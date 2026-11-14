@@ -1,8 +1,9 @@
 /**
  * Steps in the panel of a block (SNT5, D440): three steps added with Enter (the field stays for the next one), a tick shows
  * „✓ 1/3” on the tile of the axis, the order changes by Alt+↓ and by dragging the handle, a removal says „Cofnij”; what is
- * written: the list in the block (no `done`), the tick in the day's `stepsDone` (T786). D460: a routine chosen copies its steps
- * with their times, the sum „kroki: X min z Y” and its warning (the block's length never follows the steps).
+ * written: the list in the block (no `done`), the tick in the day's `stepsDone` (T786). D460, D480: a routine chosen shows its
+ * steps with their times without a copy (a change of one makes the list the block's own), the sum „kroki: X min z Y” and its
+ * warning (the block's length never follows the steps).
  */
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -71,7 +72,7 @@ test('kroki (D440): trzy kroki Enterem, ptaszek → „✓ 1/3” na kafelku, ko
   }
 })
 
-test('kroki z rutyny i czas kroku (D460): „Poranek” w bloku „Rutyny” – trzy kroki z czasem, „kroki: 35 min z 35 min”; dłuższe niż blok – ostrzeżenie', async () => {
+test('kroki z rutyny i czas kroku (D460, D480): „Poranek” w bloku „Rutyny” – trzy kroki rutyny z czasem bez kopii, „kroki: 35 min z 35 min”; dłuższe niż blok – ostrzeżenie', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-steps-routine-'))
   const { dayFile } = seedAwake(dataDir, [{ id: 'rut', categoryId: 'rutyny', startMin: 27 * 60, durationMin: 20, fixed: false, origin: 'user' }])
   mkdirSync(join(dataDir, 'routines'), { recursive: true })
@@ -95,8 +96,11 @@ test('kroki z rutyny i czas kroku (D460): „Poranek” w bloku „Rutyny” –
       await expect(panel.getByTestId('step-min').first()).toHaveValue('10 min')
       await expect(page.getByTestId('block-duration')).toHaveValue('35 min')
       await expect(panel.getByTestId('steps-time')).toHaveText('kroki: 35 min z 35 min')
-      await expect.poll(() => read().blocks.find((b) => b.id === 'rut')).toMatchObject({ routine: 'poranek', durationMin: 35, steps: [{ title: 'Prysznic', min: 10 }, { title: 'Śniadanie', min: 20 }, { title: 'Leki', min: 5 }] })
-      // A step's time changed: the sum follows, the block's length does not – over it, a warning, nothing refused.
+      // D480: the routine only – no copy of its steps in the block (the panel shows the routine's, D473).
+      await expect.poll(() => read().blocks.find((b) => b.id === 'rut')).toMatchObject({ routine: 'poranek', durationMin: 35 })
+      expect(read().blocks.find((b) => b.id === 'rut')!.steps).toBeUndefined()
+      // A step's time changed: the routine's list becomes the block's own (T1102); the sum follows, the block's length does
+      // not – over it, a warning, nothing refused.
       await panel.getByTestId('step-min').nth(2).fill('15')
       await panel.getByTestId('step-min').nth(2).press('Enter')
       await expect(panel.getByTestId('steps-time')).toHaveText('kroki: 45 min z 35 min')

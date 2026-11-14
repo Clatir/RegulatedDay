@@ -44,7 +44,7 @@ import { calibrationPeriod, costProposals, inCalibration, timeProposals, type Ca
 
 import { inProcess, type Worker } from '../worker/host'
 import { casesFrom, casesRitual, dayFactsOf, taskQuestions, type CasesRitual } from '@shared/engine/cases'
-import { CLOSE_WINDOW_H, closeEvents, closeRefusal, ritualActivity, ritualAnswer, ritualRows, unclosedDays, type DayLog, type RitualValue, type RitualView } from '@shared/engine/ritual'
+import { CLOSE_WINDOW_H, closeEvents, closeRefusal, closeUndoEvents, ritualActivity, ritualAnswer, ritualRows, unclosedDays, type DayLog, type RitualValue, type RitualView } from '@shared/engine/ritual'
 import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
 import { CLOSE_HOWS, compareEvents, daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type CloseHow, type Domain, type FeltCost, type Signal } from '@shared/model/events'
@@ -169,6 +169,8 @@ interface BarDay {
   state: DayState
   activity: Activity | null
   laid: AutoEvent[]
+  /** The day's file the context was made of (with the queue): the bar's steps of a routine read it (D473, T1115). */
+  dayFile: DayFile | null
 }
 
 /** `BarDay` with the activity always counted. */
@@ -277,6 +279,9 @@ export interface CheckResult {
 /** A click of the widget or the main window, with the day it concerns (default: the day of the running block, else today). */
 /** `probe`: only judged – its cost or refusal – never written (a step of „Przedłuż” before its second click). */
 export type TimerClick = (TimerAction | RequestAction) & { day?: string; probe?: boolean }
+
+/** An action on a day's log (`dayAction`); done – with the ids its events got in the log, in their order (D468). */
+export type DayActionResult = Exclude<ActionResult, { ok: true }> | (Extract<ActionResult, { ok: true }> & { written: string[] })
 
 /** The records the day is made from, read through a cache checked by size and time of modification. */
 export interface Inputs {
@@ -1953,8 +1958,8 @@ export class DataFolder {
   }
 
   /** The day as you see it (your queued edits laid over the files): clicks and answers are judged on it. */
-  private async ownContext(date: string, read: DayRead, at: number, inp?: Inputs): Promise<DayContext> {
-    return dayContextOf(inp ?? (await this.inputs(true)), { date, events: read.events, dayFile: await this.dayFile(date, true), nextFile: await this.dayFile(addDays(date, 1), true) }, this.o.holidays, at)
+  private async ownContext(date: string, read: DayRead, at: number, inp?: Inputs, dayFile?: DayFile | null): Promise<DayContext> {
+    return dayContextOf(inp ?? (await this.inputs(true)), { date, events: read.events, dayFile: dayFile !== undefined ? dayFile : await this.dayFile(date, true), nextFile: await this.dayFile(addDays(date, 1), true) }, this.o.holidays, at)
   }
 
   /**
@@ -1974,21 +1979,22 @@ export class DataFolder {
   private async barDay(day: string, read: DayRead, at: number, withActivity: true, known?: Activity | null): Promise<BarDayWith>
   private async barDay(day: string, read: DayRead, at: number, withActivity?: boolean, known?: Activity | null): Promise<BarDay>
   private async barDay(day: string, read: DayRead, at: number, withActivity = false, known: Activity | null = null): Promise<BarDay> {
-    const ctx = await this.ownContext(day, read, at)
+    const dayFile = await this.dayFile(day, true)
+    const ctx = await this.ownContext(day, read, at, undefined, dayFile)
     const state = computeDay(ctx)
     const t = timerNow(state)
     const runs = t.fg != null || t.bg.length > 0
     const activity = known ?? (runs || withActivity ? await this.activityFor(day, read, at) : null)
-    if (!runs || !activity || !(await this.mayLay(day, read, at))) return { ctx, state, activity, laid: [] }
+    if (!runs || !activity || !(await this.mayLay(day, read, at))) return { ctx, state, activity, laid: [], dayFile }
     const written = new Set(ctx.events.map((e) => e.id))
     const inp = { ctx, state, activity, now: at, gate: await this.gateOf(day, read, at) }
     const shutdowns = shutdownActions(inp, t)
     const laid = [...shutdowns.values()].filter((x) => x.due && !written.has(x.end.id) && !state.facts.undone.has(x.end.id)).map((x) => x.end)
-    if (!laid.length || fixedStartPausesClosed(inp, t, shutdowns)) return { ctx, state, activity, laid: [] }
+    if (!laid.length || fixedStartPausesClosed(inp, t, shutdowns)) return { ctx, state, activity, laid: [], dayFile }
     // As the leader would write them now: after every event seen, the next numbers of this computer.
     const n = ctx.events.reduce((m, e) => (e.c === this.o.computer ? Math.max(m, e.n + 1) : m), 0)
     const over = { ...ctx, events: [...ctx.events, ...simEvents(ctx, laid, at, { c: this.o.computer, n })] }
-    return { ctx: over, state: computeDay(over), activity, laid }
+    return { ctx: over, state: computeDay(over), activity, laid, dayFile }
   }
 
   /**
@@ -2025,9 +2031,10 @@ export class DataFolder {
    * laid ends first – only those not in the day's log yet (the leader's check may have written them meanwhile) – then its
    * own events. On today's bar the ends laid over the day before go first, to its log: the bar left that day by them
    * (`barActiveDay` – `before`, counted again when not given). All checked first and written in one go: with an end laid,
-   * the days' logs readable in full now; a part that fails leaves nothing behind (the click fails, as it did).
+   * the days' logs readable in full now; a part that fails leaves nothing behind (the click fails, as it did). Answers the
+   * events of `drafts` as written, in their order (their ids – „Cofnij” of a close, D468).
    */
-  private async writeOn(day: string, laid: readonly AutoEvent[], drafts: readonly TimerDraft[], before?: readonly AutoEvent[]): Promise<void> {
+  private async writeOn(day: string, laid: readonly AutoEvent[], drafts: readonly TimerDraft[], before?: readonly AutoEvent[]): Promise<AnyEvent[]> {
     const at = this.clock.now()
     const yesterday = addDays(day, -1)
     const carried = before ?? (day === logicalDayOf(at) ? ((await this.barActiveDay(at)).before ?? []) : [])
@@ -2043,9 +2050,14 @@ export class DataFolder {
     // its journal.
     for (const d of [yesterday, day]) for (const e of this.log.ownEvents(d)) seen.add(`${d}|${e.id}`)
     const fresh = (d: string, list: readonly AutoEvent[]) => list.filter((e) => !seen.has(`${d}|${e.id}`))
-    const ready = [...this.checked(yesterday, fresh(yesterday, carried)), ...this.checked(day, [...fresh(day, laid), ...drafts])]
-    for (const d of ready) this.append(d)
-    if (ready.length) await this.log.flush()
+    // All three checked before the first write (a part that fails leaves nothing behind); written in this order.
+    const early = this.checked(yesterday, fresh(yesterday, carried))
+    const ends = this.checked(day, fresh(day, laid))
+    const own = this.checked(day, drafts)
+    for (const d of [...early, ...ends]) this.append(d)
+    const written = own.map((d) => this.append(d))
+    if (early.length || ends.length || own.length) await this.log.flush()
+    return written
   }
 
   /** Drafts of the timer as lines of a day's log, each checked first (an error: none of them). */
@@ -2241,12 +2253,14 @@ export class DataFolder {
     rd: ReturnType<typeof rdFrom>
     people: Array<{ id: string; name: string }>
     carried: RunningRequest | null
+    /** The day's file the day was counted from (D473: the routine's list it keeps, its ticks – the bar reads it once, T1115). */
+    dayFile: DayFile | null
   }> {
     // The day before chosen – counted once, by the choice itself.
     const chosen = await this.barActiveDay(at)
     const day = chosen.day
     const read = chosen.read ?? (await this.log.readDay(day))
-    const { ctx, state, activity } = chosen.bar ?? (await this.barDay(day, read, at, true))
+    const { ctx, state, activity, dayFile } = chosen.bar ?? (await this.barDay(day, read, at, true))
     const rd = rdFrom(await this.recordView(paths.settings))
     const calibration = await this.calibrating(at)
     const today = logicalDayOf(at)
@@ -2258,7 +2272,8 @@ export class DataFolder {
       rd,
       // Today's log only for ranking the people: one not readable now never stops the bar.
       people: await this.topPeople(rd, today, day === today ? read.events : ((await this.log.readDay(today).catch(() => null))?.events ?? []), at),
-      carried: day === today ? await this.carriedRequest(addDays(today, -1), rd) : null
+      carried: day === today ? await this.carriedRequest(addDays(today, -1), rd) : null,
+      dayFile
     }
   }
 
@@ -2377,7 +2392,7 @@ export class DataFolder {
   }
 
   /** Your answer to a row of a day's ritual: judged on the day as it is now and written to its log, one at a time. */
-  ritualAnswer(day: string, rowId: string, choice: string, value: RitualValue = null, item: string | null = null): Promise<ActionResult> {
+  ritualAnswer(day: string, rowId: string, choice: string, value: RitualValue = null, item: string | null = null): Promise<DayActionResult> {
     return this.dayAction(day, (state, now, ctx) => {
       const row = ritualRows(state, ritualActivity(ctx, state)).find((r) => r.id === rowId)
       if (!row) return 'tego wiersza już nie ma'
@@ -2385,9 +2400,21 @@ export class DataFolder {
     })
   }
 
-  /** Closing a day: the evening ritual, or the morning's „Jak zapisano”, „Wolne”, „Nie pamiętam” (spec). */
-  closeDay(day: string, how: CloseHow): Promise<ActionResult> {
+  /**
+   * Closing a day: the evening ritual, or the morning's „Jak zapisano”, „Wolne”, „Nie pamiętam” (spec); `written` – the ids
+   * of the events of the close, for its „Cofnij” (D468, T1081).
+   */
+  closeDay(day: string, how: CloseHow): Promise<DayActionResult> {
     return this.dayAction(day, (state, now) => (day > logicalDayOf(now) ? 'ten dzień jeszcze się nie zaczął' : (closeRefusal(state, how) ?? closeEvents(state, how, now))))
+  }
+
+  /**
+   * „Cofnij” of a close (D468): an `undo` of each event of it (`ids` – what `closeDay` answered), judged on the day as you
+   * see it now like the close itself (`dayAction`: one at a time, `barDay`, the day's logs read in full) – refused on a
+   * frozen day, a close undone or gone, and while another close of the day stays (`closeUndoEvents`).
+   */
+  undoClose(day: string, ids: readonly string[]): Promise<DayActionResult> {
+    return this.dayAction(day, (state, now, ctx) => closeUndoEvents(state, ctx.events, ids, now))
   }
 
   /**
@@ -2429,8 +2456,8 @@ export class DataFolder {
    * An action on a day's log judged on the day as you see it now – as the bar shows it (`barDay`, D345) – (a text:
    * refused, why), one at a time like clicks.
    */
-  private dayAction(day: string, act: (state: DayState, now: number, ctx: DayContext) => TimerDraft[] | string): Promise<ActionResult> {
-    const run = async (): Promise<ActionResult> => {
+  private dayAction(day: string, act: (state: DayState, now: number, ctx: DayContext) => TimerDraft[] | string): Promise<DayActionResult> {
+    const run = async (): Promise<DayActionResult> => {
       if (!isIsoDate(day)) return { ok: false, why: 'zły dzień', confirm: null }
       const now = this.clock.now()
       const read = await this.log.readDay(day)
@@ -2438,8 +2465,8 @@ export class DataFolder {
       const { ctx, state, laid } = await this.barDay(day, read, now)
       const r = act(state, now, ctx)
       if (typeof r === 'string') return { ok: false, why: r, confirm: null }
-      if (r.length) await this.writeOn(day, laid, r)
-      return { ok: true, events: r, confirm: null }
+      const written = r.length ? await this.writeOn(day, laid, r) : []
+      return { ok: true, events: r, confirm: null, written: written.map((e) => e.id) }
     }
     return this.serial(run)
   }

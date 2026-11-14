@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.23.0
+- Bloki równoległe: przeciągnij blok na prawą część innego bloku – w trakcie widać „Równolegle z <nazwa>” – a po puszczeniu oba stoją w tym samym czasie, obok siebie; przeciągnięty zaczyna się razem z celem i zachowuje swoją długość. Grupa zajmuje czas raz: następne bloki czekają do końca najdłuższego z grupy i rozsuwają się z „Przesunięto N bloków · Cofnij”, a bez przesunięcia dymek ma „Cofnij”. Działa w „Dziś”, „Tygodniu” i „3 dniach” – także z innego dnia.
+- Bloki równoległe biegną razem: „Zacznij” na jednym bloku grupy zaczyna całą grupę – kliknięty jest na pierwszym planie, pozostałe w tle. Czas i kroki liczą się każdemu, energię kosztuje tylko blok z pierwszego planu, a praca i budżet liczą się raz na minutę. Gdy blok z pierwszego planu się kończy, pierwszy plan przejmuje ostatnio zaczęty z pozostałych; blok w tle kończy się sam o swoim planowanym końcu. Pasek pokazuje blok z pierwszego planu i dopisek „+K w tle”; klik w dopisek pokazuje listę i „Na pierwszy plan”. „Zacznij” na bloku spoza grupy pauzuje całą grupę i stawia ją na jego miejscu; blok grupy, który zaczyna się sam (blok stały, blok bez komputera), zaczyna całą grupę.
+- Blok z grupy przeciągnięty w inne miejsce (także ten, na który upuszczono inny), z nową godziną „Początek” albo przeniesiony na inny dzień wychodzi z grupy; reszta grupy zostaje razem.
+- Ustawienia → „Plan dnia” → „Najwięcej bloków naraz” (domyślnie 3): blok ponad limit staje zaraz po grupie z notą „Najwyżej 3 bloki naraz – zmienisz w Ustawieniach”.
+- Nakładające się bloki – równoległe, w tle, kolizje – stoją na osi „Dziś” i w „Szablonach” obok siebie, dzieląc szerokość; wąskiej kolumny bloków w tle już nie ma.
+
+## 1.22.0
+- Kroki rutyny w bloku: blok z rutyną, który nie ma własnych kroków – także rutyna z szablonu dnia i z serii – pokazuje w „Krokach” kroki rutyny z nazwą i czasem, a na kafelku licznik „✓ 0/3”; widać je też na pasku pulpitu, gdy blok trwa. Wybór rutyny w panelu bloku już nie kopiuje jej kroków, tylko wskazuje rutynę – kroki idą za nią do pierwszego odhaczenia; bloki z krokami skopiowanymi w 1.20–1.21 zostają ze swoją listą. Nad listą wybierasz jednym kliknięciem „zwykła” albo „na gorsze dni” – ten sam wybór na karcie rutyny w „Dziś” i na pasku (także w „Kroki ▸”, od razu) przełącza też panel. Odhaczenia zapisują się w dniu i są wspólne: ptaszek w panelu widać na karcie rutyny i w „Kroki ▸” na pasku, a ptaszek na karcie – w panelu; gdy wszystkie kroki są odhaczone, karta rutyny znika. Zmiana rutyny w „Rutynach” zmienia kroki bloków, w których tego dnia jeszcze nic nie odhaczyłeś; dzień z odhaczonym krokiem zachowuje swoją listę.
+- Ostatni krok kończy blok: odhaczenie ostatniego kroku (rutyna, zadanie, każdy blok z krokami – w panelu, na karcie rutyny, w „Sprawach” albo na pasku) kończy trwający blok jako skończony w tej chwili. W oknie i na pasku pojawia się „Skończono: <nazwa> · Cofnij” – „Cofnij” pozwala mu biec dalej.
+- Ukończony blok zostaje na osi „Dziś” przygaszony, ze znakiem ✓ przed nazwą (bez przekreślenia); blok niedokończony albo skończony przez aplikację, gdy Cię nie było przy komputerze – bez ✓.
+- Bloki bez komputera liczą się same: posiłek, rutyny, prośby domowe, sprawy domowe, regeneracja i dojazd zaczynają się bez „Zacznij”, gdy w ich czasie nic innego nie biegnie, a od 10 minut nie używasz komputera – od chwili, gdy odszedłeś, także rano, zanim włączysz komputer. Kończy je powrót do komputera (dojazd najpóźniej o planowanym końcu – wtedy ma ✓). Każdy taki start jest na liście „Zrobione automatycznie” z „Cofnij”. Dojazd zaczęty sam, gdy spałeś, nie zatwierdza granicy dnia.
+- „Zacznij” na innym bloku, gdy biegnie blok: bloki zamieniają się miejscami. Kliknięty zaczyna się teraz, a przerwany – niedokończony – staje na jego planowanym miejscu i czeka tam w planie i na osi; „Dalej” dojdzie do niego w swojej kolejności. Regeneracja i blok poza komputerem kończą się jak dotąd.
+- „Wstałeś później?”: aplikacja liczy poranek sama, także zanim włączysz komputer. Gdy wstałeś później, kliknij „Cofnij” przy automatycznym starcie rutyny i przeciągnij ją na osi o co najmniej 20 minut później. Aplikacja zapyta „Wstałeś później?”, a „Tak” przesunie o tyle samo resztę poranka – także bloki, które zaczęły się same, gdy spałeś (ich start zostanie cofnięty) – i skróci pracę, która nie mieści się przed granicą. Samo pierwsze użycie komputera już o to nie pyta.
+
+## 1.21.0
+- „Niezamknięte dni” rano: po „Jak zapisano”, „Wolne” albo „Nie pamiętam” pojawia się dymek „Zamknięto <dzień>: … · Cofnij”. „Cofnij” przywraca dzień na listę, dopóki aplikacja go nie zamroziła.
+- Wyszukiwarka ma przycisk: u dołu menu bocznego jest „Szukaj · Ctrl K”.
+- Szybki zapis „+”: po zapisaniu zadania pasek mówi „Dodano do Skrzynki: <tytuł>” – także po zapisie skrótem globalnym.
+- Pokój przy wyłączonej grze ma przycisk „Otwórz Ustawienia”, który od razu pokazuje sekcję „Moduły”.
+- „Dziś”: kliknięcie w puste miejsce osi już niczego nie otwiera – nowy blok tworzy przeciągnięcie po osi, „+ Blok” albo Ctrl+N.
+- Statystyki wyjaśniają, kiedy dzień jest „zamrożony”: po oknie korekty – 24 h od otwarcia następnego dnia, najpóźniej 72 h po końcu dnia.
+
 ## 1.20.0
 - Nowy blok zapisuje się sam: w panelu nowego bloku w „Dziś” i w okienku „Nowy blok” w „Tygodniu” nie ma już „Dodaj”. Blok zapisuje się przy pierwszym zatwierdzonym polu albo gdy klikniesz gdzie indziej lub zamkniesz panel, a potem pokazuje „Dodano blok · Cofnij”. Esc odrzuca nietknięty szkic. Przypadkowe kliknięcie osi nie tworzy bloku.
 - Zaznaczony odcinek: po przeciągnięciu po osi „Dziś” (i po „+ Blok”, Ctrl+N) nowy blok od razu stoi na osi jako kafelek z przerywaną ramką i godzinami, zanim go opiszesz.

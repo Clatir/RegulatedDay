@@ -64,8 +64,8 @@ paths:
   stoją jak je zostawiono); reguła „przed pierwszym stałym” jedna z `dayPlan` (`morningBound` – jak w 1.0.3, także z odwołanymi; `wakeShiftedStart`).
   „Usuń” (`leavesByCancel`: blok migawki albo sesja dodana odpowiedzią „tak” – odwołanie, własny – wyjęcie z pliku) zaczętego bloku (`removeDayBlock(…, begun)`, D336; niezaczęty / już skończony – zwykłe usunięcie): biegnący najpierw `removeBegun` (timer; kod `alreadyOver` / `notBegun` – tylko plan), koniec cofany tylko przy ostatecznej odmowie
   zapisu planu (konflikt zostaje pytaniem); „Cofnij” = najpierw plan, potem `undoRemove` (odmowa – plan wraca do stanu po usunięciu, toast).
-  „Wstałeś później?” (D337): pierwsze pokazanie karty to `question.seen` w logu (`window.rd.seen`, id `lateWake:<dzień>:<koniec rutyny>:<pobudka>`,
-  `lateWakeSeenId`); silnik bierze pierwsze takie `facts.seen` dla tej pobudki dnia (`lateWakeSeenEnd`), inna pobudka / wartość spoza dnia = liczenie z planu.
+  „Wstałeś później?” (D337): pierwsze pokazanie karty to `question.seen` w logu (`window.rd.seen`, id `lateWakeMoved:<dzień>:<godzina>:<pobudka>`,
+  `lateWakeSeenId`); silnik bierze pierwsze takie `facts.seen` dla tej pobudki dnia (`lateWakeSeenEnd`), inna pobudka / wartość spoza dnia – z planu.
 - `calendar/` (D295, `MonthGrid` wspólna z kreatorem; `cell().events` – wiersz „kropka · pierwsze · +N”, kreator ich nie daje; „Wczytaj PDF zjazdów” D357: `window.rd.zjazdyRead` → podgląd w `ZjazdyPreview` zamiast siatki,
   poprawki w `zjazdyStore` (szkic przeżywa zmianę ekranu), logika bez DOM w `zjazdyDraft` (`toSave`), „Zapisz” = `zjazdySave` w `inTurn` okna
   (T517), toast „Cofnij” = `zjazdyUndo` (sobota zjazdu o nic nie pyta – analizy tygodniowej nie ma, D467); w tożsamości testowej
@@ -82,7 +82,7 @@ paths:
 - Serie (T709): `useData().series` / `seriesPlans` (do `countDay`), `window.rd.series*` → `SeriesResult` – reguły `dane.md`.
   Ekrany (T711–T714): `features/series/` (`BlockSeries`, `SeriesFields`, `seriesForm`, `scopeAsk`, `seriesActions`, `SeriesEditor`); testy `tests/web/series-*`, `tests/e2e/series.spec.ts`.
 - `app/Questions.tsx` – pytania kolejki i kopii konfliktowych; `lib/recordText.ts` – pola i wartości po ludzku.
-- `search/` (SNT6, D387, T650–T653) – paleta Ctrl K (`Palette`, `searchStore`; skrót w `useHotkeys` w `App.tsx`, `app/pages.ts` – nazwy ekranów i
+- `search/` (SNT6, D387, T650–T653) – paleta Ctrl K (`Palette`, `searchStore`; skrót w `useHotkeys` w `App.tsx`, „Szukaj” w `app/SideMenu.tsx` (D469, bez cyfry), `app/pages.ts` – nazwy ekranów i
   klawisze menu). Dopasowanie i kolejność – czyste `shared/search.ts` (`fold` – bez ogonków i „ł” jawnie, zakresy podświetleń w oryginale,
   `buildIndex`/`searchIndex`, `compareDays`, grupy po 5); rekordy: `search/records.ts` (statyczne ekrany, sekcje ustawień po `data-testid`,
   polecenia + dane okna), dni z `window.rd.searchDays()` (`folder.searchDays`: pliki dni przez `recordView` – czytane po rozmiarze i czasie, bez

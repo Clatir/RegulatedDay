@@ -18,18 +18,19 @@ import { reserveMessageId } from './engine/game'
 import { hardEndCurrent, type HardEndNow } from './engine/hardEnd'
 import { suggestRegen } from './engine/reserve'
 import { REGEN_CATEGORY, type Pool } from './model/categories'
-import { isRunningRequest, OPEN, workSince, type AutoAction, type RequestFact } from './engine/facts'
+import { isRunningRequest, OPEN, pausedPlaceOf, workSince, type AutoAction, type RequestFact } from './engine/facts'
 import { atOf, type Grid } from './engine/grid'
 import { ritualDue } from './engine/ritual'
 import { ROUTINE_LINE_MIN, routinesDue } from './engine/routineCheck'
 import { TASK_ANSWERS, TASK_LINE_MIN, taskLineText, taskQuestions } from './engine/cases'
 import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
-import { endsAtOf, fixedStartPair, laterWork, plannedEndOf, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
+import { awayStartUndoable, endsAtOf, fixedStartPair, laterWork, plannedEndOf, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
 import { workedUntilOf } from './engine/explain'
 import { namedById, type NamedBlock } from './blockName'
 import { namingOf } from './engine/context'
-import type { PlanBlock } from './model/plan'
+import type { DayFile, PlanBlock } from './model/plan'
+import { shownSteps } from './model/routineSteps'
 import type { RequestRecord } from './model/requests'
 import type { Routine } from './model/routines'
 import type { AllDayEvent } from './model/allDay'
@@ -65,8 +66,10 @@ export interface EngineInput {
   carried?: RunningRequest | null
   /** The first day of the ritual (D320): from it the bar has „Rytuał” after the end of work. */
   ritualFrom?: string | null
-  /** The routines (D328): a routine of a block begun today and not ticked off has its line. */
+  /** The routines (D328): a routine of a block begun today and not ticked off has its line; D473 – its steps on the step line. */
   routines?: readonly Routine[]
+  /** The day's file (D473): the routine's list it keeps for a block and the ticks of its steps (none – the routine as it is). */
+  dayFile?: DayFile | null
   /** The records of „Sprawy” (D384): a task whose block ended asks „Zadanie zrobione?”. */
   cases?: readonly RequestRecord[]
   /** The all-day events (D405): today's are the label at the left of the desktop bar (read only, never an input of the day). */
@@ -84,7 +87,7 @@ export function runningRequestOf(r: RequestFact, grid: Grid, person: (id: string
 const CLASS_TONE: Record<string, Tone> = { work: 'praca', life: 'zycie', free: 'wolne' }
 const CLASS_NAME: Record<string, string> = { work: 'praca', life: 'życie i opieka', free: 'wolne' }
 /** Automatic actions that are information only (spec: no „Cofnij”). */
-const INFO_RULES = new Set(['disconnect04'])
+const INFO_RULES = new Set(['disconnect04', 'groupFront'])
 
 const clockOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
 
@@ -95,6 +98,16 @@ export function autoText(a: AutoAction, blockName: string, clock: string): strin
   switch (a.rule) {
     case 'fixedStart':
       return a.k === 'block.pause' ? `${name} – pauza o ${clock} (blok stały według planu)` : `${name} zaczęty o ${clock} (blok stały według planu)`
+    case 'awayStart':
+      return `${name} zaczęty o ${clock} (bez komputera, według planu)`
+    case 'awayPlan':
+      return `${name} skończony o ${clock} (według planu)`
+    case 'groupStart':
+      return `${name} zaczęty o ${clock} (razem z grupą)`
+    case 'groupFront':
+      return `${name} na pierwszym planie od ${clock} (po końcu bloku z grupy)`
+    case 'groupPlan':
+      return `${name} skończony o ${clock} (według planu, w tle grupy)`
     case 'plan':
       return `${name} skończony o ${clock} (według planu)`
     case 'fixedNoReaction':
@@ -327,7 +340,13 @@ export function engineView(i: EngineInput): WidgetView {
       lines.push({ id: `restart:${b.id}`, text: `${nameOf(b.id)} · do ${clockOf(at(span.end))}`, actions: [{ id: 'restart', label: 'Zacznij jeszcze raz' }], dot: false })
     }
     // Paused blocks waiting with nothing in the foreground („Wznów · Zaparkuj”) – not one a running request will resume.
-    if (!fg) for (const p of t.paused) if (p.info.id !== interruptedId) lines.push({ id: `paused:${p.info.id}`, text: nameOf(p.info.id), actions: [{ id: 'start', label: 'Wznów' }, { id: 'park', label: 'Zaparkuj' }], dot: true })
+    // One a start swapped with (D478) stands later in the plan: quiet (no dot, D240) until its place comes (T1141).
+    if (!fg)
+      for (const p of t.paused) {
+        if (p.info.id === interruptedId) continue
+        const place = pausedPlaceOf(p.fact)
+        lines.push({ id: `paused:${p.info.id}`, text: nameOf(p.info.id), actions: [{ id: 'start', label: 'Wznów' }, { id: 'park', label: 'Zaparkuj' }], dot: place == null || state.now >= place })
+      }
     for (const q of questions) if (q !== next) lines.push(questionLine(q, q.block && q.kind !== 'request' ? nameOf(q.block) : '', clockOf))
     // The break after 90 min of continuous work (D234: a dot, no notification); in a session or a class it waits.
     const run = i.care.breakAfterMin > 0 ? workRunStart(state, now) : null
@@ -364,10 +383,10 @@ export function engineView(i: EngineInput): WidgetView {
   // for 3 h after the routine; the card in „Dziś” keeps them to the day's end (T520).
   const routines: BarRoutine[] = []
   if (!hidden && !modes.night && state.grid.date === logicalDayOf(now))
-    for (const r of routinesDue(i.ctx, state, i.routines ?? [])) {
+    for (const r of routinesDue(i.ctx, state, i.routines ?? [], i.dayFile)) {
       if (state.now >= r.to + ROUTINE_LINE_MIN) continue
       const line = `routine:${state.grid.date}:${r.block}`
-      routines.push({ line, block: r.block, name: nameOf(r.block), normal: r.normal, worse: r.worse })
+      routines.push({ line, block: r.block, name: nameOf(r.block), normal: r.normal, worse: r.worse, version: r.version, done: r.ticked })
       lines.push({ id: line, text: nameOf(r.block), actions: [{ id: 'all', label: '✓ Wszystkie' }, { id: 'steps', label: 'Kroki ▸' }, ...(r.worse.length ? [{ id: 'worse', label: 'gorsze dni' }] : [])], dot: false })
     }
   // „Zadanie zrobione? · Tak · Wraca na listę” (D384, T754): quiet lines (no dot) after the routines, today, for 3 h after
@@ -391,19 +410,22 @@ export function engineView(i: EngineInput): WidgetView {
   // „Zrobione automatycznie” (D350): the actions as the plan said them (a fixed block's start, an end by the plan) in one
   // row that unfolds into them, each with „Cofnij”; what changes the counting of time – a flexible block's pause at a fixed
   // start too – and the rest each in a row of its own.
-  const autoItem = (a: (typeof state.facts.autos)[number]) => ({ id: a.id, text: autoText(a, a.block ? nameOf(a.block) : '', clockOf(at(a.at))), undo: !INFO_RULES.has(a.rule) && (fixedStartPair(state, a)?.alive ?? true) })
+  const autoItem = (a: (typeof state.facts.autos)[number]) => ({ id: a.id, text: autoText(a, a.block ? nameOf(a.block) : '', clockOf(at(a.at))), undo: !INFO_RULES.has(a.rule) && (fixedStartPair(state, a)?.alive ?? true) && awayStartUndoable(state, a) })
   const asPlanned = (a: (typeof state.facts.autos)[number]) => (a.rule === 'fixedStart' && a.k !== 'block.pause') || a.rule === 'plan'
   const planned = state.facts.autos.filter(asPlanned)
   const groups = planned.length ? [{ id: 'plan', text: `bloki stałe według planu: ${planned.length}`, items: planned.map(autoItem).reverse() }] : []
   const items = state.facts.autos
     // A meal or a regeneration of an absence: one line, at its end (its „Cofnij” takes the start back too).
-    .filter((a) => !asPlanned(a) && !(a.k === 'block.start' && (a.rule === 'absenceMeal' || a.rule === 'absenceRegen')))
+    // A block of a group resumed with it sent behind (`groupStart`, `block.fg`): no row – its resume has one (T1258).
+    .filter((a) => !asPlanned(a) && !(a.k === 'block.start' && (a.rule === 'absenceMeal' || a.rule === 'absenceRegen')) && !(a.k === 'block.fg' && a.rule === 'groupStart'))
     .map(autoItem)
     .reverse()
 
   // The steps of the block in the foreground (D440): its list as its day has it ticked – the first not ticked, or all
-  // ticked. Beside the block wherever the block is (a quiet mode, the night too); never while the widget is hidden.
-  const fgSteps = front ? i.ctx.plan.find((b) => b.id === front.fg.info.id)?.steps : undefined
+  // ticked. Beside the block wherever the block is (a quiet mode, the night too); never while the widget is hidden. A block of
+  // a routine without steps of its own – the routine's (D473).
+  const fgPlan = front ? i.ctx.plan.find((b) => b.id === front.fg.info.id) : undefined
+  const fgSteps = fgPlan ? shownSteps(fgPlan, i.routines, i.dayFile) : undefined
   const open1 = fgSteps?.length ? firstOpen(fgSteps) : null
   const steps: BarSteps | null = front && fgSteps?.length ? { block: front.fg.info.id, step: open1 ? { id: open1.step.id, title: open1.step.title, n: open1.n } : null, total: fgSteps.length } : null
   const block = front ? { name: nameOf(front.fg.info.id), className: `${CLASS_NAME[front.fg.info.rules.cls] ?? ''}${reserve ? ' · rezerwa energii' : ''}`, endsAt: front.endsAt } : null
@@ -452,7 +474,7 @@ export function engineView(i: EngineInput): WidgetView {
       start: modes.night ? null : start
     },
     // Only its hour in words („W tle: … do 10:30”): the day's minute, as in 1.0.1 – no countdown, no steps (E4a.1).
-    background: hidden || modes.night ? [] : t.bg.map((b) => ({ id: b.info.id, name: nameOf(b.info.id), endsAt: at(b.plannedEnd) })),
+    background: hidden || modes.night ? [] : t.bg.map((b) => ({ id: b.info.id, name: nameOf(b.info.id), endsAt: at(b.plannedEnd), ...(b.fact.group != null && !b.info.bg && b.fact.group === t.fg?.fact.group ? { group: true } : {}) })),
     autos: hidden ? { groups: [], items: [] } : { groups, items },
     fewer: modes.fewer,
     signals: !!i.energy?.enabled,

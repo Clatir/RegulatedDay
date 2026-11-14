@@ -51,6 +51,14 @@ const template: Template = {
   ]
 }
 
+/**
+ * The limit of each run. A run waits on the disk all along (the first one some 1200 checks of the folder, each about 70
+ * file operations): about 30 s in CI on Linux and a minute on Windows. On a Windows desktop with the antivirus scanning
+ * every file the tests write, a file operation took 1.5–16 ms and the first run 2–11 min alone, up to 17 min beside other
+ * test files – slow, not hung. CI keeps the short limit, which finds a hang soon.
+ */
+const LIMIT_MS = process.env.CI ? 240_000 : 1_500_000
+
 const roots: string[] = []
 afterAll(() => {
   for (const r of roots) rmSync(r, { recursive: true, force: true })
@@ -122,6 +130,14 @@ function world(seed: number) {
   }
 }
 
+/**
+ * One minute's checks of the given computers (each with its folder open – results in their order), side by side as on two
+ * real computers: each has its own folder and
+ * state, and the simulated OneDrive moves files only between checks – the run waits for the slower check, not for both
+ * one after the other (the checks wait on the disk; one by one they made the run several minutes long).
+ */
+const checkAll = (pcs: readonly Pc[]) => Promise.all(pcs.map((pc) => pc.folder!.check()))
+
 /** The day's block id of a template block, from the day this computer sees. */
 async function blockId(pc: Pc, source: string): Promise<string> {
   // A listing may fail now and then: the click waits for the next read.
@@ -146,7 +162,7 @@ const summary = (st: DayState) => ({
 const content = (events: readonly AnyEvent[]) => new Map(events.map((e) => [e.id, eventLine(e)]))
 
 describe('dwa komputery z opóźnioną synchronizacją', () => {
-  it('po synchronizacji oba widzą ten sam log i liczą ten sam dzień; nic nie ginie; dzień powstaje raz; jeden prowadzący', { timeout: 240_000 }, async () => {
+  it('po synchronizacji oba widzą ten sam log i liczą ten sam dzień; nic nie ginie; dzień powstaje raz; jeden prowadzący', { timeout: LIMIT_MS }, async () => {
     const w = world(20261021)
     const { a, b, sync } = w
     await w.open(a)
@@ -195,8 +211,7 @@ describe('dwa komputery z opóźnioną synchronizacją', () => {
       sync.tick(w.now)
       // Every computer checks every minute (15 s in the app; a minute keeps the run short).
       if (w.now % 60_000 === 0) {
-        const results = []
-        for (const pc of [a, b]) if (pc.folder) results.push(await pc.folder.check())
+        const results = await checkAll([a, b].filter((pc) => pc.folder))
         // Right after the pause ends the two learn of each other within the sync's delay: not counted.
         const converging = unpausedAt && w.now - unpausedAt < 5 * 60_000
         if (!sync.paused.size && !converging && results.length === 2 && results.every((r) => r.leader.iLead && r.settled)) doubleLead.push(w.now)
@@ -206,9 +221,9 @@ describe('dwa komputery z opóźnioną synchronizacją', () => {
     for (let i = 0; i < 120 && !(sync.idle && i > 10); i++) {
       w.now += 30_000
       sync.tick(w.now)
-      if (w.now % 60_000 === 0) for (const pc of [a, b]) await pc.folder!.check()
+      if (w.now % 60_000 === 0) await checkAll([a, b])
     }
-    for (const pc of [a, b]) await pc.folder!.check()
+    await checkAll([a, b])
     sync.tick(w.now + 200_000)
     w.now += 200_000
 
@@ -246,7 +261,7 @@ describe('dwa komputery z opóźnioną synchronizacją', () => {
     expect(sync.stats.conflicts).toBeGreaterThan(0)
     expect(bFs!.failures).toBeGreaterThan(0)
   })
-  it('wyłączony przy wstrzymanej synchronizacji, laptop uśpiony w torbie z działającą aplikacją, awaria, samo okno aplikacji', { timeout: 240_000 }, async () => {
+  it('wyłączony przy wstrzymanej synchronizacji, laptop uśpiony w torbie z działającą aplikacją, awaria, samo okno aplikacji', { timeout: LIMIT_MS }, async () => {
     const w = world(4242)
     const { a, b, sync } = w
     await w.open(a)
@@ -262,9 +277,8 @@ describe('dwa komputery z opóźnioną synchronizacją', () => {
         }
         sync.tick(w.now)
         if (w.now % 60_000 === 0) {
-          const ra = await a.folder!.check()
-          const rb = bOn && o.bAwake !== false ? await b.folder!.check() : null
-          checks[new Date(w.now + 2 * 3_600_000).toISOString().slice(11, 16)] = { a: ra.leader.iLead && ra.settled, b: rb ? rb.leader.iLead && rb.settled : undefined }
+          const [ra, rb] = await checkAll(bOn && o.bAwake !== false ? [a, b] : [a])
+          checks[new Date(w.now + 2 * 3_600_000).toISOString().slice(11, 16)] = { a: ra!.leader.iLead && ra!.settled, b: rb ? rb.leader.iLead && rb.settled : undefined }
         }
       }
     }

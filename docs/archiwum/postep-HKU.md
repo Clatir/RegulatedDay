@@ -27,3 +27,13 @@ w tej samej wersji.
 specyfikacji; sprawa zaplanowana dziś z dalszą datą wykonania, której blok zniknie bez zapisu, trafia na „W tym
 tygodniu” zamiast do „Skrzynki”. Flake Windows: `tests/fs/cases.test.ts` (T773) – `EPERM` przy `renameSync` folderu
 pod pełnym obciążeniem, osobno przechodzi.
+
+## Blok 4 (HKU) – stan (przeniesione z `docs/postep.md` 14.11.2026)
+**Blok 4 zamknięty 13.11:** HKU1 (1.13.0), HKU2 + HKU3 (1.17.0, paczka D413). Wpisy – `docs/archiwum/postep-HKU.md`.
+Odbiór: HKU1.1–1.5, HKU2.1–2.4, HKU3.1–3.2 w `docs/odbior.md`. Numery HKU wolne: D458–D459, T886–T899.
+
+| Zadanie | Wersja | PR | Stan |
+| --- | --- | --- | --- |
+| HKU1 wydarzenia całodniowe | 1.13.0 | #78 | wydane 12.11 22:05 |
+| HKU2 termin i data wykonania | 1.17.0 | #82 | wydane 13.11 10:32 (run 43389466888) |
+| HKU3 priorytety i macierz | 1.17.0 | #82 | wydane 13.11 10:32 |

@@ -33,9 +33,17 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * older version would make the day without them; it gives way to this one as the leader. 9 – no marks of a block (D467):
  * the evening block once marked as the second shift is work of its category – an older version would keep its minutes
  * out of the extension and the end of work (and wait for „Zacznij” at a weekly analysis) and freeze the day so; it gives
- * way to this one as the leader.
+ * way to this one as the leader. 10 – blocks away from the computer begin by themselves at their hour (D475, rule
+ * `awayStart`) and a start swaps with the running block (D478, `block.pause.place`): an older version would write no such
+ * start and put the swapped block back at its own place in the forecast; it gives way to this one as the leader. 10 in
+ * 1.23-A too – parallel blocks (D476, T1162): a group takes its time once in the forecast – an older version would count its
+ * blocks one after another (the computed end of work, the hard end, the freeze). 11 – the two together and the timer of a
+ * parallel group (D476, D493, `block.start.group`): an older version would charge the blocks behind and leave the
+ * foreground empty when the block in front ends; it gives way to this one as the leader. 12 – the block of a group that
+ * takes the front is written there (`groupFront`, T1259): an older version would leave it behind in the log (no cost, no
+ * work in front for requests and the forecast); it gives way to this one as the leader.
  */
-export const RULES_VERSION = 9
+export const RULES_VERSION = 12
 
 /** What a block's start wrote of its plan (`block.start.planned`). */
 export interface StartPlanned {
@@ -126,10 +134,21 @@ export type TimerEvent =
       confirmUntil: number | null
       /** 'plan' – it happened at its planned time, said afterwards (the ritual): its times are no measure. */
       how: 'click' | 'auto' | 'start' | 'plan'
+      /**
+       * A block of a parallel group begun with it (D476, D493): the id of the group's first block. Its background run is
+       * the group's – it costs no energy, and the foreground falls to it when the block in front ends (T1190).
+       */
+      group?: string
     })
-  | (EventBase & { k: 'block.pause'; block: string; at: number })
+  /** `place` (ms, D478): where the paused block stands – the place of the block whose start swapped with it. */
+  | (EventBase & { k: 'block.pause'; block: string; at: number; place?: number })
   | (EventBase & { k: 'block.resume'; block: string; at: number; confirmUntil: number | null })
-  | (EventBase & { k: 'block.end'; block: string; at: number; done: boolean | null; rule: string | null })
+  /**
+   * `fin` (1.22, D484, T1121): the end says the block was done explicitly – „Skończyłem”, „Dalej”, „Koniec pracy”, its last step, a
+   * fixed block at its planned end, a commute „według planu”; false or none on an end of an absence, the close of the app,
+   * idleness. An end written without it (an older version) is told by `done` and its rule (`facts.ts`).
+   */
+  | (EventBase & { k: 'block.end'; block: string; at: number; done: boolean | null; rule: string | null; fin?: boolean })
   | (EventBase & { k: 'block.extend'; block: string; at: number; minutes: number })
   /** The end of a running block dragged earlier on the axis (D365): its planned end `minutes` sooner – „Przedłuż” the other way. */
   | (EventBase & { k: 'block.shorten'; block: string; at: number; minutes: number })

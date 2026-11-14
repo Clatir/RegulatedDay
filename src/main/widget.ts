@@ -28,14 +28,15 @@ import { energyOrderVariant } from '@shared/engine/energyOrder'
 import { casesFrom, isDone, taskAnswerRaw } from '@shared/engine/cases'
 import { nextTaskRaw } from '@shared/engine/caseRepeat'
 import { marketDay } from '@shared/calendar/holidays'
-import { tickEdits } from '@shared/engine/steps'
+import { routineSaveEdits, routineStepsNow, routineVersionEdits, tickEdits, type BlockStepsEdit } from '@shared/engine/steps'
+import { listWhole, routineSaved, undoAfterSteps } from '@shared/engine/stepsFlow'
 import { dayPlan } from '@shared/engine/createDay'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { applyVariant, keepPlan, markerCause, planCause, variantCauses, variantsFor, type Variant, type VariantCause, type VariantTrigger } from '@shared/engine/variants'
 import type { NoticeKind } from '@shared/machine'
 import { POOLS, REGEN_CATEGORY, type Pool } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
-import { dayFileFrom } from '@shared/model/plan'
+import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
 import { personName } from '@shared/model/rd'
 import { allDayFrom, type AllDayEvent } from '@shared/model/allDay'
 import { ROUTINE_VERSION_NAMES, ROUTINE_VERSIONS, routineFrom, type Routine, type RoutineVersion } from '@shared/model/routines'
@@ -43,7 +44,7 @@ import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { answered } from '@shared/engine/care'
 import { batteryLine, NO_SYNC, syncLines } from '@shared/sync/syncLines'
-import { noFolderView, SEEN_LINE, UNDO_LINE_MS, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
+import { noFolderView, SEEN_LINE, shortTitle, UNDO_LINE_MS, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
 import type { DataFolder } from './data/folder'
 
 const CONFIRM_MS = 10_000
@@ -52,6 +53,8 @@ export const DOUBLE_MS = 500
 const REFRESH_MS = 15_000
 /** A refused or failed click says why in the bar this long. */
 const NOTE_MS = 6_000
+/** The longest title the bar repeats after a quick capture (D470): the bar has a line, not a field. */
+const QUICK_SAID_MAX = 40
 const MIN = 60_000
 /** The questions of the engine (their ids: rule:day:block:threshold) – only they are marked seen. */
 const QUESTION_ID = SEEN_LINE
@@ -96,7 +99,7 @@ export interface WidgetDeps {
   /** The backups as the data service knows them (its last daily backup failed – A3-06). */
   backup?: () => { failed: { error: string } | null } | null
   /** The quick capture (D385, D402): a task of your own into „Skrzynka” – the field of the bar; why, when not saved. */
-  quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null }>
+  quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>
   /** „+” of the desktop bar (T756): it takes no keys – the icon's panel opens at the cursor with the field. */
   openQuick?: () => void
 }
@@ -140,8 +143,36 @@ export function stepDelay(deadlines: readonly number[], viewAt: number, now = vi
 /** What the bar says of a click of a block that is not in the day's plan any more (a step's tick – T793). */
 const BLOCK_GONE = 'Tego bloku już nie ma w planie.'
 
-/** „Zapisano: … · Cofnij” of a routine saved from the bar stays this long. */
+/** „Zapisano: … · Cofnij” of a routine saved from the bar (and „Skończono: … · Cofnij”, D474) stays this long. */
 const ROUTINE_UNDO_MS = 60_000
+
+/** The bar's line after steps (T1108): its words and what its „Cofnij” takes back. */
+interface StepsUndo {
+  kind: 'routineSaved' | 'stepsFinished'
+  block: string
+  day: string
+  text: string
+  until: number
+  /** The end of the block by its steps (`undoStepsFinish`). */
+  end: boolean
+  /** The routine's save (`routineUndo`). */
+  routine: boolean
+  /** The ticks written with it (the day's file, a task's record) and what each made. */
+  edits: Array<{ entry: EditEntry; made: RawRecord | null }>
+  /** Its save still writes (T1122): no line and no „Cofnij” yet – a failed write leaves the routine's „Cofnij” alone. */
+  pending?: boolean
+}
+
+/** A block of a day as the bar finds it before a write of its steps (`WidgetEngine.dayBlock`). */
+interface DayBlockAt {
+  day: string
+  rel: string
+  before: RawRecord | null
+  block: PlanBlock
+  taskRel: string | null
+  taskBefore: RawRecord | null
+  routines: Routine[]
+}
 
 /**
  * What the window says it pushed apart (D367, IPC `planPushed`): a day, how many blocks, the one edit of that day's file it
@@ -168,6 +199,11 @@ export function planPushedIpc(w: Pick<WidgetEngine, 'pushed'>, log: WidgetDeps['
 
 /** The bar's note when a variant picked finds the plan as it would make it (D378). */
 export const PLAN_ALREADY = 'Plan już jest tak ułożony.'
+
+/** What the bar says after a quick capture (D470): the title as the folder saved it (the capture returns it), cut when long. */
+export function quickSavedText(saved: string): string {
+  return `Dodano do Skrzynki: ${shortTitle(saved, QUICK_SAID_MAX)}`
+}
 
 /** The longest label of a variant the window may give the bar (its line „Przestawiono: …”). */
 const ARRANGED_LABEL_MAX = 200
@@ -210,7 +246,8 @@ export class WidgetEngine {
   private view: WidgetView | null = null
   private pending: Pending | null = null
   /** The monotonic clock like every term of the bar (`until`): a wall clock set meanwhile changes none of them. */
-  private note: { text: string; until: number } | null = null
+  /** `ok`: a confirmation (a calm colour), not a refusal. */
+  private note: { text: string; until: number; ok?: true } | null = null
 
   private timer: ReturnType<typeof setInterval> | null = null
   private running: Promise<void> | null = null
@@ -245,8 +282,11 @@ export class WidgetEngine {
   private movedSeq = 0
   /** Blocks pushed apart today (D367): triggers of the marker of variants the log does not hold (this computer's bar). */
   private pushes: Array<{ day: string; trigger: VariantTrigger }> = []
-  /** „Zapisano: … · Cofnij” after a routine saved from the bar (D328). */
-  private routineSaved: { block: string; day: string; text: string; until: number } | null = null
+  /**
+   * „Zapisano: … · Cofnij” after a routine saved from the bar (D328), „Skończono: … · Cofnij” after the last step ticked off
+   * ended its block (D474, T1105) – what its „Cofnij” takes back (T1108): the end, the routine's save, the ticks it wrote.
+   */
+  private stepsUndo: StepsUndo | null = null
 
   constructor(private readonly d: WidgetDeps) {}
 
@@ -362,10 +402,12 @@ export class WidgetEngine {
           carried: m.carried,
           ritualFrom: await folder.ritualDay(),
           routines,
+          // The day's file the model was counted from (D473: the routine's list it keeps, its ticks – read once, T1115).
+          dayFile: m.dayFile,
           cases: requests,
           allDay
         }),
-        note: this.note ? { text: this.note.text, left: this.note.until - mono } : null
+        note: this.note ? { text: this.note.text, left: this.note.until - mono, ...(this.note.ok ? { ok: true as const } : {}) } : null
       }
       this.names = names
       this.gapView(m, now, modes)
@@ -533,9 +575,10 @@ export class WidgetEngine {
     // „⋯” with its „Cofnij” (`barLines`).
     const movedLines = [...this.moved].sort((a, b) => b[1].seq - a[1].seq).map(([kind, mv]) => ({ id: `moved:${kind}`, text: mv.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }))
     if (movedLines.length && !v.hidden) v.lines = [...v.lines, ...movedLines]
-    // A routine saved from the bar (D328): its „Cofnij” for a while, in place of its line.
-    if (this.routineSaved && (this.routineSaved.until <= mono || this.routineSaved.day !== date)) this.routineSaved = null
-    if (this.routineSaved && !v.hidden) v.lines = [...v.lines, { id: `routineSaved:${this.routineSaved.block}`, text: this.routineSaved.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }]
+    // A routine saved from the bar (D328) or a block ended by its last step (D474): its „Cofnij” for a while, in place of its line.
+    const u = this.stepsUndo
+    if (u && (u.until <= mono || u.day !== date)) this.stepsUndo = null
+    else if (u && !u.pending && !v.hidden) v.lines = [...v.lines, { id: `${u.kind}:${u.block}`, text: u.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }]
   }
 
   /**
@@ -880,8 +923,8 @@ export class WidgetEngine {
     }
   }
 
-  private say(text: string): void {
-    this.note = { text, until: this.mono + NOTE_MS }
+  private say(text: string, ok = false): void {
+    this.note = { text, until: this.mono + NOTE_MS, ...(ok ? { ok: true as const } : {}) }
     setTimeout(() => void this.refresh(), NOTE_MS + 50).unref?.()
   }
 
@@ -948,6 +991,9 @@ export class WidgetEngine {
       case 'bgEnd':
         if (arg) click = { a: 'finish', block: arg }
         break
+      case 'front':
+        if (arg) click = { a: 'front', block: arg }
+        break
       case 'bgExtend': {
         const [block, min] = (arg ?? '').split('|')
         if (block) click = { a: 'extend', block, minutes: num(min) ?? 15 }
@@ -993,14 +1039,26 @@ export class WidgetEngine {
         return this.refresh()
       }
       case 'routine': {
-        // „✓ Zapisz zaznaczone” of the unfolded steps (D328): `<block>|<version>|<places of the steps in it, comma-separated>`
-        // – the steps' ids from the view (40 ids would not fit an action's argument).
-        const [block, version, places] = (arg ?? '').split('|')
+        // „✓ Zapisz zaznaczone” of the unfolded steps (D328): `<block>|<version>|<a change per step of the version>` – `a` ticked
+        // there, `r` taken off there (ticked when it was unfolded), `.` as it was (T1112: the difference from the unfolding, so a tick
+        // made elsewhere meanwhile stays; 40 ids would not fit an action's argument). An older bar's `<places, comma-separated>` – ticked.
+        const [block, version, change] = (arg ?? '').split('|')
         const r = v.routines.find((x) => x.block === block)
         if (!r || !(ROUTINE_VERSIONS as readonly string[]).includes(version ?? '')) return
         const steps = r[version as RoutineVersion]
-        const ids = [...new Set((places ?? '').split(',').map(num))].flatMap((k) => (k != null && steps[k] ? [steps[k]!.id] : []))
+        if (/^[.ar]+$/.test(change ?? '')) {
+          const of = (c: string) => steps.flatMap((s, k) => (change![k] === c ? [s.id] : []))
+          return this.routineDone(day, r, version as RoutineVersion, of('a'), of('r'))
+        }
+        const ids = [...new Set((change ?? '').split(',').map(num))].flatMap((k) => (k != null && steps[k] ? [steps[k]!.id] : []))
         return this.routineDone(day, r, version as RoutineVersion, ids)
+      }
+      case 'routineVersion': {
+        // The version picked in „Kroki ▸” (D481): `<block>|<version>` – the day's version of the block at once (the panel and the
+        // card in „Dziś” switch with it, T1101).
+        const [block, version] = (arg ?? '').split('|')
+        if (!block || !(ROUTINE_VERSIONS as readonly string[]).includes(version ?? '')) return
+        return this.pickRoutineVersion(day, block, version as RoutineVersion)
       }
       case 'step': {
         // The tick of the step line (D440): `<block>|<step>` – the bar's day; no sound, no window.
@@ -1037,13 +1095,14 @@ export class WidgetEngine {
           label = `Przedłuż +${click.minutes}`
         }
         else if (kind === 'workedUntil') click = { a: 'workedUntil', explain: id }
-        // A routine (D328): „✓ Wszystkie” – every step of the usual version, „gorsze dni” – every step of that one.
+        // A routine (D328): „✓ Wszystkie” – every step of the version the day picked for the block (D479; the usual one until
+        // one is picked), „gorsze dni” – every step of that one (it becomes the day's version, T1108).
         else if (kind === 'routine') {
           const r = v.routines.find((x) => x.line === line)
           if (!r || (act !== 'all' && act !== 'worse')) return
-          const version = act === 'worse' && r.worse.length ? 'worse' : 'normal'
+          const version: RoutineVersion = act === 'worse' ? (r.worse.length ? 'worse' : 'normal') : r.version === 'worse' && r.worse.length ? 'worse' : 'normal'
           return this.routineDone(day, r, version, r[version].map((s) => s.id))
-        } else if (kind === 'routineSaved') return act === 'undo' ? this.undoRoutine() : undefined
+        } else if (kind === 'routineSaved' || kind === 'stepsFinished') return act === 'undo' ? this.undoStepsLine() : undefined
         // „OK” of the line about saving the battery: the day's answer in the log – it never comes back that day.
         else if (kind === 'battery') await this.d.timer({ a: 'mark', question: line, answer: 'ok', day })
         // A gap (D368): „Przesuń resztę wcześniej” closes it, „Zostaw” – the answer in the log, never asked again for it.
@@ -1102,10 +1161,17 @@ export class WidgetEngine {
     await this.refresh()
   }
 
-  /** A title from the bar's field into „Skrzynka” (D385): refused – the bar says why. */
+  /** A title from the bar's field into „Skrzynka” (D385): saved – the bar says what was added (D470); refused – why. */
   private async quickAdd(title: string): Promise<void> {
-    const r = this.d.quickAdd ? await this.d.quickAdd(title) : { ok: false, error: 'Szybki zapis nie działa teraz.' }
-    if (!r.ok && r.error) this.say(r.error)
+    const r = this.d.quickAdd ? await this.d.quickAdd(title) : { ok: false, error: 'Szybki zapis nie działa teraz.', title: null }
+    if (r.ok) this.say(quickSavedText(r.title ?? ''), true)
+    else if (r.error) this.say(r.error)
+    return this.refresh()
+  }
+
+  /** The quick capture saved by the global shortcut (the window „Do skrzynki”, D470): the bar says it as it does for its own field. */
+  quickSaid(title: string): Promise<void> {
+    this.say(quickSavedText(title), true)
     return this.refresh()
   }
 
@@ -1153,47 +1219,160 @@ export class WidgetEngine {
    * true state), yet the task's own entry may show its step ticked. No sound (D440).
    */
   private async tickStep(day: string | undefined, blockId: string, stepId: string): Promise<void> {
+    const at = await this.dayBlock(day, blockId)
+    if (!at) return this.refresh()
+    const out = tickEdits({ date: at.day, day: at.before, block: at.block, stepId, done: true, task: at.taskBefore, routines: at.routines })
+    if ('error' in out) {
+      this.say(out.error)
+      return this.refresh()
+    }
+    const { res } = await this.writeSteps(at, out)
+    if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Odhaczenie spotkało się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
+    // D474, T1108: the last step ticked off saves the block's routine (its line and card close) and ends the block now, done.
+    else if (out.finished) await this.finishBySteps(at, out)
+    return this.refresh()
+  }
+
+  /**
+   * The block of `day` as the bar finds it just before a write of its steps (T793): the day's file read again (with the queue),
+   * the block in the day's plan made of it over the snapshot the bar counted, its task's record and the routines as they are
+   * now (D473). A block not there – „Tego bloku już nie ma w planie.”, null.
+   */
+  private async dayBlock(day: string | undefined, blockId: string): Promise<DayBlockAt | null> {
     const folder = this.d.folder()
-    if (!folder || !day) return
+    if (!folder || !day) return null
     const m = this.model?.state.grid.date === day ? this.model : await folder.widgetModel(this.now)
     const rel = paths.day(day)
     const before = ((await folder.recordView(rel)) as RawRecord | undefined) ?? null
     const block = m.state.grid.date === day ? dayPlan(m.ctx.snapshot, before ? dayFileFrom(before, day) : null).find((b) => b.id === blockId) : undefined
     if (!block) {
       this.say(BLOCK_GONE)
-      return this.refresh()
+      return null
     }
     const taskRel = block.task ? paths.record('request', block.task) : null
     const taskBefore = taskRel ? (((await folder.recordView(taskRel)) as RawRecord | undefined) ?? null) : null
-    const out = tickEdits({ date: day, day: before, block, stepId, done: true, task: taskBefore })
+    const routines = (await folder.collection('routine').catch(() => [])).map(routineFrom).filter((x): x is Routine => !!x)
+    return { day, rel, before, block, taskRel, taskBefore, routines }
+  }
+
+  /** The day's file and the task's record as a change of the steps leaves them: one edit of the queue (and what it made). */
+  private async writeSteps(at: DayBlockAt, out: BlockStepsEdit): Promise<{ res: EditOutcome[]; made: Array<{ entry: EditEntry; made: RawRecord | null }> }> {
+    const made = [
+      { entry: recordEdit(at.rel, at.before, out.day), made: out.day as RawRecord },
+      { entry: at.taskRel && out.task ? recordEdit(at.taskRel, at.taskBefore, out.task) : null, made: (out.task ?? null) as RawRecord | null }
+    ].filter((x): x is { entry: EditEntry; made: RawRecord | null } => x.entry != null)
+    const res = made.length ? await this.d.edit(made.map((x) => x.entry)) : []
+    return { res, made }
+  }
+
+  /**
+   * The version of a block's routine picked on the bar (D481, T1110): written into the day as the panel's and the card's switch
+   * writes it (`routineVersionEdits` – the routine's list of that version kept by the day); the ticks stay the day's.
+   */
+  private async pickRoutineVersion(day: string | undefined, blockId: string, version: RoutineVersion): Promise<void> {
+    const at = await this.dayBlock(day, blockId)
+    if (!at) return this.refresh()
+    const out = routineVersionEdits({ date: at.day, day: at.before, block: at.block, version, routines: at.routines })
     if ('error' in out) {
       this.say(out.error)
       return this.refresh()
     }
-    const entries = [recordEdit(rel, before, out.day), taskRel && out.task ? recordEdit(taskRel, taskBefore, out.task) : null].filter((e): e is EditEntry => e != null)
-    const res = entries.length ? await this.d.edit(entries) : []
-    if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Odhaczenie spotkało się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
+    const { res } = await this.writeSteps(at, out)
+    if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Wersja rutyny spotkała się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
     return this.refresh()
   }
 
   /**
-   * A routine's steps saved (D328) – the same click as the card in „Dziś”, so the first save closes both (its line goes);
-   * „Zapisano: … · Cofnij” stays in its place for a while (one click of the bar is easily the wrong one).
+   * The block's list made whole by a tick on the bar (D474, T1104, T1108 – the shared `listWhole`): a block of a routine is
+   * saved as ticked off (its line and card close – quiet when saved already), the block ends now, done, when it has begun and
+   * not ended (the timer refuses any other quietly). The bar says „Skończono: <nazwa> · Cofnij” – its „Cofnij” takes the end
+   * back (the block runs on, its step stays ticked) – or, the block not ended, „Zapisano: … · Cofnij” of the routine.
    */
-  private async routineDone(day: string | undefined, routine: BarRoutine, version: RoutineVersion, steps: string[]): Promise<void> {
-    const r = await this.d.timer({ a: 'routineDone', block: routine.block, version, steps, day })
-    if (!r.ok) this.say(r.why ?? 'rutyna nie zapisała się')
-    else if (day) this.routineSaved = { block: routine.block, day, text: `Zapisano: ${routine.name} (${ROUTINE_VERSION_NAMES[version]}) – ${steps.length} z ${routine[version].length}`, until: this.mono + ROUTINE_UNDO_MS }
+  private async finishBySteps(at: DayBlockAt, out: BlockStepsEdit): Promise<void> {
+    const name = this.names ? blockName(at.block, this.names) : 'blok'
+    const version = routineStepsNow(out.day, at.day, at.block, at.routines)?.version ?? 'normal'
+    const ids = out.steps.map((s) => s.id)
+    const r = await listWhole(this.d.timer, at.day, at.block.id, at.block.routine ? { version, steps: ids } : null)
+    for (const why of r.said) this.say(why)
+    const until = this.mono + ROUTINE_UNDO_MS
+    if (r.ended) this.stepsUndo = { kind: 'stepsFinished', block: at.block.id, day: at.day, text: `Skończono: ${name}`, until, end: true, routine: false, edits: [] }
+    else if (r.saved) this.stepsUndo = { kind: 'routineSaved', block: at.block.id, day: at.day, text: `Zapisano: ${name} (${ROUTINE_VERSION_NAMES[version]}) – ${ids.length} z ${ids.length}`, until, end: false, routine: true, edits: [] }
+  }
+
+  /**
+   * A routine's steps saved (D328, T1108 – the shared `routineSaved`) – the same click as the card in „Dziś”, so the first save
+   * closes both (its line goes): first `routine.done` (saved elsewhere already – refused, nothing more written), then the steps
+   * saved ticked off in the day with the version picked (only added – T1112; one state with the panel „Kroki”), then – the list
+   * whole and the ticks written – the end of the block (D474). Its line „Zapisano: … · Cofnij” (or „Skończono: …”) comes once
+   * all of it is written (T1114: a „Cofnij” before it would miss what is still being written) and stays for a while.
+   */
+  private async routineDone(day: string | undefined, routine: BarRoutine, version: RoutineVersion, add: string[], remove: string[] = []): Promise<void> {
+    if (!day) return this.refresh()
+    // What the day will have of the list: its ticks (the view's) with the change – `routine.done` records it (T1112).
+    const off = new Set(remove)
+    const steps = routine[version].map((s) => s.id).filter((id) => (add.includes(id) || routine.done?.includes(id)) && !off.has(id))
+    let made: Array<{ entry: EditEntry; made: RawRecord | null }> = []
+    let after = { done: steps.length, of: routine[version].length }
+    const savedText = () => `Zapisano: ${routine.name} (${ROUTINE_VERSION_NAMES[version]}) – ${after.done} z ${after.of}`
+    const base = { block: routine.block, day, routine: true }
+    try {
+      const r = await routineSaved(
+        this.d.timer,
+        day,
+        routine.block,
+        { version, steps },
+        async () => {
+          const at = await this.dayBlock(day, routine.block)
+          const out = at ? routineSaveEdits({ date: day, day: at.before, block: at.block, version, done: add, undone: remove, task: at.taskBefore, routines: at.routines }) : null
+          if (!at || !out) return { ok: false, finished: false }
+          if ('error' in out) {
+            this.say(out.error)
+            return { ok: false, finished: false }
+          }
+          after = { done: out.steps.filter((s) => s.done).length, of: out.steps.length }
+          const w = await this.writeSteps(at, out)
+          made = w.made
+          const ok = w.res.every((o) => o.status === 'applied' || o.status === 'waiting')
+          if (!ok) this.say('Odhaczenie spotkało się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
+          return { ok, finished: out.finished === true }
+        },
+        // T1122: the routine's „Cofnij” from the moment it is saved – shown once all is written (T1114), or alone when the rest fails.
+        () => (this.stepsUndo = { ...base, kind: 'routineSaved', text: savedText(), until: this.mono + ROUTINE_UNDO_MS, end: false, edits: [], pending: true })
+      )
+      for (const why of r.said) this.say(why)
+      if (r.saved) this.stepsUndo = { ...base, kind: r.ended ? 'stepsFinished' : 'routineSaved', text: r.ended ? `Skończono: ${routine.name}` : savedText(), until: this.mono + ROUTINE_UNDO_MS, end: r.ended, edits: made }
+    } finally {
+      // A write that threw: the routine stays saved – its „Cofnij” alone, now.
+      if (this.stepsUndo?.pending) this.stepsUndo = { ...this.stepsUndo, pending: false }
+    }
     return this.refresh()
   }
 
-  /** „Cofnij” of a routine saved from the bar: it waits to be ticked off again (its line and card come back). */
-  private async undoRoutine(): Promise<void> {
-    const saved = this.routineSaved
-    this.routineSaved = null
-    if (saved) {
-      const r = await this.d.timer({ a: 'routineUndo', block: saved.block, day: saved.day })
-      if (!r.ok && r.why) this.say(r.why)
+  /**
+   * „Cofnij” of the bar's line after steps (T1105, T1109 – the shared `undoAfterSteps`): the end of the block first (it runs
+   * on) – refused, nothing more is taken back (D482); then the routine's save (its line and card come back), then the ticks
+   * the save wrote (each file back while it stands as the save left it).
+   */
+  private async undoStepsLine(): Promise<void> {
+    const u = this.stepsUndo
+    // A save still writing has nothing of its own to take back yet (T1114, T1122).
+    if (u?.pending) return this.refresh()
+    this.stepsUndo = null
+    const folder = this.d.folder()
+    if (u) {
+      const ticks = folder && u.edits.length
+        ? async () => {
+            const back: EditEntry[] = []
+            for (const x of u.edits) {
+              const now = ((await folder.recordView(x.entry.rel)) as RawRecord | undefined) ?? null
+              const inv = editStands(x.entry, now, x.made) ? inverseEdit(x.entry, now, x.made) : null
+              if (inv) back.push(inv)
+            }
+            if (back.length) await this.d.edit(back)
+          }
+        : null
+      const why = await undoAfterSteps(this.d.timer, { day: u.day, block: u.block, end: u.end, routine: u.routine, ticks })
+      if (why) this.say(why)
     }
     return this.refresh()
   }

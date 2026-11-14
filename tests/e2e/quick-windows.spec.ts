@@ -7,7 +7,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
-import { launch, settledBarBounds, withMainLog } from './app'
+import { dataOpen, launch, settledBarBounds, withMainLog } from './app'
 import { foreground, keys, topMost, topWindows } from './win32'
 
 test.skip(process.platform !== 'win32' || process.env.RD_E2E_REAL_HELPER !== '1', 'Windows with the real helper only')
@@ -48,6 +48,8 @@ test('Win+Alt+N: „Do skrzynki” na wierzchu z fokusem tylko na skrót; Enter 
   try {
     await withMainLog(userData, async () => {
       await expect(page.getByTestId('bar-main')).toBeVisible({ timeout: 30_000 })
+      // The bar shows before the folder opens: an Enter of that moment is refused, not saved (T1221).
+      await dataOpen(page)
       expect(await page.evaluate(() => window.rd.quickShortcut())).toEqual({ key: 'Super+Alt+N', state: 'on' })
       const w = await quick(app)
       // The start is over once the helper laid the desktop bar and it stands still: until then (and now) the window was

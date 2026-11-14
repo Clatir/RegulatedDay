@@ -19,13 +19,10 @@ import type { DayFacts } from './facts'
 import { dayGame, type GameDayInput, type GameGrade } from './game'
 import { dayOutcome, type BoundaryOutcome } from './outcome'
 import { regenWaysOf } from './progress'
+import { CORRECTION_H, FREEZE_MAX_H } from './freezeWindow'
 import { modulesOfDay, type MeasureModules } from './sideB'
 
 const HOUR = 3_600_000
-/** The window of corrections after the opening of the day after it. */
-export const CORRECTION_H = 24
-/** The latest a day waits for its freeze after its end. */
-export const FREEZE_MAX_H = 72
 /** A computer last seen before the day began is waited for at most this long after the day's end. */
 export const STALE_WAIT_H = 24
 /** The computers that wrote to the folder in this many days are waited for. */

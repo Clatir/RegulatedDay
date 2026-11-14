@@ -8,6 +8,7 @@
 import { isIsoDate } from '../time/zone'
 import { NOTE_MAX } from './note'
 import { DAY_TYPES, type DayTypeId } from './settings'
+import { routineStepsEntries, type RoutineStepsEntry } from './routineSteps'
 import { doneSetFrom, stepsFrom, type Step } from './steps'
 
 export interface PlanBlock {
@@ -63,6 +64,13 @@ export interface PlanBlock {
   movedFrom: string | null
   /** A variant of a change of the plan shortened it or moved it (the game: „niezmieniony przez warianty”). */
   byVariant: boolean
+  /**
+   * Parallel blocks (D476, D492): the block of the plan this one stands beside – the first block of its group, the one the
+   * others were dropped on; null – none. A block of a group starts with that block and keeps its own length (`engine/parallel.ts`;
+   * its own `startMin` is the group's start written at the drop, for a version that does not know the field: it shows the
+   * block there, one after another, and keeps the field in the file).
+   */
+  alongside: string | null
 }
 
 export interface TemplateVersion {
@@ -126,6 +134,11 @@ export interface DayFile {
   asked: Record<string, string>
   /** The steps ticked off on this day (D440, T786): block id → its ticked step ids (in the file a map block → step → true). */
   stepsDone: Record<string, string[]>
+  /**
+   * The lists of its blocks' routines the day keeps (D473, T1100: written at the first tick or the version picked – `model/
+   * routineSteps.ts`); a block not in it shows its routine as the routine is now. Unknown to older versions (kept in the file).
+   */
+  routineSteps?: Record<string, RoutineStepsEntry>
 }
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -192,7 +205,8 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     routine: typeof v.routine === 'string' && v.routine ? v.routine : null,
     steps: stepsFrom(v.steps),
     movedFrom: isIsoDate(v.movedFrom) ? v.movedFrom : null,
-    byVariant: v.byVariant === true
+    byVariant: v.byVariant === true,
+    alongside: typeof v.alongside === 'string' && v.alongside && v.alongside !== v.id ? v.alongside : null
   }
 }
 
@@ -218,6 +232,7 @@ export function planBlock(p: Partial<PlanBlock> & Pick<PlanBlock, 'id' | 'catego
     steps: [],
     movedFrom: null,
     byVariant: false,
+    alongside: null,
     ...p
   }
 }
@@ -362,7 +377,8 @@ export function dayFileFrom(v: unknown, date: string): DayFile {
         : [],
     movedTo,
     asked,
-    stepsDone
+    stepsDone,
+    routineSteps: routineStepsEntries(r.routineSteps)
   }
 }
 

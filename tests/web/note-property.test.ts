@@ -172,7 +172,8 @@ src ${JSON.stringify(json)}\nwant …${want.slice(Math.max(0, at - 80), at + 120
   }
 
   const CASES = 2500
-  it(`${CASES} losowych dokumentów ze wszystkim: zapis, odczyt i drugi zapis są takie same`, () => {
+  // 2500 documents take 15 s on a busy machine (the suite's default is 30 s) and more in a loaded full run: slow, not stuck.
+  it(`${CASES} losowych dokumentów ze wszystkim: zapis, odczyt i drugi zapis są takie same`, { timeout: 180_000 }, () => {
     const r = run(20261110, CASES, ALL)
     if (DEBUG) console.log(`PROP-ALL escaped=${r.escaped} of ${r.checked}`)
     expect(r.checked).toBeGreaterThan(2000)

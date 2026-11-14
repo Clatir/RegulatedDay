@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { AddLinkResult, AttachPrepared, AttachResult, AttachmentOpen, CaseDays, QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
+import type { AddLinkResult, AttachPrepared, AttachResult, AttachmentOpen, CaseDays, CloseResult, QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import { blockFactsOf, type CasesRitual } from '@shared/engine/cases'
 import { newId } from '@shared/model/ids'
@@ -1025,16 +1025,16 @@ export class DataHub {
    */
   async quickAdd(title: unknown): Promise<QuickAddResult> {
     const f = this.service?.folder
-    if (!f) return { ok: false, error: 'Folder danych nie jest otwarty – nic nie zapisano.', id: null }
+    if (!f) return { ok: false, error: 'Folder danych nie jest otwarty – nic nie zapisano.', id: null, title: null }
     const now = f.clock.now()
     const id = newId()
     const today = logicalDayOf(now)
     const q = parseQuickDates(typeof title === 'string' ? title : '', today)
     const raw = newTask(id, now, today, { title: q.title, dueDate: q.dueDate, doDate: q.doDate })
-    if (!raw) return { ok: false, error: 'Wpisz, co zapisać.', id: null }
+    if (!raw) return { ok: false, error: 'Wpisz, co zapisać.', id: null, title: null }
     const out = await this.edit([recordEdit(paths.record('request', id), null, raw)!])
     const ok = out.every((o) => o.status === 'applied' || o.status === 'waiting')
-    return { ok, error: ok ? null : 'Nie zapisano – spróbuj jeszcze raz.', id: ok ? id : null }
+    return { ok, error: ok ? null : 'Nie zapisano – spróbuj jeszcze raz.', id: ok ? id : null, title: ok ? String(raw.title) : null }
   }
 
   /** The logical day of the clock `quickAdd` saves with (D454: the preview of the words of dates counts from it, not from the window's clock). */
@@ -1063,9 +1063,17 @@ export class DataHub {
     return { ok: r.ok, why: r.ok ? null : r.why, confirm: null }
   }
 
-  /** A day closed (the ritual, „Jak zapisano”, „Wolne”, „Nie pamiętam”). */
-  async closeDay(day: string, how: CloseHow): Promise<TimerResult> {
+  /** A day closed (the ritual, „Jak zapisano”, „Wolne”, „Nie pamiętam”), with the ids of its events for „Cofnij” (D468). */
+  async closeDay(day: string, how: CloseHow): Promise<CloseResult> {
     const r = await this.need().closeDay(day, how)
+    this.changed()
+    if (r.ok) void this.service?.tick()
+    return { ok: r.ok, why: r.ok ? null : r.why, confirm: null, written: r.ok ? r.written : [] }
+  }
+
+  /** „Cofnij” of a close (D468): its events undone – the day is among the days not closed again. */
+  async undoClose(day: string, ids: string[]): Promise<TimerResult> {
+    const r = await this.need().undoClose(day, ids)
     this.changed()
     if (r.ok) void this.service?.tick()
     return { ok: r.ok, why: r.ok ? null : r.why, confirm: null }

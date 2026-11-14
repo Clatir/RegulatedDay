@@ -40,7 +40,10 @@ import { askScope } from '../series/scopeAsk'
 import { removeTarget, useDeleteResolver, useDeleteSelected, type DeleteTarget } from '../../lib/deleteKey'
 import { StepsEditor } from '../steps/StepsEditor'
 import { saveBlockSteps, stepsAskScope } from '../steps/blockSteps'
-import { tickBlockStep } from '../../store/steps'
+import { finishBySteps } from '../steps/stepsFinish'
+import { RoutineVersionPick, routineVersionShown } from '../steps/RoutineVersionPick'
+import { pickRoutineVersion, tickBlockStep } from '../../store/steps'
+import { routineStepsOf } from '@shared/model/routineSteps'
 import { changeSeries, removeSeries } from '../series/seriesActions'
 import { occurrenceRuleText, seriesBlockPatch, touchesSeries } from '../series/seriesForm'
 import { blockName, type Names } from '../plan/blockView'
@@ -53,9 +56,9 @@ import { EnergyLegend, Timeline, type BlockSpan, type DragEdge, type EdgeLimits 
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
 import { begunIds } from '@shared/engine/facts'
-import { blockNow, clickResize, newBlocksToast, patchDayBlock, pushDayBlocks, removeDayBlock, setDayWake, tellFreed } from './dayActions'
-import { addChange, dragChange, pushedSpans, pushedStarts, type DayChange } from './dayPush'
-import { putBlock } from '@shared/data/dayEdits'
+import { clickResize, newBlocksToast, patchDayBlock, pushDayBlocks, putChange, removeDayBlock, saveDay, saveParallel, setDayWake, tellFreed } from './dayActions'
+import { addChange, dragChange, parallelChange, parallelHint, pushedSpans, pushedStarts, type DayChange } from './dayPush'
+import { placePatch } from '@shared/engine/parallel'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
 import { CasesPanel } from '../cases/CasesPanel'
 import { caseTitle } from '../cases/casesLogic'
@@ -240,6 +243,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     }
   }, [pick, date, plan])
   const block = draft ?? plan.find((b) => b.id === selected) ?? null
+  // D473: a block of a routine without steps of its own shows the routine's in „Kroki” (a new block's draft – its own list only).
+  const routineList = block && !draft ? routineStepsOf(block, routines, model.dayFile?.routineSteps, new Set(model.dayFile?.stepsDone[block.id] ?? [])) : null
   // D427: what the axis draws of a hidden calendar's blocks: the one whose panel is open (Ctrl K found it – or it was open when the
   // calendar was unchecked) and the ones that must stay (running, begun outside the plan – T1002), each with the calendar's name on its
   // tile. Not counted as „ukryte”. The axis keeps the hours of all the blocks (`extent`), the pushing of blocks is counted from the day.
@@ -267,7 +272,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const lateWake = useMemo(() => (isToday ? detectLateWake(model.ctx, model.state, model.dayFile) : null), [isToday, model])
   const nowMin = logicalMinuteOf(date, now)
   // „Wstałeś później?” waits for the answer once shown (D337): the window reports it as seen (the first in the log wins) with
-  // the end of the routine and the wake it is counted from in the id, and the proposal is counted from that end.
+  // the hour the day's first block was moved to and the wake in the id (D488), and the proposal is counted from that hour.
   const lateShown = lateWake != null && (lateWake.waitUntilMin == null || nowMin >= lateWake.waitUntilMin)
   const lateSeenId = lateShown && dayUsable(model.data) ? lateWakeSeenId(date, lateWake) : null
   useEffect(() => {
@@ -303,7 +308,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     // D368: a block shortened today by its bottom edge frees its end – the bar may ask about the gap (a move, the top edge: no).
     const freed = isToday && c.was ? freedByEdit(model.state, c.was, c.block) : null
     const pushed = pushedStarts(plan, c)
-    const out = await pushDayBlocks(date, raw, (r) => putBlock(r, c.was ? { ...blockNow(r, date, c.was), ...c.patch } : c.block), pushed)
+    const out = await pushDayBlocks(date, raw, (r) => putChange(r, date, plan, c), pushed)
     if (isSaved(out)) {
       void tellFreed(date, freed)
       // D428: the pushing counts the blocks of an unchecked calendar too; the line of the bar (the desktop's, the same one) never
@@ -328,7 +333,11 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     }
     const freed = isToday ? freedByEdit(model.state, b, { ...b, ...patch }) : null
     const state: SendState = { afterSend: false }
-    const out = await patchDayBlock(date, raw, b, patch, state)
+    // D492 (T1166): a new start or „po bloku” of a block of a group takes it out of the group; the others stay together.
+    const placed = placePatch(plan, b.id, patch)
+    const out = placed.others.length
+      ? await saveDay(date, raw, (r) => putChange(r, date, plan, { was: b, block: { ...b, ...placed.patch }, patch: placed.patch, others: placed.others }), state)
+      : await patchDayBlock(date, raw, b, placed.patch, state)
     if (isSaved(out)) void tellFreed(date, freed)
     return saveAnswer(out, state)
   }
@@ -364,6 +373,20 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   useDeleteSelected(deleteTarget)
   /** A block of the plan that may be dragged (D305): what its drag to `span` changes and pushes apart (D367). */
   const movableChange = (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan): DayChange | null => (axis.items.find((i) => i.id === id)?.movable ? dragChange(model, id, span, edge, shown, pushes) : null)
+  /**
+   * D492: a movable block dropped onto another block of the plan not passed, parked nor cancelled (its tile not dimmed): what it
+   * changes – beside its group, or after a full one – with the blocks it pushes apart.
+   */
+  const ontoChange = (id: string, target: string) => {
+    const item = axis.items.find((i) => i.id === target)
+    if (!axis.items.find((i) => i.id === id)?.movable || !item || item.dim || !plan.some((b) => b.id === target)) return null
+    const endOf = (x: string) => axis.items.find((i) => i.id === x)?.endMin ?? null
+    return parallelChange(model, id, target, rd.general.parallelMax, endOf, (b) => blockName(b, names), pushes)
+  }
+  const ontoShown = (id: string) => {
+    const i = axis.items.find((x) => x.id === id)
+    return i ? { startMin: i.startMin, endMin: i.endMin } : null
+  }
 
   /**
    * A new block: in the panel first, drawn dashed on the axis (D466); an hour long, or as long as the range dragged over the axis
@@ -437,12 +460,24 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
       .then((ok) => (ok ? true : 'asked'))
   }
   /**
+   * A tick of the panel (D440); the last step ticked off today saves the block's routine (its card closes, T1108) and ends the
+   * block now, done (D474 – „Skończono: … · Cofnij”).
+   */
+  const tickStep = async (b: PlanBlock, id: string, done: boolean) => {
+    const r = await tickBlockStep(date, b, id, done, raw)
+    const version = routineStepsOf(b, routines, model.dayFile?.routineSteps)?.version ?? 'normal'
+    if (r.finished && isToday) await finishBySteps(date, b, blockName(b, names), b.routine ? { version, steps: r.steps.map((s) => s.id) } : null)
+    return r
+  }
+  /**
    * A change of the steps of the block in the panel (`isDraft` as in `changeBlock`): the new block's go into its draft (over the
    * latest draft) – and once its first save has started, also after it as the block's own change (written, T1072); a block of the
-   * plan – as ever; a draft gone meanwhile – nothing.
+   * plan – as ever; a draft gone meanwhile – nothing. `fromRoutine` – the list is the block's routine's (D473, T1102).
    */
-  const changeSteps = (b: PlanBlock, op: StepOp, isDraft: boolean): Promise<SaveAnswer> => {
+  const changeSteps =(b: PlanBlock, op: StepOp, isDraft: boolean, fromRoutine = false): Promise<SaveAnswer> => {
     const o = { date, today, raw, series, names, patchDraft: (steps: PlanBlock['steps']) => patchBlockDraft(date, { steps }), scope: stepsScope }
+    // The list of the block's routine (D473): its change is the day's own, never asked of a series (T1102).
+    if (fromRoutine && !isDraft) return saveBlockSteps(o, b, op, false, true)
     const d = draftNow(b.id)
     const shown = d ? saveBlockSteps(o, d, op, true) : null
     const later = firstSave.after(b.id, () => saveBlockSteps(o, d ?? b, op, false))
@@ -600,6 +635,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                 })
               }
               onCreate={create}
+              // D496: a bare click on the axis makes no draft – only a drag over it does.
+              clickCreates={false}
               // D305: the dragged block's planned start, as an edit of the day – today and later (a day gone is history);
               // D367: with the blocks it pushes apart.
               onMove={
@@ -637,6 +674,19 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               edgeLimits={edgeLimits}
               // D367: while a block is dragged, the blocks it pushes apart at their new places.
               pushPreview={pushes ? (id, span, edge, shown) => pushedSpans(model, movableChange(id, span, edge, shown), isToday ? 'forecast' : 'plan') : undefined}
+              // D492: a block dropped onto another one stands beside it (today and later – a day gone is history).
+              parallelPreview={pushes ? (id, target) => parallelHint(model, ontoChange(id, target), ontoShown(id), isToday ? 'forecast' : 'plan') : undefined}
+              onParallel={
+                pushes
+                  ? (id, target) => {
+                      const c = ontoChange(id, target)
+                      if (!c || c === 'same') return false
+                      const span = parallelHint(model, c, ontoShown(id), isToday ? 'forecast' : 'plan')?.span
+                      void saveParallel(date, raw, plan, c, openId)
+                      return span ?? { startMin: c.block.startMin ?? 0, endMin: (c.block.startMin ?? 0) + c.block.durationMin }
+                    }
+                  : undefined
+              }
               attached={
                 pending
                   ? {
@@ -685,12 +735,15 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             newBlock={draft ? { add: (name) => (firstSave.of(draft.id) ? false : void changeBlock(draft, { name }, true)) } : undefined}
             steps={
               <StepsEditor
-                steps={block.steps}
+                steps={routineList?.steps ?? block.steps}
                 lengthMin={block.durationMin}
                 ticks={!draft}
-                onTick={(id, done) => tickBlockStep(date, block, id, done, raw)}
-                onOp={(op) => changeSteps(block, op, draft != null)}
-                removeAsks={() => stepsAskScope({ date, series, scope: stepsScope }, block, draft != null)}
+                onTick={(id, done) => tickStep(block, id, done)}
+                onOp={(op) => changeSteps(block, op, draft != null, routineList != null)}
+                removeAsks={() => stepsAskScope({ date, series, scope: stepsScope }, block, draft != null, routineList != null)}
+                // D479; a list „na gorsze dni” the day keeps after the routine lost that version can go back to „zwykła” (T1116); a
+                // routine removed – no switch (T1124).
+                aside={routineVersionShown(routineList) ? <RoutineVersionPick version={routineList.version} onPick={(v) => void pickRoutineVersion(date, block, v, raw)} /> : undefined}
               />
             }
             place={draft ? undefined : dayPlace}
@@ -752,6 +805,9 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   )
 }
 
+/** The hint under the side panel (D496): a bare click of the axis makes nothing in „Dziś”, a new block is a drag, „+ Blok” or Ctrl+N. */
+export const AXIS_HINT = 'Przeciągnij po osi, żeby dodać blok w tych godzinach, albo użyj „+ Blok” (Ctrl+N – w najbliższym wolnym miejscu).'
+
 /** Beside the plan when no block is selected: the warnings, the parked blocks, what the engine says of the day. */
 function SidePanel({ model, names, onSelect, onMove, cases }: { model: DayModel; names: Names; onSelect: (id: string) => void; onMove: (b: PlanBlock) => void; cases?: ReactNode }) {
   const s = model.state
@@ -797,7 +853,7 @@ function SidePanel({ model, names, onSelect, onMove, cases }: { model: DayModel;
           ))}
         </div>
       )}
-      <p className={cx('text-[11.5px] text-muted')}>Kliknij wolne miejsce na osi, żeby dodać blok w tej godzinie – albo przeciągnij po nim, żeby ustawić początek i koniec (Ctrl N – w najbliższym wolnym miejscu).</p>
+      <p className={cx('text-[11.5px] text-muted')}>{AXIS_HINT}</p>
     </aside>
   )
 }

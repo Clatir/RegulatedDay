@@ -23,7 +23,7 @@ import { useEscapeLayer } from '../lib/escape'
 import { useQuickToday } from './quickToday'
 
 export type BarMode = 'main' | 'panel' | 'desktop'
-type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | 'quick' | null
+type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | 'quick' | 'parallel' | null
 
 const SIGNALS: Array<[string, string]> = [
   ['glasses', 'okulary'],
@@ -341,15 +341,18 @@ function QuickButton({ mode, open, toggle }: { mode: BarMode; open: boolean; tog
 
 /**
  * „Kroki ▸” of a routine unfolded (D328): its steps ticked one by one, the version („zwykła” or „gorsze dni”) and
- * „✓ Zapisz zaznaczone” – the same save as the card in „Dziś”. Another version starts with nothing ticked. The steps go
- * by their places in the version (an action's argument is short – 40 ids would not fit, A6-10 review).
+ * „✓ Zapisz zaznaczone” – the same save as the card in „Dziś”. It starts as the day has the block (T1108: its version and
+ * ticks, one state with the panel „Kroki”); the save writes the version and the change of the ticks against that start into the
+ * day (T1112). The change goes as one sign per place of the version (an action's argument is short – 40 ids would not fit,
+ * A6-10 review).
  */
 function RoutineUnfold({ routine, mode, close }: { routine: BarRoutine; mode: BarMode; close: () => void }) {
-  const { version, steps, done, setVersion, flip } = useStepPicks(routine)
+  const { version, steps, done, setVersion, flip, change } = useStepPicks(routine)
   const save = () => {
-    const places = steps.flatMap((s, k) => (done.has(s.id) ? [k] : []))
-    if (!places.length) return
-    act('routine', `${routine.block}|${version}|${places.join(',')}`)
+    // The change against the day when unfolded (T1112): a step taken off here goes off, one ticked elsewhere meanwhile stays.
+    const diff = change()
+    if (!done.size && !diff.includes('r')) return
+    act('routine', `${routine.block}|${version}|${diff}`)
     close()
   }
   return (
@@ -358,7 +361,17 @@ function RoutineUnfold({ routine, mode, close }: { routine: BarRoutine; mode: Ba
         <span className="text-[12px] text-muted">{routine.name}</span>
         {routine.worse.length > 0 &&
           (['normal', 'worse'] as const).map((v) => (
-            <BarButton key={v} mode={mode} pressed={version === v} testId={`bar-routine-version-${v}`} onAct={() => setVersion(v)}>
+            <BarButton
+              key={v}
+              mode={mode}
+              pressed={version === v}
+              testId={`bar-routine-version-${v}`}
+              // D481: the day's version of the block at once – the panel „Kroki” and the card in „Dziś” switch with it.
+              onAct={() => {
+                setVersion(v)
+                if (v !== version) act('routineVersion', `${routine.block}|${v}`)
+              }}
+            >
               {v === 'normal' ? 'zwykła' : 'gorsze dni'}
             </BarButton>
           ))}
@@ -367,7 +380,8 @@ function RoutineUnfold({ routine, mode, close }: { routine: BarRoutine; mode: Ba
         {steps.map((s, k) => (
           <BarButton key={s.id} mode={mode} pressed={done.has(s.id)} testId={`bar-routine-step-${s.id}`} onAct={() => flip(s.id)}>
             {done.has(s.id) ? '✓ ' : ''}
-            {s.name || `krok ${k + 1}`} · {s.min} min
+            {s.name || `krok ${k + 1}`}
+            {s.min > 0 ? ` · ${s.min} min` : ''}
           </BarButton>
         ))}
       </div>
@@ -543,6 +557,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
   const brightness = useMachine((s) => s.prefs.brightness)
   const pulse = useMachine((s) => s.prefs.barPulse)
   const [unfold, setUnfold] = useState<Unfold>(null)
+  const parallel = view.background.filter((b) => b.group)
   /** The field of the quick capture was just opened: its mount takes the focus (a mount after a change of layout does not). */
   const quickFocus = useRef(false)
   // The flag of an opening lives one commit: set by a click or by `quickAt` (after this effect – declared first), spent by
@@ -695,6 +710,20 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
               </span>
             ))}
           </div>
+        </div>
+      )}
+      {unfold === 'parallel' && (
+        <div className="flex flex-col gap-1.5" data-testid="bar-parallel-list">
+          {parallel.map((b) => (
+            <div key={b.id} className="flex flex-wrap items-center gap-1.5" data-testid={`bar-parallel-${b.id}`}>
+              <span className="text-[12px] text-muted">
+                {b.name} do {clockOf(b.endsAt)}
+              </span>
+              <BarButton mode={mode} testId={`bar-front-${b.id}`} onAct={() => (act('front', b.id), setUnfold(null))}>
+                Na pierwszy plan
+              </BarButton>
+            </div>
+          ))}
         </div>
       )}
       {unfold === 'more' && (
@@ -866,6 +895,12 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
               </span>
             </span>
           )}
+          {view.block && parallel.length > 0 && (
+            // D494: the blocks of the parallel group behind – the list unfolds, and any of them comes to the foreground.
+            <BarButton mode={mode} testId="bar-parallel" pressed={unfold === 'parallel'} onAct={() => toggle('parallel')}>
+              +{parallel.length} w tle
+            </BarButton>
+          )}
           {view.block && (
             <span className={cx('num shrink-0 text-[14px]', left < 0 ? 'text-rose' : 'text-fg')} data-testid="bar-countdown">
               {left < 0 ? `+${Math.floor(-left / 60_000)} min` : countdown(left)}
@@ -981,7 +1016,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
           </div>
         )}
         {view.note && holds(view.note.left) && (
-          <div className="text-[12px] text-rose" data-testid="bar-note-click">
+          <div className={cx('text-[12px]', view.note.ok ? 'text-fg' : 'text-rose')} data-testid="bar-note-click">
             {view.note.text}
           </div>
         )}

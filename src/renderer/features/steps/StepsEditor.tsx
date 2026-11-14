@@ -8,7 +8,7 @@
  * 45 min z 1 h” with the block's length (`lengthMin`), „kroki: 45 min” in a task – with a warning when it is over the block
  * (nothing is refused: the block's length never follows the steps).
  */
-import { useEffect, useId, useRef, useState, type DragEvent, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { addStepOp, STEP_NO_TITLE, STEP_TITLE_MAX, stepsCounter, type Step, type StepOp, type StepsKind } from '@shared/model/steps'
 import { CommitField, FieldShell, TextField } from '../../components/fields'
 import { cx } from '../../components/ui'
@@ -26,7 +26,8 @@ export function StepsEditor({
   onOp,
   readOnly,
   lengthMin,
-  removeAsks
+  removeAsks,
+  aside
 }: {
   steps: readonly Step[]
   /** Show the boxes (a block of a day, a task); off – a template's or a series' list. */
@@ -44,6 +45,8 @@ export function StepsEditor({
    * Del then asks no question of its own (D462). Left out – never.
    */
   removeAsks?: () => boolean
+  /** Beside the heading (D473: the version of the block's routine – „zwykła” / „na gorsze dni”). */
+  aside?: ReactNode
 }) {
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -137,6 +140,7 @@ export function StepsEditor({
             {time.text}
           </span>
         )}
+        {aside && <span className="ml-auto">{aside}</span>}
       </div>
       {time?.warning && (
         <p className="text-[12px] text-lamp" role="status" data-testid="steps-over">

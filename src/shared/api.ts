@@ -12,6 +12,7 @@ import type { MonthView } from './engine/calendarViews'
 import type { GoalsPatch } from './model/goals'
 import type { RitualValue, RitualView } from './engine/ritual'
 import type { CasesRitual } from './engine/cases'
+import type { ResultCode } from './engine/timer'
 import type { CloseHow } from './model/events'
 import type { DayTypeId } from './model/settings'
 import type { ZjazdDay, ZjazdWarning } from './import/zjazdy'
@@ -75,6 +76,7 @@ export const CH = {
   ritual: 'rd:ritual',
   ritualAnswer: 'rd:ritualAnswer',
   closeDay: 'rd:closeDay',
+  undoClose: 'rd:undoClose',
   unclosedDays: 'rd:unclosedDays',
   computerList: 'rd:computerList',
   exportCsv: 'rd:exportCsv',
@@ -138,11 +140,12 @@ export interface CaseDays {
   broken?: string[]
 }
 
-/** The quick capture saved (D385): the new task's id; refused – why (no folder, no title). */
+/** The quick capture saved (D385): the new task's id and its title as saved (D470 – without the words of dates); refused – why (no folder, no title). */
 export interface QuickAddResult {
   ok: boolean
   error: string | null
   id: string | null
+  title: string | null
 }
 
 /**
@@ -272,6 +275,7 @@ export type WidgetAction =
   | 'better'
   | 'start'
   | 'bgEnd'
+  | 'front'
   | 'bgExtend'
   | 'undo'
   | 'signal'
@@ -291,6 +295,8 @@ export type WidgetAction =
   | 'quickOpen'
   /** The tick of the bar's step line (D440): `<block>|<step>` ticked off on the bar's day. */
   | 'step'
+  /** The version of a routine picked in „Kroki ▸” (D481): `<block>|<version>` – the day's version of the block at once. */
+  | 'routineVersion'
 
 /** The bar's own actions: laid again („Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests). */
 export type BarActionId = 'placeBar' | 'corner' | 'openPanel'
@@ -514,8 +520,13 @@ export interface TimerResult {
   ok: boolean
   why: string | null
   confirm: { block: string; minutes: number; overrun: boolean; bedtime: boolean } | null
-  /** Why it did nothing, when the caller must tell it from other refusals (D336): never read from `why`. */
-  code?: 'alreadyOver' | 'notBegun'
+  /** Why it did nothing, when the caller must tell it from other refusals (D336, T1109): never read from `why`. */
+  code?: ResultCode
+}
+
+/** A day closed (D468): `written` – the ids of the events of the close, for its „Cofnij” (none when refused). */
+export interface CloseResult extends TimerResult {
+  written: string[]
 }
 
 export interface FolderProbe {
@@ -793,7 +804,9 @@ export interface RdApi {
   /** An answer to a row of a day's ritual (`value`: an instant, a person, a stretch; `item`: a block of the summary row). */
   ritualAnswer(day: string, row: string, choice: string, value?: RitualValue, item?: string | null): Promise<TimerResult>
   /** Closing a day: the ritual, or the morning's „Jak zapisano”, „Wolne”, „Nie pamiętam”. */
-  closeDay(day: string, how: CloseHow): Promise<TimerResult>
+  closeDay(day: string, how: CloseHow): Promise<CloseResult>
+  /** „Cofnij” of a close (D468): the events of that close (`ids` from `closeDay`) undone – the day is not closed again. */
+  undoClose(day: string, ids: string[]): Promise<TimerResult>
   /** The days the morning shows to close (D318, spec „Rano aplikacja pokazuje wszystkie niezamknięte dni naraz”). */
   unclosedDays(): Promise<UnclosedDay[]>
   /** The computers of the folder for the settings (A3-13, „Zapomnij komputer”): this one first. */

@@ -123,7 +123,8 @@ export interface WidgetView {
   /** The bar's own buttons now. */
   buttons: BarButtons
   /** Blocks in the background with „Zakończ teraz” and „Przedłuż” (in „⋯”). */
-  background: Array<{ id: string; name: string; endsAt: number }>
+  /** `group` – behind as a block of a parallel group (D476, D494): „+K w tle” counts it and „Na pierwszy plan” brings it in front. */
+  background: Array<{ id: string; name: string; endsAt: number; group?: boolean }>
   /**
    * „Zrobione automatycznie” (D350): the actions as the plan said them in one row that unfolds on a click into the list of
    * them, each with „Cofnij”; the rest (a flexible block's pause at a fixed start too) each in a row of its own.
@@ -147,8 +148,8 @@ export interface WidgetView {
   recording: boolean
   /** The computers recording a lecture now – the tones never play on them (A8-04). */
   recorders: string[]
-  /** Why a click did nothing (shown in the bar for a few seconds), null: nothing to say. */
-  note: { text: string; left: number } | null
+  /** Why a click did nothing (shown in the bar for a few seconds), null: nothing to say; `ok`: a confirmation (the quick capture, D470), not a refusal. */
+  note: { text: string; left: number; ok?: true } | null
   /** „Prośba ▸” and the request running now (D311, D312). */
   requests: BarRequests
   /** The marker of variants and, while its panel is open, the variants (D313). */
@@ -186,8 +187,12 @@ export interface BarRoutine {
   line: string
   block: string
   name: string
+  /** The steps of each version as the day shows them (T1108; a list of the block's own – `normal`, no `worse`); `min` 0 – no time. */
   normal: Array<{ id: string; name: string; min: number }>
   worse: Array<{ id: string; name: string; min: number }>
+  /** The version the day picked for the block (D479) and the ids its day has ticked off – „Kroki ▸” starts from them. */
+  version?: 'normal' | 'worse'
+  done?: string[]
 }
 
 /** A request running now: its line in place of the block (D312); `day` – the day its „Koniec” goes to (also before 04:00). */

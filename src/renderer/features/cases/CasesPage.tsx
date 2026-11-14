@@ -29,7 +29,8 @@ import { DEL_RING, deleteMark, removeTarget, useDeleteResolver } from '../../lib
 import { caseAnswer, changeCase, createRequest, createTask, moveCase, removeCase, undoCase, useCases } from '../../store/cases'
 import { addPerson, saveRd, useData } from '../../store/data'
 import { useDay } from '../../store/day'
-import { changeTaskSteps, tickTaskStep } from '../../store/steps'
+import { changeTaskSteps } from '../../store/steps'
+import { tickCaseStep } from '../steps/stepsFinish'
 import { takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
 import { categoryOptions } from '../plan/blockView'
 import { caseTitle, DATE_PRESETS, afterRequestAdded, doDateNote, filterOf, PRIORITY_CHOICES, presetDate, sectionsOf, statusParts, type PriorityChoice } from './casesLogic'
@@ -297,7 +298,7 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
       {repeating && isTask && !done && <RepeatForm x={x} today={today} onSaved={() => setRepeating(false)} />}
       {isTask && stepsOpen && (
         <div className="border-t border-line pt-1.5" data-testid="case-steps">
-          <StepsEditor steps={r.steps} ticks kind="task" onTick={(id, d) => tickTaskStep(r.id, id, d)} onOp={async (op) => stepsAnswer(op, await changeTaskSteps(r.id, op))} />
+          <StepsEditor steps={r.steps} ticks kind="task" onTick={(id, d) => tickCaseStep(r.id, id, d, caseTitle(r, rd), today)} onOp={async (op) => stepsAnswer(op, await changeTaskSteps(r.id, op))} />
         </div>
       )}
       {planning && <PlanForm x={x} today={today} title={caseTitle(r, rd)} onDone={() => setPlanning(false)} />}

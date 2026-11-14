@@ -2,7 +2,8 @@
  * Del i „+ Nowa…” (D462, D463). Del usuwa zaznaczony element po pytaniu „Usunąć „…”?” (Enter – Usuń, Esc – Anuluj) i z „Cofnij”:
  * blok w „Dziś” (klik w kafelek), blok otwarty z „Tygodnia” (klik w niego zaznacza go w „Dziś”), wiersz w „Sprawach”; w polu
  * tekstowym Del kasuje tekst i nic więcej; przycisk „Usuń” działa jak dotąd (od razu). „+ Nowa…” na liście „Rutyna” w panelu
- * bloku otwiera okno na środku z nazwą i krokami z czasem; „Zapisz” tworzy rutynę, blok ją dostaje razem z krokami i długością.
+ * bloku otwiera okno na środku z nazwą i krokami z czasem; „Zapisz” tworzy rutynę, blok ją dostaje z długością i pokazuje jej
+ * kroki (D480: bez kopii – kroki rutyny, D473).
  */
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -107,8 +108,18 @@ test('Sprawy (D462): klik w wiersz zaznacza go, Del pyta i usuwa z „Cofnij”;
       const note = page.getByTestId('request-note').first()
       await note.fill('spacer')
       await note.press('Enter')
-      await note.press('Delete')
+      // Enter commits and leaves the field; it shows the text again once the save is back. The cursor is put in the field by
+      // hand: `press` on a field without the focus puts it at the start (Playwright), so Del took the first letter whenever
+      // the save was back in time – „pacer” after „Cofnij”, or a second question (a request's name carries its note).
+      await expect(note).toHaveValue('spacer')
+      await note.click()
+      await page.keyboard.press('Home')
+      await page.keyboard.press('Delete')
+      // Del erases the letter after the cursor and asks nothing; Esc gives the saved text back.
+      await expect(note).toHaveValue('pacer')
       await expect(page.getByTestId('delete-ask')).toHaveCount(0)
+      await page.keyboard.press('Escape')
+      await expect(note).toHaveValue('spacer')
       // A click on the row (its edge, beside the fields) selects it.
       await page.getByTestId('case-row').first().click({ position: { x: 4, y: 4 } })
       await page.keyboard.press('Delete')
@@ -125,7 +136,7 @@ test('Sprawy (D462): klik w wiersz zaznacza go, Del pyta i usuwa z „Cofnij”;
   }
 })
 
-test('„+ Nowa…” (D463): lista „Rutyna” w panelu bloku otwiera okno na środku; „Zapisz” tworzy rutynę z krokami, blok ją dostaje z krokami i długością; Esc nic nie zmienia', async () => {
+test('„+ Nowa…” (D463): lista „Rutyna” w panelu bloku otwiera okno na środku; „Zapisz” tworzy rutynę z krokami, blok ją dostaje z długością i pokazuje jej kroki (D480 – bez kopii); Esc nic nie zmienia', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-new-routine-'))
   const { today } = seedAwake(dataDir, [{ id: 'r1', categoryId: 'rutyny', startMin: 8 * 60, durationMin: 20, fixed: false }])
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
@@ -165,7 +176,9 @@ test('„+ Nowa…” (D463): lista „Rutyna” w panelu bloku otwiera okno na 
       const block = blocksOn(dataDir, today)[0]!
       expect(block.routine).toBe(saved.id)
       expect(block.durationMin).toBe(10)
-      expect(block.steps.map((s) => [s.title, s.min])).toEqual([['Woda', 10]])
+      // D480: the steps are never copied – the block shows the routine's (D473).
+      expect(block.steps ?? []).toEqual([])
+      await expect(page.getByTestId('block-steps').getByTestId('step-title')).toHaveValue('Woda')
       await expect(routine).toHaveValue(saved.id)
     })
     expect(errors).toEqual([])

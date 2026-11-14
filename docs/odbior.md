@@ -94,7 +94,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E8l.1 Nazwy sesji „Sesja NY”, „Sesja Londyn”
    - [ ] E8l.2 „Start” posiłku przy biegnącej pracy pauzuje pracę
    - [ ] E8l.3 „Usuń” przy zaczętym bloku
-   - [ ] E8l.4 „Wstałeś później?” czeka na odpowiedź (gdy się zdarzy)
+   - [ ] E8l.4 „Wstałeś później?” czeka na odpowiedź (od 1.22.0 – po przesunięciu rutyny, 1.22-B.4)
    - [ ] E8l.5 Numer wersji w Ustawieniach
    - [ ] E8m.1 Pasek pulpitu nigdy nad oknami innych programów
    - [ ] E8m.2 „Uruchamiaj z Windows” pokazuje stan i da się wyłączyć
@@ -181,6 +181,23 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] U3 Del z potwierdzeniem (1.20.0)
    - [ ] U4 „+ Nowa…” w listach Rutyna, Wariant, Kategoria (1.20.0)
    - [ ] U8 Bez „Oznaczenia” i drugiej zmiany – wieczorny blok liczy się według kategorii (1.20.0)
+   - [ ] 1.22-B.4 „Wstałeś później?” po przesunięciu rutyny (1.22.0) – rano, zanim odhaczysz kroki rutyny
+   - [ ] KR1 Kroki rutyny w bloku z szablonu i serii, wybór rutyny bez kopii, wersja na gorsze dni (także od razu z paska), zmiana rutyny, jedno odhaczenie z kartą rutyny i paskiem (1.22.0)
+   - [ ] KR2 Ostatni krok kończy blok – „Skończono · Cofnij” w oknie i na pasku (1.22.0)
+   - [ ] KR3 Ukończony blok na osi „Dziś” z ✓ (1.22.0)
+   - [ ] I5 Klik w puste miejsce osi „Dziś” nic nie tworzy – nowy blok przeciągnięciem (1.21.0)
+   - [ ] R1 Blok upuszczony na prawą część innego staje obok niego (1.23.0)
+   - [ ] R2 Wyjście z grupy, „Cofnij” bez przesunięcia, „Początek” wyjmuje z grupy (1.23.0)
+   - [ ] R3 Limit „Najwięcej bloków naraz” (1.23.0)
+   - [ ] R5 Nakładające się bloki obok siebie w „Dziś” i „Szablonach” (1.23.0)
+   - [ ] R4 Bloki równoległe w „Tygodniu” i „3 dniach” (1.23.0)
+   - [ ] 1.23-B.1 Start grupy i pierwszy plan (1.23.0)
+   - [ ] 1.23-B.2 Grupa a reszta dnia (1.23.0)
+   - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
+   - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
+   - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
+   - [ ] 1.22-B.2 Posiłek zaczyna się sam, gdy odejdziesz od komputera (1.22.0)
+   - [ ] 1.22-B.3 Dojazd sam, koniec o planowanym końcu (1.22.0) – w dzień z dojazdem
    - [ ] SNT2.1 Ustawienia → „Kalendarze”: dodawanie do 12, nazwa, kolor, usuwanie z „Cofnij”
    - [ ] SNT2.2 Kategoria i wydarzenie całodniowe w kalendarzu (pole „Kalendarz”)
    - [ ] SNT2.3 Żetony nad widokami, „ukryte: N”, zapamiętane na tym komputerze
@@ -198,6 +215,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E6c.4 Odczuwany koszt
    - [ ] E8k.3 Godzina w rytuale: błędny tekst i odcinek „nie odpoczynek”
    - [ ] E6c.5 Rano: niezamknięte dni
+   - [ ] I1 „Cofnij” zamknięcia dnia rano – dymek „Zamknięto <dzień>: … · Cofnij” (1.21.0)
    - [ ] E5b.4 Prośba przez 04:00 (tylko gdy się zdarzy)
    - [ ] E6a.2 Czas po bloku pracy, który skończył się sam
    - [ ] E6a.3 Czas po projekcie, który skończył się sam – powiadomienie o twardym końcu
@@ -210,6 +228,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E3.7 Ustawienia – budżet od jutra
    - [ ] E3.13 Przeciąganie bloków na osi
    - [ ] E3.14 Ustawienia i Próba w menu bocznym
+   - [ ] I4 Pokój przy wyłączonej grze – „Otwórz Ustawienia”; statystyki – „zamrożone” (1.21.0)
    - [ ] E4b.12 Pasek przeciągnięty za uchwyt – po poprawce (27.10 nie przeszedł)
 6. Laptop i noc (gdy masz laptopa pod ręką):
    - [ ] E6d.3 Kopia – cały folder do nowego
@@ -1375,12 +1394,15 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   „poza planem” i liczy się do budżetu; toast „Usunięty: … · Cofnij”, a „Cofnij” przywraca blok w planie i biegnący (D336).
 - **Nie przechodzi, gdy:** blok dalej biegnie po „Usuń”, przebieg znika z osi albo „Cofnij” nie przywraca bloku.
 
-#### E8l.4 „Wstałeś później?” czeka na odpowiedź (1.0.4)
+#### E8l.4 „Wstałeś później?” czeka na odpowiedź (1.0.4; od 1.22.0 – D488, jak 1.22-B.4)
 - [ ] Odebrane
-- **Automatycznie:** `tests/unit/engine/e3-plan.test.ts` (D337). Ty: gdy się zdarzy.
-- **Jak sprawdzić:** gdy rano pojawi się karta „Wstałeś później?”, dodaj blok rutyny, zanim odpowiesz.
-- **Oczekiwany efekt:** karta zostaje do Twojej odpowiedzi (albo rytuału) – dodany blok rutyny jej nie zabiera (D337).
-- **Nie przechodzi, gdy:** karta znika po dodaniu bloku rutyny.
+- **Automatycznie:** `tests/unit/engine/e3-plan.test.ts` (D337, D488). Ty: rano, raz.
+- **Jak sprawdzić:** rano przy rutynie zaczętej samej kliknij „Cofnij” na liście „Zrobione automatycznie” i przeciągnij
+  rutynę na osi o 30 min później; gdy pojawi się karta „Wstałeś później?”, przeciągnij rutynę z powrotem, zanim odpowiesz.
+- **Oczekiwany efekt:** karta pojawia się po przesunięciu (nie przy samym pierwszym użyciu komputera) i zostaje do Twojej
+  odpowiedzi (albo rytuału) z godziną, na którą przesunąłeś rutynę – powrót rutyny jej nie zabiera (D337).
+- **Nie przechodzi, gdy:** karta pojawia się przy pierwszym użyciu komputera bez przesunięcia albo znika po przesunięciu
+  rutyny z powrotem.
 
 #### E8l.5 Numer wersji w Ustawieniach (1.0.4)
 - [ ] Odebrane
@@ -2407,6 +2429,155 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** w „Dziś” kliknij „+ Blok” i od razu pisz „Analiza rynku” (bez klikania w pole), wybierz kategorię „Analiza”, „Dodaj”. Kliknij „+ Blok” jeszcze raz, wpisz nazwę i wciśnij Enter. W „Tygodniu” kliknij puste miejsce, wpisz nazwę w okienku i wciśnij Enter; drugi raz wpisz nazwę i kliknij „Więcej”. Obejrzyj dzień z zajęciami z PDF zjazdów i blok zadania w „Tygodniu”, „Agendzie” i miesiącu. Zacznij blok dodany przez „+ Blok” z nazwą i usuń go w trakcie. Otwórz panel bloku bez nazwy i zobacz podpowiedź w polu. Zmień nazwę istniejącego bloku, potem wyczyść ją. Zobacz blok z nazwą w „Tygodniu”, „3 dniach”, „Agendzie”, w miesiącu i na pasku pulpitu, gdy trwa. W „Szablonach” kliknij pustą oś (kursor stoi w „Nazwa”), nadaj nazwę blokowi szablonu i zobacz dzień z tego szablonu; zmień tam nazwę w jednym dniu. Nadaj nazwę serii („Szablony” → seria) i zmień ją w jednym wystąpieniu w „Dziś”. Wpisz nazwę w Ctrl K.
 - **Oczekiwany efekt:** pole „Nazwa” jest na samej górze panelu, nad „Kategorią”, i na górze okienka „Nowy blok” w „Tygodniu”; przy każdym nowym bloku kursor stoi w nim, a Enter dodaje blok jak „Dodaj”; w istniejącym bloku Enter tylko zatwierdza nazwę; „Więcej” przenosi nazwę do panelu dnia; blok usunięty w trakcie zostaje na osi „poza planem” ze swoją nazwą i kategorią przy godzinach, na pasku pulpitu też z nazwą; puste pole – blok nazywa się jak dotąd, podpowiedź w polu mówi jak; kafelek bloku z nazwą ma nazwę w miejscu kategorii, a przy godzinach małym drukiem kategorię („09:00–09:45 · Analiza”); blok bez nazwy wygląda jak przedtem; „Agenda” – nazwa i kategoria raz; miesiąc i pasek pulpitu – sama nazwa; dzień z szablonu ma nazwę bloku szablonu, a zmiana w jednym dniu zmienia tylko ten dzień; zmiana nazwy wystąpienia serii pyta „Tylko to · To i następne · Cała seria”; Ctrl K znajduje blok po nazwie; zajęcia z PDF mają swoją nazwę także w „Tygodniu”, „3 dniach”, „Agendzie” i miesiącu, a blok zadania – tytuł zadania jak w „Dziś” (D430, D431).
 - **Nie przechodzi, gdy:** pola nie ma albo stoi pod „Kategorią” (w panelu albo w okienku „Tygodnia”); po „+ Blok” albo w okienku trzeba kliknąć w pole, żeby pisać; Enter w nazwie nowego bloku go nie dodaje albo w istniejącym bloku robi coś więcej niż zatwierdzenie; „Więcej” gubi nazwę; blok zadania w „Tygodniu” nazywa się kategorią; same spacje zapisują pustą nazwę zamiast nazwy jak dotąd; kafelek z nazwą nie pokazuje kategorii przy godzinach albo pokazuje ją dwa razy; blok bez nazwy wygląda inaczej niż przedtem; zmiana nazwy w jednym dniu zmienia szablon albo inne dni; wystąpienie serii nie pyta o zakres; pasek pulpitu albo miesiąc pokazują kategorię zamiast nazwy.
+
+---
+
+### R – bloki równoległe, plan i widoki (1.23.0, część A; D476, D492–D498)
+
+#### R1 Blok upuszczony na inny staje obok niego (D492)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts` („bloki równoległe”), `tests/web/parallel-drop.test.ts`, `tests/unit/engine/parallel.test.ts`.
+- **Jak sprawdzić:** jutro w „Dziś”: blok A 13:00 (1 h), C 14:00, B 16:00 (1,5 h). Chwyć B za prawą część kafelka i przeciągnij na prawą część A; puść. Potem „Cofnij” w pasku.
+- **Oczekiwany efekt:** w trakcie dymek „Równolegle z <nazwa A>”, B rysuje się w prawej połowie A, C przerywaną ramką o 14:30; po puszczeniu A i B stoją obok siebie od 13:00, C o 14:30, pasek „Przesunięto 1 blok · Cofnij”; „Cofnij” przywraca B na 16:00 i C na 14:00.
+- **Nie przechodzi, gdy:** B ląduje po A zamiast obok; C nie czeka do końca B; przeciągnięcie za nazwę (lewa część) przestaje rozsuwać jak dotąd.
+
+#### R2 Wyjście z grupy i „Cofnij” bez przesunięcia (D492, D497, D498)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/screens.spec.ts` („bez przesunięcia”), `tests/unit/engine/parallel.test.ts`.
+- **Jak sprawdzić:** ustaw B obok A, gdy nic po nich nie stoi – kliknij „Cofnij” w dymku; ustaw znowu i przeciągnij B za nazwę na 18:00; ustaw trzeci blok obok A i przeciągnij A w inne miejsce; zmień w panelu „Początek” bloku z grupy.
+- **Oczekiwany efekt:** dymek „Równolegle z <nazwa A> · Cofnij” cofa zmianę; odciągnięty blok stoi tam, gdzie go puszczono, sam; po odciągnięciu A pozostałe dwa zostają razem o starej godzinie; nowy „Początek” wyjmuje blok z grupy.
+- **Nie przechodzi, gdy:** odciągnięty blok wraca do grupy; reszta grupy rozjeżdża się po wyjściu A.
+
+#### R3 Limit bloków naraz (D476, D492)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/settings-fields.test.ts` (D476), `tests/web/parallel-drop.test.ts`.
+- **Jak sprawdzić:** Ustawienia → „Plan dnia” → „Najwięcej bloków naraz” 2; upuść trzeci blok na grupę dwóch.
+- **Oczekiwany efekt:** podgląd i dymek „Najwyżej 2 bloki naraz – zmienisz w Ustawieniach”; blok staje zaraz po grupie, sam; nic nie jest zablokowane.
+- **Nie przechodzi, gdy:** trzeci blok dołącza do grupy albo przeciągnięcie jest odrzucone.
+
+#### R4 „Tydzień” i „3 dni” (D476, D492)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/week.spec.ts` („Bloki równoległe w „Tygodniu””), `tests/web/parallel-drop.test.ts`.
+- **Jak sprawdzić:** w przyszłym tygodniu przeciągnij blok wtorku na prawą część innego bloku wtorku, potem blok środy na blok wtorku; to samo w „3 dniach”.
+- **Oczekiwany efekt:** pasmo upuszczenia mówi „Równolegle z <nazwa>”; bloki stoją obok siebie w kolumnie; blok ze środy przechodzi na wtorek obok celu z linią „Przeniesiono … · Cofnij”.
+- **Nie przechodzi, gdy:** blok staje po celu albo zostaje w środzie.
+
+#### R5 Nakładające się bloki obok siebie (D476)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/parallel-drop.test.ts` (pasy), `tests/e2e/screens.spec.ts` (`data-lane`).
+- **Jak sprawdzić:** w „Dziś” i „Szablonach” zobacz blok w tle (np. pranie) w czasie innego bloku i grupę równoległą.
+- **Oczekiwany efekt:** nakładające się kafelki dzielą szerokość osi po równo (przy trzech i więcej bez godzin na kafelku); wąskiej kolumny tła po prawej już nie ma; reszta dnia ma całą szerokość.
+- **Nie przechodzi, gdy:** kafelki się zakrywają albo blok w tle nadal stoi w wąskiej kolumnie.
+
+#### 1.23-B.1 Start grupy i pierwszy plan (D493, D494)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/parallel-timer.test.ts`, `tests/web/bar-parallel.test.ts`.
+- **Jak sprawdzić:** ułóż trzy bloki równolegle (przeciągnij dwa na trzeci), kliknij „Zacznij” na środkowym.
+- **Oczekiwany efekt:** pasek pokazuje kliknięty blok z czasem i „+2 w tle”; klik w dopisek – lista dwóch bloków z „Na pierwszy plan”, wybór zmienia blok w pasku; „Dalej” na bloku z przodu kończy go i pokazuje w pasku inny blok grupy, a następny blok planu się nie zaczyna.
+- **Nie przechodzi, gdy:** zaczyna się tylko kliknięty blok; dopisek liczy blok w tle spoza grupy (np. sesję); po „Dalej” pasek pokazuje „Bez bloku” albo zaczyna następny blok planu.
+
+#### 1.23-B.2 Grupa a reszta dnia (D499)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/parallel-timer.test.ts`.
+- **Jak sprawdzić:** w biegnącej grupie kliknij „Zacznij” na bloku spoza niej; potem wróć do grupy „Zacznij” na jednym z jej bloków; poczekaj na planowany koniec krótszego bloku grupy.
+- **Oczekiwany efekt:** cała grupa pauzuje i stoi na osi w miejscu klikniętego bloku; po powrocie biegnie cała, kliknięty z przodu; krótszy blok o swoim końcu kończy się sam („… skończony o HH:MM (według planu, w tle grupy)” z „Cofnij”), a blok z przodu biegnie dalej.
+- **Nie przechodzi, gdy:** w tle grupa biegnie dalej za blokiem spoza niej; po powrocie biegnie tylko kliknięty; krótszy blok biegnie w tle po swoim końcu.
+
+---
+
+### KR – kroki rutyny i ukończone bloki (1.22.0, D473, D474, D477, D479)
+
+#### KR1 Kroki rutyny w bloku bez własnych kroków, wybór rutyny bez kopii, jedno odhaczenie z kartą i paskiem (D473, D479, D480, D481)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/routine-steps.test.ts` (karta i „Kroki ▸” paska pokazują listę dnia – wersję i odhaczenia panelu; zapis karty i paska odhacza kroki w dniu; blok szablonu i wystąpienie serii z rutyną – kroki rutyny z odhaczeniami dnia; blok zadania i blok z własnymi krokami – bez; zmiana rutyny zmienia blok bez odhaczeń, pierwsze odhaczenie zapamiętuje listę w dniu; wersja na gorsze dni i powrót z odhaczeniami; zmiana listy w panelu – własna lista bloku; linia kroku paska), `tests/web/routine-steps-axis.test.ts` (licznik na osi), `tests/fs/steps.test.ts` (pasek: „✓ Wszystkie” odhacza w dniu, „Cofnij” zdejmuje oba; ostatni krok linii kroku zapisuje rutynę; `routineVersion` z „Kroki ▸” zapisuje wersję od razu), `tests/web/bar-routine-version.test.ts` (klik wersji w „Kroki ▸” wysyła akcję), `tests/web/steps-time.test.ts` i `tests/web/new-thing.test.ts` (wybór rutyny bez kopii kroków), E2E `tests/e2e/steps-screens.spec.ts` i `tests/e2e/delete-key.spec.ts` (wybór rutyny – kroki w panelu, bez kopii w pliku), `tests/e2e/routine-steps.spec.ts` (wersja z karty przełącza panel, ptaszek panelu na karcie, ostatni na karcie kończy blok), `tests/e2e/screens.spec.ts` (karta i „Kroki ▸”). Ty: rzut oka na swoich rutynach.
+- **Jak sprawdzić:** w „Dziś” kliknij blok rutyny porannej z szablonu (albo blok serii z rutyną), który nie ma własnych kroków. Jeśli rutyna ma wersję na gorsze dni, kliknij „na gorsze dni”, potem „zwykła” – w panelu, a gdy rutyna już się zaczęła, także na jej karcie w „Dziś”. Odhacz pierwszy krok w panelu, drugi na karcie. Na drugim bloku rutyny na pasku rozwiń „Kroki ▸” i kliknij w rozwinięciu „gorsze dni” (bez zapisu) – spójrz na panel i kartę; potem „Zapisz zaznaczone” albo „gorsze dni” na linii. W pustym bloku „Rutyny” wybierz rutynę z listy „Rutyna”. W „Rutynach” dopisz krok tej rutynie i wróć do „Dziś” – zobacz dzisiejszy blok i ten sam blok jutro (strzałka dnia).
+- **Oczekiwany efekt:** w panelu „Kroki” stoją kroki rutyny z nazwą i czasem, na kafelku licznik „✓ 0/N”; „na gorsze dni” pokazuje kroki tej wersji, „zwykła” – znów zwykłe; wybór wersji na karcie przełącza panel i odwrotnie, a klik wersji w „Kroki ▸” na pasku przełącza panel i kartę od razu (D481); ptaszek w panelu widać od razu na karcie, ptaszek na karcie – w panelu (licznik „✓ 1/N” na kafelku i w panelu, na pasku pulpitu – następny krok, gdy blok biegnie); po odhaczeniu wszystkich kroków (gdziekolwiek) karta znika, a linia rutyny na pasku też; „Kroki ▸” na pasku zaczyna od kroków odhaczonych w panelu, a „Zapisz zaznaczone” i „gorsze dni” odhaczają je w panelu; po dopisaniu kroku w „Rutynach” dzisiejszy blok (z odhaczonym krokiem) ma dawną listę, a jutrzejszy – z nowym krokiem; blok, w którym wybrałeś rutynę z listy, pokazuje jej kroki i też idzie za jej zmianą (D480), a blok z listą skopiowaną w 1.20–1.21 zostaje ze swoją.
+- **Nie przechodzi, gdy:** blok rutyny bez kroków pokazuje pustą listę; przełącznik wersji niczego nie zmienia, jest przy rutynie bez wersji na gorsze dni albo karta i panel pokazują różne wersje; ptaszek na karcie nie pojawia się w panelu (albo odwrotnie); karta zostaje po odhaczeniu wszystkich kroków; wybór rutyny z listy kopiuje kroki do bloku (zmiana rutyny go nie zmienia) albo zmienia listę bloku z 1.20–1.21; klik wersji w „Kroki ▸” nie przełącza panelu; odhaczenie zmienia blok w szablonie albo w serii (inne dni); zmiana rutyny zmienia dzisiejszy blok z odhaczonym krokiem albo nie zmienia jutrzejszego; blok zadania „Spraw” dostaje kroki rutyny.
+
+#### KR2 Ostatni krok kończy blok (D474)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/steps.test.ts` („Sprawy”: ostatni krok zadania kończy jego blok), `tests/fs/steps.test.ts` (pasek: konflikt odhaczeń – blok się nie kończy; „Cofnij” po starcie innego bloku – nic nie cofa; „Cofnij” w trakcie zapisu – nic), `tests/unit/engine/routine-steps.test.ts` (ostatni nieodhaczony krok; `stepsFinish` – biegnący i zapauzowany blok kończy się jako skończony, niezaczęty – nic; „Cofnij” – biegnie dalej, odmowa po starcie innego bloku), E2E `tests/e2e/routine-steps.spec.ts` (panel – dymek i „Cofnij”), `tests/e2e/steps.spec.ts` (pasek pulpitu i pasek okna – linia „Skończono · Cofnij”).
+- **Jak sprawdzić:** zacznij blok z dwoma krokami (rutyna albo własne kroki); odhacz oba w panelu; kliknij „Cofnij” w dymku. Zacznij inny blok z krokami i odhacz ostatni krok na pasku pulpitu; kliknij „Cofnij” na pasku. Zacznij blok zadania ze „Spraw” i odhacz jego ostatni krok na stronie „Sprawy”. Odhacz wszystkie kroki bloku bez rutyny, który jeszcze się nie zaczął, i bloku rutyny, który się nie zaczął. Na karcie zaczętej rutyny kliknij „✓ Wszystkie”, potem „Cofnij”.
+- **Oczekiwany efekt:** po ostatnim ptaszku blok kończy się w tej chwili: w oknie dymek „Skończono: <nazwa> · Cofnij”, na pasku linia „Skończono: <nazwa> · Cofnij” (ok. minuty); „Cofnij” – blok biegnie dalej, krok zostaje odhaczony, pasek mówi „Wszystkie kroki ✓”; blok niezaczęty się nie kończy – bez rutyny nic nie mówi, rutyna mówi „Zapisano: <nazwa> (zwykła) – N z N · Cofnij” i jej karta znika; „✓ Wszystkie” na karcie odhacza wszystkie kroki w panelu i kończy biegnący blok, a „Cofnij” zdejmuje odhaczenia, wraca karta i blok biegnie dalej.
+- **Nie przechodzi, gdy:** po ostatnim kroku blok dalej biegnie; kończy się już po przedostatnim; „Cofnij” nie wznawia bloku albo odznacza krok; blok niezaczęty zaczyna się albo kończy; aplikacja czegoś odmawia albo blokuje.
+
+#### KR3 Ukończony blok na osi „Dziś” (D477, D484)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/routine-steps-axis.test.ts` (skończony jawnie – przygaszony z ✓, także „Dalej” i „Koniec pracy” na bloku stałym i sesji, dojazd według planu; zaparkowany po starcie, niezaczęty i skończony po bezczynności – bez), `tests/unit/engine/routine-steps.test.ts` (`fin` końca i `finished` w faktach, stare zdarzenia bez `fin`), E2E `tests/e2e/routine-steps.spec.ts`, `tests/e2e/steps.spec.ts`.
+- **Jak sprawdzić:** skończ jeden blok („Skończyłem”, „Dalej” albo ostatnim krokiem), blok stały albo sesję – „Dalej” albo „Koniec pracy”, drugi blok zacznij i zaparkuj po pauzie, trzeci zacznij i odejdź od komputera, aż aplikacja sama go skończy (albo zamknij aplikację w trakcie); spójrz na oś „Dziś”.
+- **Oczekiwany efekt:** blok skończony jawnie („Skończyłem”, „Dalej”, „Koniec pracy”, ostatni krok, blok stały do planowanego końca, dojazd według planu) stoi na osi przygaszony, z „✓” przed nazwą, bez przekreślenia; zaparkowany (niedokończony) i skończony przez aplikację przy Twojej nieobecności, zamknięciu aplikacji albo bezczynności – przygaszone bez „✓”; „Cofnij” końca zdejmuje „✓”.
+- **Nie przechodzi, gdy:** brak „✓” przy skończonym jawnie (także blok stały po „Dalej” albo „Koniec pracy”); „✓” przy niedokończonym, niezaczętym albo skończonym samoczynnie po nieobecności, zamknięciu aplikacji czy bezczynności; nazwa przekreślona; skończony blok znika z osi.
+
+---
+
+### 1.22-B – bloki bez komputera i zamiana przy „Zacznij” (1.22.0, D475, D478, D485–D490)
+
+#### 1.22-B.1 Zamiana przy „Zacznij” (D478, D485)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/timer-1-22.test.ts`, `tests/web/swap-axis.test.ts`.
+- **Jak sprawdzić:** w „Dziś” zacznij blok A (np. 09:00, 60 min), po 20 min kliknij „Zacznij” na bloku C zaplanowanym później (np. 11:00).
+- **Oczekiwany efekt:** C biegnie od teraz; A zostaje na osi o 11:00 z resztą długości (40 min), bez „biegnie”; po C „Dalej” idzie po planie i dochodzi do A, które się wznawia.
+- **Nie przechodzi, gdy:** A znika z osi albo jest „skończony”; A stoi zaraz po C zamiast o 11:00; pasek od razu pokazuje kropkę przy „Wznów: A”.
+
+#### 1.22-B.2 Bloki bez komputera same (D475, D487)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/timer-1-22.test.ts`.
+- **Jak sprawdzić:** zaplanuj posiłek na najbliższą pełną godzinę, nic nie zaczynaj i odejdź od komputera na ponad 10 min od tej godziny; wróć.
+- **Oczekiwany efekt:** posiłek ma start o swojej godzinie (albo od chwili odejścia, jeśli później) i koniec w chwili powrotu; na liście „Zrobione automatycznie” jest „Posiłek zaczęty o HH:MM (bez komputera, według planu)” z „Cofnij”, które usuwa start i koniec.
+- **Nie przechodzi, gdy:** posiłek zaczyna się, choć cały czas pracujesz przy komputerze; po powrocie biegnie dalej; po „Cofnij” zaczyna się znowu sam.
+
+#### 1.22-B.3 Dojazd sam (D486, D490, D483)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/timer-1-22.test.ts`, `tests/web/routine-steps-axis.test.ts` (✓ po końcu według planu).
+- **Jak sprawdzić:** zaplanuj „Dojazd” (wariant „Dojazd”) na najbliższą pełną godzinę i nie dotykaj komputera przez ponad 10 min od tej godziny.
+- **Oczekiwany efekt:** dojazd ma start o swojej godzinie. Po powrocie przed planowanym końcem kończy się w chwili powrotu; bez powrotu – o planowanym końcu, z wierszem „Dojazd skończony o HH:MM (według planu)” i ✓ na osi.
+- **Nie przechodzi, gdy:** dojazd zaczyna się przy pracującym komputerze; biegnie dalej po planowanym końcu; sam zaczyna się blok „Zajęcia”.
+
+#### 1.22-B.4 „Wstałeś później?” po przesunięciu rutyny (D488–D490)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/timer-1-22.test.ts`, `tests/unit/engine/e3-plan.test.ts`, `tests/unit/engine/day-rules-e8.test.ts`.
+- **Jak sprawdzić:** rano przy rutynie zaczętej samej kliknij „Cofnij” na liście „Zrobione automatycznie” i przeciągnij rutynę na osi o 30 min później.
+- **Oczekiwany efekt:** karta „Wstałeś później? <rutyna> stoi o HH:MM, 30 min później niż w planie”; „Tak” pokazuje posiłki i opiekę przed pierwszym blokiem stałym przesunięte o 30 min; „Zastosuj” je przesuwa. Śniadanie albo inny blok, który zaczął się sam przed pobudką, jest na liście z dopiskiem „start zostanie cofnięty” i po „Zastosuj” stoi na nowej godzinie, niezaczęty.
+- **Nie przechodzi, gdy:** karta pojawia się przy samym pierwszym użyciu komputera; pojawia się po przesunięciu o 15 min albo po południu; znika po przesunięciu rutyny z powrotem, zanim odpowiesz; po „Zastosuj” śniadanie zostaje jako zjedzone o planowanej godzinie.
+
+---
+
+### I – intuicyjność (1.21.0, D468–D472)
+
+#### I1 „Cofnij” zamknięcia dnia rano (D468)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/close-undo.test.ts`, `tests/web/unclosed-undo.test.ts`.
+- **Jak sprawdzić:** rano przy „Niezamkniętych dniach” kliknij „Wolne” przy jednym dniu, potem „Cofnij” w dymku; zamknij go „Nie pamiętam” i zostaw.
+- **Oczekiwany efekt:** dymek „Zamknięto <dzień>: wolny · Cofnij”; po „Cofnij” dzień wraca na listę; po drugim zamknięciu dzień znika i nie wraca.
+- **Nie przechodzi, gdy:** brak dymka; „Cofnij” nie przywraca dnia albo zmienia inny dzień.
+
+#### I2 „Szukaj · Ctrl K” w menu (D469)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/side-menu-search.test.ts`.
+- **Jak sprawdzić:** kliknij „Szukaj” u dołu menu bocznego.
+- **Oczekiwany efekt:** otwiera się ta sama wyszukiwarka co po Ctrl K; skróty Ctrl+cyfra ekranów bez zmian.
+- **Nie przechodzi, gdy:** pozycji nie ma albo zmienia kolejność ekranów.
+
+#### I3 Potwierdzenie szybkiego zapisu (D470)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/widget.test.ts` (D470), `tests/web/bar-render.test.ts`.
+- **Jak sprawdzić:** w pasku „+”, wpisz „Kupić mleko !jutro”, Enter; potem to samo skrótem globalnym szybkiego zapisu.
+- **Oczekiwany efekt:** pasek mówi „Dodano do Skrzynki: Kupić mleko” spokojnym kolorem (nie czerwonym), zadanie jest w Skrzynce.
+- **Nie przechodzi, gdy:** brak potwierdzenia albo jest czerwone jak błąd.
+
+#### I4 Pokój – „Otwórz Ustawienia” (D471) i statystyki – „zamrożone” (D472)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/room-off.test.ts`, `tests/web/stats-view.test.ts`.
+- **Jak sprawdzić:** wyłącz grę, otwórz „Pokój” i kliknij przycisk; otwórz „Statystyki”.
+- **Oczekiwany efekt:** przycisk otwiera Ustawienia na sekcji „Moduły”; nota nad statystykami mówi, kiedy dzień się zamraża.
+- **Nie przechodzi, gdy:** przycisk prowadzi gdzie indziej; nota bez wyjaśnienia.
+
+#### I5 Klik osi „Dziś” nic nie tworzy (D496)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/axis-click.test.ts`, `tests/e2e/block-autosave.spec.ts`.
+- **Jak sprawdzić:** w „Dziś” kliknij w puste miejsce osi; potem przeciągnij po niej 10:00–11:00; w „Szablonach” kliknij w pustą oś.
+- **Oczekiwany efekt:** klik w „Dziś” nic nie otwiera; przeciągnięcie daje szkic i blok; w „Szablonach” klik dalej dodaje blok.
+- **Nie przechodzi, gdy:** klik w „Dziś” otwiera panel albo kafelek szkicu; przeciągnięcie przestało tworzyć blok.
 
 ---
 

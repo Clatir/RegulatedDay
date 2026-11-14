@@ -57,7 +57,10 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   (panel, okno, kliknięcie paska) i kliknięcie powiadomienia (`handleArgv` → `seen(…, notification)`).
 - Rutyny (D328, T520): `engine/routineCheck.ts` (`routinesDue`) – linia `routine:<dzień>:<blok>` z akcjami `all`, `steps`
   (rozwinięcie w pasku z `WidgetView.routines`, akcja `routine` `<blok>|<wersja>|<kroki>`), `worse`; ten sam zapis
-  `routineDone` co karta w „Dziś” (`RoutineCard`). Pulsowanie (D225): `pulseClass` w `Bar`, klasy w `index.css`.
+  `routineDone` co karta w „Dziś” (`RoutineCard`). Od 1.22 (T1108) karta i „Kroki ▸” to widoki listy bloku z dnia (`BarRoutine.version`,
+  `done` – start rozwinięcia), zapis pisze też odhaczenia (`routineSaveEdits`) i wersję, a `all` bierze wersję dnia; jedna linia „Cofnij”
+  po krokach (`stepsUndo`: `routineSaved:` / `stepsFinished:`). Przełącznik wersji w „Kroki ▸” – akcja `routineVersion` `<blok>|<wersja>`
+  od razu w dniu (D481, T1110, `pickRoutineVersion`). Pulsowanie (D225): `pulseClass` w `Bar`, klasy w `index.css`.
 - `engine/modes.ts` (sesja, zajęcia, „mniej pytań”, noc, „Odcinam się”), `engine/care.ts` (woda, ciąg pracy, kontakt).
 - Linie mają id `rodzaj:…` – pytania silnika `reguła:dzień:blok:próg`; `line|akcja|wartość` w `widgetAction('line')`.
 - Prośby (D311, D312, T503): `WidgetView.requests` – 3 osoby (`folder.widgetModel().people`), trwająca prośba (także
@@ -67,7 +70,7 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 - Sprawy (D384, D385, D402, reguły `sprawy.md`): cicha linia `task:<dzień>:<blok>` „Zadanie zrobione? · Tak · Wraca na
   listę” (`engineView` z `cases`, odpowiedź `WidgetEngine.answerTask` – zapis rekordu); „+” (`QuickButton`) w każdym trybie:
   w oknie i panelu pole w pasku (akcja `quickAdd`), na pasku pulpitu akcja `quickOpen` – panel przy kursorze z polem
-  (`PanelTarget.quick`). Okienko „Do skrzynki” (`windows/quickWindow.ts`) na wierzch tylko ze skrótu – `checkQuickWindow`.
+  (`PanelTarget.quick`). Po udanym zapisie pasek mówi „Dodano do Skrzynki: <tytuł bez słów dat, ≤ 40 znaków>” (D470: `quickSavedText`, `say(…, ok)` – `note.ok`, spokojny kolor zamiast czerwonego; skrótem globalnym – `WidgetEngine.quickSaid` z uchwytu `CH.quickAdd`). Okienko „Do skrzynki” (`windows/quickWindow.ts`) na wierzch tylko ze skrótu – `checkQuickWindow`.
 - Warianty (D313, T502): `WidgetView.variants` (znacznik, panel) ustawia `WidgetEngine.variantsView` po `engineView`;
   akcja `variants` `open` / `close` / `pick|i`, „Przestawiono … · Cofnij” to linia `moved:variant`. „Ułóż pod energię” (D369, T612): `openVariants`
   dokłada `energyOrderVariant` (tylko dzień paska = dziś) przed ostatnim „Zostaw”; bez przyczyny panel = ten wariant + `keepPlan`
@@ -95,7 +98,10 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 
 - Kroki (D440, T793, reguły `kroki.md`): `WidgetView.steps` – „☐ <krok> · krok 1/4” pod blokiem na pierwszym planie
   (`StepLine`, ptaszek `bar-step-tick` = akcja `step` `<blok>|<krok>` → `tickStep`), po ostatnim „Wszystkie kroki ✓”; w każdym
-  trybie poza „Odcinam się”; bez dźwięku i kropki.
+  trybie poza „Odcinam się”; bez dźwięku i kropki. Blok rutyny bez własnych kroków – kroki rutyny (D473: `engineView` z `dayFile`
+  modelu – `widgetModel().dayFile`, T1115 – `tickStep` z rutynami). Ostatni ptaszek kończy blok (D474): `finishBySteps` → wspólne
+  `listWhole` (`engine/stepsFlow.ts`, T1120), linia `stepsFinished:<blok>` „Skończono: <nazwa> · Cofnij” przez `ROUTINE_UNDO_MS` (jak
+  `routineSaved`, po całym zapisie – T1114), „Cofnij” = `undoAfterSteps` (najpierw koniec; odmowa – nic więcej).
 - Wydarzenia całodniowe (D405, T740–T743): `WidgetView.allDay` (`barAllDay`, dziś = doba logiczna) – kropka i tytuł (≤ 20 znaków, „+N”) z lewej strony pierwszego wiersza
   paska pulpitu (`AllDayLabel`, tylko `desktop`), tylko odczyt, pełne tytuły po najechaniu w miejscu; miejsce zabiera tylko elastyczna nazwa bloku.
 

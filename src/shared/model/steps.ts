@@ -14,12 +14,12 @@
  * another step. Read tolerantly: a step without an id or a title is left out of the list shown, yet stays in the file – as
  * every item a write does not change, with the fields this version does not know.
  *
- * A step's time (D460): `min` of its item, 1–240 min, optional – a step of a routine copied into a block brings its own. The
+ * A step's time (D460): `min` of its item, 1–240 min, optional – a step of a routine's list (D473) has its routine step's. The
  * sum of the times never changes the block's length: the panel says „kroki: X min z Y” and warns when it is over (D72). A
  * version before it keeps the field in every item it writes (an item changed – its other fields stay; a step it adds has none).
  */
 import { newId } from './ids'
-import { STEP_RANGE, type Routine } from './routines'
+import { STEP_RANGE } from './routines'
 
 export interface Step {
   id: string
@@ -34,7 +34,7 @@ export interface Step {
 
 /**
  * At most this many steps in one list – counted only when adding (T789: a list may hold more after two computers added) – and
- * each title at most this long. 40 – as many as a routine may have (D460: its steps are copied into a block whole).
+ * each title at most this long. 40 – as many as a routine may have (D460: a routine's list is a block's whole – D473).
  */
 export const STEPS_MAX = 40
 export const STEP_TITLE_MAX = 200
@@ -293,25 +293,6 @@ export function stepsTime(steps: readonly Pick<Step, 'min'>[] | undefined, lengt
   if (!timed.length) return null
   const minutes = timed.reduce((sum, s) => sum + s.min!, 0)
   return { minutes, over: lengthMin != null && minutes > lengthMin ? minutes - lengthMin : 0 }
-}
-
-/**
- * The steps of a routine copied into a block (D460, T1030): its usual version 1:1 – a name as the title (none – „krok N”, as
- * the routine's card names it), its time – with new ids, after the list as it is. The block's list empty, or exactly the
- * copy of the routine chosen before (`was`: the same titles and times in the same order, nothing ticked) – it is replaced;
- * any other list keeps its steps and gets the routine's at its end. At most `STEPS_MAX`: the steps that do not fit are left
- * out (`cut` – how many; the panel says so). The ticks of the steps kept stay as they are.
- */
-export function routineStepsCopy(steps: readonly Step[], was: Pick<Routine, 'normal'> | null | undefined, next: Pick<Routine, 'normal'>): { steps: Step[]; cut: number } {
-  const copyOf = (r: Pick<Routine, 'normal'>) => r.normal.map((x, k) => ({ title: stepTitleOf(x.name) || `krok ${k + 1}`, min: stepMinOf(x.min) }))
-  const prior = was ? copyOf(was) : null
-  const replace = steps.length === 0 || (prior != null && prior.length === steps.length && prior.every((p, k) => p.title === steps[k]!.title && sameMin(p.min, steps[k]!.min) && !steps[k]!.done))
-  const kept = replace ? [] : [...steps]
-  const room = Math.max(0, STEPS_MAX - kept.length)
-  const add = copyOf(next)
-  const first = (kept.at(-1)?.order ?? -1) + 1
-  const made: Step[] = add.slice(0, room).map((x, k) => withMin<Step>({ id: newId(8), title: x.title, order: first + k, done: false }, x.min))
-  return { steps: [...kept, ...made], cut: add.length - made.length }
 }
 
 /** A text with the titles of its steps after it (the search, Ctrl K – D387: the steps are found as the text of their block or task). */

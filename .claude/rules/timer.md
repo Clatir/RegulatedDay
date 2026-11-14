@@ -34,6 +34,10 @@ paths:
 ## Zasady
 - Każde działanie automatyczne ma `autoRule` i identyfikator `derivedId(dzień, 'auto', reguła, rodzaj, blok, at)` –
   ten sam na każdym komputerze; zapisuje tylko prowadzący i tylko do bramki (`minuteGate`).
+- Jawne ukończenie (D484, T1121): `block.end` z `fin: true` przy „Skończyłem”, „Dalej” (nie jako niezrobiony), „Koniec pracy”, starcie
+  innego bloku, ostatnim kroku, bloku stałym o planowanym końcu (`plan`, `fixedNoReaction`) i dojeździe według planu (`awayPlan`); nowy
+  koniec z kliknięcia albo reguły „według planu” musi je ustawić. Fakty: `BlockFact.finished` (`finishedEnd` – bez `fin` zgodność ze
+  starymi logami po `done` i regule); oś czyta tylko je. `RULES_VERSION` bez zmian.
 - „Cofnij” = `undo` z celem; fakty (`foldFacts`) pomijają cofnięte zdarzenia. Cofnięty identyfikator nie wraca –
   reguła, która ma zadziałać ponownie, musi dać inny `at` (np. nowy planowany koniec po „Przedłuż”).
 - Pytanie ma id `reguła:dzień:blok:próg`; zobaczone = `question.seen` (pierwsze w logu); dzień pytania z jego id.
@@ -44,13 +48,27 @@ paths:
   bramkę; blok stały w tle nie czeka) – poza tym jak w 1.0.1 (G2).
 
 ## Pułapki
-- Start bloku życia (`isLife`) przy biegnącej pracy pauzuje ją jak regeneracja (D335, `startEvents`); inny blok pracy albo projektu
-  kończy biegnący. „Usuń” zaczętego bloku: `removeBegun` (`block.end` z `rule: 'removed'`, `done: false`) i `undoRemove`
+- Start bloku życia (`isLife`) przy biegnącej pracy pauzuje ją jak regeneracja (D335, `startEvents`); inny blok elastyczny zamienia się z
+  biegnącym (D478, niżej) – kończy go tylko po planowanym końcu, regeneracja i blok „poza komputerem”. „Usuń” zaczętego bloku: `removeBegun` (`block.end` z `rule: 'removed'`, `done: false`) i `undoRemove`
   (`undo` tego końca, D336; odmowa, gdy po zdarzeniu usunięcia – kolejnością zdarzeń `compareOrder` z `BlockFact.endOrder`, nie minutami – zaczął się inny blok, prośba (`RequestFact.begun`) albo „Odcinam się”; kończy przez `endInstant` jak „Skończyłem”; powody „już skończony” / „nie zaczął się” mają `code` w `ActionResult`/`TimerResult`); blok zdjęty z planu zostaje w dniu jako „poza planem” (`dayItems`) z nazwą ze startu albo z migawki dnia (`nameById`, T543, T1024), liczy się jak każdy przebieg.
 - Para `fixedStart` (`fixedStartPair` w `timer.ts`): pauza bloku elastycznego i start bloku stałego z tej samej listy (ten sam
   `at`, start na pierwszym planie). „Cofnij” przy któregokolwiek cofa oba – elastyczny biegnie jak przed startem, stały
   niezaczęty – ale tylko póki stały biegnie bez późniejszego kliknięcia (przedłużenie) i elastyczny stoi w tej pauzie
   (`alive`); potem oba wiersze to informacja (bez „Cofnij”, `undo` odrzucone). Start stałego bez pauzy – zwykłe „Cofnij”.
+- Zamiana przy „Zacznij” (D478, T1130–T1132): biegnący elastyczny pauzuje z `block.pause.place` (miejsce klikniętego w
+  prognozie) – `Run.place`/`pausedPlaceOf` w `facts.ts`, kolejność i dolna granica w `forecast.ts`, oś w `dayItems`, koniec
+  pracy w `day.ts`; regeneracja, blok „poza komputerem” i blok po planowanym końcu dalej się kończą.
+- Bloki bez komputera same (D475, T1133–T1137): `awayOwnHour` + `awayStarts` w `auto.ts` (reguła `awayStart`, id z
+  planowanym startem; także dojazd – koniec `awayPlan` – i przed pierwszym użyciem dnia, D486, D488) – po przerwie w
+  wejściu ≥ `AWAY_START_MIN` (od jej początku; regeneracja z limitem, sprawdzanie od nowa T465 – T1138–T1140), liczone przed `fixedStartLists` – wcześniejszy start idzie pierwszy, stałe czekają przebieg; `fixedStart` nie
+  widzi z przodu bloku „poza komputerem” kończonego najpóźniej w chwili startu; „Cofnij” startu (`awayStartUndoable` –
+  tylko póki blok ruszała sama aplikacja) cofa jego automatyczny koniec. „Tydzień” (`week.ts`) rysuje zamieniony jak oś.
+- Grupa równoległa (D476, D493, D494, D499, T1190–T1199): `block.start.group` (`BlockFact.group`) – start grupy
+  `groupStarts` (`groupOf` z `parallel.ts`, 1.23-A), z przodu `groupFront` (to samo w `energy.ts`), `front` (pasek „+K w
+  tle”), `groupStart`/`groupPlan` w `auto.ts`; blok spoza grupy (także stały sam, „Odcinam się”) pauzuje całą grupę, „Dalej” w
+  grupie nic nie zaczyna; prośba i „Odcinam się” trzymają przód (T1200); koszt grupy – `groupCost` (T1205); zapauzowana grupa w prognozie
+  razem (`pausedLead`, T1211); przejęcie przodu zapisuje prowadzący (`groupFront`, T1259); grupa – `inGroupOf`,
+  `groupMate`, `untouched` (T1250–T1263).
 - `activityOf` bez żadnego komputera = cały czas bez wejścia; w testach dodaj `observe(...)` (DSL) – inaczej blok
   stały „przy komputerze” nie zacznie się (czeka na pierwsze użycie).
 - Otwarty odcinek innego komputera liczy się tylko do jego ostatniego `observe.alive` (`alive` w DSL).
@@ -85,6 +103,8 @@ paths:
   `endChanges` sortowane tak przed pętlą, ta sama kolejność dla sumy) do swojego
   końca (`confirmWindows` w `day.ts`). Limity krawędzi (`runningEdges`: `earliestEnd`, `latestEnd`) liczy jedno
   `limitsOf` w `resize.ts` – także podgląd; oba na siatce, zawsze `earliestEnd ≤ latestEnd`.
-- Późne wstanie (`lateWake.ts`) – pierwsze użycie z `dayFirstUse`; `presence.first` tylko bez zapisów obserwacji.
-- Prowadzący sprawdza `idle`, `firstUse`, `limit`, `absence`, `lastInput` przy każdym sprawdzeniu i cofa je, gdy
+- Późne wstanie (`lateWake.ts`, D488, T1144, T1150) – pierwszy blok dnia przesunięty w planie ≥ 20 min później niż w
+  migawce (z pobudką dnia); „Tak” cofa starty `awayStart` poranka (`applyLateWake`). Granica sama – od pierwszej pracy
+  przy komputerze (`approvalStart`, D490, T1149).
+- Prowadzący sprawdza `idle`, `firstUse`, `limit`, `absence`, `lastInput`, `awayPlan` (i start `awayStart`) przy każdym sprawdzeniu i cofa je, gdy
   późniejszy log z wejściem im przeczy (T465) – nowa reguła końca zależna od wejścia musi tam trafić.

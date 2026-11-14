@@ -4,6 +4,7 @@
  * comparison with anyone.
  */
 import type { AccuracyRow, FeltRow, MeanRow, PersonRow, StatsPeriod, StatsResult, WeekBoundaries } from '@shared/engine/stats'
+import { CORRECTION_H, FREEZE_MAX_H } from '@shared/engine/freezeWindow'
 import { countLabel, durationLabel, formatNumber, plDate, plDayMonth } from '@shared/format'
 import { addDays } from '@shared/time/zone'
 
@@ -114,6 +115,11 @@ export function daysNote(r: Pick<StatsResult, 'days' | 'first' | 'last' | 'unrea
   if (r.first && r.last) parts.push(r.first === r.last ? plDate(r.first) : `${plDate(r.first)}–${plDate(r.last)}`)
   if (r.unreadable) parts.push(`nieczytelne: ${r.unreadable}`)
   return parts.join(' · ')
+}
+
+/** The note over the charts (D472): the days counted, what counts, and when the app freezes a day (spec „Statusy dni i passa”: the correction window). */
+export function statsNote(r: Pick<StatsResult, 'days' | 'first' | 'last' | 'unreadable'>): string {
+  return `${daysNote(r)}. Liczą się tylko dni zamrożone – potwierdzone dane, bez dnia dzisiejszego. Aplikacja zamraża dzień po oknie korekty: ${CORRECTION_H} h od otwarcia następnego dnia, najpóźniej ${FREEZE_MAX_H} h po końcu dnia.`
 }
 
 /** Why the screen shows no numbers (too few frozen days), or null. */

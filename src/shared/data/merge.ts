@@ -241,9 +241,32 @@ export function recordEdit(rel: string, before: Record<string, unknown> | null, 
   if (!after) return before ? { rel, remove: true, edits: [], base: before } : null
   const kind = classify(rel)?.kind ?? 'settings'
   const maps = LEAF_MAPS[kind]
-  if (!before) return { rel, create: true, edits: Object.entries(after).flatMap(([k, v]) => itemEdits(kind, [k], undefined, v) ?? leafEdits(maps, [k], undefined, v)) }
-  const edits = diffRecords(before, after).flatMap((c) => itemEdits(kind, c.path, c.before, c.after) ?? leafEdits(maps, c.path, c.before, c.after))
+  const entries = ENTRY_MAPS[kind]
+  const general = (path: Path) => !entries?.has(path[0] ?? '')
+  if (!before) return { rel, create: true, edits: [...Object.entries(after).filter(([k]) => general([k])).flatMap(([k, v]) => itemEdits(kind, [k], undefined, v) ?? leafEdits(maps, [k], undefined, v)), ...entryEdits(entries, {}, after)] }
+  const edits = [...diffRecords(before, after).filter((c) => general(c.path)).flatMap((c) => itemEdits(kind, c.path, c.before, c.after) ?? leafEdits(maps, c.path, c.before, c.after)), ...entryEdits(entries, before, after)]
   return edits.length ? { rel, edits } : null
+}
+
+/**
+ * Maps whose entries are written whole, one edit each (T1123): a day's `routineSteps` – a block's routine list (its routine, its
+ * version and its steps go together: a question about one field alone could leave a version beside another version's list).
+ * The first entry of a map the file does not have yet is the edit of that entry, never of the whole map – two computers keeping
+ * the lists of two blocks meet in no question; an entry taken back goes whole (no empty `{}` left of it).
+ */
+export const ENTRY_MAPS: Partial<Record<FileKind, ReadonlySet<string>>> = { day: new Set(['routineSteps']) }
+
+/** The edits of the entries of `ENTRY_MAPS` that differ between `before` and `after` – each entry whole (path `[map, id]`). */
+function entryEdits(keys: ReadonlySet<string> | undefined, before: Record<string, unknown>, after: Record<string, unknown>): Array<{ path: Path; base: unknown; value: unknown }> {
+  const out: Array<{ path: Path; base: unknown; value: unknown }> = []
+  for (const key of keys ?? []) {
+    const b = before[key]
+    const a = after[key]
+    const was = isObject(b) ? b : {}
+    const now = isObject(a) ? a : {}
+    for (const id of new Set([...Object.keys(was), ...Object.keys(now)])) if (!deepEqual(was[id], now[id])) out.push({ path: [key, id], base: was[id], value: now[id] })
+  }
+  return out
 }
 
 /**
@@ -265,7 +288,7 @@ const ITEM_LIST_KEYS: ReadonlySet<string> = new Set(Object.values(ITEM_LISTS).fl
 /**
  * Maps of records by id in rd.json (T973, D419): `categories`. The first write of an entry the file does not have yet (the
  * first calendar of a default category) is the edits of its fields – two computers writing the first different fields of one
- * entry meet in no question. The entry's removal stays one edit.
+ * entry meet in no question. The entry's removal stays one edit. (A day's `routineSteps` – `ENTRY_MAPS`: entries whole.)
  */
 export const ITEM_MAPS: Partial<Record<FileKind, ReadonlySet<string>>> = { settings: new Set(['categories']) }
 

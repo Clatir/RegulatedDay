@@ -34,6 +34,8 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
 ## Pułapki
 - Blok liczy się tak, jak się zaczął: kategoria, wariant, koszty i udział tła z `block.start` (`planned.costs`,
   `planned.bgCostPct` – zapisuje je też proces główny w E4a); bez tych pól (stare zdarzenia) – z planu.
+- Grupa równoległa (D476, T1191, T1199): blok grupy w tle (`why: 'group'`) – 0, także w prognozie (`alongside`); nic z przodu –
+  z przodu ostatnio zaczęty blok grupy (`groupAt`), pełny koszt.
 - Kilka bloków na pierwszym planie (`pickFront`): elastyczny pod innym pauzuje (bez kosztu, powrót = przełączenie),
   stały jest „za” (pełny koszt, sesja 0) i wraca bez przełączenia; prośba przerywa regenerację.
 - Stan „teraz” nie zawiera kosztu przełączenia bloku, który jest tylko w prognozie (przesunięty na teraz+1); wiersz

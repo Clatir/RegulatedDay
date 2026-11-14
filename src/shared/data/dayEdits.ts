@@ -5,7 +5,8 @@
  * change of another field on another computer.
  */
 import { planBlockFrom, type PlanBlock } from '../model/plan'
-import { sameStepList, stepsFrom, withStepsJson } from '../model/steps'
+import { ROUTINE_STEPS, routineStepsEntries } from '../model/routineSteps'
+import { sameStepList, stepsFrom, stepsJson, withStepsJson, type Step } from '../model/steps'
 import { deepEqual } from './merge'
 
 export type Raw = Record<string, unknown>
@@ -56,13 +57,23 @@ export function blockJson(b: PlanBlock, before?: Raw): Raw {
   return out
 }
 
-/** The block put into the day (replacing one with its id, keeping its unknown fields). */
+/**
+ * The block put into the day (replacing one with its id, keeping its unknown fields). The blocks of the file beside it
+ * (`alongside`, D492, T1161) get its start too: the window places them with it whatever they hold, a version that does not
+ * know the field shows them at their own start – with the group, not where it stood once.
+ */
 export function putBlock(raw: Raw, b: PlanBlock): Raw {
   const before = dayBlocks(raw).find((x) => isPlain(x) && x.id === b.id) as Raw | undefined
-  return putRawBlock(raw, before ? blockJson(b, before) : blockJson(b))
+  const out = putRawBlock(raw, before ? blockJson(b, before) : blockJson(b))
+  if (b.startMin == null) return out
+  const beside = dayBlocks(out).filter((x): x is Raw => isPlain(x) && x.alongside === b.id && x.id !== b.id && x.startMin !== b.startMin)
+  return beside.reduce((r, x) => putRawBlock(r, { ...x, startMin: b.startMin }), out)
 }
 
-/** A block of your own taken out of the file (a new block you added and then removed). */
+/**
+ * A block of your own taken out of the file (a new block you added and then removed). The blocks beside it keep naming it: the
+ * first of them stands for it while it is gone (`groupRootOf`, T1166), and its „Cofnij” brings the whole group back.
+ */
 export function takeBlock(raw: Raw, id: string): Raw {
   return { ...raw, blocks: dayBlocks(raw).filter((x) => !(isPlain(x) && x.id === id)) }
 }
@@ -133,6 +144,36 @@ export function setStepsDone(raw: Raw, blockId: string, ids: readonly string[]):
   if (ids.length) all[blockId] = Object.fromEntries(ids.map((id) => [id, true]))
   else delete all[blockId]
   return { ...raw, stepsDone: all }
+}
+
+/**
+ * The list of a block's routine the day keeps from now on (D473, T1100: `routineSteps.<block>` = `{ routine, version, steps }`,
+ * the steps as a list is written – no `done`), or none any more (null: the field's entry goes, no empty map left behind).
+ */
+export function setRoutineSteps(raw: Raw, blockId: string, entry: { routine: string; version: string; steps: readonly Step[] } | null): Raw {
+  const all = isPlain(raw[ROUTINE_STEPS]) ? { ...(raw[ROUTINE_STEPS] as Raw) } : {}
+  if (!entry) {
+    if (!(blockId in all)) return raw
+    delete all[blockId]
+    if (Object.keys(all).length) return { ...raw, [ROUTINE_STEPS]: all }
+    const { [ROUTINE_STEPS]: _gone, ...rest } = raw
+    return rest
+  }
+  all[blockId] = { routine: entry.routine, version: entry.version, steps: stepsJson(entry.steps) ?? [] }
+  return { ...raw, [ROUTINE_STEPS]: all }
+}
+
+/**
+ * A block's routine list as one day's file holds it, put into another's as it is (a move – T1118: it goes with the ticks it
+ * keeps), or taken away (none in the source – the target's own goes too, as `setStepsDone` with none).
+ */
+export function moveRoutineSteps(from: Raw | null | undefined, to: Raw, blockId: string): Raw {
+  const src = from && isPlain(from[ROUTINE_STEPS]) ? (from[ROUTINE_STEPS] as Raw)[blockId] : undefined
+  // Only an entry that is one (T1123): an empty `{}` or a broken one is no list to take along.
+  if (src === undefined || !routineStepsEntries({ [blockId]: src })[blockId]) return setRoutineSteps(to, blockId, null)
+  const all = isPlain(to[ROUTINE_STEPS]) ? { ...(to[ROUTINE_STEPS] as Raw) } : {}
+  all[blockId] = src
+  return { ...to, [ROUTINE_STEPS]: all }
 }
 
 /** The ids of a block's steps ticked off in the day's file. */

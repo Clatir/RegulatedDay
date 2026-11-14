@@ -6,7 +6,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { BarChart, BoundaryChart } from '@renderer/features/stats/Charts'
-import { accuracyBars, lastWeeks, missingNote, MAX_WEEKS, weekAxisLabel, axisOf, barPlaces, daysNote, ENERGY_AXIS, energyText, feltBars, hourLabel, meanBars, minutesText, niceStep, percentText, personBars, ratioText, stackPlaces, tooLittle, weekdayShort, weekLabel } from '@renderer/features/stats/statsView'
+import { accuracyBars, lastWeeks, missingNote, MAX_WEEKS, weekAxisLabel, axisOf, barPlaces, daysNote, ENERGY_AXIS, statsNote, energyText, feltBars, hourLabel, meanBars, minutesText, niceStep, percentText, personBars, ratioText, stackPlaces, tooLittle, weekdayShort, weekLabel } from '@renderer/features/stats/statsView'
 
 describe('skale wykresów', () => {
   it('krok osi to 1, 2 albo 5 razy potęga dziesięciu; oś od 0 do okrągłego maksimum nad największą wartością', () => {
@@ -63,6 +63,14 @@ describe('teksty statystyk', () => {
     expect(daysNote({ days: 12, first: '2026-10-12', last: '2026-10-25', unreadable: 0 })).toBe('dni zamrożone: 12 · 12.10.2026–25.10.2026')
     expect(daysNote({ days: 12, first: '2026-10-12', last: '2026-10-25', unreadable: 2 })).toBe('dni zamrożone: 12 · 12.10.2026–25.10.2026 · nieczytelne: 2')
     expect(daysNote({ days: 0, first: null, last: null, unreadable: 0 })).toBe('dni zamrożone: 0')
+  })
+
+  it('nota nad wykresami (D472): dni, co się liczy i kiedy aplikacja zamraża dzień – okno korekty 24 h, najpóźniej 72 h', () => {
+    expect(statsNote({ days: 12, first: '2026-10-12', last: '2026-10-25', unreadable: 0 })).toBe(
+      'dni zamrożone: 12 · 12.10.2026–25.10.2026. Liczą się tylko dni zamrożone – potwierdzone dane, bez dnia dzisiejszego. Aplikacja zamraża dzień po oknie korekty: 24 h od otwarcia następnego dnia, najpóźniej 72 h po końcu dnia.'
+    )
+    expect(statsNote({ days: 0, first: null, last: null, unreadable: 1 })).toContain('dni zamrożone: 0 · nieczytelne: 1. Liczą się tylko dni zamrożone')
+    expect(statsNote({ days: 0, first: null, last: null, unreadable: 1 })).toContain('po oknie korekty: 24 h')
   })
 
   it('„za mało danych” poniżej progu, z liczbą dni; od progu – nic', () => {

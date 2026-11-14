@@ -66,3 +66,48 @@ T650–T699 (zajęte D387–D388, T650–T674).
 | SNT3 Markdown w notatkach | 1.9.0 | #71 | scalone 12.11 (16c1568); runy `main` po #71 i #73 czerwone na nocnych E2E (J2, E3 – godzina); wydanie 1.9.0 12.11 z runu 43148191553 po #75 (sesja J) | po przejęciu ok. 4 h (6–9 h) |
 
 Wpisy obu zadań, „Uwagi na później” i „Pytania na później” – `docs/archiwum/postep-SNT.md`.
+
+## Blok 3 – paczka SNT (D416) (przeniesione z `docs/postep.md` 14.11.2026)
+**Przed etapem (13.11, 07:20):** koniec Bloku 3 – SNT4b → SNT1 → SNT2 bez pauz do „dalej” (D416), jedna paczka według
+D413: gałąź `claude/paczka-blok3`, drzewo `.claude/worktrees/ws4m`, jeden PR do `main` po #82 (HKU, 1.17.0) i #83,
+wersja – następna minor przy scaleniu (zwykle 1.18.0). Sesja `regulatedday-ab`; numery D416–D439, T841–T849 i T900–T949.
+Decyzje: D415 (SNT4b), D417 (SNT1 – „3 dni”, przenoszenie między dniami, krzywa energii), D418 (SNT1 – „Agenda”,
+miesiąc), D419 (SNT2 – kalendarz jako grupa kategorii, ukrycie tylko w widoku). Ryzyka: SNT4b – kosz załączników
+i „Cofnij” serii (folder danych); SNT1 – zapis dwóch plików dni jedną partią z jednym „Cofnij” i rozsuwaniem (D367);
+SNT2 – nowe pole kategorii (migracja formatu, dwa komputery). Przygotować: nic. Model: główna sesja Opus 5.5 · high;
+SNT4b `wykonawca-opus` · xhigh; SNT1 `wykonawca-opus` (przenoszenie między dniami) + `wykonawca-sonnet` (widoki) · xhigh;
+SNT2 `wykonawca-sonnet` (migracja – przegląd xhigh). Szacunek 11,5–17,5 h, wydanie dziś ok. 20:00–02:00.
+
+| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
+| --- | --- | --- | --- | --- |
+| SNT4 załączniki i linki | 1.15.0 | #80 | wydane 13.11; wpis – `docs/archiwum/postep-SNT.md` | ok. 5 h (3,5–5 h) |
+| SNT4b usuwanie załączników szablonu i serii | 1.18.0 (paczka) | PR paczki | gotowe 13.11: trzy rundy xhigh (14 + 14 + 13 uwag), kolejka zależnych wpisów `after` (T923, T926–T931); D415, D420, D421, D423; T841–T849, T920–T934 | ok. 4 h (1,5–2,5 h) |
+| SNT1 widoki wielodniowe, przenoszenie, miesiąc | 1.18.0 (paczka) | PR paczki | gotowe 13.11: część A cztery rundy xhigh (15 + 13 + 12 + 14), część B high (10); D417, D418, D422, D424, D426; T900–T919, T936–T939, T950–T969, T980–T986 | ok. 6 h (6–9 h) |
+| SNT1.8 miesiąc – paski z nazwami (D429) | 1.18.1 | #86 | scalone 13.11 (16db060), run wydania 43499839869 – sprawdzić wydanie; przegląd high, T1013–T1016 | ok. 1,5 h |
+| SNT1.9 nazwa bloku (D430, D431) | 1.19.0 | PR 1.19.0 | gotowe 13.11: dwie rundy xhigh (13 + 15 uwag); nazwa, zadanie, rutyna i prośby w zdarzeniu startu (`planned`, pola addytywne – T1024); T1017–T1029; scalić po wydaniu 1.18.1 | ok. 3 h |
+| SNT2 kalendarze – warstwy | 1.18.0 (paczka) | PR paczki | gotowe 13.11: część A trzy rundy xhigh (14 + 15 + 15), część B dwie rundy (10 + 15); D419, D425, D427, D428; T940–T949, T970–T979, T990–T1012 | ok. 5 h (4–6 h) |
+
+**Paczka 1.18.0 (13.11):** SNT4b, SNT1 i SNT2 w jednym PR #85 (D413, D416), scalone 13.11 (`main` 83382e4); run
+na `main` 43465743577 padł raz na chwiejnym E2E „!jutro” (focus) w zadaniu Windows – ponowiony; wykonawcy w drzewach `ws4m` (paczka), `ws4n`
+(SNT1), `ws4s` (SNT2), scalone do `claude/paczka-blok3` z `main` 1.17.0 (b0c4aa5). Rejestr T: T600–T699 w osobnym pliku
+(T935, uzupełnia T857), T700+ w `docs/decyzje-techniczne.md`. Odbiór: SNT4b.1–3, SNT1.1–7, SNT2.1–6 w `docs/odbior.md`
+(Tylko Ty: SNT4b.3, SNT1.7, SNT2.6). Niestabilne przy obciążeniu lokalnie (osobno zielone): `tests/sim/two-computers`,
+`tests/fs/cases` (EPERM), E2E szybkiego zapisu „!jutro” i przeciągania w `week.spec` – do obserwacji w CI.
+**Uwagi na później:** SNT1 – pytanie o samo `movedTo` w źródle przy jednoczesnym przeniesieniu tego samego bloku na dwóch
+komputerach zostawia blok w obu dniach do odpowiedzi; „Przenieś na…” przy niepoliczonym dniu bierze plan okna (T964);
+pierwsze otwarcie dawnego tygodnia – krzywe bez `moduleStates` (T950). SNT2 – po „moje” na usuniętym bloku dnia `setAt`
+tworzy element bez `id` (jak przed T948, tylko poza listą `calendars`); warianty z procesu głównego nie dopisują
+„(w tym M ukrytych)”; „Tydzień” i „3 dni” nie pokazują bloku odkrytego z Ctrl K (Ctrl K otwiera „Dziś”); w „Dziś”
+dopisek o ukrytych to osobny dymek okna, bo linię „Przesunięto” rysuje pasek (T1010). SNT4b – starsza wersja na drugim
+komputerze kładzie zależne wpisy kolejki osobno (T923). `docs/decyzje.md`: D400 stoi przed D380 (kolejność historyczna).
+1.19.0 – zmiana nazwy w trakcie biegu ginie po usunięciu bloku (nazwa ze startu, `blockName.ts`); testy T1026 i T1027
+sprawdzają tekst źródła (ekranów „Dziś” i „Szablonów” nie da się zamontować w jsdom), zapis `fresh` tylko po udanym
+`saveChange` bez testu; `newBlock.add` i `add(n = name)` przenoszą nazwę ręcznie obok stanu renderu (można czytać
+`useUi.getState().blockDraft`). Run na `main` 1.18.0 padł dwa razy na chwiejnych testach Windows („!jutro”, sprzątanie
+`tests/scale` – poprawione w c1a635c), trzecia próba zielona, wydanie 13.11 21:07.
+
+## Blok 3 – pozycja kolejki (przeniesione z `docs/postep.md` 14.11.2026)
+6. Blok 3 – paczka SNT (D416, sesja `regulatedday-ab`): SNT4b, SNT1, SNT2 wydane w 1.18.0 (PR #85), poprawka
+   miesiąca 1.18.1 (D429) scalona w PR #86 (`main` 16db060). Na prośbę użytkownika 13.11 wieczorem: nazwa bloku jak
+   tytuł w Google Calendar (D430, D431) – 1.19.0, PR z gałęzi `claude/1.19.0-nazwa-bloku` (drzewo `ws4q`), scalić po
+   wydaniu 1.18.1 (sekcja „Blok 3 – paczka SNT”). Blok 4 zamknięty (1.17.0). 1.19.0 scalone (PR #87, `main` b23f382).
