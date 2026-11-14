@@ -78,7 +78,17 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 | U3 + U4 (Del, „+ Nowa…”) | `w120d` | scalone (T1065–T1069) |
 | Przegląd xhigh runda 1 (a+b+c): 13 uwag | `w120f`, `w120e` | poprawione i scalone (T1045, T1049, T1070–T1072) |
 | E2E E3 w nocy („+ Blok” o 02:20 – ta sama wartość pola nie zapisywała) | `w120g` | poprawione i scalone (T1077, T1078) |
-| Przegląd xhigh runda 2 (poprawki + U3/U4): 14 uwag | `w120h` (Del, okna, „+ Nowa…”), `w120g` (`TodayPage`, `draftSave`) | h scalone (T1067, T1073–T1076); g w toku (T1079–T1080); runda 3 nie będzie (D351) |
+| Przegląd xhigh runda 2 (poprawki + U3/U4): 14 uwag | `w120h` (Del, okna, „+ Nowa…”), `w120g` (`TodayPage`, `draftSave`) | poprawione i scalone (T1067, T1073–T1076, T1079–T1080); runda 3 nie będzie (D351) |
+| PR 1.20.0 | `w120` | PR #88 otwarty 14.11; po zielonym CI scalić (D285), sprawdzić wydanie 1.20.0 z runu na `main`, Setup.exe do Pobranych |
+
+**Do pokazania użytkownikowi przy odbiorze 1.20.0:** klik w blok w „Tygodniu” i „3 dniach” otwiera „Dziś” z zaznaczonym
+blokiem (T1066 – Del działa po kliknięciu); „+ Nowa…” dla Wariantu i Kategorii nie ma na dniu minionym (T1067); wieczorny
+blok dawnej drugiej zmiany w szablonie liczy się teraz jak praca (granica, przedłużenie – D467); Esc na ruszonym szkicu
+zapisuje go (T1080).
+**Uwagi na później:** `tests/e2e/quick.spec.ts` „„+” w pasku okna głównego…” niestabilny już na 1.19.0 (lokalnie 2 na 6) –
+zapis z pola paska czasem nie dochodzi; `AllDayCard` ma własny nasłuch kliku poza kartą – przejść na `useOutsidePointer`;
+`cases.spec` „!jutro” chwiejny pod obciążeniem (Ctrl+N tuż po menu); porzucenie zadania nie ma akcji w interfejsie, więc
+nie tworzy następnego (T1042).
 
 ## Ciąg L – stan (D380)
 Numery: D404, T700–T719 (L1), T750–T799 (L2, L3 – uzgodnione z sesją HKU1 12.11); kolejne D – osobno od HKU1 (ma D405, D406). „Przed etapem” pominięte na
