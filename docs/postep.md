@@ -70,9 +70,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    (d7, 2a3581c, T1220–T1231) i dokumenty (d7, ce4dbb6, T1240–T1242); wersja 1.23.0; D492–D499, T1160–T1242. Przegląd xhigh
    runda 2 całego 1.23 (13beb59..5f26bcf): 15 uwag – a8 poprawia na `claude/1.23-poprawki2` (drzewo `w123q`, T1212–T1219,
    T1250–T1269) – scalone (3f908ee, RULES_VERSION 12). Lokalnie `npm test` 3495/3495, build, lint, check-context ok;
-   Setup 1.23.0 w Pobranych 14.11 17:40. **PR #90** (paczka do `main`), CI run 43616954798; po zielonym – scalić (D285), sprawdzić
-   wydanie 1.23.0 z runu na `main`.
-   **14.11 20:30:** PR #90 scalony (5f2d9ae), run wydania 1.23.0 na `main` 43626981099.
+   Setup 1.23.0 w Pobranych 14.11 17:40. PR #90 scalony 14.11 (5f2d9ae); wydanie 1.23.0 opublikowane 14.11 21:12 (run 43626981099,
+   Linux E2E D492 niestabilny – poprawka 0f9919b w 1.24).
    **Po 1.23 (decyzja 14.11):** szybki zapis „+” w chwili otwierania folderu czeka na folder i wtedy się zapisuje (dziś przepada).
    **Uwagi na później (d7):** TextField po Enter miga starą wartością; TipTap getMarkdown nieliniowy przy tysiącach znaczników;
    proces po will-quit żyje pod obciążeniem do 170 s (czy nowa kopia startuje); QUIT_MS wydłuża też zawieszenie w teście;
