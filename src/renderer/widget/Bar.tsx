@@ -342,15 +342,17 @@ function QuickButton({ mode, open, toggle }: { mode: BarMode; open: boolean; tog
 /**
  * „Kroki ▸” of a routine unfolded (D328): its steps ticked one by one, the version („zwykła” or „gorsze dni”) and
  * „✓ Zapisz zaznaczone” – the same save as the card in „Dziś”. It starts as the day has the block (T1108: its version and
- * ticks, one state with the panel „Kroki”); the save writes the version and the ticks into the day. The steps go by their
- * places in the version (an action's argument is short – 40 ids would not fit, A6-10 review).
+ * ticks, one state with the panel „Kroki”); the save writes the version and the change of the ticks against that start into the
+ * day (T1112). The change goes as one sign per place of the version (an action's argument is short – 40 ids would not fit,
+ * A6-10 review).
  */
 function RoutineUnfold({ routine, mode, close }: { routine: BarRoutine; mode: BarMode; close: () => void }) {
-  const { version, steps, done, setVersion, flip } = useStepPicks(routine)
+  const { version, steps, done, setVersion, flip, change } = useStepPicks(routine)
   const save = () => {
-    const places = steps.flatMap((s, k) => (done.has(s.id) ? [k] : []))
-    if (!places.length) return
-    act('routine', `${routine.block}|${version}|${places.join(',')}`)
+    // The change against the day when unfolded (T1112): a step taken off here goes off, one ticked elsewhere meanwhile stays.
+    const diff = change()
+    if (!done.size && !diff.includes('r')) return
+    act('routine', `${routine.block}|${version}|${diff}`)
     close()
   }
   return (

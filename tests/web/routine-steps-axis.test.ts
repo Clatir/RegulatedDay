@@ -16,6 +16,7 @@ import { newSeries } from '@shared/engine/series'
 import type { SeriesBlock } from '@shared/model/series'
 import type { DayModel } from '@renderer/store/day'
 import { lm, Scenario } from '../unit/engine/dsl'
+import { timerAction, type TimerAction } from '@shared/engine/timer'
 
 const DATE = '2026-11-18'
 const poranek: Routine = { id: 'poranek', name: 'Poranek', archived: false, worse: [], normal: [
@@ -74,18 +75,28 @@ describe('oś „Dziś”: kroki rutyny i ukończone bloki', () => {
     expect(stepsAskScope(o, b, false, true)).toBe(false)
   })
 
-  it('`finishedBlock` (przegląd 4): ✓ tylko przy jawnym ukończeniu – „Skończyłem”, ostatni krok, stały o planowanym końcu; koniec z nieobecności – bez ✓', () => {
-    const end = (done: boolean | null, endRule: string | null) => finishedBlock({ endedAt: 10, done, endRule })
-    expect([end(true, null), end(true, 'endNow'), end(null, 'steps'), end(null, 'endNow'), end(null, 'finished'), end(null, 'plan'), end(null, 'fixedNoReaction')]).toEqual([true, true, true, true, true, true, true])
-    // The app's own ends of a flexible block left alone (`done` null) and one left unfinished: no ✓.
-    expect(['idle', 'absence', 'shutdown', 'lastInput', 'twoQuestions', 'disconnect', 'firstUse', 'limit', 'bedtime', null].map((r) => end(null, r))).toEqual(Array(10).fill(false))
-    expect([end(false, 'park'), end(false, 'removed')]).toEqual([false, false])
-    expect(finishedBlock({ endedAt: null, done: null, endRule: null })).toBe(false)
-    expect(finishedBlock(undefined)).toBe(false)
+  it('`finishedBlock` czyta tylko `finished` silnika (D484, T1121): koniec bez niego albo nieskończony – bez ✓', () => {
+    expect([finishedBlock({ endedAt: 10, finished: true }), finishedBlock({ endedAt: 10, finished: false }), finishedBlock({ endedAt: null, finished: true }), finishedBlock(undefined)]).toEqual([true, false, false, false])
+  })
+
+  it('D484 (przegląd 2, uwaga 1): „Dalej” i „Koniec pracy” na bloku stałym i sesji – ✓ na osi', () => {
+    const fixed = (id: string, time: string, cat = 'inne') => at(id, time, 60, { fixed: true, categoryId: cat })
+    const s = new Scenario({ date: DATE, plan: [fixed('w', '08:00'), fixed('s', '10:00', 'sesja'), at('n', '12:00', 30)] }).observe('07:00', null)
+    const click = (time: string, act: TimerAction) => {
+      const t = s.at(time)
+      const r = timerAction(s.contextAt(t), s.stateAt(t), act, t)
+      if (!r.ok) throw new Error(r.why)
+      s.write(r.events, t)
+    }
+    click('08:00', { a: 'start', block: 'w' })
+    click('08:30', { a: 'next', confirm: true })
+    click('10:00', { a: 'start', block: 's' })
+    click('10:30', { a: 'workEnd' })
+    const m = axis(s, '13:00')
+    expect([m.get('w')?.finished, m.get('s')?.finished]).toEqual([true, true])
   })
 
   it('D483: dojazd zaczęty sam i skończony sam o planowanym końcu (`awayPlan`) – ✓ na osi', () => {
-    expect(finishedBlock({ endedAt: 10, done: null, endRule: 'awayPlan' })).toBe(true)
     const s = new Scenario({ date: DATE, plan: [at('d', '08:00', 30, { categoryId: 'dojazd', variantId: 'dojazd' })] }).observe('07:00', null)
     s.start('d', '08:00').write([{ k: 'block.end', block: 'd', at: s.at('08:30'), done: null, rule: 'awayPlan' }], s.at('08:30'))
     expect(axis(s, '11:00').get('d')).toMatchObject({ dim: true, finished: true })

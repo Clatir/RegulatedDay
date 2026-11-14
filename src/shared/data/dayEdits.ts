@@ -5,7 +5,7 @@
  * change of another field on another computer.
  */
 import { planBlockFrom, type PlanBlock } from '../model/plan'
-import { ROUTINE_STEPS } from '../model/routineSteps'
+import { ROUTINE_STEPS, routineStepsEntries } from '../model/routineSteps'
 import { sameStepList, stepsFrom, stepsJson, withStepsJson, type Step } from '../model/steps'
 import { deepEqual } from './merge'
 
@@ -159,7 +159,8 @@ export function setRoutineSteps(raw: Raw, blockId: string, entry: { routine: str
  */
 export function moveRoutineSteps(from: Raw | null | undefined, to: Raw, blockId: string): Raw {
   const src = from && isPlain(from[ROUTINE_STEPS]) ? (from[ROUTINE_STEPS] as Raw)[blockId] : undefined
-  if (src === undefined) return setRoutineSteps(to, blockId, null)
+  // Only an entry that is one (T1123): an empty `{}` or a broken one is no list to take along.
+  if (src === undefined || !routineStepsEntries({ [blockId]: src })[blockId]) return setRoutineSteps(to, blockId, null)
   const all = isPlain(to[ROUTINE_STEPS]) ? { ...(to[ROUTINE_STEPS] as Raw) } : {}
   all[blockId] = src
   return { ...to, [ROUTINE_STEPS]: all }

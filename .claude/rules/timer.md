@@ -34,6 +34,10 @@ paths:
 ## Zasady
 - Każde działanie automatyczne ma `autoRule` i identyfikator `derivedId(dzień, 'auto', reguła, rodzaj, blok, at)` –
   ten sam na każdym komputerze; zapisuje tylko prowadzący i tylko do bramki (`minuteGate`).
+- Jawne ukończenie (D484, T1121): `block.end` z `fin: true` przy „Skończyłem”, „Dalej” (nie jako niezrobiony), „Koniec pracy”, starcie
+  innego bloku, ostatnim kroku, bloku stałym o planowanym końcu (`plan`, `fixedNoReaction`) i dojeździe według planu (`awayPlan`); nowy
+  koniec z kliknięcia albo reguły „według planu” musi je ustawić. Fakty: `BlockFact.finished` (`finishedEnd` – bez `fin` zgodność ze
+  starymi logami po `done` i regule); oś czyta tylko je. `RULES_VERSION` bez zmian.
 - „Cofnij” = `undo` z celem; fakty (`foldFacts`) pomijają cofnięte zdarzenia. Cofnięty identyfikator nie wraca –
   reguła, która ma zadziałać ponownie, musi dać inny `at` (np. nowy planowany koniec po „Przedłuż”).
 - Pytanie ma id `reguła:dzień:blok:próg`; zobaczone = `question.seen` (pierwsze w logu); dzień pytania z jego id.

@@ -132,7 +132,12 @@ export type TimerEvent =
   /** `place` (ms, D478): where the paused block stands – the place of the block whose start swapped with it. */
   | (EventBase & { k: 'block.pause'; block: string; at: number; place?: number })
   | (EventBase & { k: 'block.resume'; block: string; at: number; confirmUntil: number | null })
-  | (EventBase & { k: 'block.end'; block: string; at: number; done: boolean | null; rule: string | null })
+  /**
+   * `fin` (1.22, D484, T1121): the end says the block was done explicitly – „Skończyłem”, „Dalej”, „Koniec pracy”, its last step, a
+   * fixed block at its planned end, a commute „według planu”; false or none on an end of an absence, the close of the app,
+   * idleness. An end written without it (an older version) is told by `done` and its rule (`facts.ts`).
+   */
+  | (EventBase & { k: 'block.end'; block: string; at: number; done: boolean | null; rule: string | null; fin?: boolean })
   | (EventBase & { k: 'block.extend'; block: string; at: number; minutes: number })
   /** The end of a running block dragged earlier on the axis (D365): its planned end `minutes` sooner – „Przedłuż” the other way. */
   | (EventBase & { k: 'block.shorten'; block: string; at: number; minutes: number })

@@ -12,6 +12,7 @@ import type { MonthView } from './engine/calendarViews'
 import type { GoalsPatch } from './model/goals'
 import type { RitualValue, RitualView } from './engine/ritual'
 import type { CasesRitual } from './engine/cases'
+import type { ResultCode } from './engine/timer'
 import type { CloseHow } from './model/events'
 import type { DayTypeId } from './model/settings'
 import type { ZjazdDay, ZjazdWarning } from './import/zjazdy'
@@ -519,7 +520,7 @@ export interface TimerResult {
   why: string | null
   confirm: { block: string; minutes: number; overrun: boolean; bedtime: boolean } | null
   /** Why it did nothing, when the caller must tell it from other refusals (D336, T1109): never read from `why`. */
-  code?: 'alreadyOver' | 'notBegun' | 'notRunning' | 'routineSaved' | 'noRoutine'
+  code?: ResultCode
 }
 
 /** A day closed (D468): `written` – the ids of the events of the close, for its „Cofnij” (none when refused). */

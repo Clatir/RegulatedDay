@@ -136,7 +136,7 @@ function auto(date: string, rule: string, draft: TimerDraft & { block?: string }
 /** A block's fact without its end (to judge again whether an automatic end still holds). */
 function unended(f: BlockFact): BlockFact {
   const runs = f.runs.map((r, i) => (i === f.runs.length - 1 && f.endedAt != null && r.to === f.endedAt ? { ...r, to: OPEN } : r))
-  return { ...f, runs, endedAt: null, done: null, endRule: null, endId: null, endOrder: null }
+  return { ...f, runs, endedAt: null, done: null, finished: false, endRule: null, endId: null, endOrder: null }
 }
 
 interface Ctx {
@@ -215,7 +215,9 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
 export const AWAY_PLAN_RULE = 'awayPlan'
 
 /** The automatic end of a block away from the computer by `awayEnd` (one id for the rule and the check that waits for it). */
-const awayEndEvent = (date: string, block: string, away: { at: number; rule: string }): AutoEvent => auto(date, away.rule, { k: 'block.end', block, at: away.at, done: null, rule: away.rule })
+const awayEndEvent = (date: string, block: string, away: { at: number; rule: string }): AutoEvent =>
+  // A commute ended „według planu” is done explicitly (D483, D484 – `fin`, T1121); the first use, the limit, the bedtime – not.
+  auto(date, away.rule, { k: 'block.end', block, at: away.at, done: null, rule: away.rule, ...(away.rule === AWAY_PLAN_RULE ? { fin: true } : {}) })
 
 /** The context the rules of running blocks judge in (outside `autoActions`, which builds its own). */
 function ctxOf(inp: AutoInput, t: TimerNow): Ctx {
@@ -508,7 +510,8 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
       const session = b.rules.kind === 'session'
       const when = !inFg || session ? endAt : endAt + FIXED_REACTION_MIN * MIN
       const rule = inFg && !session ? 'fixedNoReaction' : 'plan'
-      if (due(when) && nowIdx >= tb.plannedEnd && take([auto(date, rule, { k: 'block.end', block: b.id, at: endAt, done: null, rule })])) continue
+      // A fixed block to its planned end is done explicitly (D484 – `fin`, T1121).
+      if (due(when) && nowIdx >= tb.plannedEnd && take([auto(date, rule, { k: 'block.end', block: b.id, at: endAt, done: null, rule, fin: true })])) continue
       // A session ends at the last input outside the app once no computer had presence for 30 min (D193, D210).
       if (session) {
         const end = sessionLastInputEnd(activity, runFrom, inp.now)

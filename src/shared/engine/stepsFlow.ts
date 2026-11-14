@@ -14,11 +14,12 @@
  */
 import type { TimerIn, TimerResult } from '../api'
 import { MAX_STEPS, type RoutineVersion } from '../model/routines'
+import type { ResultCode } from './timer'
 
 export type Timer = (click: TimerIn) => Promise<TimerResult>
 
 /** The refusals said by no word (by their code): not begun, over, not running nor paused, its routine saved already or none. */
-const QUIET: ReadonlySet<string> = new Set(['notBegun', 'alreadyOver', 'notRunning', 'routineSaved', 'noRoutine'])
+const QUIET: ReadonlySet<ResultCode> = new Set<ResultCode>(['notBegun', 'alreadyOver', 'notRunning', 'routineSaved', 'noRoutine'])
 export const quietRefusal = (r: TimerResult): boolean => !r.ok && r.code != null && QUIET.has(r.code)
 
 /** What an end of a list did: the routine saved, the block ended, and the refusals to say (none quiet). */
@@ -48,14 +49,17 @@ export async function listWhole(timer: Timer, day: string, block: string, routin
 
 /**
  * A routine saved (T1108): `routine.done`, then `write` (the day's ticks – whether they were written and the list is whole
- * after them), then the end of the block when both hold. Refused at once – `saved` false and why (nothing written).
+ * after them), then the end of the block when both hold. `saved` – called once `routine.done` is written, before the ticks
+ * (T1122: a place keeps its „Cofnij” of the save even when the write of the ticks fails). Refused at once – `saved` false,
+ * nothing written; a refusal of its own (saved already, no routine) said by no word (T1109).
  */
-export async function routineSaved(timer: Timer, day: string, block: string, routine: RoutineSave, write: () => Promise<{ ok: boolean; finished: boolean }>): Promise<StepsEnd & { ticks: boolean }> {
+export async function routineSaved(timer: Timer, day: string, block: string, routine: RoutineSave, write: () => Promise<{ ok: boolean; finished: boolean }>, saved?: () => void): Promise<StepsEnd> {
   const done = await routineDone(timer, day, block, routine)
-  if (!done.ok) return { saved: false, ended: false, ticks: false, said: [done.why ?? 'rutyna nie zapisała się'] }
+  if (!done.ok) return { saved: false, ended: false, said: quietRefusal(done) ? [] : [done.why ?? 'rutyna nie zapisała się'] }
+  saved?.()
   const w = await write()
   const ended = w.ok && w.finished ? await timer({ a: 'stepsFinish', block, day }) : null
-  return { saved: true, ended: ended?.ok === true, ticks: w.ok, said: said(ended) }
+  return { saved: true, ended: ended?.ok === true, said: said(ended) }
 }
 
 /** What a „Cofnij” after steps takes back: the end of the block, the routine's save, the ticks (the place's own undo). */

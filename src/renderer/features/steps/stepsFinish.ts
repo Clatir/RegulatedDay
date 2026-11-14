@@ -48,19 +48,38 @@ export async function finishBySteps(date: string, block: Pick<PlanBlock, 'id' | 
 
 /**
  * A routine saved from its card (T1108): `done` – the steps of its list it saves ticked off (of `total`), with the version
- * picked. Nothing saved (saved elsewhere already, a refusal) – said, nothing more is written.
+ * picked; the card's boxes are the day's own, so nothing is taken off (T1112). „N z M” – the list after the save. Nothing saved
+ * (saved elsewhere already – quiet, another refusal – said): nothing more is written. The ticks' write failing after the
+ * routine was saved: „Cofnij” of the save still comes (T1122).
  */
 export async function saveRoutine(date: string, block: PlanBlock, name: string, version: RoutineVersion, done: readonly string[], total: number, seen: Parameters<typeof saveRoutineSteps>[4]): Promise<void> {
   let undo: Awaited<ReturnType<typeof saveRoutineSteps>>['undo'] = []
-  const r = await routineSaved(timerClick, date, block.id, { version, steps: done }, async () => {
-    const ticks = await saveRoutineSteps(date, block, version, done, seen)
-    undo = ticks.undo
-    return { ok: ticks.saved, finished: ticks.finished }
-  })
+  let after: { done: number; of: number } = { done: done.length, of: total }
+  let routineWritten = false
+  let r: Awaited<ReturnType<typeof routineSaved>>
+  try {
+    r = await routineSaved(
+      timerClick,
+      date,
+      block.id,
+      { version, steps: done },
+      async () => {
+        const ticks = await saveRoutineSteps(date, block, version, done, seen)
+        undo = ticks.undo
+        if (ticks.steps.length) after = { done: ticks.steps.filter((s) => s.done).length, of: ticks.steps.length }
+        return { ok: ticks.saved, finished: ticks.finished }
+      },
+      () => (routineWritten = true)
+    )
+  } catch (e) {
+    toast(`Nie zapisano odhaczeń: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
+    if (routineWritten) undoToast(routineSavedText(name, version, done.length, total), () => void undoWith({ day: date, block: block.id, end: false, routine: true }))
+    return
+  }
   for (const why of r.said) toast(why, 'info')
   if (!r.saved) return
   const ticks = undo
-  undoToast(r.ended ? finishedText(name) : routineSavedText(name, version, done.length, total), () =>
+  undoToast(r.ended ? finishedText(name) : routineSavedText(name, version, after.done, after.of), () =>
     void undoWith({ day: date, block: block.id, end: r.ended, routine: true, ticks: ticks.length ? () => undoSteps(ticks).then(() => undefined) : null })
   )
 }

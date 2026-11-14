@@ -41,7 +41,7 @@ import { removeTarget, useDeleteResolver, useDeleteSelected, type DeleteTarget }
 import { StepsEditor } from '../steps/StepsEditor'
 import { saveBlockSteps, stepsAskScope } from '../steps/blockSteps'
 import { finishBySteps } from '../steps/stepsFinish'
-import { RoutineVersionPick } from '../steps/RoutineVersionPick'
+import { RoutineVersionPick, routineVersionShown } from '../steps/RoutineVersionPick'
 import { pickRoutineVersion, tickBlockStep } from '../../store/steps'
 import { routineStepsOf } from '@shared/model/routineSteps'
 import { changeSeries, removeSeries } from '../series/seriesActions'
@@ -710,8 +710,9 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
                 onTick={(id, done) => tickStep(block, id, done)}
                 onOp={(op) => changeSteps(block, op, draft != null, routineList != null)}
                 removeAsks={() => stepsAskScope({ date, series, scope: stepsScope }, block, draft != null, routineList != null)}
-                // D479; a list „na gorsze dni” the day keeps after the routine lost that version can go back to „zwykła” (T1116).
-                aside={routineList && (routineList.version === 'worse' || routineList.routine?.worse.length) ? <RoutineVersionPick version={routineList.version} onPick={(v) => void pickRoutineVersion(date, block, v, raw)} /> : undefined}
+                // D479; a list „na gorsze dni” the day keeps after the routine lost that version can go back to „zwykła” (T1116); a
+                // routine removed – no switch (T1124).
+                aside={routineVersionShown(routineList) ? <RoutineVersionPick version={routineList.version} onPick={(v) => void pickRoutineVersion(date, block, v, raw)} /> : undefined}
               />
             }
             place={draft ? undefined : dayPlace}

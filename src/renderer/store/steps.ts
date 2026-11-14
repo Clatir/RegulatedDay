@@ -78,11 +78,13 @@ async function withList(date: string, block: PlanBlock, seen: RawRecord | null |
 }
 
 /**
- * A routine saved from its card in „Dziś” (D328, T1108 – „✓ Wszystkie”, „Zapisz zaznaczone”): the day's ticks of the block's
- * list become exactly `done`, after the version picked; the ticks stay the day's, one state with the panel (`stepsDone`).
+ * A routine saved from its card in „Dziś” (D328, T1108 – „✓ Wszystkie”, „Zapisz zaznaczone”) as a change of the day's ticks
+ * against what the card showed (T1112): the steps of `done` ticked off, those of `undone` (ticked when it was shown, taken off
+ * there) not, every other tick of the day as it is – after the version picked; the ticks stay the day's, one state with the
+ * panel (`stepsDone`). `steps` of the answer – the list after it (its „N z M”), `finished` – it is whole.
  */
-export function saveRoutineSteps(date: string, block: PlanBlock, version: RoutineVersion, done: readonly string[], seen?: RawRecord | null): Promise<StepsDone> {
-  return withList(date, block, seen, (day, task) => routineSaveEdits({ date, day, block, version, done, task, routines: routinesNow() }))
+export function saveRoutineSteps(date: string, block: PlanBlock, version: RoutineVersion, done: readonly string[], seen?: RawRecord | null, undone: readonly string[] = []): Promise<StepsDone> {
+  return withList(date, block, seen, (day, task) => routineSaveEdits({ date, day, block, version, done, undone, task, routines: routinesNow() }))
 }
 
 /**

@@ -11,6 +11,9 @@ import type { RdApi } from '@shared/api'
 import { installEscape } from '@renderer/lib/escape'
 import { Bar } from '@renderer/widget/Bar'
 import { noFolderView, type WidgetView } from '@shared/widget'
+import type { RoutineSteps } from '@shared/model/routineSteps'
+import type { Routine } from '@shared/model/routines'
+import { RoutineVersionPick, routineVersionShown } from '@renderer/features/steps/RoutineVersionPick'
 
 let uninstallEscape: () => void = () => undefined
 beforeAll(() => {
@@ -70,5 +73,47 @@ describe('„Kroki ▸” na pasku: wersja od razu w dniu (D481)', () => {
     expect(q('bar-routine-version-worse')!.getAttribute('aria-pressed')).toBe('true')
     expect(q('bar-routine-step-leki')).not.toBeNull()
     expect(q('bar-routine-step-woda')).toBeNull()
+  })
+})
+
+describe('„Kroki ▸” zapisuje różnicę od rozwinięcia (przegląd 2, uwaga 5, T1112)', () => {
+  it('krok odhaczony przy rozwinięciu i odznaczony tu – `r`, zaznaczony tu – `a`, reszta – `.`', async () => {
+    await unfold(view('normal', ['woda']))
+    await act(async () => q('bar-routine-step-woda')!.click())
+    await act(async () => q('bar-routine-step-kot')!.click())
+    await act(async () => q('bar-routine-save')!.click())
+    expect(widgetAction).toHaveBeenLastCalledWith('routine', 'rut|normal|ra')
+  })
+
+  it('nic nie zaznaczone i nic nie odznaczone – nic nie wysyła', async () => {
+    await unfold(view('normal', []))
+    await act(async () => q('bar-routine-save')!.click())
+    expect(widgetAction).not.toHaveBeenCalled()
+  })
+})
+
+describe('przełącznik wersji w panelu (przegląd 2, uwagi 6, 10 – T1116, T1124)', () => {
+  const rutyna: Routine = { id: 'p', name: 'Poranek', archived: false, normal: [{ id: 'a', name: 'A', min: 1 }], worse: [{ id: 'w', name: 'W', min: 1 }] }
+  const list = (routine: Routine | null, version: 'normal' | 'worse'): RoutineSteps => ({ routineId: 'p', routine, version, steps: [], kept: version === 'worse' })
+
+  it('rutyna z wersją na gorsze dni – jest; bez niej – nie ma; rutyna usunięta – nie ma (lista z dnia, nic do wyboru)', () => {
+    expect(routineVersionShown(list(rutyna, 'normal'))).toBe(true)
+    expect(routineVersionShown(list({ ...rutyna, worse: [] }, 'normal'))).toBe(false)
+    expect(routineVersionShown(list(null, 'worse'))).toBe(false)
+    expect(routineVersionShown(null)).toBe(false)
+  })
+
+  it('lista „na gorsze dni” zatrzymana w dniu, gdy rutyna straciła tę wersję – przełącznik jest (powrót do „zwykła”), wybrane „na gorsze dni”', async () => {
+    const lost = list({ ...rutyna, worse: [] }, 'worse')
+    expect(routineVersionShown(lost)).toBe(true)
+    const onPick = vi.fn()
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(createElement(RoutineVersionPick, { version: lost.version, onPick })))
+    const radio = (name: string) => [...host!.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((b) => b.textContent === name)!
+    expect(radio('na gorsze dni').getAttribute('aria-checked')).toBe('true')
+    await act(async () => radio('zwykła').click())
+    expect(onPick).toHaveBeenCalledWith('normal')
   })
 })

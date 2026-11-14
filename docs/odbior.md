@@ -2436,12 +2436,12 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Oczekiwany efekt:** po ostatnim ptaszku blok kończy się w tej chwili: w oknie dymek „Skończono: <nazwa> · Cofnij”, na pasku linia „Skończono: <nazwa> · Cofnij” (ok. minuty); „Cofnij” – blok biegnie dalej, krok zostaje odhaczony, pasek mówi „Wszystkie kroki ✓”; blok niezaczęty się nie kończy – bez rutyny nic nie mówi, rutyna mówi „Zapisano: <nazwa> (zwykła) – N z N · Cofnij” i jej karta znika; „✓ Wszystkie” na karcie odhacza wszystkie kroki w panelu i kończy biegnący blok, a „Cofnij” zdejmuje odhaczenia, wraca karta i blok biegnie dalej.
 - **Nie przechodzi, gdy:** po ostatnim kroku blok dalej biegnie; kończy się już po przedostatnim; „Cofnij” nie wznawia bloku albo odznacza krok; blok niezaczęty zaczyna się albo kończy; aplikacja czegoś odmawia albo blokuje.
 
-#### KR3 Ukończony blok na osi „Dziś” (D477)
+#### KR3 Ukończony blok na osi „Dziś” (D477, D484)
 - [ ] Odebrane
-- **Automatycznie:** `tests/web/routine-steps-axis.test.ts` (skończony jawnie – przygaszony z ✓; zaparkowany po starcie, niezaczęty i skończony po bezczynności – bez), E2E `tests/e2e/routine-steps.spec.ts`, `tests/e2e/steps.spec.ts`.
-- **Jak sprawdzić:** skończ jeden blok („Skończyłem”, „Dalej” albo ostatnim krokiem), drugi zacznij i zaparkuj po pauzie, trzeci zacznij i odejdź od komputera, aż aplikacja sama go skończy; spójrz na oś „Dziś”.
-- **Oczekiwany efekt:** skończony blok stoi na osi przygaszony, z „✓” przed nazwą, bez przekreślenia; zaparkowany (niedokończony) i skończony przez aplikację przy Twojej nieobecności – przygaszone bez „✓”; „Cofnij” końca zdejmuje „✓”.
-- **Nie przechodzi, gdy:** brak „✓” przy skończonym; „✓” przy niedokończonym, niezaczętym albo skończonym samoczynnie po nieobecności; nazwa przekreślona; skończony blok znika z osi.
+- **Automatycznie:** `tests/web/routine-steps-axis.test.ts` (skończony jawnie – przygaszony z ✓, także „Dalej” i „Koniec pracy” na bloku stałym i sesji, dojazd według planu; zaparkowany po starcie, niezaczęty i skończony po bezczynności – bez), `tests/unit/engine/routine-steps.test.ts` (`fin` końca i `finished` w faktach, stare zdarzenia bez `fin`), E2E `tests/e2e/routine-steps.spec.ts`, `tests/e2e/steps.spec.ts`.
+- **Jak sprawdzić:** skończ jeden blok („Skończyłem”, „Dalej” albo ostatnim krokiem), blok stały albo sesję – „Dalej” albo „Koniec pracy”, drugi blok zacznij i zaparkuj po pauzie, trzeci zacznij i odejdź od komputera, aż aplikacja sama go skończy (albo zamknij aplikację w trakcie); spójrz na oś „Dziś”.
+- **Oczekiwany efekt:** blok skończony jawnie („Skończyłem”, „Dalej”, „Koniec pracy”, ostatni krok, blok stały do planowanego końca, dojazd według planu) stoi na osi przygaszony, z „✓” przed nazwą, bez przekreślenia; zaparkowany (niedokończony) i skończony przez aplikację przy Twojej nieobecności, zamknięciu aplikacji albo bezczynności – przygaszone bez „✓”; „Cofnij” końca zdejmuje „✓”.
+- **Nie przechodzi, gdy:** brak „✓” przy skończonym jawnie (także blok stały po „Dalej” albo „Koniec pracy”); „✓” przy niedokończonym, niezaczętym albo skończonym samoczynnie po nieobecności, zamknięciu aplikacji czy bezczynności; nazwa przekreślona; skończony blok znika z osi.
 
 ---
 

@@ -441,3 +441,46 @@ describe('rutyna na pasku – przegląd 1.22-A (uwagi 3, 8, 9)', () => {
     await a.folder.close('quit')
   })
 })
+
+describe('rutyna na pasku – przegląd 1.22-A, runda 2 (uwagi 2, 5)', () => {
+  const seedRoutine = () => {
+    mkdirSync(join(dataDir, 'routines'), { recursive: true })
+    write(paths.record('routine', 'r'), { schema: 1, id: 'r', name: 'Poranna', normal: [{ id: 'woda', name: 'woda', min: 2 }, { id: 'kot', name: 'kot', min: 8 }, { id: 'leki', name: 'leki', min: 1 }], worse: [] })
+    write(paths.day(DAY), { schema: 1, date: DAY, blocks: [{ id: 'rut', categoryId: 'rutyny', startMin: 10 * 60, durationMin: 10, fixed: false, origin: 'user', routine: 'r' }] })
+  }
+  const line = `routine:${DAY}:rut`
+
+  it('2: zapis odhaczeń rzuca wyjątek po zapisie rutyny – „Zapisano · Cofnij” zostaje i cofa zapis rutyny', async () => {
+    seedRoutine()
+    const clock = { now: placeLogical(DAY, 10 * 60 + 5) }
+    const a = await computer('pca', clock, async (entries, real) => {
+      if (entries.some((e) => e.rel === paths.day(DAY))) throw new Error('dysk niedostępny')
+      return real(entries)
+    })
+    await a.w.refresh()
+    await a.w.act('line', `${line}|all`, 'bar')
+    const saved = a.w.current().lines.find((l) => l.id === 'routineSaved:rut')
+    expect(saved?.actions).toEqual([{ id: 'undo', label: 'Cofnij' }])
+    clock.now += 1_000
+    await a.w.act('line', 'routineSaved:rut|undo', 'bar')
+    const events = (await a.folder.readDay(DAY)).events
+    expect([events.filter((e) => e.k === 'routine.done').length, events.filter((e) => e.k === 'undo').length]).toEqual([1, 1])
+    expect(a.w.current().lines.map((l) => l.id)).toContain(line)
+    await a.folder.close('quit')
+  })
+
+  it('5: „Kroki ▸” – krok odznaczony w rozwinięciu schodzi, odhaczony gdzie indziej po rozwinięciu zostaje; „N z M” liczy wynik', async () => {
+    seedRoutine()
+    // Unfolded with „woda” ticked; meanwhile „leki” ticked elsewhere (the file); the save: „woda” off, „kot” on.
+    write(paths.day(DAY), { schema: 1, date: DAY, blocks: [{ id: 'rut', categoryId: 'rutyny', startMin: 10 * 60, durationMin: 10, fixed: false, origin: 'user', routine: 'r' }], stepsDone: { rut: { woda: true } } })
+    const clock = { now: placeLogical(DAY, 10 * 60 + 5) }
+    const a = await computer('pca', clock)
+    await a.w.refresh()
+    const file = read(paths.day(DAY))
+    write(paths.day(DAY), { ...file, stepsDone: { rut: { woda: true, leki: true } } })
+    await a.w.act('routine', 'rut|normal|ra.', 'bar')
+    expect(dayFileFrom(read(paths.day(DAY)), DAY).stepsDone.rut?.sort()).toEqual(['kot', 'leki'])
+    expect(a.w.current().lines.find((l) => l.id === 'routineSaved:rut')).toMatchObject({ text: 'Zapisano: Poranna (zwykła) – 2 z 3' })
+    await a.folder.close('quit')
+  })
+})

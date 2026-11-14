@@ -109,6 +109,12 @@ export interface BlockFact {
   gone: { at: number; rule: string | null; id: string; order: EventOrder } | null
   cancelledAt: number | null
   done: boolean | null
+  /**
+   * Ended as done explicitly (D484, T1121): „Skończyłem”, „Dalej”, „Koniec pracy”, its last step, a fixed block at its planned
+   * end, a commute „według planu” – the end's own `fin`, or (an end written before 1.22) told by `done` and its rule. Never an
+   * end the app made of an absence, the close of the app or idleness. The axis of „Dziś” puts ✓ by it (D477).
+   */
+  finished: boolean
   endRule: string | null
   /** The id of the event that ended it („Cofnij” of an automatic end points at it). */
   endId: string | null
@@ -254,6 +260,22 @@ export function betterFreeze(a: { v: number; c: string; know: Readonly<Record<st
   return d !== 0 ? d > 0 : a.c < b.c
 }
 
+/**
+ * The rules of an end that say the block was done though the end carries no `done` – how an end written before `fin` (1.22,
+ * T1121) is told: its last step, „Skończyłem” of a fixed block or a session, a fixed block at its planned end, a commute
+ * „według planu” (D483). An end without a rule and without `done` was a click of yours on a fixed block („Dalej”, „Koniec
+ * pracy”, another block begun) – done too. Every end of an absence, the close of the app or idleness has its rule – never done.
+ */
+const LEGACY_FINISHED_RULES: ReadonlySet<string> = new Set(['steps', 'endNow', 'finished', 'plan', 'fixedNoReaction', 'awayPlan'])
+
+/** Whether an end says its block was done explicitly (D484): its `fin`, else (an older end) `done` true or its rule. */
+function finishedEnd(e: { done?: boolean | null; rule?: string | null; fin?: unknown }): boolean {
+  if (typeof e.fin === 'boolean') return e.fin
+  if (e.done === true) return true
+  if (e.done === false) return false
+  return e.rule == null || LEGACY_FINISHED_RULES.has(e.rule)
+}
+
 const newBlock = (id: string): BlockFact => ({
   id,
   startedAt: null,
@@ -268,6 +290,7 @@ const newBlock = (id: string): BlockFact => ({
   gone: null,
   cancelledAt: null,
   done: null,
+  finished: false,
   endRule: null,
   endId: null,
   endOrder: null,
@@ -396,6 +419,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         b.endedAt = run ? run.to : (b.runs.at(-1)?.to ?? at)
         b.done = e.done ?? null
         b.endRule = e.rule ?? null
+        b.finished = finishedEnd(e)
         b.endId = e.id
         b.endOrder = orderOf(e)
         break
@@ -411,6 +435,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         b.runs.push({ from: at, to: OPEN, bg: b.runs.at(-1)?.bg ?? false, begun: orderOf(e) })
         b.endedAt = null
         b.done = null
+        b.finished = false
         b.endRule = null
         b.endId = null
         b.endOrder = null
@@ -649,6 +674,7 @@ export function blockAt(b: BlockFact, m: number): BlockFact {
     runs,
     endedAt: ended ? b.endedAt : null,
     done: ended ? b.done : null,
+    finished: ended && b.finished,
     endRule: ended ? b.endRule : null,
     endId: ended ? b.endId : null,
     endOrder: ended ? b.endOrder : null,

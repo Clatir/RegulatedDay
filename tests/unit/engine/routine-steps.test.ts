@@ -14,11 +14,11 @@ import { newSeries, seriesBlockId } from '@shared/engine/series'
 import { routinesDue } from '@shared/engine/routineCheck'
 import { blockStepsEdits, ROUTINE_VERSION_NONE, routineSaveEdits, routineVersionEdits, STEP_GONE, taskTickEdits, tickEdits, type BlockStepsEdit } from '@shared/engine/steps'
 import { moveBetweenDays } from '@shared/engine/planEdit'
-import { putBlock } from '@shared/data/dayEdits'
+import { moveRoutineSteps, putBlock } from '@shared/data/dayEdits'
 import { newTask } from '@shared/model/requests'
 import type { TimerIn, TimerResult } from '@shared/api'
 import { ALREADY_OVER, NOT_BEGUN, STEPS_RULE, timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
-import { recordEdit } from '@shared/data/merge'
+import { inverseEdit, recordEdit, setAt } from '@shared/data/merge'
 import { engineView } from '@shared/engineView'
 import { dayFileFrom, planBlock, templateFrom, type PlanBlock } from '@shared/model/plan'
 import { ROUTINE_STEPS, routineList, routineStepsEntries, routineStepsOf, shownSteps } from '@shared/model/routineSteps'
@@ -85,7 +85,7 @@ describe('kroki rutyny w bloku (D473)', () => {
     expect(view(shownSteps(b, [changed], null)).map((x) => x[1])).toEqual(['Zimny prysznic', 'Kawa'])
     // The first tick: the day's tick and the list kept – the block itself is never written (T786).
     const out = ok(tickEdits({ date: DAY, day: null, block: b, stepId: 'b', done: true, task: null, routines: [poranek()] }))
-    expect(paths(null, out.day)).toEqual(['schema', 'date', 'stepsDone.r.b', `${ROUTINE_STEPS}.r.routine`, `${ROUTINE_STEPS}.r.version`, `${ROUTINE_STEPS}.r.steps`])
+    expect(paths(null, out.day)).toEqual(['schema', 'date', 'stepsDone.r.b', `${ROUTINE_STEPS}.r`])
     expect(paths(null, out.day).some((p) => p.startsWith('blocks'))).toBe(false)
     expect((out.day[ROUTINE_STEPS] as Raw).r).toEqual({ routine: 'poranek', version: 'normal', steps: [
       { id: 'a', title: 'Prysznic', order: 0, min: 10 },
@@ -351,10 +351,10 @@ describe('przegląd 1.22-A (uwagi 1–12)', () => {
     expect(dayFileFrom(ok(routineVersionEdits({ date: DAY, day: worse, block: b(), version: 'normal', routines: [lost] })).day, DAY).routineSteps?.r?.version).toBe('normal')
   })
 
-  it('10: pierwszy zapis listy rutyny to pola wpisu bloku (ITEM_MAPS) – dwa komputery na dwóch blokach nie spotykają się w pytaniu', () => {
+  it('10: pierwszy zapis listy rutyny to wpis bloku (ENTRY_MAPS, T1123) – dwa komputery na dwóch blokach nie spotykają się w pytaniu', () => {
     const after = { schema: 1, date: DAY, [ROUTINE_STEPS]: (kept() as Record<string, unknown>)[ROUTINE_STEPS] }
     const e = recordEdit('days/2026/2026-11-18.json', { schema: 1, date: DAY }, after)!
-    expect(e.edits.map((x) => x.path.join('.')).sort()).toEqual([`${ROUTINE_STEPS}.r.routine`, `${ROUTINE_STEPS}.r.steps`, `${ROUTINE_STEPS}.r.version`])
+    expect(e.edits.map((x) => x.path.join('.'))).toEqual([`${ROUTINE_STEPS}.r`])
   })
 
   describe('wspólna sekwencja końca listy (uwagi 3, 8, 11, 12 – `stepsFlow`)', () => {
@@ -405,5 +405,91 @@ describe('przegląd 1.22-A (uwagi 1–12)', () => {
     expect(out.block).toMatchObject({ id: 'tb', finished: true })
     // Not the last one, or taken back – no end.
     expect(ok(taskTickEdits({ record, stepId: 's1', done: false, date: DAY, day, today: DAY })).block?.finished).toBe(false)
+  })
+})
+
+describe('przegląd 1.22-A, runda 2', () => {
+  const b = () => rutyna({ origin: 'user' })
+  const kept = (day: Raw | null = null) => ok(tickEdits({ date: DAY, day, block: b(), stepId: 'a', done: true, task: null, routines: [poranek()] })).day
+
+  describe('1+7: jawność końca zapisuje silnik (D484, T1121)', () => {
+    const fixedDay = () =>
+      new Scenario({ date: DAY, plan: [planBlock({ id: 'w', categoryId: 'inne', startMin: lm('08:00'), durationMin: 60, fixed: true }), planBlock({ id: 'n', categoryId: 'inne', startMin: lm('12:00'), durationMin: 30 })] }).observe('07:00', null)
+    const click = (s: Scenario, time: string, act: TimerAction) => {
+      const t = s.at(time)
+      const r = timerAction(s.contextAt(t), s.stateAt(t), act, t)
+      if (!r.ok) throw new Error(r.why)
+      s.write(r.events, t)
+      return r.events
+    }
+
+    it('„Dalej” i „Koniec pracy” na bloku stałym – `fin` w zdarzeniu i `finished` w faktach; „Dalej” jako niezrobiony – bez', () => {
+      const s = fixedDay()
+      click(s, '08:00', { a: 'start', block: 'w' })
+      expect(click(s, '08:30', { a: 'next', confirm: true })[0]).toMatchObject({ k: 'block.end', block: 'w', done: null, rule: null, fin: true })
+      expect(s.state('08:31').facts.blocks.get('w')).toMatchObject({ finished: true })
+      const t = fixedDay()
+      click(t, '08:00', { a: 'start', block: 'w' })
+      expect(click(t, '08:20', { a: 'workEnd' }).find((e) => e.k === 'block.end')).toMatchObject({ block: 'w', fin: true })
+      const u = new Scenario({ date: DAY, plan: [planBlock({ id: 'x', categoryId: 'inne', startMin: lm('08:00'), durationMin: 60 })] }).observe('07:00', null)
+      click(u, '08:00', { a: 'start', block: 'x' })
+      click(u, '08:10', { a: 'next', done: false })
+      expect(u.state('08:11').facts.blocks.get('x')).toMatchObject({ done: false, finished: false })
+    })
+
+    it('stare zdarzenia (bez `fin`): koniec bez reguły i bez `done` (klik w bloku stałym) – jawny; koniec z nieobecności, bezczynności, zamknięcia – nie', () => {
+      const ends: Array<[Record<string, unknown>, boolean]> = [
+        [{ done: null, rule: null }, true],
+        [{ done: true, rule: null }, true],
+        [{ done: null, rule: 'plan' }, true],
+        [{ done: null, rule: 'awayPlan' }, true],
+        [{ done: null, rule: 'idle' }, false],
+        [{ done: null, rule: 'shutdown' }, false],
+        [{ done: null, rule: 'absence' }, false],
+        [{ done: false, rule: 'park' }, false],
+        // A newer end says it itself.
+        [{ done: null, rule: 'firstUse', fin: true }, true],
+        [{ done: true, rule: null, fin: false }, false]
+      ]
+      for (const [end, finished] of ends) {
+        const s = new Scenario({ date: DAY, plan: [planBlock({ id: 'x', categoryId: 'inne', startMin: lm('08:00'), durationMin: 60 })] }).observe('07:00', null)
+        s.start('x', '08:00').write([{ k: 'block.end', block: 'x', at: s.at('08:20'), ...end }], s.at('08:20'))
+        expect([end, s.state('08:30').facts.blocks.get('x')!.finished]).toEqual([end, finished])
+      }
+    })
+  })
+
+  it('3, 11: wpis listy rutyny w edycji – cały wpis bloku (ścieżka 2); cofnięcie pierwszego zapisu nie zostawia pustego wpisu', () => {
+    const first = kept()
+    const e = recordEdit('days/2026/2026-11-18.json', { schema: 1, date: DAY }, first)!
+    expect(e.edits.filter((x) => x.path[0] === ROUTINE_STEPS).map((x) => x.path.join('.'))).toEqual([`${ROUTINE_STEPS}.r`])
+    // A change of the version: one edit of the entry (the version and its list together).
+    const worse = ok(routineVersionEdits({ date: DAY, day: first, block: b(), version: 'worse', routines: [poranek()] })).day
+    expect(recordEdit('days/2026/2026-11-18.json', first, worse)!.edits.map((x) => x.path.join('.'))).toEqual([`${ROUTINE_STEPS}.r`])
+    // Taken back: the entry goes whole – no `{}` of it is left.
+    let back: unknown = first
+    for (const x of inverseEdit(e, first, first)?.edits ?? []) if (x.path[0] === ROUTINE_STEPS) back = setAt(back, x.path, x.value)
+    expect(((back as Raw)[ROUTINE_STEPS] as Raw | undefined)?.r).toBeUndefined()
+    // An empty entry is no list to move along.
+    const target = moveRoutineSteps({ [ROUTINE_STEPS]: { r: {} } }, { schema: 1, date: DAY }, 'r')
+    expect(ROUTINE_STEPS in target).toBe(false)
+  })
+
+  it('4, 14: zapis rutyny już zapisanej albo bez rutyny – cicho; wynik bez pola `ticks`', async () => {
+    const timer = (code: TimerResult['code']) => async (): Promise<TimerResult> => ({ ok: false, why: 'odmowa', confirm: null, code })
+    const r1 = await routineSaved(timer('routineSaved'), DAY, 'r', { version: 'normal', steps: ['a'] }, async () => ({ ok: true, finished: true }))
+    const r2 = await routineSaved(timer('noRoutine'), DAY, 'r', { version: 'normal', steps: ['a'] }, async () => ({ ok: true, finished: true }))
+    expect([r1.said, r2.said, r1.saved]).toEqual([[], [], false])
+    expect('ticks' in r1).toBe(false)
+    const loud = await routineSaved(async () => ({ ok: false, why: 'zaznacz co najmniej jeden krok', confirm: null }), DAY, 'r', { version: 'normal', steps: ['a'] }, async () => ({ ok: true, finished: true }))
+    expect(loud.said).toEqual(['zaznacz co najmniej jeden krok'])
+  })
+
+  it('5: zapis to różnica od otwarcia – krok odznaczony jawnie schodzi, odhaczony gdzie indziej zostaje; blok kończy się tylko przy całej liście', () => {
+    // At the opening: „a” ticked. Meanwhile „c” ticked elsewhere. The save: „a” taken off, „b” ticked.
+    const day = ok(tickEdits({ date: DAY, day: kept(), block: b(), stepId: 'c', done: true, task: null, routines: [poranek()] })).day
+    const out = ok(routineSaveEdits({ date: DAY, day, block: b(), version: 'normal', done: ['b'], undone: ['a'], task: null, routines: [poranek()] }))
+    expect(dayFileFrom(out.day, DAY).stepsDone.r?.sort()).toEqual(['b', 'c'])
+    expect([out.finished, out.steps.filter((s) => s.done).length, out.steps.length]).toEqual([undefined, 2, 3])
   })
 })

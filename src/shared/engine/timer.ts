@@ -477,7 +477,7 @@ function startEvents(ctx: DayContext, state: DayState, t: TimerNow, info: BlockI
     } else {
       // The start ends a regeneration (a break), or a block away from the computer – a click there means you are back: the
       // running one ends here, done.
-      out.push({ k: 'block.end', block: fg.info.id, at, done: fg.info.fixed ? null : true, rule: null })
+      out.push({ k: 'block.end', block: fg.info.id, at, done: fg.info.fixed ? null : true, rule: null, fin: true })
     }
   }
   const left = leftOf(state, info, idxOf(state.grid, at))
@@ -562,7 +562,8 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
     case 'next': {
       const events: TimerDraft[] = []
       const fg = t.fg
-      if (fg) events.push({ k: 'block.end', block: fg.info.id, at: endInstant(state, fg, at), done: isFixedLike(fg.info) ? null : (act.done ?? true), rule: null })
+      // „Dalej” (D484, T1121): done explicitly – unless as not done.
+      if (fg) events.push({ k: 'block.end', block: fg.info.id, at: endInstant(state, fg, at), done: isFixedLike(fg.info) ? null : (act.done ?? true), rule: null, fin: act.done !== false })
       const next = t.next
       if (!next) return events.length ? yes(events) : no('w planie nie ma następnego bloku')
       const cost = startCost(state, next, at)
@@ -621,7 +622,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       let end: number
       if (fg?.info.isWork) {
         end = endInstant(state, fg, at)
-        events.push({ k: 'block.end', block: fg.info.id, at: end, done: isFixedLike(fg.info) ? null : true, rule: null })
+        events.push({ k: 'block.end', block: fg.info.id, at: end, done: isFixedLike(fg.info) ? null : true, rule: null, fin: true })
       } else {
         // Clicked when no work runs: it only confirms the earlier end – where the work stopped (`lastWorkStop`: a paused
         // block's too, which ends with the parking below; an end of the engine without a block).
@@ -636,7 +637,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
     case 'finish': {
       const target = act.block ? [t.fg, ...t.bg].find((x) => x?.info.id === act.block) ?? null : t.fg?.info.rules.kind === 'session' ? t.fg : (t.bg.find((x) => x.info.rules.kind === 'session') ?? null)
       if (!target) return no('nie ma biegnącego bloku do zakończenia')
-      return yes([{ k: 'block.end', block: target.info.id, at: endInstant(state, target, at), done: isFixedLike(target.info) ? null : true, rule: target.info.rules.kind === 'session' ? 'finished' : 'endNow' }])
+      return yes([{ k: 'block.end', block: target.info.id, at: endInstant(state, target, at), done: isFixedLike(target.info) ? null : true, rule: target.info.rules.kind === 'session' ? 'finished' : 'endNow', fin: true }])
     }
     case 'cancel': {
       const info = byId.get(act.block)
@@ -776,7 +777,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       if (f.endedAt != null) return no(ALREADY_OVER, null, 'alreadyOver')
       const open = [t.fg, ...t.bg, ...t.paused].find((x) => x?.info.id === act.block)
       if (!open) return no('ten blok nie biegnie', null, 'notRunning')
-      return yes([{ k: 'block.end', block: act.block, at: endInstant(state, open, at), done: isFixedLike(open.info) ? null : true, rule: STEPS_RULE }])
+      return yes([{ k: 'block.end', block: act.block, at: endInstant(state, open, at), done: isFixedLike(open.info) ? null : true, rule: STEPS_RULE, fin: true }])
     }
     case 'undoStepsFinish': {
       // Its „Cofnij” (T1105): the end taken back – the block runs on – while nothing has begun since (as „Cofnij” of a removal).

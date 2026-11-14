@@ -33,19 +33,10 @@ export interface DayAxis {
 }
 
 /**
- * The ends of a block that say it is done though they carry no `done` (T1106): its last step (`steps`), „Skończyłem” of a fixed
- * block or a session (`endNow`, `finished`), a fixed block ended at its planned end (`plan`, `fixedNoReaction`), a commute begun
- * by itself and ended by itself at its planned end (`awayPlan`, D483 – „według planu”).
+ * A block done (D477, D484, T1106): the engine says it – `BlockFact.finished`, the end's `fin` (an older end told by its `done`
+ * and rule, `facts.ts`). The axis only reads it and puts ✓ before the name.
  */
-const DONE_ENDS: ReadonlySet<string> = new Set(['steps', 'endNow', 'finished', 'plan', 'fixedNoReaction', 'awayPlan'])
-
-/**
- * A block done (D477, T1106): ended as done explicitly – `done` true („Skończyłem”, „Dalej” of a flexible block, the end of a
- * meal or a regeneration after an absence) or one of `DONE_ENDS`; never an end the app made of an absence of you (idle,
- * absence, the first use, the last input, two questions, the close of the app, „Odcinam się” – `done` null) nor one left
- * unfinished (`done` false). The axis puts ✓ before its name.
- */
-export const finishedBlock = (f: { endedAt: number | null; done: boolean | null; endRule: string | null } | undefined): boolean => f?.endedAt != null && (f.done === true || DONE_ENDS.has(f.endRule ?? ''))
+export const finishedBlock = (f: { endedAt: number | null; finished: boolean } | undefined): boolean => f?.endedAt != null && f.finished
 
 /**
  * `today` – the logical day of the window (D409): the block of a task shows the task's due date badge, from `today` on (a day
