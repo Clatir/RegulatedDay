@@ -36,13 +36,20 @@ describe('`createCategory`', () => {
 })
 
 describe('jedne pola w obu ekranach', () => {
-  it('„Kategorie” i okno nowej kategorii biorą kolory, koszty i tworzenie z `categoryFields` – bez własnych kopii', () => {
-    for (const f of ['src/renderer/features/settings/CategoriesSection.tsx', 'src/renderer/features/plan/NewThingDialogs.tsx']) {
-      const src = readFileSync(f, 'utf8')
-      expect(src).toMatch(/import \{[^}]*\bColorSwatches\b[^}]*\bCostNumbers\b[^}]*\bcreateCategory\b[^}]*\} from '[./]*(settings\/)?categoryFields'/)
-      expect(src).not.toContain('CATEGORY_COLORS')
-      expect(src).not.toContain('POOLS.map')
-      expect(src).not.toContain('.slice(0, 60)')
+  const from = (names: string[]) => new RegExp(String.raw`import \{[^}]*\b(${names.join('|')})\b[^}]*\} from '[./]*(settings/)?categoryFields'`)
+  it('wiersz podkategorii i okno nowej podkategorii biorą kolory i koszty z `categoryFields`, „Kategorie” i okno – tworzenie; nikt nie trzyma kopii', () => {
+    const dir = 'src/renderer/features/'
+    const src = (f: string) => readFileSync(dir + f, 'utf8')
+    for (const f of ['settings/CategoryRow.tsx', 'plan/NewThingDialogs.tsx']) {
+      expect(src(f)).toMatch(from(['ColorSwatches']))
+      expect(src(f)).toMatch(from(['CostNumbers']))
+    }
+    for (const f of ['settings/CategoriesSection.tsx', 'plan/NewThingDialogs.tsx']) expect(src(f)).toMatch(from(['createCategory']))
+    expect(src('settings/VariantRows.tsx')).toMatch(from(['CostNumbers']))
+    for (const f of ['settings/CategoriesSection.tsx', 'settings/CategoryRow.tsx', 'settings/VariantRows.tsx', 'plan/NewThingDialogs.tsx']) {
+      expect(src(f)).not.toContain('CATEGORY_COLORS')
+      expect(src(f)).not.toContain('POOLS.map')
+      expect(src(f)).not.toContain('.slice(0, 60)')
     }
   })
 })

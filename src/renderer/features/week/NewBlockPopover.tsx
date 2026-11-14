@@ -15,14 +15,14 @@ import { newUserBlock } from '@shared/engine/planEdit'
 import { logicalClock } from '@shared/format'
 import { endOf } from '@shared/blockEnd'
 import { BLOCK_NAME_MAX, type PlanBlock } from '@shared/model/plan'
-import { Choice, DurationField, EndField, TextField, TimeField } from '../../components/fields'
+import { DurationField, EndField, GroupedChoice, TextField, TimeField } from '../../components/fields'
 import { Field } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { useEscapeLayer } from '../../lib/escape'
 import { holdGesture, useOutsidePointer } from '../../lib/outside'
 import { useDay, type DayModel } from '../../store/day'
 import { toast } from '../../store/ui'
-import { blockName, categoryOptions, type Names } from '../plan/blockView'
+import { blockName, categoryOptions, groupedCategoryOptions, type Names } from '../plan/blockView'
 import { lastNewBlockCategory, rememberNewBlockCategory, startCategory } from '../plan/lastCategory'
 import { ExchangeDialog } from '../today/ExchangeDialog'
 import { showWeekPush } from '../../store/weekPush'
@@ -228,8 +228,8 @@ export function NewBlockPopover({
           data-testid="week-new-name"
         />
       </Field>
-      <Field label="Kategoria" labelWidth={70}>
-        <Choice value={categoryId} options={categoryOptions(names, categoryId)} onChange={(categoryId) => change({ categoryId })} aria-label="Kategoria" data-testid="week-new-category" />
+      <Field label="Podkategoria" labelWidth={70}>
+        <GroupedChoice value={categoryId} groups={groupedCategoryOptions(names, categoryId)} onChange={(categoryId) => change({ categoryId })} aria-label="Podkategoria" data-testid="week-new-category" />
       </Field>
       <Field label="Początek" labelWidth={70}>
         <TimeField value={start} onCommit={(start) => change({ start })} aria-label="Godzina początku" errorPlacement="below" data-testid="week-new-start" />

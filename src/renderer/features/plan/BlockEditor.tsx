@@ -9,13 +9,14 @@
  * D480 (replaces the copy of D460): choosing a routine only points at it – its length goes with it, its steps never: a block
  * without steps of its own shows the routine's (D473, `model/routineSteps.ts`) until its day ticks one; a list of the block's own
  * (also a copy made by 1.20–1.21) stays as it is; „bez rutyny” leaves the steps.
- * D463: the lists „Kategoria”, „Wariant” and „Rutyna” end with „+ Nowa…” – a window in the middle of the screen with all the fields of the thing
+ * D463: the lists „Podkategoria” (one list with a header for each category of the tree, D510), „Wariant” and „Rutyna” end with „+ Nowa…” – a window in the middle of the screen with all the fields of the thing
  * (`NewThingDialogs`); once saved, the new one is chosen in the block like one picked from the list (a field committed, D461) – a
  * variant and a category once the panel's data (`names`) have it. A variant and a category are made from today on, so a block
  * of a day gone by offers no „+ Nowa…” for them (its day would not have the new one); a routine is not dated – always.
  */
 import { useState, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
+import { groupOfCategory } from '@shared/model/categoryTree'
 import { BLOCK_NAME_MAX, type PlanBlock } from '@shared/model/plan'
 import { routineMinutes, type Routine } from '@shared/model/routines'
 import type { SessionDef } from '@shared/model/settings'
@@ -23,17 +24,17 @@ import { SESSION_ANCHOR } from '@shared/engine/createDay'
 import { olderComputers } from '@shared/model/note'
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { forecastEndText } from '@shared/blockEnd'
-import { Choice, DurationField, EndField, TextField, TimeField } from '../../components/fields'
+import { Choice, DurationField, EndField, GroupedChoice, TextField, TimeField } from '../../components/fields'
 import { Field, Segmented } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
 import { useData, type SaveAnswer } from '../../store/data'
 import { useAttachDrop } from '../attachments/attachDrop'
 import { AttachmentsSection } from '../attachments/AttachmentsSection'
 import { NoteEditor } from '../note/NoteEditor'
-import { anchorCandidates, blockName, categoryOptions, type Names } from './blockView'
+import { anchorCandidates, blockName, groupedCategoryOptions, type Names } from './blockView'
 import { NewCategoryDialog, NewRoutineDialog, NewVariantDialog } from './NewThingDialogs'
 
-/** The last item of the lists „Kategoria”, „Wariant”, „Rutyna” (D463): it makes a new one in a window and chooses it. */
+/** The last item of the lists „Podkategoria”, „Wariant”, „Rutyna” (D463): it makes a new one in a window and chooses it. */
 const NEW_THING = '__new__'
 const NEW_OPTION = { value: NEW_THING, label: '+ Nowa…' }
 
@@ -145,12 +146,13 @@ export function BlockEditor({
           data-testid="block-name"
         />
       </Field>
-      <Field label="Kategoria" labelWidth={92}>
-        <Choice
+      <Field label="Podkategoria" labelWidth={92}>
+        <GroupedChoice
           value={block.categoryId}
-          options={[...categoryOptions(names, block.categoryId), ...newOption(true)]}
+          groups={groupedCategoryOptions(names, block.categoryId)}
+          tail={newOption(true)}
           onChange={(categoryId) => (categoryId === NEW_THING ? setMaking('category') : set({ categoryId, variantId: null }))}
-          aria-label="Kategoria"
+          aria-label="Podkategoria"
           data-testid="block-category"
         />
       </Field>
@@ -266,6 +268,7 @@ export function BlockEditor({
       )}
       {making === 'category' && (
         <NewCategoryDialog
+          defaultGroup={groupOfCategory(names.rd, block.categoryId)}
           has={(categoryId) => names.settings.categories[categoryId] != null}
           onClose={() => setMaking(null)}
           onCreated={(categoryId) => {

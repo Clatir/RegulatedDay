@@ -11,6 +11,7 @@ import { plDate, WEEKDAY_NAMES } from '@shared/format'
 import { compareAllDay, rangeText, type AllDayEvent } from '@shared/model/allDay'
 import { FIELD_GROUP_NAMES } from '@shared/model/fields'
 import { templateVersionOn, type Template } from '@shared/model/plan'
+import { groupOfCategory } from '@shared/model/categoryTree'
 import { personName, type RdFile } from '@shared/model/rd'
 import { CASE_LIST_NAMES, CASE_LISTS, PRIORITY_NAMES, type RequestRecord } from '@shared/model/requests'
 import { isDone, listOf } from '@shared/engine/cases'
@@ -24,6 +25,9 @@ import { textWithSteps } from '@shared/model/steps'
 import type { SearchRecord } from '@shared/search'
 import { addDays, weekday } from '@shared/time/zone'
 import { PAGES, type Page } from '../../store/ui'
+
+/** The id of a category of the tree (D510) among the records of kind 'category' – the subcategories keep their own ids, a variant has its subcategory as `parent`. */
+export const GROUP_PICK = 'group:'
 
 /** The commands (D387: they only navigate, nothing is moved): „nowe” finds both „Nowy …” (the spec's example). */
 export const COMMANDS: SearchRecord[] = [
@@ -43,7 +47,6 @@ export const SETTING_SECTIONS: Array<{ id: string; title: string; keys?: string 
   { id: 'settings-boundary', title: FIELD_GROUP_NAMES.boundary },
   { id: 'settings-energy', title: FIELD_GROUP_NAMES.energy },
   { id: 'settings-categories', title: 'Kategorie' },
-  { id: 'settings-regen-ways', title: 'Sposoby regeneracji' },
   { id: 'settings-lectures', title: 'Plan wykładów' },
   { id: 'settings-reminders', title: FIELD_GROUP_NAMES.reminders },
   { id: 'settings-timer', title: FIELD_GROUP_NAMES.timer },
@@ -82,7 +85,17 @@ export function searchRecords(i: RecordsInput): SearchRecord[] {
   const out: SearchRecord[] = [...COMMANDS]
   for (const p of PAGES) out.push({ kind: 'screen', id: p, title: i.pageLabel[p], ...(i.pageKeys(p) ? { hint: i.pageKeys(p)! } : {}) })
   for (const s of SETTING_SECTIONS) out.push({ kind: 'setting', id: s.id, title: s.title, hint: 'w ustawieniach', ...(s.keys ? { keys: s.keys } : {}) })
-  for (const [id, meta] of Object.entries(i.rd.categories)) out.push({ kind: 'category', id, title: meta.name, hint: meta.archived ? 'kategoria w archiwum' : 'w ustawieniach' })
+  // The tree of „Kategorie” (D510): categories, subcategories (the category in the hint) and variants – Enter opens it in the settings.
+  const groupName = new Map(i.rd.categoryGroups.map((g) => [g.id, g.name]))
+  for (const g of i.rd.categoryGroups) out.push({ kind: 'category', id: `${GROUP_PICK}${g.id}`, title: g.name, hint: g.archived ? 'kategoria w archiwum' : 'kategoria w ustawieniach' })
+  for (const [id, meta] of Object.entries(i.rd.categories)) {
+    const where = groupName.get(groupOfCategory(i.rd, id, { archived: true })) ?? 'Inne'
+    out.push({ kind: 'category', id, title: meta.name, hint: meta.archived ? `podkategoria w archiwum · ${where}` : `podkategoria · ${where}` })
+  }
+  const rules = settingsOn(i.rd.settings, addDays(i.today, 1)).categories
+  for (const [id, r] of Object.entries(rules)) {
+    for (const v of r.variants) out.push({ kind: 'category', id: v.id, parent: id, title: v.name, hint: `${v.archived ? 'wariant w archiwum' : 'wariant'} · ${i.rd.categories[id]?.name ?? id}` })
+  }
 
   // A template block is named as the template's editor shows it (the version in force from tomorrow).
   const names: Names = { rd: i.rd, settings: settingsOn(i.rd.settings, addDays(i.today, 1)), routines: i.routines, requests: i.requests }

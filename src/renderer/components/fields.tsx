@@ -335,3 +335,37 @@ export function Choice<T extends string>({ value, options, onChange, className, 
     </select>
   )
 }
+
+/**
+ * A choice from a list with headers (a native list with `<optgroup>`, the main window only): `groups` each with its header and options, `tail`
+ * after them without a header (the „+ Nowa…” item). The subcategory list of a block (D510).
+ */
+export function GroupedChoice<T extends string>({ value, groups, tail, onChange, className, ...rest }: {
+  value: T | null
+  groups: Array<{ label: string; options: Array<{ value: T; label: string }> }>
+  tail?: Array<{ value: T; label: string }>
+  onChange: (v: T) => void
+  className?: string
+  'aria-label'?: string
+  'data-testid'?: string
+}) {
+  return (
+    <select className={cx('input pr-6', className)} value={value ?? ''} aria-label={rest['aria-label']} data-testid={rest['data-testid']} onChange={(e) => onChange(e.currentTarget.value as T)}>
+      {value == null && <option value="">— wybierz —</option>}
+      {groups.map((g, i) => (
+        <optgroup key={i} label={g.label}>
+          {g.options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+      {tail?.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  )
+}

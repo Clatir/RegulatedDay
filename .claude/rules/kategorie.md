@@ -4,8 +4,13 @@ paths:
   - "src/renderer/features/settings/categoryTreeEdits.ts"
   - "src/renderer/features/settings/CategoriesSection.tsx"
   - "src/renderer/features/settings/categoryFields.tsx"
+  - "src/renderer/features/settings/CategoryRow.tsx"
+  - "src/renderer/features/settings/VariantRows.tsx"
+  - "src/renderer/features/settings/GroupRemoveDialog.tsx"
+  - "src/renderer/features/plan/NewThingDialogs.tsx"
   - "tests/unit/category-tree.test.ts"
   - "tests/web/category-tree-save.test.ts"
+  - "tests/web/category-tree-screen.test.ts"
 ---
 
 # Drzewo kategorii (D510, T1310–T1318)
@@ -30,3 +35,11 @@ drzewa; „kategoria” drzewa to grupa (`CategoryGroup`, `categoryGroups`).
   zdarzenie timera → instalacja w nocy bez 24 h (T1313). Pisze rd.json pole po polu, więc grup nie gubi; `costs: null` wariantu czyta
   jako koszt sprzed zmiany (rozjazd do instalacji, T1315). `RULES_VERSION` bez zmian.
 - Pułapka: odwrotność pierwszej zmiany wpisu listy `ITEM_LISTS` zdejmuje `id` – `setAt` usuwa wtedy cały wpis (T1316).
+- Ekran (A2, T1319–T1324): `CategoriesSection` – pole `group-row` na kategorię (nazwa, „Usuń” – nie „Inne”, podkategorie `CategoryRow`, „+ Podkategoria”
+  = `createCategory` z `group`), „+ Kategoria” (`newGroup` w turze zapisu), „Pokaż archiwum” (kategorie, podkategorie, warianty). Usunięcie
+  kategorii z podkategoriami (niezarchiwizowanymi) otwiera `GroupRemoveDialog` (`removeGroupRaw`), bez nich – od razu `{ to: OTHER_GROUP }`;
+  potem `undoToast` z `undoTree` (`changed` / `unreadable` / `failed` mają komunikat). Warianty: `VariantRows` w „więcej” podkategorii, tylko
+  `saveVariants` (data „Od kiedy”); nowy wariant – bez kosztu i miejsca („jak podkategoria”). Sekcji „Sposoby regeneracji” nie ma (warianty
+  „Regeneracji”). Lista „Podkategoria” (`GroupedChoice`, `<optgroup>`) w `BlockEditor`, okienku „Tygodnia” i zadaniu „Spraw”; okno `NewCategoryDialog`
+  ma pole „Kategoria” (domyślnie grupa podkategorii bloku). Ctrl K: rekordy `kind: 'category'` – kategoria (`GROUP_PICK` + id), podkategoria
+  (id), wariant (id, `parent` = podkategoria); wszystkie otwierają to drzewo (`takeFoundPick` w `CategoriesSection`).
