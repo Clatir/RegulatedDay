@@ -229,12 +229,15 @@ async function hourY(page: Page, hourMin: number): Promise<number> {
   return box.y + box.height / 2
 }
 
+/** D461: no „Dodaj” – Enter in „Nazwa” of the small window saves the block (the other fields are committed by it). */
+const saveWeekNew = (page: Page) => page.getByTestId('week-new-name').press('Enter')
+
 const centreOf = async (page: Page, date: string): Promise<number> => {
   const box = (await page.getByTestId(`week-col-${date}`).boundingBox())!
   return box.x + box.width / 2
 }
 
-test('Tydzień (D366): klik w pusty wtorek – okienko, „Dodaj” zapisuje blok o tej godzinie; przeciągnięcie – blok 90 min; Esc nic nie zapisuje; nagłówek i blok otwierają dzień', async () => {
+test('Tydzień (D366, D461): klik w pusty wtorek – okienko, Enter w nazwie zapisuje blok o tej godzinie; przeciągnięcie – blok 90 min, zapisany kliknięciem poza okienkiem; Esc nic nie zapisuje; nagłówek i blok otwierają dzień', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-week-new-'))
   seed(dataDir)
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
@@ -255,7 +258,9 @@ test('Tydzień (D366): klik w pusty wtorek – okienko, „Dodaj” zapisuje blo
       // The block waiting is drawn in its column; nothing is saved yet.
       await expect(page.getByTestId('week-range-waiting')).toContainText(`${clockOf(h1)}–${clockOf(h1 + 60)}`)
       expect(planOf(dataDir, tue)).toEqual([])
-      await page.getByTestId('week-new-add').click()
+      // D461: no „Dodaj” – Enter in „Nazwa” saves.
+      await expect(page.getByTestId('week-new-add')).toHaveCount(0)
+      await saveWeekNew(page)
       await expect(small).toBeHidden()
       await expect.poll(() => planOf(dataDir, tue).map((b) => [b.categoryId, b.startMin, b.durationMin]), { timeout: 15_000 }).toEqual([['inne', h1, 60]])
       await expect(page.locator(`[data-testid="week-block-${tue}-${planOf(dataDir, tue)[0]!.id}"]`)).toBeVisible({ timeout: 15_000 })
@@ -273,7 +278,11 @@ test('Tydzień (D366): klik w pusty wtorek – okienko, „Dodaj” zapisuje blo
       await expect(small).toBeVisible()
       await expect(small).toHaveAttribute('data-date', wed)
       await expect(page.getByTestId('week-new-duration')).toHaveValue('1 h 30 min')
-      await page.getByTestId('week-new-add').click()
+      // D464: the end is there too, beside the start; the length 1 h 30 min ends at h2 + 90. A click outside saves (D461).
+      await expect(page.getByTestId('week-new-start')).toHaveValue(clockOf(h2))
+      await expect(page.getByTestId('week-new-end')).toHaveValue(clockOf(h2 + 90))
+      await page.getByTestId('week-title').click()
+      await expect(small).toBeHidden()
       await expect.poll(() => planOf(dataDir, wed).map((b) => [b.startMin, b.durationMin]), { timeout: 15_000 }).toEqual([[h2, 90]])
 
       // A move under 4 px is a click; Esc closes the window and writes nothing.
@@ -290,12 +299,13 @@ test('Tydzień (D366): klik w pusty wtorek – okienko, „Dodaj” zapisuje blo
       await page.keyboard.press('Escape')
       await expect(small).toBeHidden()
       expect(planOf(dataDir, thu)).toEqual([])
-      // A click outside it closes it too.
+      // A click outside it saves the block (D461) – the end typed makes it 45 min long first.
       await page.mouse.click(xThu, y3)
       await expect(small).toBeVisible()
+      await page.getByTestId('week-new-end').fill(clockOf(h3 + 45))
       await page.getByTestId('week-title').click()
       await expect(small).toBeHidden()
-      expect(planOf(dataDir, thu)).toEqual([])
+      await expect.poll(() => planOf(dataDir, thu).map((b) => [b.startMin, b.durationMin]), { timeout: 15_000 }).toEqual([[h3, 45]])
 
       // The heading of a day opens its plan; so does a block of it.
       await page.getByTestId(`week-day-${tue}`).click()
@@ -312,7 +322,7 @@ test('Tydzień (D366): klik w pusty wtorek – okienko, „Dodaj” zapisuje blo
   }
 })
 
-test('Tydzień (D366, D431): „Więcej” otwiera pełną edycję dnia z blokiem jeszcze niezapisanym (z nazwą z okienka), „Dodaj” w niej go zapisuje', async () => {
+test('Tydzień (D366, D431, D461): „Więcej” otwiera pełną edycję dnia z blokiem jeszcze niezapisanym (z nazwą z okienka), „Zamknij” go zapisuje', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-week-more-'))
   seed(dataDir)
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
@@ -338,8 +348,12 @@ test('Tydzień (D366, D431): „Więcej” otwiera pełną edycję dnia z blokie
       await expect(page.getByTestId('block-name')).toHaveValue('Analiza rynku')
       await expect(page.getByTestId('block-name')).toBeFocused()
       expect(planOf(dataDir, thu)).toEqual([])
-      await page.getByTestId('block-add').click()
+      // D466: the draft stands on the axis, dashed, with its hours – and „Dodaj” is gone (D461): closing the panel saves it.
+      await expect(page.getByTestId('draft-tile-hours')).toContainText(`${clockOf(h)}–${clockOf(h + 45)}`)
+      await expect(page.getByTestId('block-add')).toHaveCount(0)
+      await page.getByTestId('block-editor-close').click()
       await expect.poll(() => planOf(dataDir, thu).map((b) => [b.startMin, b.durationMin, b.name]), { timeout: 15_000 }).toEqual([[h, 45, 'Analiza rynku']])
+      await expect(page.getByTestId('draft-tile')).toHaveCount(0)
     })
     expect(errors).toEqual([])
   } finally {
@@ -385,7 +399,7 @@ async function dragDays(page: Page, from: string, to: string, h: number, minutes
   await page.mouse.move(await centreOf(page, to), y + minutes * 0.8, { steps: 6 })
 }
 
-test('Tydzień (D371): przeciągnięcie przez trzy dni – pasmo w każdym, „Anuluj” nic nie zapisuje, „Dodaj” zapisuje blok w każdym dniu; kategoria z ostatniego bloku', async () => {
+test('Tydzień (D371, D461): przeciągnięcie przez trzy dni – pasmo w każdym, „Anuluj” nic nie zapisuje, Enter zapisuje blok w każdym dniu; kategoria z ostatniego bloku', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-week-days-'))
   seed(dataDir)
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
@@ -425,7 +439,7 @@ test('Tydzień (D371): przeciągnięcie przez trzy dni – pasmo w każdym, „A
       const values = await category.locator('option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))
       const chosen = values.find((v) => v !== 'inne')!
       await category.selectOption(chosen)
-      await page.getByTestId('week-new-add').click()
+      await saveWeekNew(page)
       await expect(small).toBeHidden()
       for (const d of [tue, wed, thu]) await expect.poll(() => planOf(dataDir, d).map((b) => [b.categoryId, b.startMin, b.durationMin]), { timeout: 15_000 }).toEqual([[chosen, h, 90]])
       expect(planOf(dataDir, fri)).toEqual([])
@@ -453,7 +467,7 @@ test('Tydzień (D371): przeciągnięcie przez trzy dni – pasmo w każdym, „A
   }
 })
 
-test('Tydzień (D371): dzień minął – okienko ma ostrzeżenie (z nazwami dni w zakresie), a „Dodaj” dalej zapisuje', async () => {
+test('Tydzień (D371): dzień minął – okienko ma ostrzeżenie (z nazwami dni w zakresie), a zapis dalej działa', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-week-past-'))
   seed(dataDir)
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
@@ -478,11 +492,11 @@ test('Tydzień (D371): dzień minął – okienko ma ostrzeżenie (z nazwami dni
       await page.getByTestId('week-new-cancel').click()
       await expect(small).toBeHidden()
       expect(planOf(dataDir, tue)).toEqual([])
-      // One day: the warning of one; only a warning – „Dodaj” saves (D72).
+      // One day: the warning of one; only a warning – the save works (D72).
       await page.mouse.click(await centreOf(page, mon), await hourY(page, h))
       await expect(small).toBeVisible()
       await expect(page.getByTestId('week-new-past')).toHaveText('Ten dzień już minął.')
-      await page.getByTestId('week-new-add').click()
+      await saveWeekNew(page)
       await expect(small).toBeHidden()
       await expect.poll(() => planOf(dataDir, mon).map((b) => [b.startMin, b.durationMin]), { timeout: 15_000 }).toEqual([[h, 60]])
     })
@@ -635,7 +649,9 @@ test('oś dnia (D366): przeciągnięcie po pustym miejscu ustawia start i długo
       await expect(page.getByTestId('block-duration')).toHaveValue('1 h 30 min')
       // After midnight the start of the logical day carries „+1”.
       expect(await page.getByTestId('block-start').inputValue()).toMatch(/^\d\d:\d[05]( \+1)?$/)
-      await expect(page.getByTestId('block-add')).toBeVisible()
+      // D466: the range stays on the axis as the dashed draft, with its hours; D461: no „Dodaj”.
+      await expect(page.getByTestId('draft-tile')).toBeVisible()
+      await expect(page.getByTestId('block-add')).toHaveCount(0)
       await expect(page.getByTestId('create-range')).toHaveCount(0)
 
       // „Szablony”: a block of the template 90 min long; a click in the column of hours makes one on the quarter, an hour long.
@@ -668,7 +684,7 @@ test('oś dnia (D366): przeciągnięcie po pustym miejscu ustawia start i długo
   }
 })
 
-test('Tydzień (D400): „Dodaj” na zajęte miejsce w trzech przyszłych dniach przesuwa kolejny blok w każdym, jedna linia „Przesunięto N bloków w 3 dniach · Cofnij” cofa wszystkie', async () => {
+test('Tydzień (D400): zapis na zajęte miejsce w trzech przyszłych dniach przesuwa kolejny blok w każdym, jedna linia „Przesunięto N bloków w 3 dniach · Cofnij” cofa wszystkie', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-week-push-'))
   seed(dataDir)
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
@@ -686,7 +702,7 @@ test('Tydzień (D400): „Dodaj” na zajęte miejsce w trzech przyszłych dniac
       await dragDays(page, tue, thu, h + 60, 60)
       await page.mouse.up()
       await expect(small).toBeVisible()
-      await page.getByTestId('week-new-add').click()
+      await saveWeekNew(page)
       await expect(small).toBeHidden()
       for (const d of days) await expect.poll(() => planOf(dataDir, d).map((b) => [b.startMin, b.durationMin]), { timeout: 15_000 }).toEqual([[h + 60, 60]])
       await expect(line).toHaveCount(0)
@@ -698,7 +714,7 @@ test('Tydzień (D400): „Dodaj” na zajęte miejsce w trzech przyszłych dniac
       await page.mouse.up()
       await expect(small).toBeVisible()
       await expect(page.getByTestId('week-new-duration')).toHaveValue('1 h 30 min')
-      await page.getByTestId('week-new-add').click()
+      await saveWeekNew(page)
       await expect(small).toBeHidden()
       for (const d of days) {
         await expect.poll(() => planOf(dataDir, d).find((b) => b.id === pIds[d])?.startMin, { timeout: 15_000 }).toBeGreaterThanOrEqual(h + 90)

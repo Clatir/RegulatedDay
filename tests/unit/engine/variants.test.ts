@@ -166,12 +166,12 @@ describe('warianty przy brakującym czasie', () => {
     expect(shorten.label).toBe('Skróć Inne obowiązki o 30 min · koniec pracy 13:00')
   })
 
-  it('bloki po starcie drugiej zmiany nie są kandydatami: koniec pracy przed nią ich nie liczy', () => {
+  it('D467: wieczorny blok pracy po wieczornej sesji jest kandydatem jak każdy blok pracy (bez granicy drugiej zmiany)', () => {
     const plan = [
       block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }),
       block({ id: 'b', cat: 'inne', at: '09:00', min: 60 }),
       block({ id: 'w', cat: 'inne', at: '11:00', min: 120, fixed: true }),
-      block({ id: 'ds', cat: 'sesja', at: '19:00', min: 60, fixed: true, tag: 'secondShift' }),
+      block({ id: 'ds', cat: 'sesja', at: '19:00', min: 60, fixed: true }),
       block({ id: 'x', cat: 'inne', at: '21:00', min: 60 })
     ]
     const s = new Scenario({ date: DATE, plan, settings: { transitionBufferMin: 0 } }).observe('07:00', null)
@@ -180,11 +180,9 @@ describe('warianty przy brakującym czasie', () => {
     const st = s.state('09:25')
     vi.mocked(computeDay).mockClear()
     const v = variantsFor(s.contextAt(s.at('09:25')), st, { kind: 'time', id: 'x', at: s.at('09:25'), minutes: 30 }, names)
-    // The end of work 13:00 is „w”'s and „x” (after the second shift) is not counted in it: one count per variant, none spent on „x”.
-    expect(vi.mocked(computeDay)).toHaveBeenCalledTimes(2)
+    // The end of work is the evening block's („x” at 21:00, the latest planned): the variants shorten or move it first.
     const touched = v.flatMap((x) => x.changes.map((c) => (c as { block: string }).block))
-    expect(touched).not.toContain('x')
-    expect(touched).toContain('b')
+    expect(touched).toContain('x')
   })
 
   it('ta sama zmiana planu liczona raz: pierwszy krok wyszukiwania równy próbie liniowej nie liczy dnia drugi raz', () => {

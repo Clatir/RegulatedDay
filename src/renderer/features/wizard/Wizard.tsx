@@ -14,7 +14,7 @@ import { MODULES, MODULE_NAMES, rdFrom } from '@shared/model/rd'
 import { DAY_TYPES, DAY_TYPE_NAMES, NY_ZONE, RANGES, sessionWithEnd, sessionWithStart, type DayTypeId, type SessionChoice } from '@shared/model/settings'
 import { placeLogical } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
-import { Choice, ClockField, DateField, DurationField, TextField, TimeField } from '../../components/fields'
+import { Choice, ClockField, DateField, DurationField, EndField, TextField, TimeField } from '../../components/fields'
 import { blockFill } from '@shared/theme'
 import { setMachinePrefs, useMachine } from '../../store/machine'
 import { BRIGHTNESS_STEPS } from '@shared/machine'
@@ -31,7 +31,7 @@ import { draftChanges, draftTemplates, failedFinish, finishRecords, newLecture, 
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
 
-type StepId = 'folder' | 'week' | 'hours' | 'work' | 'regen' | 'sessions' | 'secondShift' | 'lectures' | 'calendar' | 'people' | 'regenWays' | 'costs' | 'modules' | 'computer' | 'summary'
+type StepId = 'folder' | 'week' | 'hours' | 'work' | 'regen' | 'sessions' | 'lectures' | 'calendar' | 'people' | 'regenWays' | 'costs' | 'modules' | 'computer' | 'summary'
 
 const TITLES: Record<StepId, string> = {
   folder: 'Folder danych',
@@ -40,7 +40,6 @@ const TITLES: Record<StepId, string> = {
   work: 'Praca i granica',
   regen: 'Regeneracja i projekty',
   sessions: 'Sesje',
-  secondShift: 'Druga zmiana',
   lectures: 'Plan wykładów',
   calendar: 'Zjazdy',
   people: 'Osoby',
@@ -51,9 +50,9 @@ const TITLES: Record<StepId, string> = {
   summary: 'Podsumowanie'
 }
 
-const FIRST: StepId[] = ['folder', 'week', 'hours', 'work', 'regen', 'sessions', 'secondShift', 'lectures', 'calendar', 'people', 'regenWays', 'costs', 'modules', 'computer', 'summary']
+const FIRST: StepId[] = ['folder', 'week', 'hours', 'work', 'regen', 'sessions', 'lectures', 'calendar', 'people', 'regenWays', 'costs', 'modules', 'computer', 'summary']
 const NEXT: StepId[] = ['folder', 'computer', 'summary']
-const WITH_PREVIEW = new Set<StepId>(['week', 'hours', 'work', 'regen', 'sessions', 'secondShift', 'lectures', 'calendar', 'costs'])
+const WITH_PREVIEW = new Set<StepId>(['week', 'hours', 'work', 'regen', 'sessions', 'lectures', 'calendar', 'costs'])
 
 export function Wizard() {
   const w = useWizard()
@@ -169,8 +168,6 @@ function StepView({ step, today }: { step: StepId; today: string }) {
       return <DayTypeTable keys={['minRegenMin', 'projectLimitMin']} intro="Minimum regeneracji chroni odpoczynek przed porą snu; limit projektów to najwięcej projektów dziennie." />
     case 'sessions':
       return <StepSessions />
-    case 'secondShift':
-      return <StepSecondShift />
     case 'lectures':
       return <StepLectures today={today} />
     case 'calendar':
@@ -377,23 +374,6 @@ const ZONES = [
   { value: 'Australia/Sydney', label: 'Sydney' }
 ]
 
-function StepSecondShift() {
-  const ss = useWizard((x) => x.secondShift)
-  return (
-    <div className="flex flex-col gap-3">
-      <Lead>Druga zmiana to wieczorny blok pracy w dni zwykłe (domyślnie trading 20:00–21:00). Liczy się do budżetu, ale nie przesuwa granicy i nie jest przedłużeniem; zaczyna się dopiero po „Zacznij”.</Lead>
-      <Toggle checked={ss.on} onChange={(on) => patchWizard({ secondShift: { ...ss, on } })} label={ss.on ? 'Druga zmiana w dni zwykłe' : 'Bez drugiej zmiany'} data-testid="wizard-second-shift" />
-      {ss.on && (
-        <div className="flex items-center gap-2">
-          <TimeField value={ss.startMin} onCommit={(startMin) => patchWizard({ secondShift: { ...ss, startMin } })} shellClassName="w-[90px]" aria-label="Początek drugiej zmiany" data-testid="wizard-second-start" />
-          <span className="text-muted">przez</span>
-          <DurationField value={ss.durationMin} onCommit={(durationMin) => patchWizard({ secondShift: { ...ss, durationMin } })} shellClassName="w-[110px]" aria-label="Długość drugiej zmiany" />
-        </div>
-      )}
-    </div>
-  )
-}
-
 function StepLectures({ today }: { today: string }) {
   const lectures = useWizard((x) => x.lectures)
   const set = (i: number, p: Partial<(typeof lectures)[number]>) => patchWizard({ lectures: lectures.map((l, j) => (j === i ? { ...l, ...p } : l)) })
@@ -421,6 +401,8 @@ function StepLectures({ today }: { today: string }) {
           <div className="flex flex-wrap items-center gap-2">
             <Choice value={String(l.weekday)} options={WEEKDAY_NAMES.map((n, j) => ({ value: String(j + 1), label: n }))} onChange={(v) => set(i, { weekday: Number(v) })} className="w-[140px]" aria-label="Dzień tygodnia" />
             <TimeField value={l.startMin} onCommit={(startMin) => set(i, { startMin })} shellClassName="w-[80px]" aria-label="Godzina" />
+            <span className="text-muted">koniec</span>
+            <EndField startMin={l.startMin} durationMin={l.durationMin} onCommit={(durationMin) => set(i, { durationMin })} shellClassName="w-[80px]" aria-label="Godzina końca" data-testid="wizard-lecture-end" />
             <DurationField value={l.durationMin} onCommit={(durationMin) => set(i, { durationMin })} shellClassName="w-[100px]" aria-label="Długość" />
             <span className="text-muted">od</span>
             <DateField today={today} value={l.from} onCommit={(from) => set(i, { from })} shellClassName="w-[110px]" aria-label="Od" />
@@ -697,7 +679,6 @@ function StepSummary() {
         <li>
           Dzień zwykły: pobudka {logicalClock(s.dayTypes.zwykly.wakeMin)}, pora snu {logicalClock(s.dayTypes.zwykly.bedtimeMin)}, budżet {durationLabel(s.dayTypes.zwykly.budgetMin)}, maksimum {logicalClock(s.dayTypes.zwykly.maxMin)}.
         </li>
-        <li>{w.secondShift.on ? `Druga zmiana ${logicalClock(w.secondShift.startMin)} przez ${durationLabel(w.secondShift.durationMin)}.` : 'Bez drugiej zmiany.'}</li>
         <li>Wykłady: {w.lectures.length}, dni zaznaczone w kalendarzu: {special}, osoby: {w.people.length}.</li>
         <li>Moduły: {MODULES.filter((m) => w.general.modules[m]).map((m) => MODULE_NAMES[m].toLowerCase()).join(', ') || 'żaden'}.</li>
       </ul>
@@ -723,7 +704,7 @@ function Preview({ today }: { today: string }) {
     return countDay(
       shown,
       { date: shown, dayFile, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false },
-      { changes: draftChanges(w), templates: draftTemplates(w), lectures: w.lectures, series: [] },
+      { changes: draftChanges(w), templates: draftTemplates(), lectures: w.lectures, series: [] },
       placeLogical(shown, 4 * 60),
       false
     )

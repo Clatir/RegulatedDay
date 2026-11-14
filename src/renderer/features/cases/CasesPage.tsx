@@ -8,7 +8,7 @@
  * HKU3 (D450): the switch „Listy · Macierz” on top (remembered by the window – `casesView.ts`), the quarter of a sprawa chosen in its row
  * (its stripe on the left), the matrix of Eisenhower (`CasesMatrix`) in place of the lists.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RequestCounters } from '@shared/api'
 import { dueBadge } from '@shared/engine/caseDates'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
@@ -20,11 +20,12 @@ import { settingsOn } from '@shared/model/settings'
 import { parseQuickDates } from '@shared/quickDates'
 import { logicalDayOf, logicalMinuteOf } from '@shared/time/day'
 import { FilterBar, useFilters } from '../../components/FilterBar'
-import { Choice, DateField, DurationField, TextField, TimeField } from '../../components/fields'
+import { Choice, DateField, DurationField, EndField, TextField, TimeField } from '../../components/fields'
 import { EmptyState, Section, cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
+import { DEL_RING, deleteMark, removeTarget, useDeleteResolver } from '../../lib/deleteKey'
 import { caseAnswer, changeCase, createRequest, createTask, moveCase, removeCase, undoCase, useCases } from '../../store/cases'
 import { addPerson, saveRd, useData } from '../../store/data'
 import { useDay } from '../../store/day'
@@ -38,6 +39,8 @@ import { DueMark } from './DueMark'
 import { PriorityMark } from './PriorityMark'
 import { nextFreeStart, submitTitle } from './casesUi'
 import { planOnAxis } from './planOnAxis'
+import { SeriesFields } from '../series/SeriesFields'
+import { draftProblem, repeatChanged, repeatDraft, repeatInputOf, type SeriesDraft } from '../series/seriesForm'
 import { StepsEditor } from '../steps/StepsEditor'
 import { stepsAnswer } from '../steps/stepsUi'
 
@@ -228,6 +231,8 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
   const names = useMemo(() => ({ rd, settings: settingsOn(rd.settings, today) }), [rd, today])
   const [planning, setPlanning] = useState(false)
   const [dating, setDating] = useState(false)
+  // D465: „Powtarzaj” of a task opens under its row (as „Terminy”).
+  const [repeating, setRepeating] = useState(false)
   // D440: a task's steps open under its row (as the note of a request is read there); the counter stays in the row.
   const [stepsOpen, setStepsOpen] = useState(false)
   const counter = isTask ? stepsCounter(r.steps) : null
@@ -236,11 +241,13 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
     const res = await removeCase(r.id)
     if (res.saved) undoToast(isTask ? 'Zadanie usunięte' : 'Prośba usunięta', () => void undoCase(res.undo))
   }
+  // D462: Del on the selected row (a click on it) removes the case, as „Usuń” does.
+  useDeleteResolver('case', (id) => (id === r.id ? removeTarget(caseTitle(r, rd), () => remove()) : null))
   const parts = statusParts(x, today)
   const badge = dueBadge(r, today)
   const done = x.list === 'done'
   return (
-    <div className={cx('relative flex flex-col gap-1 rounded border px-3 py-1.5', marked ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')} data-testid="case-row" data-case={r.id} data-kind={r.kind} data-list={x.list}>
+    <div {...deleteMark('case', r.id)} className={cx('relative flex flex-col gap-1 rounded border px-3 py-1.5', DEL_RING, marked ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')} data-testid="case-row" data-case={r.id} data-kind={r.kind} data-list={x.list}>
       {!done && r.priority && <PriorityMark priority={r.priority} />}
       <div className="grid items-center gap-2" style={{ gridTemplateColumns: '220px 110px minmax(0,1fr) 150px' }}>
         {isTask ? (
@@ -275,6 +282,11 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
             <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={dating} onClick={() => setDating(!dating)} data-testid="case-dates-open">
               Terminy
             </button>
+            {isTask && (
+              <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={repeating} onClick={() => setRepeating(!repeating)} data-testid="case-repeat-open">
+                Powtarzaj
+              </button>
+            )}
           </>
         )}
         <button type="button" className="h-[24px] px-1.5 text-[12px] text-muted hover:text-rose" onClick={() => void remove()} data-testid="request-remove">
@@ -282,6 +294,7 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
         </button>
       </div>
       {dating && !done && <DatesForm x={x} set={set} />}
+      {repeating && isTask && !done && <RepeatForm x={x} today={today} onSaved={() => setRepeating(false)} />}
       {isTask && stepsOpen && (
         <div className="border-t border-line pt-1.5" data-testid="case-steps">
           <StepsEditor steps={r.steps} ticks kind="task" onTick={(id, d) => tickTaskStep(r.id, id, d)} onOp={async (op) => stepsAnswer(op, await changeTaskSteps(r.id, op))} />
@@ -305,6 +318,57 @@ export function DatesForm({ x, set }: { x: CaseItem; set: (patch: { dueDate?: st
     <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 border-t border-line pt-1.5 text-[12px]" data-testid="case-dates-form">
       <DateRow label="Termin" id="due" value={r.dueDate} today={today} onSet={(dueDate) => set({ dueDate })} />
       <DateRow label="Wykonać" id="do" value={r.doDate} today={today} note={doDateNote(r.doDate, today)} onSet={(doDate) => set({ doDate })} />
+    </div>
+  )
+}
+
+/**
+ * „Powtarzaj” of a task (D465): the rules of a series (`SeriesFields` without „W dni szczególne”) and its end; „Zapisz
+ * powtarzanie” once the draft says another repeat than the task's (an incomplete rule – its message, nothing to save). A weekly
+ * rule counts its weeks from the task's date („Wykonać”, else „Termin”, else today – `patchedRaw`). Ticked off, the task gets
+ * its next one at once (`changeRecord`).
+ */
+function RepeatForm({ x, today, onSaved }: { x: CaseItem; today: string; onSaved: () => void }) {
+  const r = x.record
+  const base = useMemo(() => repeatDraft(r.repeat, r.doDate ?? r.dueDate ?? today), [r.repeat, r.doDate, r.dueDate, today])
+  // The saved repeat changed (here, on another computer) or another task: the form shows it again. Not the defaults of a new
+  // rule counted from the task's date and today – a date moved meanwhile or 04:00 never wipes the rule being edited; a form
+  // not touched since it showed the saved one follows them (its weekday, day of the month, „który z kolei” from the new date).
+  const saved = JSON.stringify([r.id, r.repeat ?? null])
+  const [draft, setDraft] = useState<SeriesDraft>(base)
+  const touched = useRef(false)
+  const shown = useRef(saved)
+  useEffect(() => {
+    if (shown.current !== saved) {
+      shown.current = saved
+      touched.current = false
+    }
+    if (!touched.current) setDraft(base)
+  }, [saved, base])
+  const [busy, run] = useBusy()
+  const input = repeatInputOf(draft)
+  const save = () =>
+    run(async () => {
+      if (input === undefined) return
+      if ((await changeCase(r.id, { repeat: input })).saved) onSaved()
+    })
+  return (
+    <div className="flex max-w-[460px] flex-col gap-2 border-t border-line pt-1.5 text-[12px]" data-testid="case-repeat-form">
+      <SeriesFields
+        draft={draft}
+        onChange={(p) => {
+          touched.current = true
+          setDraft((d) => ({ ...d, ...p }))
+        }}
+        today={today}
+        special={false}
+      />
+      {repeatChanged(r.repeat, draft) && draftProblem(draft) == null && (
+        <button type="button" className="btn btn-accent self-start" disabled={busy} onClick={() => void save()} data-testid="case-repeat-save">
+          Zapisz powtarzanie
+        </button>
+      )}
+      <span className="text-[11.5px] text-muted">Po odhaczeniu od razu pojawia się następne zadanie z kolejną datą: przesuwa się „Wykonać”, bez niej „Termin”, bez żadnej daty – liczone od dnia odhaczenia.</span>
     </div>
   )
 }
@@ -339,15 +403,19 @@ function PlanForm({ x, today, title, onDone }: { x: CaseItem; today: string; tit
   const now = useNow(60_000)
   const [date, setDate] = useState(x.scheduled?.day && x.scheduled.day >= today ? x.scheduled.day : today)
   const [start, setStart] = useState<number | null>(null)
+  // D464: the end typed changes the block's length (the sprawa's estimate stays); null – the estimate. The start shown stays:
+  // a proposal is pinned first (counted again for the longer block it would move to another free place).
+  const [length, setLength] = useState<number | null>(null)
+  const long = length ?? estimateOf(x.record)
   const model = useDay(date)
-  const proposed = model ? nextFreeStart(model.state, { isToday: date === today, nowMin: logicalMinuteOf(date, now), wakeMin: model.ctx.wakeMin }, estimateOf(x.record)) : null
+  const proposed = model ? nextFreeStart(model.state, { isToday: date === today, nowMin: logicalMinuteOf(date, now), wakeMin: model.ctx.wakeMin }, long) : null
   const at = start ?? proposed
   const [busy, setBusy] = useState(false)
   const save = async () => {
     if (!model || at == null) return
     setBusy(true)
     try {
-      const res = await planOnAxis(model, today, x.record, title, at)
+      const res = await planOnAxis(model, today, x.record, title, at, length ?? undefined)
       if (res.saved) onDone()
     } finally {
       setBusy(false)
@@ -359,7 +427,11 @@ function PlanForm({ x, today, title, onDone }: { x: CaseItem; today: string; tit
       <DateField value={date} today={today} onCommit={(d) => (setDate(d), setStart(null))} shellClassName="w-[130px]" aria-label="Dzień" data-testid="case-plan-date" />
       <span className="text-muted">od</span>
       <TimeField value={at} onCommit={setStart} shellClassName="w-[76px]" aria-label="Początek" data-testid="case-plan-start" />
-      <span className="text-muted">{durationLabel(estimateOf(x.record))}</span>
+      <span className="text-muted">do</span>
+      {at != null ? <EndField startMin={at} durationMin={long} onCommit={(l) => (setStart(at), setLength(l))} shellClassName="w-[76px]" aria-label="Koniec" data-testid="case-plan-end" /> : null}
+      <span className="text-muted" data-testid="case-plan-length">
+        {durationLabel(long)}
+      </span>
       <button type="button" className="btn btn-accent h-[24px] px-2 text-[12px]" disabled={!model || at == null || busy} onClick={() => void save()} data-testid="case-plan-save">
         Postaw na osi
       </button>

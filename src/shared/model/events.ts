@@ -30,16 +30,18 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * 7 – a running block shortened by its end dragged on the axis (D365, `block.shorten`): an older version skips the event
  * and would keep the old planned end – its „Dalej?”, automatic ends and the windows of a later „Przedłuż”. 8 – series
  * (D381, T716): the leader's `day.create` takes the occurrences and the room they make among the template's blocks – an
- * older version would make the day without them; it gives way to this one as the leader.
+ * older version would make the day without them; it gives way to this one as the leader. 9 – no marks of a block (D467):
+ * the evening block once marked as the second shift is work of its category – an older version would keep its minutes
+ * out of the extension and the end of work (and wait for „Zacznij” at a weekly analysis) and freeze the day so; it gives
+ * way to this one as the leader.
  */
-export const RULES_VERSION = 8
+export const RULES_VERSION = 9
 
 /** What a block's start wrote of its plan (`block.start.planned`). */
 export interface StartPlanned {
   categoryId: string
   variantId: string | null
   durationMin: number
-  tag: PlanBlock['tag']
   fixed: boolean
   costs?: Costs | null
   bgCostPct?: number | null
@@ -182,7 +184,7 @@ export type TimerEvent =
    * lasts; an older version skips it.
    */
   | (EventBase & { k: 'plan.freed'; at: number; block: string; how: 'remove' | 'shorten'; place: number; minutes: number; end?: number | null })
-  /** „Zacznij jeszcze raz” (D207): another stretch of a session (or a weekly analysis) that ended before its planned end. */
+  /** „Zacznij jeszcze raz” (D207): another stretch of a session that ended before its planned end. */
   | (EventBase & { k: 'block.restart'; block: string; at: number })
   /** „Mniej pytań” (spec „Cisza”): a state of the day on every computer, until „Jest lepiej” (or 04:00). */
   | (EventBase & { k: 'fewer.start'; at: number })

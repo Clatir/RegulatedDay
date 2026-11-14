@@ -13,8 +13,13 @@
  * goes at the end of the list in the file – every change is a field of one step, merged with another computer's change of
  * another step. Read tolerantly: a step without an id or a title is left out of the list shown, yet stays in the file – as
  * every item a write does not change, with the fields this version does not know.
+ *
+ * A step's time (D460): `min` of its item, 1–240 min, optional – a step of a routine copied into a block brings its own. The
+ * sum of the times never changes the block's length: the panel says „kroki: X min z Y” and warns when it is over (D72). A
+ * version before it keeps the field in every item it writes (an item changed – its other fields stay; a step it adds has none).
  */
 import { newId } from './ids'
+import { STEP_RANGE, type Routine } from './routines'
 
 export interface Step {
   id: string
@@ -23,16 +28,36 @@ export interface Step {
   order: number
   /** Ticked off – on its day (a block) or in its task; never written into the list. */
   done: boolean
+  /** Its time (D460), whole minutes within `STEP_MIN_RANGE`; absent – none (a step need not have one). */
+  min?: number
 }
 
-/** At most this many steps in one list – counted only when adding (T789: a list may hold more after two computers added) – and each title at most this long. */
-export const STEPS_MAX = 30
+/**
+ * At most this many steps in one list – counted only when adding (T789: a list may hold more after two computers added) – and
+ * each title at most this long. 40 – as many as a routine may have (D460: its steps are copied into a block whole).
+ */
+export const STEPS_MAX = 40
 export const STEP_TITLE_MAX = 200
+/** A step's time: the range of a routine's step (D460). */
+export const STEP_MIN_RANGE = STEP_RANGE
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 
 /** A title as stored: one line, trimmed, at most `STEP_TITLE_MAX`. */
 export const stepTitleOf = (v: unknown): string => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, STEP_TITLE_MAX) : '')
+
+/** A step's time as read (a file, an op): whole minutes within `STEP_MIN_RANGE`; anything else – none. */
+export const stepMinOf = (v: unknown): number | undefined => (typeof v === 'number' && Number.isInteger(v) && v >= STEP_MIN_RANGE[0] && v <= STEP_MIN_RANGE[1] ? v : undefined)
+
+/** `s` with its time `min` (none – the field left out, never `min: undefined`). */
+function withMin<T extends { min?: number }>(s: T, min: number | undefined): T {
+  if (min === undefined) {
+    if (!('min' in s)) return s
+    const { min: _m, ...rest } = s
+    return rest as T
+  }
+  return s.min === min ? s : { ...s, min }
+}
 
 /** The items of a file's list this version reads: for each id the first item with a title, with its place in the file. */
 function readItems(v: readonly unknown[]): Array<{ at: number; step: Omit<Step, 'done'> }> {
@@ -43,7 +68,7 @@ function readItems(v: readonly unknown[]): Array<{ at: number; step: Omit<Step, 
     const title = stepTitleOf(x.title)
     if (!title) return
     seen.add(x.id)
-    out.push({ at, step: { id: x.id, title, order: typeof x.order === 'number' && Number.isFinite(x.order) ? x.order : at } })
+    out.push({ at, step: withMin<Omit<Step, 'done'>>({ id: x.id, title, order: typeof x.order === 'number' && Number.isFinite(x.order) ? x.order : at }, stepMinOf(x.min)) })
   })
   return out
 }
@@ -61,10 +86,15 @@ export function stepsFrom(v: unknown, done?: ReadonlySet<string>): Step[] {
     .map(({ step }) => ({ ...step, done: done?.has(step.id) === true }))
 }
 
-/** The same list to show (ids and titles in the same order) – ticks and the numbers of `order` aside. */
-export function sameStepList(a: readonly Pick<Step, 'id' | 'title'>[], b: readonly Pick<Step, 'id' | 'title'>[]): boolean {
-  return a.length === b.length && a.every((x, i) => x.id === b[i]!.id && x.title === b[i]!.title)
+/** The same list to show (ids, titles and times in the same order) – ticks and the numbers of `order` aside. */
+export function sameStepList(a: readonly Pick<Step, 'id' | 'title' | 'min'>[], b: readonly Pick<Step, 'id' | 'title' | 'min'>[]): boolean {
+  return a.length === b.length && a.every((x, i) => x.id === b[i]!.id && x.title === b[i]!.title && sameMin(x.min, b[i]!.min))
 }
+
+/** The same time (none equal to none). */
+const sameMin = (a: number | undefined, b: number | undefined): boolean => (a ?? null) === (b ?? null)
+/** A step as the file's list holds it: its id, title, order and – when it has one – its time. */
+const itemOf = (s: Step): Record<string, unknown> => (s.min !== undefined ? { id: s.id, title: s.title, order: s.order, min: s.min } : { id: s.id, title: s.title, order: s.order })
 
 /** An item a version reads as a step where it is the first of its id: an object with an id and a title. */
 const readable = (x: unknown): x is Record<string, unknown> & { id: string } => isPlain(x) && typeof x.id === 'string' && !!x.id && !!stepTitleOf(x.title)
@@ -78,14 +108,15 @@ const readable = (x: unknown): x is Record<string, unknown> & { id: string } => 
  *   with a title) out; for a step removed – every item of its id this version reads out (a duplicate never comes back as
  *   the step); an item of an id without a title or not read at all (not an object, no id) – the file's own; an item read
  *   without a number `order` gets the place it is read at (its order no longer moves when items before it go);
- * - a step new to the file at the end.
+ * - a step new to the file at the end;
+ * - a step's time (D460) as `min` of its item: a time changed or cleared is a change of the step (its other fields kept).
  * No `done` is ever written – a tick is the day's (or the task's). Undefined: no steps and no list in the file.
  */
 export function stepsJson(steps: readonly Step[], before?: unknown): unknown[] | undefined {
-  if (!Array.isArray(before)) return steps.length ? steps.map((s) => ({ id: s.id, title: s.title, order: s.order })) : undefined
+  if (!Array.isArray(before)) return steps.length ? steps.map(itemOf) : undefined
   const items = readItems(before)
   const now = [...items].sort((a, b) => a.step.order - b.step.order || a.at - b.at).map((r) => r.step)
-  if (now.length === steps.length && now.every((x, i) => x.id === steps[i]!.id && x.title === steps[i]!.title && x.order === steps[i]!.order)) return [...before]
+  if (now.length === steps.length && now.every((x, i) => x.id === steps[i]!.id && x.title === steps[i]!.title && x.order === steps[i]!.order && sameMin(x.min, steps[i]!.min))) return [...before]
   const read = new Map(items.map((r) => [r.step.id, r]))
   const byId = new Map(steps.map((s) => [s.id, s]))
   /** Whether the step of `id` (read) stays exactly as the file has it – its own item and every other of its id stay. */
@@ -93,7 +124,7 @@ export function stepsJson(steps: readonly Step[], before?: unknown): unknown[] |
     const r = read.get(id)!
     const s = byId.get(id)
     const x = before[r.at] as Record<string, unknown>
-    return !!s && s.title === r.step.title && s.order === r.step.order && typeof x.order === 'number' && Number.isFinite(x.order)
+    return !!s && s.title === r.step.title && s.order === r.step.order && sameMin(s.min, r.step.min) && typeof x.order === 'number' && Number.isFinite(x.order)
   }
   const out: unknown[] = []
   before.forEach((x, at) => {
@@ -105,9 +136,16 @@ export function stepsJson(steps: readonly Step[], before?: unknown): unknown[] |
     }
     // Changed or removed: only the read item of its id, with the change (removed – none); its other readable items out.
     const s = byId.get(r.step.id)
-    if (s && r.at === at) out.push({ ...x, title: s.title, order: s.order })
+    if (!s || r.at !== at) return
+    const item: Record<string, unknown> = { ...x, title: s.title, order: s.order }
+    // Its time only when this version changed it: a value it cannot read stays as the file has it.
+    if (!sameMin(s.min, r.step.min)) {
+      if (s.min !== undefined) item.min = s.min
+      else delete item.min
+    }
+    out.push(item)
   })
-  for (const s of steps) if (!read.has(s.id)) out.push({ id: s.id, title: s.title, order: s.order })
+  for (const s of steps) if (!read.has(s.id)) out.push(itemOf(s))
   return out
 }
 
@@ -147,6 +185,8 @@ export type StepOp =
   | { op: 'rename'; id: string; title: string }
   | { op: 'remove'; id: string }
   | { op: 'move'; id: string; before: string | null }
+  /** Its time set (D460) – null: cleared. */
+  | { op: 'min'; id: string; min: number | null }
 
 /** An op from the window (untrusted – the series API): its shape checked; null – not one. */
 export function stepOpFrom(v: unknown): StepOp | null {
@@ -161,6 +201,9 @@ export function stepOpFrom(v: unknown): StepOp | null {
       return { op: 'remove', id: v.id }
     case 'move':
       return idOrNull(v.before) ? { op: 'move', id: v.id, before: (v.before as string | null | undefined) ?? null } : null
+    case 'min':
+      // A time out of its range is still an op (`applyStepOp` refuses it with its message); here only its shape.
+      return v.min === null || (typeof v.min === 'number' && Number.isFinite(v.min)) ? { op: 'min', id: v.id, min: v.min as number | null } : null
     default:
       return null
   }
@@ -179,6 +222,8 @@ export function moveStepOp(steps: readonly Pick<Step, 'id'>[], id: string, to: n
 /** Why a change of a list is refused (the panel says it under the field). */
 export const STEP_NO_TITLE = 'Krok potrzebuje treści.'
 export const STEPS_FULL = `Najwyżej ${STEPS_MAX} kroków w bloku.`
+/** A time out of its range (D460). */
+export const STEP_MIN_BAD = `Czas kroku: od ${STEP_MIN_RANGE[0]} min do ${STEP_MIN_RANGE[1] / 60} h, w pełnych minutach.`
 /** The same of a task's list (its own, or the task of a block refusing the block's change – T792). */
 export const STEPS_FULL_TASK = `Najwyżej ${STEPS_MAX} kroków w zadaniu.`
 /** Whose list a refusal is about: a block's (a day, a template, a series) or a task's. */
@@ -228,7 +273,45 @@ export function applyStepOp(steps: readonly Step[], op: StepOp): { steps: Step[]
       list.splice(at, 0, s!)
       return { steps: renumbered(list) }
     }
+    case 'min': {
+      const min = op.min === null ? undefined : stepMinOf(op.min)
+      if (op.min !== null && min === undefined) return { error: STEP_MIN_BAD }
+      if (i < 0) return { steps: list }
+      list[i] = withMin(list[i]!, min)
+      return { steps: list }
+    }
   }
+}
+
+/**
+ * The time of a list (D460): the sum of its steps' times, null – no step has one. With the block's length (`lengthMin`) the
+ * panel says „kroki: 45 min z 1 h” and warns when the sum is over it (`over` – never a block, D72); a task's list has no
+ * length – „kroki: 45 min”.
+ */
+export function stepsTime(steps: readonly Pick<Step, 'min'>[] | undefined, lengthMin?: number | null): { minutes: number; over: number } | null {
+  const timed = (steps ?? []).filter((s) => s.min !== undefined)
+  if (!timed.length) return null
+  const minutes = timed.reduce((sum, s) => sum + s.min!, 0)
+  return { minutes, over: lengthMin != null && minutes > lengthMin ? minutes - lengthMin : 0 }
+}
+
+/**
+ * The steps of a routine copied into a block (D460, T1030): its usual version 1:1 – a name as the title (none – „krok N”, as
+ * the routine's card names it), its time – with new ids, after the list as it is. The block's list empty, or exactly the
+ * copy of the routine chosen before (`was`: the same titles and times in the same order, nothing ticked) – it is replaced;
+ * any other list keeps its steps and gets the routine's at its end. At most `STEPS_MAX`: the steps that do not fit are left
+ * out (`cut` – how many; the panel says so). The ticks of the steps kept stay as they are.
+ */
+export function routineStepsCopy(steps: readonly Step[], was: Pick<Routine, 'normal'> | null | undefined, next: Pick<Routine, 'normal'>): { steps: Step[]; cut: number } {
+  const copyOf = (r: Pick<Routine, 'normal'>) => r.normal.map((x, k) => ({ title: stepTitleOf(x.name) || `krok ${k + 1}`, min: stepMinOf(x.min) }))
+  const prior = was ? copyOf(was) : null
+  const replace = steps.length === 0 || (prior != null && prior.length === steps.length && prior.every((p, k) => p.title === steps[k]!.title && sameMin(p.min, steps[k]!.min) && !steps[k]!.done))
+  const kept = replace ? [] : [...steps]
+  const room = Math.max(0, STEPS_MAX - kept.length)
+  const add = copyOf(next)
+  const first = (kept.at(-1)?.order ?? -1) + 1
+  const made: Step[] = add.slice(0, room).map((x, k) => withMin<Step>({ id: newId(8), title: x.title, order: first + k, done: false }, x.min))
+  return { steps: [...kept, ...made], cut: add.length - made.length }
 }
 
 /** A text with the titles of its steps after it (the search, Ctrl K – D387: the steps are found as the text of their block or task). */

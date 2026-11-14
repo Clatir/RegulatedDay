@@ -1,13 +1,16 @@
 /**
  * The pure side of the list „Kroki” in the window (SNT5, D440): what a store's answer of a change of steps is for the screen
  * (`stepsAnswer`: a saved removal offers „Cofnij”), the keys that move a step (Alt+↑ / Alt+↓ – the keyboard's way to the
- * drag), the place a drop gives a step, the message of a refused op said before anything is sent.
+ * drag), the place a drop gives a step, the message of a refused op said before anything is sent; the sum of the steps'
+ * times (D460) and the note of a routine's steps that did not fit.
  */
+import { durationLabel, type Parsed } from '@shared/format'
 import { caseAnswer } from '../../store/cases'
 import type { SaveAnswer } from '../../store/data'
 import { undoSteps, type StepsResult } from '../../store/steps'
 import { undoToast } from '../../store/ui'
-import { applyStepOp, moveStepOp, refusalFor, type Step, type StepOp, type StepsKind } from '@shared/model/steps'
+import { durationParser } from '../../components/fields'
+import { applyStepOp, moveStepOp, refusalFor, STEP_MIN_RANGE, STEPS_MAX, stepsTime, type Step, type StepOp, type StepsKind } from '@shared/model/steps'
 
 /** What a change of steps became for a field: saved, refused (the text stays in the field – also a failed send), or asked (a question waits). */
 export function stepsAnswer(op: StepOp, r: StepsResult): SaveAnswer {
@@ -46,3 +49,27 @@ export function refusedOp(steps: readonly Step[], op: StepOp, kind: StepsKind = 
   const next = applyStepOp([...steps], op)
   return 'error' in next ? refusalFor(next.error, kind) : null
 }
+
+/**
+ * The line under the heading „Kroki” (D460): the sum of the steps' times – „kroki: 45 min z 1 h” with the block's length,
+ * „kroki: 45 min” without one (a task); `warning` when the steps are longer than the block (said, never refused – D72).
+ * Null – no step has a time.
+ */
+export function stepsTimeLine(steps: readonly Pick<Step, 'min'>[], lengthMin?: number | null): { text: string; warning: string | null } | null {
+  const t = stepsTime(steps, lengthMin)
+  if (!t) return null
+  return {
+    text: lengthMin != null ? `kroki: ${durationLabel(t.minutes)} z ${durationLabel(lengthMin)}` : `kroki: ${durationLabel(t.minutes)}`,
+    warning: t.over > 0 ? `Kroki trwają o ${durationLabel(t.over)} dłużej niż blok – jego długość się nie zmienia.` : null
+  }
+}
+
+/** The field of a step's time (D460): empty – none; else a length within the step's range („15”, „1:30”, „1h30”). */
+export function stepMinParse(text: string): Parsed<number | null> {
+  return text.trim() === '' ? { ok: true, value: null } : durationParser(STEP_MIN_RANGE)(text)
+}
+/** A step's time in its field: „15 min” (also over an hour – the field is narrow). */
+export const stepMinText = (min: number | null): string => (min == null ? '' : `${min} min`)
+
+/** The routine's steps that did not fit into the block (D460, `routineStepsCopy`) – said by a toast. */
+export const routineCutText = (cut: number): string => `Z rutyny nie skopiowano ${cut} ${cut === 1 ? 'kroku' : 'kroków'} – w bloku mieści się najwyżej ${STEPS_MAX}.`

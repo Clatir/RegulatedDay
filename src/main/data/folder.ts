@@ -15,7 +15,7 @@ import { join } from 'node:path'
 import { writeFileAtomic } from '../datastore/atomic'
 import type { ComputerRow, SearchCorpus } from '@shared/api'
 import { EventClock, type ClockSources } from '@shared/data/clock'
-import { setAt, type MergeConflict } from '@shared/data/merge'
+import { sameContentAs, setAt, type MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
 import { readLogText } from '@shared/data/logText'
 import { activityOf, type Activity } from '@shared/engine/activity'
@@ -154,6 +154,13 @@ function refusalOf(choice: string): string {
   if (choice === 'notRest') return 'odcinek: tylko wieczór od końca pracy albo czas „Odcinam się”, a „od” przed „do”'
   if (choice === 'person') return 'wybierz osobę z listy'
   return 'tego wyboru nie ma w tym wierszu'
+}
+
+/** A new record as the fields of its entry make it (`create`: every field from nothing, as the queue lays it). */
+function newRecordOf(edits: QueuedEdit['edits']): unknown {
+  let value: unknown = {}
+  for (const f of edits) value = setAt(value, f.path, f.value)
+  return value
 }
 
 /** The day as the bar shows it (`DataFolder.barDay`, D345): its activity (null – not counted), the ends laid over it. */
@@ -902,6 +909,9 @@ export class DataFolder {
         fresh.push(e.rel)
         continue
       }
+      // The very record made on another computer (T1041 – an id derived from its data, the same content: the next task of a
+      // task that repeats, ticked off on both): nothing to refuse – the queue lays it as no change.
+      if (now.status === 'ok' && !inQueue && sameContentAs(now.value, newRecordOf(e.edits))) continue
       if (now.status !== 'missing' || inQueue)
         throw new Error(
           now.status === 'ok'

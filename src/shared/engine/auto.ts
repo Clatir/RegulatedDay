@@ -79,7 +79,7 @@ export function placeOf(b: BlockInfo): Place {
   return b.rules.variants.find((v) => v.id === b.variantId)?.place ?? b.rules.place
 }
 
-/** Fixed by the plan (a session too): no pause, no „Dalej?” – it ends by its plan (a weekly analysis is flexible once begun). */
+/** Fixed by the plan (a session too): no pause, no „Dalej?” – it ends by its plan. */
 const isFixedLike = (b: BlockInfo) => b.fixed || b.rules.kind === 'session'
 
 /**
@@ -116,11 +116,10 @@ export function nextQuestions(state: DayState, t: TimerNow): { block: BlockInfo;
   return { block: fg.info, plannedEnd: fg.plannedEnd, q1: { id: id1, at: endAt, seen: seen1 }, q2: at2 <= atOf(state.grid, state.now) + 30_000 ? { id: id2, at: at2, seen: seen2 } : null, passive }
 }
 
-/** The last planned work block before the second shift: „Dalej?” then has „Dalej” and „Koniec pracy” (spec „Timer”). */
+/** The last planned work block: „Dalej?” then has „Dalej” and „Koniec pracy” (spec „Timer”). */
 function isLastWork(state: DayState, b: BlockInfo): boolean {
   if (!isBoundaryWork(b) || b.rules.afterWorkAsProject) return false
-  const second = Math.min(...state.blocks.filter((x) => x.secondShift && x.start != null).map((x) => x.start!), Number.POSITIVE_INFINITY)
-  return !state.forecast.some((p) => p.block.id !== b.id && !p.running && isBoundaryWork(p.block) && p.from < second)
+  return !state.forecast.some((p) => p.block.id !== b.id && !p.running && isBoundaryWork(p.block))
 }
 
 /** An automatic event with its derived id. */
@@ -266,7 +265,7 @@ export const runFromOf = (grid: Grid, f: BlockFact): number => atOf(grid, f.runs
 
 /**
  * The starts of fixed blocks due now (spec „Bloki”), each with the pause of the block in front it makes – not yet taken
- * (`autoActions` takes them in order). Sessions and blocks marked as second shift or weekly analysis wait for „Zacznij”;
+ * (`autoActions` takes them in order). Fixed sessions wait for „Zacznij” (D192);
  * in „Odcinam się” nothing starts; behind a running regeneration they wait for its end.
  */
 function fixedStartLists(inp: AutoInput, t: TimerNow, shutdowns: Map<string, ShutdownEnd>): AutoEvent[][] {
@@ -399,7 +398,7 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
       if (take([closed.end])) continue
     }
     if (b.fixed || b.rules.kind === 'session') {
-      // A fixed block in the background, a session (also in the foreground) and a second shift end at their planned end;
+      // A fixed block in the background and a session (also in the foreground) end at their planned end;
       // a fixed block in the foreground 10 min after it without a reaction – at its planned end.
       const inFg = tb === fg
       const session = b.rules.kind === 'session'
@@ -631,7 +630,7 @@ function absenceWhat(state: DayState, block: string, answer: 'meal' | 'regen' | 
   if (answer === 'regen') {
     const rid = id('regen')
     return [
-      { k: 'block.start', block: rid, at: away, bg: false, planned: { categoryId: REGEN_CATEGORY, variantId: null, durationMin: Math.max(1, b - a), tag: null, fixed: false }, confirmUntil: null, how: 'plan', autoRule: 'absenceRegen' },
+      { k: 'block.start', block: rid, at: away, bg: false, planned: { categoryId: REGEN_CATEGORY, variantId: null, durationMin: Math.max(1, b - a), fixed: false }, confirmUntil: null, how: 'plan', autoRule: 'absenceRegen' },
       { k: 'block.end', block: rid, at: back, done: true, rule: 'absenceRegen', autoRule: 'absenceRegen' }
     ]
   }
@@ -660,7 +659,7 @@ export function answerEvents(state: DayState, q: Question, answer: string, at: n
       return null
     case 'workEnd':
       if (answer === 'yes') return [{ k: 'work.end', at, end: q.askedAt }, ...workEndParking(state, null, at), mark]
-      // „Przerwa” (T261): the later of the click plus 60 min and the planned end of the work left before the second shift
+      // „Przerwa” (T261): the later of the click plus 60 min and the planned end of the work left
       // (what it puts the 15-minute rule off to – its effect on the end of work comes with the ritual, T463).
       if (answer === 'break') return [{ ...mark, value: Math.max(at + 60 * MIN, state.forecastWorkEnd != null ? atOf(state.grid, state.forecastWorkEnd) : 0) }]
       return null

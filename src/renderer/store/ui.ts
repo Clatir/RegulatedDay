@@ -20,8 +20,6 @@ export interface Toast {
   text: string
   kind: 'info' | 'error' | 'success'
   action?: { label: string; run: () => void }
-  /** A second way out (the second shift's „Przesuń na teraz” beside „Potwierdź”). */
-  action2?: { label: string; run: () => void }
   /** How long it stays (ms). */
   ms: number
 }
@@ -39,8 +37,8 @@ interface UiState {
   sideBClosed: string | null
   /** The month whose morning step „Cele” „Pomiń” closed here – at once, whatever the save does (D72, as „Strona B”, A6-15). */
   goalsClosed: string | null
-  /** The new block not added yet, with its day: a form not saved survives going to another screen (spec „Szkice”, A6-17). */
-  blockDraft: { date: string; block: PlanBlock } | null
+  /** The new block not saved yet, with its day (D461: saved at its first committed field or when you leave it; Esc throws it away while untouched – `touched`: a field or a step changed, T1080) – it also survives going to another screen when the exchange for it is not answered (spec „Szkice”, A6-17). */
+  blockDraft: { date: string; block: PlanBlock; intended: boolean; touched: boolean } | null
   /** What the search selected for the screen it opened (null: nothing waits). */
   pick: SearchPick | null
 }
@@ -55,16 +53,43 @@ export function closeGoals(month: string): void {
   useUi.setState({ goalsClosed: month })
 }
 
-/** The day's new block (null: none) – clearing touches only that day's draft. */
-export function setBlockDraft(date: string, block: PlanBlock | null): void {
-  if (block) useUi.setState({ blockDraft: { date, block } })
+/**
+ * The day's new block (null: none) – clearing touches only that day's draft. `intended` (D461, T1045): made on purpose – a range
+ * dragged over the axis, „+ Blok”, Ctrl+N, „Więcej” of „Tydzień”: it is saved when left even untouched; one from a bare click of the
+ * axis is thrown away then (a changed field saves it at once, so a draft that is left is untouched, but for the steps).
+ */
+export function setBlockDraft(date: string, block: PlanBlock | null, intended = false): void {
+  if (block) useUi.setState({ blockDraft: { date, block, intended, touched: false } })
   else if (useUi.getState().blockDraft?.date === date) useUi.setState({ blockDraft: null })
 }
 
-/** A field of the day's new block changed (the latest draft, never one read at the render before). */
+/**
+ * The day's draft of block `id` saved (the plan has its block): that draft goes – only it, as the store holds it now. The day's
+ * effect that calls this may run late, with the draft of the render before: a new one made meanwhile (Ctrl+N right after) stays.
+ */
+export function dropSavedDraft(date: string, id: string): void {
+  const d = useUi.getState().blockDraft
+  if (d?.date === date && d.block.id === id) useUi.setState({ blockDraft: null })
+}
+
+/**
+ * What leaving the screen or the day does to a new block not saved yet (D461): the plan screen hands in its save (the block is
+ * written as it stands, like when you click elsewhere), the change of view calls it first – the view changes at once, the save
+ * goes on with what the screen knew. Null: no plan screen is open.
+ */
+let leaveDraft: (() => void) | null = null
+
+export function onLeaveBlockDraft(fn: (() => void) | null): void {
+  leaveDraft = fn
+}
+
+/**
+ * A field of the day's new block changed (the latest draft, never one read at the render before) – a draft touched is intended, and
+ * touched (Esc no longer throws it away, T1080) unless the change is empty (leaving saves the draft as it stands).
+ */
 export function patchBlockDraft(date: string, patch: Partial<PlanBlock>): void {
   const d = useUi.getState().blockDraft
-  if (d?.date === date) useUi.setState({ blockDraft: { date, block: { ...d.block, ...patch } } })
+  if (d?.date === date) useUi.setState({ blockDraft: { date, block: { ...d.block, ...patch }, intended: true, touched: d.touched || Object.keys(patch).length > 0 } })
 }
 
 export function setMovedLater(key: string): void {
@@ -74,24 +99,28 @@ export function setMovedLater(key: string): void {
 /** Every change of view first commits the active field (spec „Zatwierdzanie przed przejściem”). */
 export function navigate(page: Page): void {
   commitActiveField()
+  leaveDraft?.()
   useUi.setState({ page, pick: null })
 }
 
 /** Today's ritual brought into view (the bar's „Rytuał”, D318). */
 export function openRitual(): void {
   commitActiveField()
+  leaveDraft?.()
   useUi.setState({ page: 'today', day: null, focus: 'ritual', pick: null })
 }
 
 /** The plan of a day (a click in the calendar opens it, D295); null: today. Commits the active field first. */
 export function openDay(day: string | null): void {
   commitActiveField()
+  leaveDraft?.()
   useUi.setState({ page: 'today', day, pick: null })
 }
 
 /** The search's Enter (T653): the screen (and the day of „Dziś”) with what to select there; a hand-made move drops it. */
 export function openPick(target: { page: Page; day?: string | null }, pick: SearchPick): void {
   commitActiveField()
+  leaveDraft?.()
   useUi.setState({ page: target.page, ...(target.day !== undefined ? { day: target.day } : {}), pick })
 }
 
@@ -124,9 +153,9 @@ export function closeToast(id: number): void {
   useUi.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }))
 }
 
-export function toast(text: string, kind: Toast['kind'] = 'info', ms = 5000, action?: Toast['action'], action2?: Toast['action2']): number {
+export function toast(text: string, kind: Toast['kind'] = 'info', ms = 5000, action?: Toast['action']): number {
   const id = nextToast++
-  useUi.setState((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, kind, ms, action, ...(action2 ? { action2 } : {}) }] }))
+  useUi.setState((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, kind, ms, action }] }))
   timers.set(
     id,
     setTimeout(() => closeToast(id), ms)

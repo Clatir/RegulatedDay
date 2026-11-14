@@ -2,15 +2,13 @@
  * Plans (spec „Bloki”, „Typy dni i szablony”): templates of a day type and weekday, the plan of lectures as recurring
  * fixed blocks, and a day's own edits (days/RRRR/RRRR-MM-DD.json – only your changes; facts like starts and the approved
  * boundary live only in the log). Times are logical minutes of the day. Records are read tolerantly: a broken field
- * falls back, a broken block is left out (and reported), unknown fields stay in the file.
+ * falls back, a broken block is left out (and reported), unknown fields stay in the file – also the marks of a block an
+ * older version wrote (`tag` – „druga zmiana”, „analiza tygodniowa” – and `waitUntilMin`, D467): never read, kept as written.
  */
 import { isIsoDate } from '../time/zone'
 import { NOTE_MAX } from './note'
 import { DAY_TYPES, type DayTypeId } from './settings'
 import { doneSetFrom, stepsFrom, type Step } from './steps'
-
-/** „druga zmiana” and „analiza tygodniowa” (spec „Model dnia”): a block with either waits for „Zacznij”. */
-export type BlockTag = 'secondShift' | 'weeklyAnalysis'
 
 export interface PlanBlock {
   id: string
@@ -25,9 +23,6 @@ export interface PlanBlock {
   fixed: boolean
   /** Planned in the background (null: from the category). */
   background: boolean | null
-  tag: BlockTag | null
-  /** The latest a weekly analysis waits for „Zacznij” (logical minute, D226); null: its planned end. */
-  waitUntilMin: number | null
   /** Its own costs instead of the category's. */
   costs: { head: number; emotions: number; senses: number } | null
   /** Its own share of the cost in the background, 0–100 % (null: the setting, 50 % at the start). */
@@ -125,8 +120,8 @@ export interface DayFile {
   /** Blocks moved to another day (id → date); their ids stay. */
   movedTo: Record<string, string>
   /**
-   * Questions asked once for this day and their answers (e.g. „lateWake” → „yes”, „weeklyAnalysisMove” → „no”): a
-   * question answered on any computer is never asked again.
+   * Questions asked once for this day and their answers (e.g. „lateWake” → „yes”, „holiday” → „no”): a question
+   * answered on any computer is never asked again.
    */
   asked: Record<string, string>
   /** The steps ticked off on this day (D440, T786): block id → its ticked step ids (in the file a map block → step → true). */
@@ -138,10 +133,10 @@ const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : 
 const intIn = (v: unknown, min: number, max: number): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max ? v : null)
 
 /**
- * A block of its day's own layers (D401, D424, T980): a session of the layer, a lecture of the plan, a class of a „zjazd”, the
- * second shift – never a series, never moved to another day with the block it is anchored to. The one structural rule.
+ * A block of its day's own layers (D401, D424, T980): a session of the layer, a lecture of the plan, a class of a „zjazd” –
+ * never a series, never moved to another day with the block it is anchored to. The one structural rule.
  */
-export const layerKept = (b: Pick<PlanBlock, 'origin' | 'tag'>): boolean => b.origin === 'session' || b.origin === 'lecture' || b.origin === 'zjazd' || b.tag === 'secondShift'
+export const layerKept = (b: Pick<PlanBlock, 'origin'>): boolean => b.origin === 'session' || b.origin === 'lecture' || b.origin === 'zjazd'
 
 /** Logical minutes a plan may use: 04:00 to 03:59 of the night after. */
 export const PLAN_MIN = 240
@@ -184,8 +179,6 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     durationMin,
     fixed: v.fixed === true,
     background: typeof v.background === 'boolean' ? v.background : null,
-    tag: v.tag === 'secondShift' || v.tag === 'weeklyAnalysis' ? v.tag : null,
-    waitUntilMin: intIn(v.waitUntilMin, PLAN_MIN, PLAN_MAX),
     costs: costsFrom(v.costs),
     bgCostPct: intIn(v.bgCostPct, 0, 100),
     note: str(v.note).slice(0, NOTE_MAX),
@@ -211,8 +204,6 @@ export function planBlock(p: Partial<PlanBlock> & Pick<PlanBlock, 'id' | 'catego
     anchor: null,
     fixed: false,
     background: null,
-    tag: null,
-    waitUntilMin: null,
     costs: null,
     bgCostPct: null,
     note: '',

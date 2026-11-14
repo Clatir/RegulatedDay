@@ -49,7 +49,7 @@ export interface PushOptions {
 
 /**
  * A block that may be pushed: flexible, of the plan, with its own hour (`ownHourBlock` – not a session, a lecture, a class
- * of a „zjazd”, the second shift, nor anchored), in the foreground, not waiting for „Zacznij”, not protected (a protected
+ * of a „zjazd”, nor anchored), in the foreground, not waiting for „Zacznij”, not protected (a protected
  * life block or a protected category – as the variants never touch them), not begun, parked or cancelled. The same blocks
  * close a gap (D368, `gaps.ts`).
  */

@@ -9,7 +9,7 @@ import { plDate } from '@shared/format'
 import { lectureJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
 import type { LectureSeries } from '@shared/model/plan'
-import { Choice, DateField, DurationField, TextField, TimeField } from '../../components/fields'
+import { Choice, DateField, DurationField, EndField, TextField, TimeField } from '../../components/fields'
 import { Section } from '../../components/ui'
 import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
 import { undoToast } from '../../store/ui'
@@ -73,6 +73,8 @@ function Lecture({ l, today }: { l: LectureSeries; today: string }) {
       <div className="flex flex-wrap items-center gap-2">
         <Choice value={String(l.weekday)} options={WEEKDAY_NAMES.map((n, i) => ({ value: String(i + 1), label: n }))} onChange={(v) => set({ weekday: Number(v) })} className="w-[140px]" aria-label="Dzień tygodnia" />
         <TimeField value={l.startMin} onCommit={(startMin) => set({ startMin })} shellClassName="w-[76px]" aria-label="Godzina" />
+        <span className="text-muted">koniec</span>
+        <EndField startMin={l.startMin} durationMin={l.durationMin} onCommit={(durationMin) => set({ durationMin })} shellClassName="w-[76px]" aria-label="Godzina końca" data-testid="lecture-end" />
         <DurationField value={l.durationMin} onCommit={(durationMin) => set({ durationMin })} shellClassName="w-[96px]" aria-label="Długość" />
         <span className="text-muted">od</span>
         <DateField today={today} value={l.from} onCommit={(from) => set({ from })} shellClassName="w-[110px]" aria-label="Od" />

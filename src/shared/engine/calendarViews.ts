@@ -40,7 +40,7 @@ export type MonthNamed = Omit<HorizonBlock['named'], 'note'>
 
 /**
  * A block of the month's day (D429): what a bar needs – its name, category, hour and state – and what decides whether it gets
- * one (`fixed`: fixed in the plan; `session`: a trading session or the second shift – never a bar, D422; `state`, `background`:
+ * one (`fixed`: fixed in the plan; `session`: a trading session – never a bar, D422; `state`, `background`:
  * a flexible block that was missed or runs in the background has none, T1014).
  */
 export interface MonthBlock {

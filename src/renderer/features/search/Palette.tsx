@@ -9,6 +9,7 @@ import type { SearchCorpus } from '@shared/api'
 import { buildIndex, hitView, queryWords, searchIndex, type GroupId, type Range, type SearchRecord } from '@shared/search'
 import { EmptyState, cx } from '../../components/ui'
 import { onModal, useEscapeLayer } from '../../lib/escape'
+import { DIALOG_BACKDROP } from '../../lib/outside'
 import { useData } from '../../store/data'
 import { PAGE_LABEL, pageKeys } from '../../app/pages'
 import { choose, loadRecents, recentRecords, rowsOf, saveRecent, selectable, stepIndex, todayOf, type Row } from './paletteLogic'
@@ -124,7 +125,7 @@ function PaletteBody() {
           : null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && closeSearch()} data-testid="search">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && closeSearch()} {...{ [DIALOG_BACKDROP]: '' }} data-testid="search">
       <div role="dialog" aria-modal="true" aria-label="Szukaj" className="flex max-h-[70vh] w-full max-w-[640px] animate-fade-in flex-col overflow-hidden rounded-lg border border-line-strong bg-panel">
         <input
           ref={input}

@@ -23,7 +23,7 @@ import { STEPS_FULL, STEPS_MAX, STEP_NO_TITLE, moveStepOp, type Step } from '@sh
 import { logicalDayOf } from '@shared/time/day'
 import { dayAxis } from '@renderer/features/plan/dayItems'
 import { Timeline } from '@renderer/features/plan/Timeline'
-import { saveBlockSteps } from '@renderer/features/steps/blockSteps'
+import { saveBlockSteps, stepsAskScope } from '@renderer/features/steps/blockSteps'
 import { StepsEditor } from '@renderer/features/steps/StepsEditor'
 import { dropMove, keyMove, refusedOp, stepsAnswer } from '@renderer/features/steps/stepsUi'
 import { askScope } from '@renderer/features/series/scopeAsk'
@@ -306,6 +306,15 @@ describe('zmiana kroków bloku w panelu (zakres serii – D401, D404)', () => {
 
   beforeEach(() => {
     stub({}, { [DATE]: null })
+  })
+
+  it('`stepsAskScope`: blok serii bez wybranego zakresu – zmiana zapyta sama (Del bez własnego pytania); zakres wybrany, szkic, blok zwykły – nie', () => {
+    const o = ctx()
+    expect(stepsAskScope(o, occ(), false)).toBe(true)
+    expect(stepsAskScope(o, occ(), true)).toBe(false)
+    expect(stepsAskScope(ctx({ series: [] }), occ(), false)).toBe(false)
+    o.scope.current = 'only'
+    expect(stepsAskScope(o, occ(), false)).toBe(false)
   })
 
   it('blok serii: zmiana listy pyta o zakres; „Anuluj” – nic nie zapisane', async () => {

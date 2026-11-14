@@ -29,7 +29,6 @@ export interface BlockSpec {
   min: number
   fixed?: boolean
   bg?: boolean
-  tag?: PlanBlock['tag']
   origin?: PlanBlock['origin']
   source?: string
   variant?: string
@@ -45,7 +44,6 @@ export const block = (s: BlockSpec): PlanBlock =>
     durationMin: s.min,
     fixed: s.fixed === true,
     background: s.bg ?? null,
-    tag: s.tag ?? null,
     origin: s.origin ?? 'template',
     sourceId: s.source ?? null
   })
@@ -107,13 +105,12 @@ export class Scenario {
     return p
   }
 
-  start(id: string, at: string, o: { bg?: boolean; confirmUntil?: string; cat?: string; variant?: string; min?: number; tag?: PlanBlock['tag'] } = {}): this {
+  start(id: string, at: string, o: { bg?: boolean; confirmUntil?: string; cat?: string; variant?: string; min?: number } = {}): this {
     const p = this.opts.plan.find((b) => b.id === id)
     const planned = {
       categoryId: o.cat ?? p?.categoryId ?? 'inne',
       variantId: o.variant ?? p?.variantId ?? null,
       durationMin: o.min ?? p?.durationMin ?? 30,
-      tag: o.tag ?? p?.tag ?? null,
       fixed: p?.fixed ?? false,
       costs: p?.costs ?? null,
       bgCostPct: p?.bgCostPct ?? null

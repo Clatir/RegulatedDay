@@ -36,10 +36,10 @@ export interface ExchangeProposal extends ExchangeCost {
   preselected: string[]
 }
 
-/** The block counts for the boundary (work, not „nie przerywa regeneracji”, not the second shift). */
+/** The block counts for the boundary (work, not „nie przerywa regeneracji”). */
 function boundaryWork(state: DayState, block: PlanBlock): boolean {
   const rules = state.settings.categories[block.categoryId]
-  if (!rules || rules.cls !== 'work' || rules.keepsRegen || block.tag === 'secondShift') return false
+  if (!rules || rules.cls !== 'work' || rules.keepsRegen) return false
   return rules.kind !== 'request'
 }
 
@@ -47,7 +47,7 @@ const budgetTotal = (s: DayState) => s.budgetUsedMin + s.budget.forecastMin
 
 /**
  * The forecast's minutes of work after the boundary (each counted once) – what would be extension: work that sets the
- * boundary, not the plan of lectures nor a „zjazd”, also after the second shift (work there reopens it) – and whether
+ * boundary, not the plan of lectures nor a „zjazd” – and whether
  * any is past the maximum.
  */
 function forecastExtension(s: DayState, boundary: number): { minutes: number; pastMax: boolean } {

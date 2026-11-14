@@ -15,11 +15,9 @@ export function blockColor(categoryId: string, n: Pick<Names, 'rd' | 'settings'>
   return CLASS_COLORS[cls]
 }
 
-/** The marks a block shows beside its name. */
+/** The marks a block shows beside its name (no „druga zmiana” nor „analiza tygodniowa” since D467; „po pracy” is the engine's, D209). */
 export function blockMarks(b: PlanBlock, extra: { afterWork?: boolean; fromYesterday?: boolean } = {}): string[] {
   const out: string[] = []
-  if (b.tag === 'secondShift') out.push('druga zmiana')
-  if (b.tag === 'weeklyAnalysis') out.push('analiza tygodniowa')
   if (extra.afterWork) out.push('po pracy')
   if (b.fixed) out.push('stały')
   if (b.background) out.push('w tle')

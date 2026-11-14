@@ -7,7 +7,9 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { CaseDays, EditOutcome, QuickShortcut, RawRecord } from '@shared/api'
+import { marketDay } from '@shared/calendar/holidays'
 import { isRaw, putBlock } from '@shared/data/dayEdits'
+import { nextTaskRaw } from '@shared/engine/caseRepeat'
 import { sameContentAs } from '@shared/data/merge'
 import { classify, paths } from '@shared/data/paths'
 import {
@@ -24,7 +26,7 @@ import {
   type CasePatch,
   type GoneOf
 } from '@shared/engine/cases'
-import { parseQuickDates } from '@shared/quickDates'
+import { dayWord, parseQuickDates } from '@shared/quickDates'
 import { newId } from '@shared/model/ids'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
 import { newRequest, newTask, requestFrom, type CaseList, type NewTask } from '@shared/model/requests'
@@ -32,7 +34,7 @@ import { settingsOn } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { useNow } from '../lib/clock'
 import { editOf, isSaved, rawRecord, saveAnswer, trySaveWith, useData, type SaveAnswer, type SendState } from './data'
-import { toast } from './ui'
+import { toast, undoToast } from './ui'
 
 const relOf = (id: string): string => paths.record('request', id)
 
@@ -134,6 +136,11 @@ export interface CaseUndoFile {
   rel: string
   before: RawRecord | null
   after: RawRecord | null
+  /**
+   * The file this one goes with (T923: the next task of a task that repeats goes with its tick): its entry is laid only
+   * after that file's – a question about it keeps this one waiting, „ich” takes it out with it; absent – on its own.
+   */
+  owner?: string
 }
 
 /** What a change of „Sprawy” did: saved (written or waiting for the folder), its edits' outcomes, its „Cofnij”. */
@@ -146,6 +153,8 @@ export interface CaseResult {
   id: string | null
   /** „Cofnij” of this change (`undoCase`); empty when nothing was saved. */
   undo: CaseUndoFile[]
+  /** D465: the id of the next task this change made (a task that repeats ticked off); null or absent – none. */
+  next?: string | null
   /**
    * Whether the edits were handed to the queue (`SendState.afterSend`): no outcomes after it – the result is not known (the
    * folder may have it – `saveAnswer` says „asked”, never a refusal); absent – a result made without a send.
@@ -164,21 +173,29 @@ export function caseAnswer(r: Pick<CaseResult, 'saved' | 'error' | 'outcomes' | 
 
 /**
  * Edits of several files in one turn: `make` puts each file's version before and after (a file put twice keeps its
- * first before) or says why nothing is written; saved together – one edit of the queue.
+ * first before) or says why nothing is written; saved together – one edit of the queue. `owner` – the file put before
+ * this one that it goes with (`CaseUndoFile.owner`, T923); not written by this change – this one goes on its own.
  */
-export async function change(make: (put: (rel: string, before: RawRecord | null, after: RawRecord | null) => void) => Promise<string | null> | string | null): Promise<CaseResult> {
+export async function change(make: (put: (rel: string, before: RawRecord | null, after: RawRecord | null, owner?: string) => void) => Promise<string | null> | string | null): Promise<CaseResult> {
   let error: string | null = null
   let undo: CaseUndoFile[] = []
   const sent: SendState = { afterSend: false }
   const out = await trySaveWith(async () => {
-    const files = new Map<string, { before: RawRecord | null; after: RawRecord | null }>()
-    error = await make((rel, before, after) => {
+    const files = new Map<string, CaseUndoFile>()
+    error = await make((rel, before, after, owner) => {
       const had = files.get(rel)
-      files.set(rel, { before: had ? had.before : before, after })
+      const by = owner ?? had?.owner
+      files.set(rel, { rel, before: had ? had.before : before, after, ...(by ? { owner: by } : {}) })
     })
     if (error) return []
-    undo = [...files].map(([rel, f]) => ({ rel, before: f.before, after: f.after })).filter((f) => (f.before == null ? f.after != null : f.after == null || !sameContentAs(f.before, f.after)))
-    return undo.map((f) => editOf(f.rel, f.before, f.after))
+    undo = [...files.values()].filter((f) => (f.before == null ? f.after != null : f.after == null || !sameContentAs(f.before, f.after)))
+    const place = new Map(undo.map((f, i) => [f.rel, i]))
+    return undo.map((f, i) => {
+      const e = editOf(f.rel, f.before, f.after)
+      const o = f.owner != null ? place.get(f.owner) : undefined
+      // Places in this list; `sentEntries` follows them to the list sent (an owner with nothing to write – on its own).
+      return e && o != null && o < i ? { ...e, after: [o] } : e
+    })
   }, sent)
   if (error) toast(error, 'error', 6000)
   const saved = !error && isSaved(out)
@@ -214,17 +231,42 @@ export async function createRequest(p: { person: string | null; estimateMin: num
   return { ...r, id: r.saved ? id : null }
 }
 
-/** One record changed by `fn` from what it is in its turn (or refused with why); gone – „Tej sprawy już nie ma.”. */
-function changeRecord(id: string, fn: (raw: RawRecord, at: number) => { raw: RawRecord } | { error: string }): Promise<CaseResult> {
-  return change((put) => {
+/** What the tick of a task that repeats says (D465): „Następne: „Podlać kwiaty” – wykonać jutro” (its „Cofnij” takes both back). */
+export function nextTaskText(raw: RawRecord, today: string): string {
+  const r = requestFrom(raw)
+  const date = r?.doDate ?? r?.dueDate
+  return `Następne: „${r?.title || 'zadanie'}”${date ? ` – ${r?.doDate ? 'wykonać' : 'termin'} ${dayWord(date, today)}` : ''}`
+}
+
+/**
+ * One record changed by `fn` from what it is in its turn (or refused with why); gone – „Tej sprawy już nie ma.”. A task that
+ * repeats taken to „Zrobione” by it (D465) gets its next task in the same edit – unless the window has that one already (made
+ * on another computer, or before a tick taken back by hand): the next one is never written twice; „Cofnij” then for both.
+ * The next one goes with the tick (T923, `owner`): a tick that meets a change elsewhere keeps it waiting, „ich” takes it out –
+ * never an open task and its next one side by side; its „Cofnij” removes the next one only after the task is back.
+ */
+async function changeRecord(id: string, fn: (raw: RawRecord, at: number) => { raw: RawRecord } | { error: string }): Promise<CaseResult> {
+  // The next task this change made (written in the callback – its last run counts).
+  const made: { raw: RawRecord | null } = { raw: null }
+  const r = await change((put) => {
+    made.raw = null
     const rel = relOf(id)
     const before = rawRecord(rel)
     if (!before) return 'Tej sprawy już nie ma.'
-    const next = fn({ ...before }, Date.now())
+    const at = Date.now()
+    const next = fn({ ...before }, at)
     if ('error' in next) return next.error
     put(rel, before, next.raw)
+    const n = nextTaskRaw(before, next.raw, at, marketDay)
+    if (n && !rawRecord(relOf(n.id))) {
+      put(relOf(n.id), null, n.raw, rel)
+      made.raw = n.raw
+    }
     return null
   })
+  const next = r.saved ? made.raw : null
+  if (next) undoToast(nextTaskText(next, logicalDayOf(Date.now())), () => void undoCase(r.undo))
+  return { ...r, next: next ? String(next.id) : null }
 }
 
 /** Its fields (title, estimate, category, note, person, kind) – refused with why (a task without a title). */
@@ -294,7 +336,7 @@ export interface CasePushed {
  * (`push.planOf`, T770); `seen` – the day's file as the window knows it, for one not readable now. Its „Cofnij” –
  * `undoCase(result.undo)`; `moved` – the starts that changed.
  */
-export async function planCase(id: string, date: string, startMin: number, o: { push?: CasePush; seen?: (date: string) => RawRecord | null | undefined } = {}): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
+export async function planCase(id: string, date: string, startMin: number, o: { push?: CasePush; seen?: (date: string) => RawRecord | null | undefined; durationMin?: number } = {}): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
   let block: PlanBlock | null = null
   let moved = 0
   const r = await change(async (put) => {
@@ -323,7 +365,7 @@ export async function planCase(id: string, date: string, startMin: number, o: { 
     }
     const begunOf = (d: string, b: string) => (begunIn[d] ? begunIn[d].includes(b) : undefined)
     // Now – in the turn of the write (a turn waiting over 04:00 counts with the day it runs in).
-    const p = casePlan({ record: before, date, startMin, files: days, rules: settingsOn(useData.getState().rd.settings, date).categories, at: Date.now(), begun: begunOf })
+    const p = casePlan({ record: before, date, startMin, ...(o.durationMin != null ? { durationMin: o.durationMin } : {}), files: days, rules: settingsOn(useData.getState().rd.settings, date).categories, at: Date.now(), begun: begunOf })
     if (!p) return 'Tej sprawy już nie ma.'
     // Its old block today or later, its log not known: whether it began is not known – no write (T774).
     if ('refused' in p) return DAY_UNREADABLE
@@ -409,7 +451,7 @@ export function undoFiles(undo: readonly CaseUndoFile[], kinds: readonly string[
       const now = c.kind === 'day' ? (days[c.date!] ?? null) : rawRecord(u.rel)
       const stands = now == null ? u.after == null : u.after != null && isRaw(now) && sameContentAs(now, u.after)
       // Changed since (here or on another computer): never written over.
-      if (stands) put(u.rel, now, u.before)
+      if (stands) put(u.rel, now, u.before, u.owner)
     }
     return null
   })

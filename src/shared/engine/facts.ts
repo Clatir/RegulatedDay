@@ -342,8 +342,9 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         }
         const at = idx(e.at)
         b.startedAt = at
+        // `tag` of a start an older version wrote (D467) is never read – it may ride along in the spread, unused.
         const { name, task, routine, requests, ...planned } = e.planned
-        b.planned = { ...planned, variantId: planned.variantId ?? null, tag: planned.tag ?? null, fixed: planned.fixed === true, ...startNaming({ name, task, routine, requests }) }
+        b.planned = { ...planned, variantId: planned.variantId ?? null, fixed: planned.fixed === true, ...startNaming({ name, task, routine, requests }) }
         b.runs.push({ from: at, to: OPEN, bg: e.bg === true, begun: orderOf(e) })
         if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil), order: orderOf(e) })
         break

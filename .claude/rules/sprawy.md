@@ -4,6 +4,8 @@ paths:
   - "src/shared/engine/cases.ts"
   - "src/shared/engine/caseDates.ts"
   - "src/shared/engine/casePriority.ts"
+  - "src/shared/engine/caseRepeat.ts"
+  - "src/shared/model/taskRepeat.ts"
   - "src/shared/quickDates.ts"
   - "src/renderer/store/cases.ts"
   - "src/main/windows/quickWindow.ts"
@@ -16,7 +18,7 @@ paths:
   - "tests/web/cases-screens.test.ts"
   - "tests/e2e/cases.spec.ts"
   - "tests/unit/engine/cases*.test.ts"
-  - "tests/fs/cases.test.ts"
+  - "tests/fs/cases*.test.ts"
   - "tests/web/cases-*.test.ts"
   - "tests/unit/theme.test.ts"
   - "tests/e2e/quick*.spec.ts"
@@ -77,6 +79,18 @@ paths:
   nieczytelny albo (od dziś) z niepełnym logiem – `DAY_UNREADABLE`; dzień miniony nigdy nie jest przepisywany (T769).
 - Skrót: `quickKey` + `quickOn` (wyłączenie zostawia Twój klucz); zajęty – ponawiany (ustawienia, `quickShortcut`, co 60 s – T759).
 - „Zadanie zrobione?”: odpowiedź to rekord (T754) – nie `question.answer`; linia `task:<dzień>:<blok>`, cicha, 3 h.
+- Powtarzanie zadań (D465, T1036–T1042): `model/taskRepeat.ts` (`TaskRepeat { rule, until, count, n }`, `taskRepeatFrom`,
+  `taskRepeatJson`, `repeatPatched` – tygodniowa bez `anchor` liczy tygodnie od daty zadania, z tym samym „co ile” – swoje),
+  `RequestRecord.repeat` (tylko zadanie), `CasePatch.repeat` w `patchedRaw`; `engine/caseRepeat.ts` – `nextTaskRaw(before, after, at,
+  holidays)` (tylko przejście zadania do „Zrobione”; data: najbliższy dzień reguły po „Wykonać”, bez niej po „Termin”, bez dat – od dnia
+  odhaczenia, nigdy na dzień odhaczenia ani wcześniej; oba – odstęp zostaje; koniec `count` / `until`), `nextTaskId` (`derivedId` z id
+  zadania – ten sam plik na każdym komputerze, T1041), `repeatText`. Zapis: okno – `changeRecord` (`store/cases.ts`: następne w tej samej
+  edycji, gdy okno go nie ma; `CaseResult.next`, dymek `nextTaskText` z „Cofnij” obu), pasek – `WidgetEngine.answerTask` (gdy `recordView`
+  go nie zna). Następne idzie za odhaczeniem (`after`, T923; okno – `put(…, owner)` w `change`, `CaseUndoFile.owner`, też w „Cofnij”):
+  pytanie przy odhaczeniu trzyma je, „ich” zabiera – nigdy otwarte zadanie obok następnego. `folder.edit`: nowy rekord, który już
+  jest z tą samą treścią, nie jest odmową (T1041). Ekran: „Powtarzaj” w wierszu (`RepeatForm`, `SeriesFields special={false}`,
+  `repeatDraft` / `repeatInputOf` / `repeatChanged` w `seriesForm.ts`; szkic wraca tylko po zmianie zapisanego `repeat`, nie dat
+  zadania ani dnia), „↻ …” w `statusParts`.
 - Kroki zadania (D440, T792, reguły `kroki.md`): `RequestRecord.steps` + `stepsDone`; `caseBlock` kopiuje listę do bloku,
   `withTaskBlock` – odhaczenia; zmiany w bloku i w zadaniu idą w obie strony (`engine/steps.ts`).
 - „Powtarzaj” nie dotyczy bloku zadania ani próśb (D408): `blockNotSeries` (kod `task` / `requests`), w panelu bloku `RepeatNote`.

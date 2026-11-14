@@ -5,6 +5,7 @@
  */
 import { useEffect, useRef, type ReactNode } from 'react'
 import { onModal, tabTarget, topModal, useEscapeLayer } from '../lib/escape'
+import { DIALOG_BACKDROP } from '../lib/outside'
 import { cx } from './ui'
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -15,6 +16,7 @@ export function Dialog({
   actions,
   onClose,
   wide,
+  centered,
   ...rest
 }: {
   title: ReactNode
@@ -22,6 +24,8 @@ export function Dialog({
   actions?: ReactNode
   onClose: () => void
   wide?: boolean
+  /** In the middle of the screen, not at its top (D463: the window of a new thing made from a list). */
+  centered?: boolean
   'data-testid'?: string
 }) {
   useEscapeLayer(true, onClose)
@@ -53,7 +57,12 @@ export function Dialog({
     }
   }, [])
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 px-4 py-10" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    // The overlay is the dialog's own (`DIALOG_BACKDROP`): a press on it is never a click „elsewhere” of the part below.
+    <div
+      className={cx('fixed inset-0 z-50 flex justify-center overflow-y-auto bg-black/50 px-4 py-10', centered ? 'items-center' : 'items-start')}
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      {...{ [DIALOG_BACKDROP]: '' }}
+    >
       <div
         ref={box}
         tabIndex={-1}

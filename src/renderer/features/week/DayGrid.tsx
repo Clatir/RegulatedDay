@@ -18,7 +18,7 @@ import { weekday } from '@shared/time/zone'
 import { cx } from '../../components/ui'
 import { useData } from '../../store/data'
 import { useMachine } from '../../store/machine'
-import { openDay, setBlockDraft, toast } from '../../store/ui'
+import { openDay, openPick, setBlockDraft, toast } from '../../store/ui'
 import { showWeekPush } from '../../store/weekPush'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockColor, blockKind, blockName, type Names } from '../plan/blockView'
@@ -48,6 +48,8 @@ interface NewPick {
   dates: string[]
   startMin: number
   durationMin: number
+  /** Dragged out (a range, also across days) – intended: saved by a click outside even untouched (D461); a bare click is not. */
+  dragged: boolean
   place: { left: number; top: number }
 }
 
@@ -134,7 +136,7 @@ export function DayGrid({
   /** The column under `x` (the pointer of a drag may be in another one than where it began); `fallback` where the grid cannot be read. */
   const columnUnder = (x: number, fallback: number): number => columnAt(x, (rects.current ??= readRects()), fallback)
   /** A click (an hour long) or a drag over an empty place of the columns `first`–`last` asks for a new block there. */
-  const pickOn = (first: number, last: number, r: GridRange) => {
+  const pickOn = (first: number, last: number, r: GridRange, dragged = true) => {
     const body = bodyRef.current?.getBoundingClientRect()
     if (!body) return
     const idx = dayIndexes(first, last)
@@ -143,7 +145,7 @@ export function DayGrid({
     const b = side(idx.at(-1)!)
     if (!a || !b) return
     const place = popoverPlace({ gridWidth: body.width, colLeft: a.left - body.left, colRight: b.right - body.left, top: a.top - body.top + axisY(r.startMin, lo, ppm), width: NEW_BLOCK_WIDTH })
-    setPick({ seq: ++asks.current, dates: idx.map((i) => days[i]!.date), startMin: r.startMin, durationMin: r.endMin - r.startMin, place })
+    setPick({ seq: ++asks.current, dates: idx.map((i) => days[i]!.date), startMin: r.startMin, durationMin: r.endMin - r.startMin, dragged, place })
   }
   const spanHeld = held ? dayIndexes(held.from, held.to) : []
 
@@ -330,14 +332,15 @@ export function DayGrid({
             dates={pick.dates}
             startMin={pick.startMin}
             durationMin={pick.durationMin}
+            dragged={pick.dragged}
             today={today}
             namesOf={namesOf}
             place={pick.place}
             onClose={() => setPick(null)}
             onDates={(dates) => setPick((p) => p && { ...p, dates })}
             onMore={(block) => {
-              // The full editing of the day, the block not saved yet: the draft of „Dziś” (A6-17) – its „Dodaj” saves it.
-              setBlockDraft(pick.dates[0]!, block)
+              // The full editing of the day, the block not saved yet: the draft of „Dziś” (A6-17, D461) – saved at its first field or when you leave it.
+              setBlockDraft(pick.dates[0]!, block, true)
               setPick(null)
               openDay(pick.dates[0]!)
             }}
@@ -423,7 +426,7 @@ function DayColumn({
   brightness: number
   columnUnder: (x: number, fallback: number) => number
   onHold: (range: GridRange | null, x: number) => void
-  onPick: (first: number, last: number, range: GridRange) => void
+  onPick: (first: number, last: number, range: GridRange, dragged?: boolean) => void
   held: GridRange | null
   waiting: NewPick | null
   grab: (b: HorizonBlock) => BlockGrab
@@ -443,7 +446,7 @@ function DayColumn({
     flatMin: DEFAULT_NEW_BLOCK_MIN,
     onClick: (min) => {
       const startMin = Math.min(Math.max(snapMinute(min), lo), hi)
-      onPick(index, index, { startMin, endMin: startMin + DEFAULT_NEW_BLOCK_MIN })
+      onPick(index, index, { startMin, endMin: startMin + DEFAULT_NEW_BLOCK_MIN }, false)
     },
     onHold,
     onRange: (r, _rect, x) => onPick(index, columnUnder(x, index), r)
@@ -502,7 +505,8 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
     <button
       type="button"
       onClick={() => {
-        if (!grab?.consumed()) openDay(date)
+        // D462: the click selects the block – its day opens with it selected (as in „Agenda”); Del there removes it. A block outside the plan only opens the day.
+        if (!grab?.consumed()) b.outsidePlan ? openDay(date) : openPick({ page: 'today', day: date }, { kind: 'block', id: b.id, date })
       }}
       onPointerDown={grab?.down}
       {...NO_GRID}

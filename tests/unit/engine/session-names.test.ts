@@ -1,6 +1,6 @@
 /**
  * D338 (1.0.4): a block of the session layer is „Sesja <nazwa>” („Sesja NY”) in the bar's lines, in the CSV and wherever
- * `blockName` names it; the second shift and a category block added by hand stay „Sesja tradingowa”.
+ * `blockName` names it; a category block of the template or added by hand stays „Sesja tradingowa”.
  */
 import { describe, expect, it } from 'vitest'
 import { blockName, nameById } from '@shared/blockName'
@@ -24,7 +24,7 @@ function scenario() {
     date: DATE,
     plan: [
       block({ id: 'ny', cat: 'sesja', at: '15:30', min: 60, fixed: true, origin: 'session', source: 'ny' }),
-      block({ id: 'zm', cat: 'sesja', at: '20:00', min: 60, fixed: true, tag: 'secondShift' }),
+      block({ id: 'zm', cat: 'sesja', at: '20:00', min: 60, fixed: true }),
       block({ id: 'rec', cat: 'sesja', at: '17:00', min: 30, fixed: true, origin: 'user' })
     ]
   })
@@ -33,7 +33,7 @@ function scenario() {
 const names = (s: Scenario) => ({ rd: rdFrom({}), settings: s.settings, routines: [], requests: [] })
 
 describe('nazwy sesji (D338)', () => {
-  it('blockName: blok warstwy sesji to „Sesja <nazwa>”, druga zmiana i ręczny blok kategorii – nazwa kategorii', () => {
+  it('blockName: blok warstwy sesji to „Sesja <nazwa>”, wieczorna sesja szablonu i ręczny blok kategorii – nazwa kategorii', () => {
     const s = scenario()
     const n = names(s)
     const [ny, zm, rec] = s.contextAt(s.at('12:00')).plan

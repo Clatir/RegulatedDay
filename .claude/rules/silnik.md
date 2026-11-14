@@ -23,7 +23,9 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - `engine/createDay.ts` – deterministyczna migawka dnia (szablon, ustawienia daty, wykłady, sesje ze strefy NY ze
   skróceniem, przesunięcie pobudki) i `dayPlan` (migawka + plik dnia).
 - `engine/facts.ts` – log → fakty (przebiegi bloków, prośby, „Odcinam się”, zatwierdzenia, odcinki); `viewAt(f, m)`.
-- `engine/blocks.ts` – `BlockInfo` (klasa, czeka na „Zacznij”, druga zmiana, wykład/zjazd, oznaczenie „po pracy”).
+- `engine/blocks.ts` – `BlockInfo` (klasa, czeka na „Zacznij” – tylko stała sesja, wykład/zjazd, oznaczenie „po pracy”).
+  Oznaczeń bloku nie ma (D467): `PlanBlock` nie ma `tag` ani `waitUntilMin` – stare pola zostają w pliku nieczytane
+  (`blockJson`, `templateJson` nadpisują tylko pola modelu), `block.start.planned` nie pisze `tag`.
 - `engine/forecast.ts` – prognoza planu od minuty m (tryby `window` i `typical`); `day.ts` `shownForecaster(ctx, state)` – ta sama
   prognoza co `DayState.forecast` dla innych bloków (widok, bufor, typowe długości raz), `typicalOf`; `grid.ts` `logicalSpan` – minuty osi
   jak zegar na obu końcach (jak przed J3: doba 25 h – powtórzona godzina raz, bloki po sobie się nie nakładają) – ta sama w `dayAxis` i podglądzie.
@@ -57,7 +59,8 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - E11 (T546–T550): `import/zjazdy.ts` (parser PDF z elementów tekstu), `import/zjazdDay.ts` (`zjazdDayRaw`,
   `withoutZjazd`, `zjazdTypeRaw`, `classImport`, `sameDayFile`); bloki `origin: 'zjazd'` i zajęcia zdalne w dniu zjazdu
   (`blockInfos(…, typeAt)`, D359) są `lectureOrCommute`; `PlanBlock.name` – nowe pole bloku dopisz w `planBlock()`,
-  `planBlockFrom` i literale w `blockInfos`. `RULES_VERSION` 7 od 1.4.0 (`block.shorten`, D365), 8 – serie w `day.create` (T716).
+  `planBlockFrom` i literale w `blockInfos`. `RULES_VERSION` 7 od 1.4.0 (`block.shorten`, D365), 8 – serie w `day.create` (T716), 9 – bez drugiej
+  zmiany (D467).
 - Serie (OPS1, D381, D382, D401, D404, T700–T719): `model/series.ts` (rekord, `ruleFallsOn`, `seriesVersionOn`,
   `specialOutcome`, licznik `countedBefore`/`seriesLast`, `seriesPlans` – `SeriesPlan { series, last }`, `countDatesToRead`,
   `seriesOfBlock`, `currentSeries` – lista), `engine/series.ts` (`seriesBlocks` w `createDay`, `pushedBySeries` – rozsuwanie
@@ -72,14 +75,14 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - E3: `engine/context.ts` (`dayContextOf`, `snapshotOf` – jedno źródło kontekstu dla prowadzącego i okna),
   `planEdit.ts` (nowy blok, przeniesienie, kopia dnia i szablonu, blok próśb, `wakeShifted` – bloki własne przy zmianie pobudki, D334), `exchange.ts` (wymiana),
   `typeChange.ts` (zmiana typu, „Dodaj bloki typu …”), `lateWake.ts`, `morning.ts` (z wczoraj, pytania sesji i świąt,
-  ostrzeżenia, przesunięcie sesji, analiza sobotnia); `model/rd.ts`, `requests.ts`, `routines.ts`, `fields.ts`
+  ostrzeżenia, przesunięcie sesji); `model/rd.ts`, `requests.ts`, `routines.ts`, `fields.ts`
   (opis każdego ustawienia z liczbą), `defaults.ts` (zapisy kreatora). Testy: `tests/unit/engine/e3-plan.test.ts`.
 
 ## Jak liczy `computeDay`
 - Siatka minut od 04:00 (T412). Przeszłość z faktów (`actual` – flagi minut), przyszłość z prognozy; każda minuta
   oceniana `evaluateAt(m)` na widoku sprzed niej (T413). Stan „teraz” – z `inclusive` (zdarzenia bieżącej minuty).
-- Flagi minuty (`F_END` praca do granicy i końca pracy, `F_EXT` minuty klasyfikowane, `F_SSOUT` druga zmiana poza
-  swoim czasem, `F_BUDGET`, `F_SECOND`, `F_PROJECT`, `F_LIFE`, `F_REGEN`, `F_REQUEST`, `F_DISC`, `F_BLOCK`, `F_UPFRONT`).
+- Flagi minuty (`F_END` praca do granicy i końca pracy, `F_EXT` minuty klasyfikowane, `F_BUDGET`, `F_PROJECT`,
+  `F_LIFE`, `F_REGEN`, `F_REQUEST`, `F_DISC`, `F_BLOCK`, `F_UPFRONT`; flag drugiej zmiany nie ma od D467).
 - Klasy minut pracy po granicy: `after` (przedłużenie), `max` (po maksimum), `empty` (przy pustej puli); `in` w granicy.
   Porę snu przesuwają tylko `empty` z `upfront` (potwierdzone z góry), najwyżej 2 h i nie po 03:59.
 - Koniec pracy: potwierdzony (`work.end`, `disconnect.start` w odcinku pracy) albo wyliczony – po odcinku pracy, gdy
@@ -130,7 +133,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - Migawka typu (`day.snapshot` reason type) niesie `max` i `minRegen`; pora snu nigdy przed chwilą migawki. Blok
   zaparkowany albo odwołany przed startem nie jest pracą w planie (dzień bez pracy). `block.addConfirm` potwierdza
   minuty bloku z góry także przed startem (prognoza pory snu).
-- Niezaczęte bloki czekające na „Zacznij” po końcu okna: bez innej pracy przed drugą zmianą ich planowany koniec jest
+- Niezaczęte bloki czekające na „Zacznij” po końcu okna: bez innej pracy dnia ich planowany koniec jest
   pierwszym końcem pracy (`expiredWaitEnd`, T455) – bez tego dzień bez timera ma „minimum nie mieści się”.
 - „Nauka”, „Oglądanie”, „Journaling” zaplanowane ≥ 30 min po innej pracy mają „po pracy” – w testach budżetu i
   granicy używaj „Inne obowiązki”.
@@ -138,7 +141,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   pusty odcinek w minucie bloku (T507). W dzień roboczy sesje szablonu są stałą pracą: E2E z „Koniec pracy” bez sesji
   dnia (`seed(…, { sessions: false })`), inaczej przed końcem ostatniej sesji koniec jest przerwą.
 - E2E biorą dzień z prawdziwego zegara (CI także w weekend i święta): typ dnia ustaw w danych dla `logicalToday()`
-  (T528). Propozycję granicy dają tylko bloki pracy przed drugą zmianą – w dzień roboczy sesje, w weekend nic;
+  (T528). Propozycję granicy dają bloki pracy dnia (także wieczorne, D467) – w dzień roboczy sesje, w weekend nic;
   niedziela nie ma szablonu (pusty plan). Inne dni lokalnie: `faketime -f "@<data UTC>"` z `FAKETIME_DONT_FAKE_MONOTONIC=1`.
 - `DayState.hardEnd.nothingMissing`: przy przejściu twardego końca brakująca część minimum wynosiła 0 – bez komunikatu
   i bez powiadomienia o biegnącym projekcie (`widget.ts`); prowadzący zapisuje je w `hardend.pass` (`quiet`), silnik czyta to pole, a liczy od nowa tylko bez niego (starsze logi). Powiadomienie

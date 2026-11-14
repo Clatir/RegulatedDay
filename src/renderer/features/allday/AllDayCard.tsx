@@ -16,6 +16,8 @@ import { Field, cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { commitActiveField } from '../../lib/commit'
 import { useEscapeLayer } from '../../lib/escape'
+import { removeTarget, useDeleteSelected } from '../../lib/deleteKey'
+import { IN_DIALOG } from '../../lib/outside'
 import { allDayGone, removeAllDay, saveAllDay } from '../../store/allDay'
 import { useData } from '../../store/data'
 import { NoteEditor } from '../note/NoteEditor'
@@ -75,7 +77,8 @@ export function AllDayCard({
   // A click outside closes it (the answer „Nie” on the question).
   useEffect(() => {
     const away = (e: PointerEvent) => {
-      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target)) onClose()
+      // A dialog over it (Del's question, D462) with its overlay is no „outside”: the card waits for the answer.
+      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target) && !(e.target instanceof Element && e.target.closest(IN_DIALOG))) onClose()
     }
     document.addEventListener('pointerdown', away)
     return () => document.removeEventListener('pointerdown', away)
@@ -115,6 +118,8 @@ export function AllDayCard({
       onRemoved(base.title, raw)
       onClose()
     })
+  // D462: the card is the selected event (a click on it opened it): Del removes it, as „Usuń” does.
+  useDeleteSelected(base ? removeTarget(base.title, () => remove()) : null)
   const yes = () =>
     run(async () => {
       if (!ask) return

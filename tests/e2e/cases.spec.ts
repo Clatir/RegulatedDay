@@ -9,6 +9,7 @@
  * field, saved without the word), the card „Terminy” of the morning plan with „Na Dziś” and „Pomiń”, the threshold in the settings.
  * HKU3 (D450): the priority chosen in the row (its stripe, the order), the switch „Listy · Macierz” remembered by the window, the drop
  * between the fields of the matrix, the stripe in the panel and on the tile of a block, the morning plan's line of the sprawy „Ważne i pilne”.
+ * D465: „Powtarzaj” of a task, the next task made by „Zrobione” and taken back with it by „Cofnij”.
  */
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -617,6 +618,43 @@ test('Sprawy: „+ Prośba” i Ctrl K „Nowa prośba” w widoku „Macierz”
       await expect(page.getByTestId('cases-view-lists')).toHaveAttribute('aria-pressed', 'true')
       await expect(fresh).toHaveCount(3)
       await expect(fresh.locator('[data-testid="request-note"]:focus')).toHaveCount(1)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Sprawy: „Powtarzaj” codziennie – reguła przy zadaniu; „Zrobione” daje od razu następne z Wykonać jutro, „Cofnij” zdejmuje je i przywraca zadanie (D465)', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-repeat-'))
+  const { today } = seedAwake(dataDir, [])
+  putRecord(dataDir, newTask('t1', Date.now(), today, { title: 'Podlać kwiaty', doDate: today })!)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-requests').click()
+      const row = page.locator('[data-case="t1"]')
+      await expect(row).toBeVisible()
+      await row.getByTestId('case-repeat-open').click()
+      const form = row.getByTestId('case-repeat-form')
+      await expect(form.getByTestId('series-special')).toHaveCount(0)
+      await form.getByTestId('series-rule').selectOption('daily')
+      await form.getByTestId('case-repeat-save').click()
+      await expect(row.getByTestId('case-status')).toContainText('↻ codziennie')
+      await expect.poll(() => (records(dataDir).find((r) => r.id === 't1')?.repeat as Json | undefined)?.rule).toEqual({ kind: 'daily' })
+
+      await row.getByTestId('case-done').click()
+      await expect(page.getByText('Następne: „Podlać kwiaty” – wykonać jutro')).toBeVisible()
+      await expect.poll(() => records(dataDir).map((r) => [r.id === 't1' ? 't1' : 'next', r.state, r.doDate]).sort()).toEqual([
+        ['next', 'queued', addDays(today, 1)],
+        ['t1', 'done', today]
+      ])
+      // The window shows the next one (the done one in „Zrobione”); „Cofnij”: the next one removed, the task back on its list.
+      await expect(page.getByTestId('case-row')).toHaveCount(2)
+      await page.getByRole('button', { name: 'Cofnij' }).click()
+      await expect.poll(() => records(dataDir).map((r) => [r.id, r.state])).toEqual([['t1', 'queued']])
     })
     expect(errors).toEqual([])
   } finally {

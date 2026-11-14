@@ -26,6 +26,8 @@ import { timerNow, type TimerNow } from '@shared/engine/timer'
 import { pushedText } from '@shared/engine/pushApart'
 import { energyOrderVariant } from '@shared/engine/energyOrder'
 import { casesFrom, isDone, taskAnswerRaw } from '@shared/engine/cases'
+import { nextTaskRaw } from '@shared/engine/caseRepeat'
+import { marketDay } from '@shared/calendar/holidays'
 import { tickEdits } from '@shared/engine/steps'
 import { dayPlan } from '@shared/engine/createDay'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
@@ -1110,7 +1112,8 @@ export class WidgetEngine {
   /**
    * The answer to „Zadanie zrobione?” (D384, T754): the task the line asks about – planned in its block, not done – as the
    * folder has it now: „Tak” – Zrobione, „Wraca na listę” – no longer planned. One edit of the record: every computer's
-   * line goes with it (answered elsewhere meanwhile – nothing written, the bar says so).
+   * line goes with it (answered elsewhere meanwhile – nothing written, the bar says so). A task that repeats (D465): „Tak”
+   * writes its next task in the same edit, unless this computer sees it already (`nextTaskRaw`, the window's rule).
    */
   private async answerTask(line: string, answer: 'done' | 'back'): Promise<void> {
     const folder = this.d.folder()
@@ -1126,8 +1129,15 @@ export class WidgetEngine {
       this.say('To pytanie ma już odpowiedź.')
       return this.refresh()
     }
-    const entry = recordEdit(rel, before, taskAnswerRaw(before, answer, this.now))
-    const res = entry ? await this.d.edit([entry]) : []
+    const at = this.now
+    const after = taskAnswerRaw(before, answer, at)
+    const entry = recordEdit(rel, before, after)
+    const next = nextTaskRaw(before, after, at, marketDay)
+    const nextRel = next ? paths.record('request', next.id) : null
+    // Not readable now: written as new – the folder refuses the whole answer then (a file it cannot read is never taken as missing).
+    const made = next && nextRel && (await folder.recordView(nextRel).catch(() => undefined)) === undefined ? recordEdit(nextRel, null, next.raw) : null
+    // The next one goes with the answer (T923): a question about the answer keeps it waiting, „ich” takes it out with it.
+    const res = entry ? await this.d.edit(made ? [entry, { ...made, after: [0] }] : [entry]) : []
     if (res.some((o) => o.status !== 'applied' && o.status !== 'waiting')) this.say('Odpowiedź spotkała się ze zmianą z innego komputera – odpowiedz na pytanie w oknie głównym.')
     return this.refresh()
   }

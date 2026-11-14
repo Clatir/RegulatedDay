@@ -20,6 +20,14 @@ import { askScope } from '../series/scopeAsk'
 import { occurrenceRuleText } from '../series/seriesForm'
 import { stepsAnswer } from './stepsUi'
 
+/**
+ * Whether the next change of the list of `b` asks the scope by itself (a block of a series, its scope not picked yet for the
+ * panel) – `StepsEditor.removeAsks`: Del then asks no question of its own (D462). A new block's draft never asks.
+ */
+export function stepsAskScope(o: { date: string; series: readonly Series[]; scope: { current: SeriesScope | null } }, b: PlanBlock, isDraft: boolean): boolean {
+  return !isDraft && o.scope.current == null && seriesOfBlock(o.series, b, o.date) != null
+}
+
 export async function saveBlockSteps(
   o: { date: string; today: string; raw: RawRecord | null | undefined; series: readonly Series[]; names: Names; patchDraft: (steps: PlanBlock['steps']) => void; scope: { current: SeriesScope | null } },
   b: PlanBlock,

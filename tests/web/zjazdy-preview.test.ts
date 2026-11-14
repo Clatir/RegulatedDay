@@ -4,8 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { ZjazdPreview, ZjazdPreviewDay } from '@shared/api'
-import { analysisAsks } from '@renderer/features/calendar/analysisAsk'
-import { noteFriday, runInTurn, type PendingImport } from '@renderer/features/calendar/zjazdyRun'
+import { runInTurn } from '@renderer/features/calendar/zjazdyRun'
 import { editZjazdy, keepZjazdy, openZjazdy, useZjazdy } from '@renderer/features/calendar/zjazdyStore'
 import type { inTurn } from '@renderer/store/data'
 import {
@@ -26,14 +25,10 @@ import {
   subjectMaxOf,
   toSave,
   typeNowText,
-  undoList,
   undoneText,
   unchangedText
 } from '@renderer/features/calendar/zjazdyDraft'
 import { plDateWithWeekday } from '@shared/format'
-import { rdFrom } from '@shared/model/rd'
-import { defaultTemplates } from '@shared/model/defaults'
-import { marketDay } from '@shared/calendar/holidays'
 
 const cls = (startMin: number, endMin: number, room: string, subject: string, form = 'wykład') => ({ startMin, endMin, room, form, subject })
 const day = (date: string, classes: ReturnType<typeof cls>[], o: Partial<ZjazdPreviewDay> = {}): ZjazdPreviewDay => ({
@@ -195,35 +190,10 @@ describe('komunikaty po „Zapisz” i „Cofnij”', () => {
     expect(questionsText({ questions: [] })).toBeNull()
   })
 
-  it('„Cofnij” bierze też piątki z odpowiedzią „Tak”; piątek zmieniony przez import zachowuje plik sprzed importu', () => {
-    const imp = [undo('2030-10-11', { schema: 1, v: 'przed' }), undo('2030-10-12')]
-    const friday = { date: '2030-10-11', before: { schema: 1, v: 'po imporcie' }, after: { schema: 1, v: 'po odpowiedzi' } }
-    expect(undoList(imp, [friday])).toEqual([{ date: '2030-10-11', before: { schema: 1, v: 'przed' }, after: { schema: 1, v: 'po odpowiedzi' } }, imp[1]])
-    const other = { date: '2030-10-18', before: null, after: { schema: 1 } }
-    expect(undoList(imp, [other])).toEqual([...imp, other])
-    expect(undoList(imp, [])).toEqual(imp)
-  })
-
-  it('komunikat „Cofnij”: dni importu, odpowiedź o analizie, nic; piątek, którego nie dało się odczytać – powiedziane', () => {
+  it('komunikat „Cofnij”: dni importu albo nic (bez odpowiedzi o analizie tygodniowej – D467)', () => {
     expect(undoneText({ saved: ['2030-10-12', '2030-10-13'] })).toBe('Cofnięto import zjazdów: 2 dni')
-    expect(undoneText({ saved: ['2030-10-11', '2030-10-12'] }, ['2030-10-11'])).toBe('Cofnięto import zjazdów: 1 dzień i odpowiedź o analizie tygodniowej')
-    expect(undoneText({ saved: ['2030-10-11'] }, ['2030-10-11'])).toBe('Cofnięto import zjazdów i odpowiedź o analizie tygodniowej')
+    expect(undoneText({ saved: ['2030-10-12'] })).toBe('Cofnięto import zjazdów: 1 dzień')
     expect(undoneText({ saved: [] })).toBe('Nic nie cofnięto.')
-    expect(undoneText({ saved: ['2030-10-12'] }, [], ['2030-10-11'])).toBe('Cofnięto import zjazdów: 1 dzień. Piątku 11.10.2030 nie cofnięto – jego pliku nie dało się odczytać po odpowiedzi o analizie.')
-  })
-
-  it('odpowiedź o analizie po imporcie – „Tak” i „Nie” – idzie z „Cofnij” (piątek przed i po odpowiedzi, odczyt w kolejce okna)', async () => {
-    const p: PendingImport = { out: { saved: [], unchanged: [], questions: [], skipped: [], outcomes: [], undo: [] }, fridays: [], lost: [] }
-    let turns = 0
-    const turn = (async <T,>(fn: () => Promise<T>) => (turns++, fn())) as typeof inTurn
-    const files: Record<string, Record<string, unknown>> = { '2030-10-11': { schema: 1, date: '2030-10-11', asked: { weeklyAnalysisMove: 'no' } } }
-    const read = async (dates: string[]) => Object.fromEntries(dates.filter((d) => files[d]).map((d) => [d, files[d]!]))
-    await noteFriday(p, '2030-10-11', null, { turn, read })
-    expect(p.fridays).toEqual([{ date: '2030-10-11', before: null, after: files['2030-10-11'] }])
-    expect(turns).toBe(1)
-    // A Friday that cannot be read after the answer cannot go back: noted for the message.
-    await noteFriday(p, '2030-10-04', { schema: 1 }, { turn, read })
-    expect(p.lost).toEqual(['2030-10-04'])
   })
 })
 
@@ -251,38 +221,5 @@ describe('zapis w kolejce okna i ponowny odczyt (T517)', () => {
     expect(reloads).toBe(1)
     await expect(runInTurn(() => Promise.reject(new Error('nie zapisano')), { turn, reload })).rejects.toThrow('nie zapisano')
     expect(reloads).toBe(1)
-  })
-})
-
-describe('analiza tygodniowa po zjeździe w sobotę (wspólna z kalendarzem)', () => {
-  const ctx = { changes: rdFrom(undefined).settings, templates: defaultTemplates(), lectures: [], series: [], holidays: marketDay }
-  // 2030-10-12 is a Saturday.
-  // As `dayFiles` answers: null for a day without a file, a day whose file cannot be read now left out.
-  const readOf = (files: Record<string, Record<string, unknown> | null>) => async (dates: string[]) => Object.fromEntries(dates.filter((d) => d in files).map((d) => [d, files[d]!]))
-
-  it('sobota ze zjazdem w pliku daje pytanie o piątek; dzień niebędący sobotą nie', async () => {
-    const read = readOf({ '2030-10-11': null, '2030-10-12': { schema: 1, date: '2030-10-12', dayType: 'zjazd-zdalny' } })
-    const asks = await analysisAsks(['2030-10-12', '2030-10-13'], { ...ctx, read })
-    expect(asks.map((a) => a.friday)).toEqual(['2030-10-11'])
-    expect(asks[0]!.analysis.startMin).toBe(20 * 60)
-    expect(asks[0]!.secondShift).not.toBeNull()
-  })
-
-  it('bez zjazdu w pliku soboty pytania nie ma', async () => {
-    const asks = await analysisAsks(['2030-10-12'], { ...ctx, read: readOf({ '2030-10-11': null, '2030-10-12': null }) })
-    expect(asks).toEqual([])
-  })
-
-  it('plik soboty nieczytelny (dayFiles go pomija) – bierze się typ, który właśnie nadano (ręczne oznaczenie w Kalendarzu)', async () => {
-    const read = readOf({ '2030-10-11': null })
-    const asks = await analysisAsks(['2030-10-12'], { ...ctx, read, dayType: 'zjazd-zdalny' })
-    expect(asks.map((a) => a.friday)).toEqual(['2030-10-11'])
-    // Without it (a day of another type): no question.
-    expect(await analysisAsks(['2030-10-12'], { ...ctx, read })).toEqual([])
-  })
-
-  it('piątek nieczytelny (dayFiles go pomija) to nie „brak pliku”: bez pytania (odpowiedź mogła już w nim być)', async () => {
-    const read = readOf({ '2030-10-12': { schema: 1, date: '2030-10-12', dayType: 'zjazd-zdalny' } })
-    expect(await analysisAsks(['2030-10-12'], { ...ctx, read })).toEqual([])
   })
 })

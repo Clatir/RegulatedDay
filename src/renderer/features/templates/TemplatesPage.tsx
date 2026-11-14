@@ -3,9 +3,9 @@
  * weekday (one without weekdays is the type's default), each with versions applying from a date. A change applies from
  * the date you choose – by default tomorrow – and never changes days past: the first edit makes a new version from that
  * date, a copy of the one in force then. The version is edited on the axis of a day it would make (the same functions as
- * the engine) with the same panel of a block as the day; a template block may follow a session („po sesji NY”), carry
- * the second shift or the weekly analysis. Ctrl+N makes a new template; a template can be copied. A block dragged or added
- * on a taken place of the axis pushes the flexible blocks after it apart (D367, D372) – „Przesunięto N bloków · Cofnij”
+ * the engine) with the same panel of a block as the day; a template block may follow a session („po sesji NY”). Ctrl+N
+ * makes a new template; a template can be copied. A block dragged or added on a taken place of the axis pushes the
+ * flexible blocks after it apart (D367, D372) – „Przesunięto N bloków · Cofnij”
  * stays on the page for 15 min, or until the template changes again. Below the templates: the list of series (D381, D401) –
  * each with its rule in words, edited and ended there (`SeriesEditor`); Ctrl K finds a series as one record.
  */
@@ -31,6 +31,7 @@ import { EmptyState, Field, Segmented, cx } from '../../components/ui'
 import { isSaved, saveRecord, storedAnswer, tryUpdateRecord, updateRecord, useData, type SaveAnswer, type SendState } from '../../store/data'
 import { countDay } from '../../store/day'
 import { useNewShortcut } from '../../lib/escape'
+import { removeTarget, useDeleteResolver, useDeleteSelected } from '../../lib/deleteKey'
 import { takeFoundPick, useUi } from '../../store/ui'
 import { attachTransfer } from '../attachments/attachDrop'
 import { withAttachCounts } from '../attachments/attachView'
@@ -119,6 +120,7 @@ export function TemplatesPage() {
                   key={t.id}
                   type="button"
                   onClick={() => setSelected(t.id)}
+                  data-del={`template:${t.id}`}
                   className={cx('flex flex-col rounded border px-2.5 py-1.5 text-left', selected === t.id ? 'border-lamp bg-lamp-soft' : 'border-line hover:bg-hover', t.archived && 'border-dashed text-muted')}
                   data-testid="template-item"
                 >
@@ -139,6 +141,7 @@ export function TemplatesPage() {
                   key={s.id}
                   type="button"
                   onClick={() => openSeries(s.id)}
+                  data-del={`series:${s.id}`}
                   className={cx('flex flex-col rounded border px-2.5 py-1.5 text-left', selectedSeries === s.id ? 'border-lamp bg-lamp-soft' : 'border-line hover:bg-hover', ended && 'border-dashed text-muted')}
                   data-testid="series-item"
                 >
@@ -286,6 +289,11 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const remove = async () => {
     if (await removeTemplate(template.id, template.name)) onRemoved()
   }
+  // D462: Del on the selected template (its row of the list, clicked) or its selected block (a tile, or the panel open) removes it, as „Usuń” does.
+  useDeleteResolver('template', (id) => (id === template.id ? removeTarget(template.name, remove) : null))
+  const removeBlockOf = (b: PlanBlock) => removeTemplateBlock(template.id, from, b, blockName(b, names)).then(() => setSelected(null))
+  useDeleteResolver('block', (id) => (block && block.id === id ? removeTarget(blockName(block, names), () => removeBlockOf(block)) : null))
+  useDeleteSelected(block ? removeTarget(blockName(block, names), () => removeBlockOf(block)) : null)
 
   return (
     <div className="flex min-h-0 flex-1" data-testid="template-editor">
@@ -422,11 +430,11 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           focusName={fresh === block.id}
           onChange={(patch) => patchBlock(block.id, patch)}
           // D440: the list without boxes – every day made from the template starts with none ticked.
-          steps={<StepsEditor steps={block.steps} ticks={false} onOp={async (op) => stepsAnswer(op, await changeTemplateSteps(template.id, from, block.id, op))} />}
+          steps={<StepsEditor steps={block.steps} lengthMin={block.durationMin} ticks={false} onOp={async (op) => stepsAnswer(op, await changeTemplateSteps(template.id, from, block.id, op))} />}
           onClose={() => setSelected(null)}
           actions={
             // D415: out of the version from the date shown, with its attachments when no later version keeps it; „Cofnij”.
-            <button type="button" className="btn" onClick={() => void removeTemplateBlock(template.id, from, block, blockName(block, names)).then(() => setSelected(null))} data-testid="template-block-remove">
+            <button type="button" className="btn" onClick={() => void removeBlockOf(block)} data-testid="template-block-remove">
               Usuń z szablonu ({blockName(block, names)})
             </button>
           }

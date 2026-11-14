@@ -1,28 +1,43 @@
 /**
  * The editing panel of a block (D293: on the right of the plan): its own name (D430: „Nazwa” on top – empty, it is named as
  * before; a new block has the cursor in it), its category and variant, its start or the block it
- * follows („po sesji NY”), its length, fixed or flexible, in the foreground or the background, the marks of the second
- * shift and the weekly analysis, its routine, the computer recording a lecture, „Powtarzaj” (`repeat`, D381: a slot of the day's panel),
+ * follows („po sesji NY”), its end („Koniec”, D464: typed – the length changes; „ok. HH:MM” of the forecast after a block) and length, fixed or flexible, in the foreground or the background (no marks of a second
+ * shift or a weekly analysis any more, D467), its routine, the computer recording a lecture, „Powtarzaj” (`repeat`, D381: a slot of the day's panel),
  * its list „Kroki” (`steps`, D440 – a slot of the screen, above the note), its note (a live Markdown editor, D388), its
  * attachments (`place`, D410). Every field saves on leaving it (spec „Edycja pól”); the panel changes nothing by itself.
- * A block of a series (`inSeries`, also the one edited in the list of „Szablony”) has its own hour and no marks: no „po bloku”, no „Oznaczenie” (D401).
+ * A block of a series (`inSeries`, also the one edited in the list of „Szablony”) has its own hour and no marks: no „po bloku” (D401).
+ * D460: choosing a routine copies its usual steps into „Kroki” in the same change (`routineStepsCopy`) – a block of a task
+ * keeps its list (it goes with the task's, T792); „bez rutyny” leaves the steps.
+ * D463: the lists „Kategoria”, „Wariant” and „Rutyna” end with „+ Nowa…” – a window in the middle of the screen with all the fields of the thing
+ * (`NewThingDialogs`); once saved, the new one is chosen in the block like one picked from the list (a field committed, D461) – a
+ * variant and a category once the panel's data (`names`) have it. A variant and a category are made from today on, so a block
+ * of a day gone by offers no „+ Nowa…” for them (its day would not have the new one); a routine is not dated – always.
  */
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
 import { BLOCK_NAME_MAX, type PlanBlock } from '@shared/model/plan'
-import { routineMinutes } from '@shared/model/routines'
+import { routineMinutes, type Routine } from '@shared/model/routines'
+import { routineStepsCopy } from '@shared/model/steps'
 import type { SessionDef } from '@shared/model/settings'
 import { SESSION_ANCHOR } from '@shared/engine/createDay'
 import { olderComputers } from '@shared/model/note'
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
-import { Choice, DurationField, TextField, TimeField } from '../../components/fields'
+import { forecastEndText } from '@shared/blockEnd'
+import { Choice, DurationField, EndField, TextField, TimeField } from '../../components/fields'
 import { Field, Segmented } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
-import type { SaveAnswer } from '../../store/data'
+import { useData, type SaveAnswer } from '../../store/data'
+import { toast } from '../../store/ui'
 import { useAttachDrop } from '../attachments/attachDrop'
+import { routineCutText } from '../steps/stepsUi'
 import { AttachmentsSection } from '../attachments/AttachmentsSection'
 import { NoteEditor } from '../note/NoteEditor'
 import { anchorCandidates, blockName, categoryOptions, type Names } from './blockView'
+import { NewCategoryDialog, NewRoutineDialog, NewVariantDialog } from './NewThingDialogs'
+
+/** The last item of the lists „Kategoria”, „Wariant”, „Rutyna” (D463): it makes a new one in a window and chooses it. */
+const NEW_THING = '__new__'
+const NEW_OPTION = { value: NEW_THING, label: '+ Nowa…' }
 
 export function BlockEditor({
   block,
@@ -39,7 +54,10 @@ export function BlockEditor({
   inSeries,
   place,
   newBlock,
-  focusName
+  focusName,
+  forecastEnd,
+  onEscape,
+  day
 }: {
   block: PlanBlock
   plan: readonly PlanBlock[]
@@ -71,13 +89,25 @@ export function BlockEditor({
   newBlock?: { add: (name: string | null) => boolean | void }
   /** A block just made and saved at once (a click or a range on the axis of „Szablony”): the cursor starts in „Nazwa” too (D431). */
   focusName?: boolean
+  /** Where the forecast ends a block that follows another („po bloku”, D464): its „Koniec” says „ok. HH:MM”; left out – no forecast (templates, series). */
+  forecastEnd?: number | null
+  /** Esc (the second one, after a field's own): left out – `onClose`. A new block not saved yet throws itself away by it (D461), „Zamknij” saves it. */
+  onEscape?: () => void
+  /**
+   * The day of the block (a day's panel, also a new block's not saved yet): a day gone by has no „+ Nowa…” for a variant and a
+   * category. Left out – the day of `place`, else none (a template, a series: used from today on).
+   */
+  day?: string
 }) {
-  useEscapeLayer(true, onClose)
+  useEscapeLayer(true, onEscape ?? onClose)
   const owner = place ? ownerToAdd(block, place) : null
   const drop = useAttachDrop(owner)
   const rules = names.settings.categories[block.categoryId]
   const variants = (rules?.variants ?? []).filter((v) => !v.archived || v.id === block.variantId)
   const set = (patch: Partial<PlanBlock>): void | Promise<SaveAnswer> => (readOnly ? undefined : onChange(patch))
+  // D461: a new block saves itself at its first committed field – also one typed with the value it showed already (the start of a
+  // draft put by „+ Blok” at the very hour you type).
+  const commitSame = newBlock != null
   // A block of a series has its own hour (T707): nothing to follow.
   const anchors = inSeries
     ? []
@@ -86,6 +116,19 @@ export function BlockEditor({
         ...anchorCandidates(plan, block.id).map((b) => ({ value: b.id, label: `po: ${blockName(b, names)}${b.startMin != null ? ` (${logicalClock(b.startMin)})` : ''}` }))
       ]
   const routine = block.routine ? names.routines.find((r) => r.id === block.routine) : undefined
+  const [making, setMaking] = useState<'routine' | 'variant' | 'category' | null>(null)
+  const today = useData((s) => s.view?.today ?? '')
+  const blockDay = day ?? (place?.scope === 'day' ? place.date : null)
+  // A variant and a category are made „od dziś”: a day gone by would not have them (T1067).
+  const newDated = blockDay == null || (today !== '' && blockDay >= today)
+  const newOption = (dated: boolean) => (readOnly || (dated && !newDated) ? [] : [NEW_OPTION])
+  // D460: its steps with the routine, as one change of the block (the copy of the routine chosen before is replaced).
+  const pickRoutine = (r: Routine | undefined) => {
+    const was = block.routine ? names.routines.find((x) => x.id === block.routine) : null
+    const copy = r && !block.task && r.normal.length ? routineStepsCopy(block.steps, was, r) : null
+    const out = set({ routine: r ? r.id : null, ...(r && routineMinutes(r) > 0 ? { durationMin: routineMinutes(r) } : {}), ...(copy ? { steps: copy.steps } : {}) })
+    if (copy?.cut) void Promise.resolve(out).then((saved) => saved !== false && toast(routineCutText(copy.cut), 'info', 6000))
+  }
   return (
     <aside className="flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3" data-testid="block-editor" {...drop.bind}>
       <div className="flex items-center gap-2">
@@ -110,14 +153,20 @@ export function BlockEditor({
         />
       </Field>
       <Field label="Kategoria" labelWidth={92}>
-        <Choice value={block.categoryId} options={categoryOptions(names, block.categoryId)} onChange={(categoryId) => set({ categoryId, variantId: null })} aria-label="Kategoria" data-testid="block-category" />
+        <Choice
+          value={block.categoryId}
+          options={[...categoryOptions(names, block.categoryId), ...newOption(true)]}
+          onChange={(categoryId) => (categoryId === NEW_THING ? setMaking('category') : set({ categoryId, variantId: null }))}
+          aria-label="Kategoria"
+          data-testid="block-category"
+        />
       </Field>
       {variants.length > 0 && (
         <Field label="Wariant" labelWidth={92}>
           <Choice
             value={block.variantId ?? '-'}
-            options={[{ value: '-', label: 'bez wariantu' }, ...variants.map((v) => ({ value: v.id, label: v.name }))]}
-            onChange={(v) => set({ variantId: v === '-' ? null : v })}
+            options={[{ value: '-', label: 'bez wariantu' }, ...variants.map((v) => ({ value: v.id, label: v.name })), ...newOption(true)]}
+            onChange={(v) => (v === NEW_THING ? setMaking('variant') : set({ variantId: v === '-' ? null : v }))}
             aria-label="Wariant"
             data-testid="block-variant"
           />
@@ -137,12 +186,21 @@ export function BlockEditor({
           {block.anchor ? (
             <Choice value={block.anchor} options={anchors} onChange={(anchor) => set({ anchor })} aria-label="Po bloku" data-testid="block-anchor" />
           ) : (
-            <TimeField value={block.startMin} onCommit={(startMin) => set({ startMin })} aria-label="Godzina początku" errorPlacement="below" data-testid="block-start" />
+            <TimeField value={block.startMin} onCommit={(startMin) => set({ startMin })} commitSame={commitSame} aria-label="Godzina początku" errorPlacement="below" data-testid="block-start" />
           )}
         </div>
       </Field>
+      <Field label="Koniec" labelWidth={92}>
+        {block.anchor || block.startMin == null ? (
+          <span className="num text-[12.5px] text-muted" data-testid="block-end-forecast">
+            {forecastEndText(forecastEnd) ?? '—'}
+          </span>
+        ) : (
+          <EndField startMin={block.startMin} durationMin={block.durationMin} onCommit={(durationMin) => set({ durationMin })} commitSame={commitSame} aria-label="Godzina końca" errorPlacement="below" data-testid="block-end" />
+        )}
+      </Field>
       <Field label="Długość" labelWidth={92} hint={routine ? `Rutyna: ${durationLabel(routineMinutes(routine))} (zwykła), ${durationLabel(routineMinutes(routine, 'worse'))} (na gorsze dni).` : undefined}>
-        <DurationField value={block.durationMin} onCommit={(durationMin) => set({ durationMin })} aria-label="Długość" errorPlacement="below" data-testid="block-duration" />
+        <DurationField value={block.durationMin} onCommit={(durationMin) => set({ durationMin })} commitSame={commitSame} aria-label="Długość" errorPlacement="below" data-testid="block-duration" />
       </Field>
       <Field label="Rodzaj" labelWidth={92} hint={block.fixed ? 'Stały: zaczyna się o swojej godzinie.' : 'Elastyczny: idzie za końcem poprzedniego bloku, nie wcześniej niż o swojej godzinie.'}>
         <Segmented
@@ -169,38 +227,12 @@ export function BlockEditor({
           />
         </Field>
       )}
-      {rules?.cls === 'work' && !inSeries && (
-        <Field label="Oznaczenie" labelWidth={92} hint={block.tag ? 'Czeka na „Zacznij”.' : undefined}>
-          <div className="flex flex-col gap-1.5">
-            <Segmented
-              value={block.tag ?? 'none'}
-              options={[
-                { value: 'none', label: 'brak' },
-                { value: 'secondShift', label: 'druga zmiana' },
-                { value: 'weeklyAnalysis', label: 'analiza tygodniowa' }
-              ]}
-              onChange={(v) => set({ tag: v === 'none' ? null : v, waitUntilMin: v === 'weeklyAnalysis' ? (block.waitUntilMin ?? 15 * 60) : null })}
-              aria-label="Oznaczenie"
-              data-testid="block-tag"
-            />
-            {block.tag === 'weeklyAnalysis' && (
-              <label className="flex items-center gap-2 text-[12px] text-muted">
-                czeka do
-                <TimeField value={block.waitUntilMin} onCommit={(waitUntilMin) => set({ waitUntilMin })} aria-label="Czeka do" shellClassName="w-[90px]" />
-              </label>
-            )}
-          </div>
-        </Field>
-      )}
       {rules?.kind === 'routine' && (
         <Field label="Rutyna" labelWidth={92}>
           <Choice
             value={block.routine ?? '-'}
-            options={[{ value: '-', label: 'bez rutyny' }, ...names.routines.filter((r) => !r.archived || r.id === block.routine).map((r) => ({ value: r.id, label: r.name }))]}
-            onChange={(v) => {
-              const r = names.routines.find((x) => x.id === v)
-              set({ routine: r ? r.id : null, ...(r && routineMinutes(r) > 0 ? { durationMin: routineMinutes(r) } : {}) })
-            }}
+            options={[{ value: '-', label: 'bez rutyny' }, ...names.routines.filter((r) => !r.archived || r.id === block.routine).map((r) => ({ value: r.id, label: r.name })), ...newOption(false)]}
+            onChange={(v) => (v === NEW_THING ? setMaking('routine') : pickRoutine(names.routines.find((x) => x.id === v)))}
             aria-label="Rutyna"
             data-testid="block-routine"
           />
@@ -217,6 +249,38 @@ export function BlockEditor({
       {place && <AttachmentsSection block={block} place={place} owner={owner} dropOver={drop.over} />}
       {block.moves > 0 && <p className="text-[12px] text-muted">Przeniesiony {block.moves}×.</p>}
       {actions && <div className="flex flex-wrap gap-2 border-t border-line pt-3">{actions}</div>}
+      {/* D463: the windows of „+ Nowa…” (over the page: `fixed`, in the middle of the screen). */}
+      {making === 'routine' && (
+        <NewRoutineDialog
+          onClose={() => setMaking(null)}
+          onCreated={(r) => {
+            setMaking(null)
+            pickRoutine(r)
+          }}
+        />
+      )}
+      {making === 'variant' && (
+        <NewVariantDialog
+          categoryId={block.categoryId}
+          costs={rules?.costs ?? { head: 1, emotions: 1, senses: 1 }}
+          has={(variantId) => (names.settings.categories[block.categoryId]?.variants ?? []).some((v) => v.id === variantId)}
+          onClose={() => setMaking(null)}
+          onCreated={(variantId) => {
+            setMaking(null)
+            void set({ variantId })
+          }}
+        />
+      )}
+      {making === 'category' && (
+        <NewCategoryDialog
+          has={(categoryId) => names.settings.categories[categoryId] != null}
+          onClose={() => setMaking(null)}
+          onCreated={(categoryId) => {
+            setMaking(null)
+            void set({ categoryId, variantId: null })
+          }}
+        />
+      )}
     </aside>
   )
 }

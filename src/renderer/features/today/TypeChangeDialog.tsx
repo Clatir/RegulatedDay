@@ -83,12 +83,12 @@ export function TypeChangeDialog({ model, names, isToday, onlyAdd, initialTo, on
 }
 
 function DuringDay({ model, names, to, onlyAdd, onClose }: { model: DayModel; names: Names; to: DayTypeId; onlyAdd: boolean; onClose: () => void }) {
-  const { rd, templates } = useData()
+  const { rd } = useData()
   const date = model.date
   const raw = model.data.dayFile
   const inp: TypeChangeInput = useMemo(
-    () => ({ ctx: model.ctx, state: model.state, energyNow: model.energy.known ? model.energy.now : null, to, settings: settingsOn(rd.settings, date, model.ctx.now), templates, withAdd: onlyAdd }),
-    [model, to, rd.settings, date, templates, onlyAdd]
+    () => ({ ctx: model.ctx, state: model.state, energyNow: model.energy.known ? model.energy.now : null, to, settings: settingsOn(rd.settings, date, model.ctx.now), withAdd: onlyAdd }),
+    [model, to, rd.settings, date, onlyAdd]
   )
   const plan = useMemo(() => planTypeChange(inp), [inp])
   const [park, setPark] = useState<string[]>(plan.park.map((b) => b.id))

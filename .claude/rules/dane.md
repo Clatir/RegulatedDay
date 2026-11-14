@@ -118,6 +118,8 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
 - Plik uszkodzony a chwilowo nieczytelny: `UnknownRecordError.broken` (z `cachedJson`); `hub.caseDays` zwraca dni z uszkodzonym
   plikiem w `broken` (poza `files`, jak nieczytelne) – kroki zadania kończą na takim dniu minionym drogę bloku (T792).
   `SendState.afterSend` – dopiero po odpowiedzi `edit` procesu głównego (kolejka przyjęła wpis); odmowa przed kolejką = nic.
+  `edit` z `create` na pliku, który już jest: odmowa całej edycji – chyba że ma tę samą treść (`sameContentAs`, np. następne zadanie
+  powtarzanego z id wyliczonym, zrobione na obu komputerach – T1041); wtedy kolejka kładzie go bez zmiany.
 - Kroki (D440, reguły `kroki.md`): lista w bloku / rekordzie, odhaczenia w `stepsDone` (plik dnia, rekord zadania) – w
   `recordEdit` liść po liściu (`LEAF_MAPS`, T788), kopia konfliktowa łączy je sumą; starsza wersja zachowuje oba pola.
 - Sprawy (T750–T758, reguły `sprawy.md`): te same pliki `requests/`, bez migracji w miejscu; `hub.quickAdd` (szybki zapis),

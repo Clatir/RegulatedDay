@@ -16,6 +16,7 @@ import { changeSeriesListSteps } from '../../store/steps'
 import { StepsEditor } from '../steps/StepsEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { SeriesFields } from './SeriesFields'
+import { removeTarget, useDeleteResolver } from '../../lib/deleteKey'
 import { changeSeries, endSeries, removeSeries } from './seriesActions'
 import { draftOf, draftPatch, draftProblem, isEmptyPatch, occurrenceRuleText, seriesBlockOf, seriesBlockPatch, type SeriesDraft } from './seriesForm'
 
@@ -52,6 +53,8 @@ export function SeriesEditor({ series, today, onClosed }: { series: Series; toda
     run(async () => {
       if ((await removeSeries({ seriesId: series.id }, 'all', `Usunięta seria: ${name}`)) === true) onClosed()
     })
+  // D462: Del on the selected series (its row of the list, clicked) removes it, as „Usuń serię” does.
+  useDeleteResolver('series', (id) => (id === series.id ? removeTarget(name, remove) : null))
   return (
     <div className="flex min-h-0 flex-1" data-testid="series-editor">
       <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
@@ -108,6 +111,7 @@ export function SeriesEditor({ series, today, onClosed }: { series: Series; toda
         steps={
           <StepsEditor
             steps={block.steps}
+            lengthMin={block.durationMin}
             ticks={false}
             readOnly={ended}
             // The op goes to each version's own list in the write's turn; „Cofnij” only for a removal (D443: an empty text – none).

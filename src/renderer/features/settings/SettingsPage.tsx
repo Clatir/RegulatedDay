@@ -151,7 +151,7 @@ export function SettingsPage() {
           hint="Pokazuje je tylko komputer prowadzący, każde raz. Wszystko widać też w pasku. Przez „Nie przeszkadzać” i nad pełnym ekranem przejdą tylko wtedy, gdy dodasz Regulated Day do powiadomień priorytetowych Windows."
         >
           <div className="flex flex-col gap-1.5">
-            <Toggle checked={prefs.notices.start5} onChange={(v) => void setMachinePrefs({ notices: { ...prefs.notices, start5: v } })} label="5 min przed sesją, drugą zmianą, analizą, zajęciami i dojazdem" data-testid="pref-notice-start5" />
+            <Toggle checked={prefs.notices.start5} onChange={(v) => void setMachinePrefs({ notices: { ...prefs.notices, start5: v } })} label="5 min przed sesją, zajęciami i dojazdem" data-testid="pref-notice-start5" />
             <Toggle checked={prefs.notices.hardEnd} onChange={(v) => void setMachinePrefs({ notices: { ...prefs.notices, hardEnd: v } })} label="twardy koniec projektów" data-testid="pref-notice-hardend" />
             <Toggle checked={prefs.notices.reserve} onChange={(v) => void setMachinePrefs({ notices: { ...prefs.notices, reserve: v } })} label="energia na poziomie rezerwy" data-testid="pref-notice-reserve" />
           </div>

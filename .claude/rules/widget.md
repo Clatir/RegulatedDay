@@ -26,8 +26,8 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   chwila zdarzenia, które otworzyło bieg, minus jego minuta; blok stały – koniec okna); z niego `warnOf` (kroki, puls,
   dźwięk), a „Dalej?” silnika (z minut, od hh:mm:30) pasek chowa do `now >= endsAt`. Godziny słowami (podpowiedź „do
   HH:MM”, „W tle: … do HH:MM”) – z minuty `plannedEnd`, jak w 1.0.1. Dzień liczy dalej w minutach (T412).
-- Nazwy bloków: `blockName` (`shared/blockName.ts`) – blok `origin: 'session'` to „Sesja <nazwa>” (D338; druga zmiana i ręczny blok
-  kategorii – „Sesja tradingowa”); przekazuj mu cały `PlanBlock` albo `origin` i `sourceId` (pasek, powiadomienia, CSV).
+- Nazwy bloków: `blockName` (`shared/blockName.ts`) – blok `origin: 'session'` to „Sesja <nazwa>” (D338; blok kategorii z szablonu i ręczny
+  – „Sesja tradingowa”); przekazuj mu cały `PlanBlock` albo `origin` i `sourceId` (pasek, powiadomienia, CSV).
   Blok po id (także zdjęty z planu po starcie – D336, albo zaczęty poza planem): `nameById` / `namedById` z danymi
   `namingOf` (`engine/context.ts`) – wpis planu; zaczęty: kategoria, wariant, nazwa, zadanie, rutyna i prośby ze startu
   (`planned`, D431, T1024 – każdą drogą startu przez `startPlanned` z planem; brak pola w starszym starcie: z migawki),

@@ -8,6 +8,7 @@ import { activityOf } from '@shared/engine/activity'
 import { computeDay } from '@shared/engine/day'
 import { timerAction } from '@shared/engine/timer'
 import { engineView } from '@shared/engineView'
+import { planBlockFrom } from '@shared/model/plan'
 import { block, hhmm, Scenario } from './dsl'
 
 const DATE = '2026-10-28' // a Wednesday
@@ -135,7 +136,7 @@ describe('czas do wyjaśnienia po projekcie', () => {
   })
 })
 
-describe('czas do wyjaśnienia – zapisy w środku minuty, poprawki z rytuału, druga zmiana', () => {
+describe('czas do wyjaśnienia – zapisy w środku minuty, poprawki z rytuału, wieczorny blok pracy', () => {
   it('koniec progiem bezczynności w środku minuty (20:05:17): czas od powrotu, nie od końca bloku', () => {
     const s = new Scenario({ date: DATE, plan: [block({ id: 'p', cat: 'projekty', at: '19:00', min: 60 })] }).using('07:00', '23:59')
     s.start('p', '19:00')
@@ -195,15 +196,16 @@ describe('czas do wyjaśnienia – zapisy w środku minuty, poprawki z rytuału,
     expect(after.energy.series.head[at(after.day, '18:30')]).toBe(before.energy.series.head[at(before.day, '18:30')])
   })
 
-  it('po drugiej zmianie odpowiedź „praca” liczy się jak druga zmiana poza swoim czasem – nie przesuwa końca pracy', () => {
-    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 's2', cat: 'inne', at: '20:00', min: 60, tag: 'secondShift' })] }).using('07:00', '23:59')
+  it('D467: po wieczornym bloku z dawnym oznaczeniem drugiej zmiany odpowiedź „praca” jest pracą – przesuwa koniec pracy', () => {
+    const s2 = planBlockFrom({ id: 's2', categoryId: 'inne', startMin: 20 * 60, durationMin: 60, tag: 'secondShift', origin: 'template' })!
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), s2] }).using('07:00', '23:59')
     s.ran('a', '08:00', '09:00').workEnd('09:00')
     s.start('s2', '20:00')
     silentEnd(s, 's2', '21:00', 'twoQuestions', '22:00')
     s.gap('21:40', '22:30')
     answer(s, s.state('22:35').explains[0]!.id, 'work', '22:40')
     const st = s.state('22:45')
-    expect(hhmm(st, st.workEnd)).toBe('09:00')
+    expect(hhmm(st, st.workEnd)).toBe('21:40')
   })
 
   it('długi czas do wyjaśnienia nie spowalnia liczenia dnia (sprawdzanie twardego końca przeskakuje jego minuty)', () => {

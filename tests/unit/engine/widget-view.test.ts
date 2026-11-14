@@ -11,7 +11,8 @@ import { timerAction, type TimerAction } from '@shared/engine/timer'
 import { fewerAt } from '@shared/engine/modes'
 import { engineView, HARD_END_TEXT, warnDeadlines } from '@shared/engineView'
 import { stepDelay, toneOnChange } from '../../../src/main/widget'
-import { block, Scenario } from './dsl'
+import { planBlockFrom } from '@shared/model/plan'
+import { block, lm, Scenario } from './dsl'
 
 const DATE = '2026-10-28'
 const care = { waterOn: true, waterEveryMin: 45, breakAfterMin: 90, solitudeAfterMin: 30 }
@@ -387,11 +388,12 @@ describe('linie chwil dnia w pasku (A1-12)', () => {
 })
 
 describe('linie chwil dnia po przeglądzie 0.21.0', () => {
-  it('druga zmiana po „Koniec pracy” zostaje bez pytania – żadnego „Odwołaj”', () => {
-    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'ds', cat: 'inne', at: '20:00', min: 60, fixed: true, tag: 'secondShift' })] }).observe('07:00', null)
+  it('D467: wieczorny stały blok pracy z dawnym oznaczeniem drugiej zmiany po „Koniec pracy” zostaje jak każdy – z „Odwołaj”', () => {
+    const ds = planBlockFrom({ id: 'ds', categoryId: 'inne', startMin: lm('20:00'), durationMin: 60, fixed: true, tag: 'secondShift', origin: 'template' })!
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), ds] }).observe('07:00', null)
     click(s, '08:00', { a: 'start', block: 'a' })
     click(s, '09:00', { a: 'workEnd' })
-    expect(view(s, '09:05').lines.filter((l) => l.id.startsWith('fixedLeft:'))).toEqual([])
+    expect(view(s, '09:05').lines.filter((l) => l.id.startsWith('fixedLeft:')).map((l) => [l.id, l.actions.map((a) => a.id)])).toEqual([['fixedLeft:ds', ['cancel']]])
   })
 
   it('„nie przedłużono” liczy 30 min od końca z przedłużeniem', () => {
@@ -459,8 +461,8 @@ describe('„Koniec pracy” bez biegnącego bloku pracy (G1, spec „Granica i 
     expect(after.lines.some((l) => l.id === 'paused:a')).toBe(false)
   })
 
-  it('po samoczynnym końcu bloku, gdy w planie przed drugą zmianą zostaje elastyczna praca (E6a.2, E8f.2 cz. 1)', () => {
-    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '16:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '17:30', min: 60 }), block({ id: 'ds', cat: 'inne', at: '20:00', min: 60, fixed: true, tag: 'secondShift' })] }).observe('07:00', null)
+  it('po samoczynnym końcu bloku, gdy w planie zostaje elastyczna praca (E6a.2, E8f.2 cz. 1)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '16:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '17:30', min: 60 })] }).observe('07:00', null)
     click(s, '16:00', { a: 'start', block: 'a' })
     s.write([{ id: 'auto-a-two', k: 'block.end', block: 'a', at: s.at('17:00'), done: null, rule: 'twoQuestions', autoRule: 'twoQuestions' }], s.at('17:05'))
     expect(view(s, '17:10').buttons.workEnd).toBe(true)

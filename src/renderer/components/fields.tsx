@@ -8,6 +8,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { clock, durationLabel, logicalClock, parseDate, parseDuration, parseInteger, parseLogicalTime, plDate, type Parsed } from '@shared/format'
 import { parseField } from '@shared/model/fields'
+import { nextDayNote, parseEnd } from '@shared/blockEnd'
 import { toast } from '../store/ui'
 import { useEscapeLayer } from '../lib/escape'
 import { cx } from './ui'
@@ -31,6 +32,11 @@ interface CommitFieldProps<T> {
   onReject?: (message: string) => void
   /** Every text accepted – also one equal to the value – and an edit cancelled (Esc): what the field holds now. */
   onAccept?: (value: T) => void
+  /**
+   * A text typed and accepted is committed even when it equals the value: the field of a new block not saved yet (D461 – its first
+   * committed field saves it, also with the value the field showed already).
+   */
+  commitSame?: boolean
   'aria-label'?: string
   'data-testid'?: string
 }
@@ -77,7 +83,7 @@ export function FieldShell({ error, errorId, className, placement = 'float', tes
 
 // The refused value's message goes away with Esc – wherever the focus is (the layer is the newest, so it is first). Only the message
 // and the frame: the value stays refused (A6-14: `onAccept` is not called, „Zapisz” of an answer still refuses).
-export function CommitField<T>({ value, onCommit, parse, format, placeholder, className, shellClassName, errorPlacement, readOnly, check, onReject, onAccept, ...rest }: CommitFieldProps<T>) {
+export function CommitField<T>({ value, onCommit, parse, format, placeholder, className, shellClassName, errorPlacement, readOnly, check, onReject, onAccept, commitSame, ...rest }: CommitFieldProps<T>) {
   const [draft, setDraft] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const errorId = useId()
@@ -105,7 +111,7 @@ export function CommitField<T>({ value, onCommit, parse, format, placeholder, cl
     }
     setError(null)
     onAccept?.(r.value)
-    if (r.changed) onCommit(r.value)
+    if (r.changed || commitSame) onCommit(r.value)
   }
   return (
     <FieldShell error={error} errorId={errorId} className={shellClassName} placement={errorPlacement} testId={rest['data-testid']}>
@@ -165,6 +171,27 @@ export function IntegerField({ min, max, ...p }: Omit<CommitFieldProps<number>, 
 export function TimeField({ range, ...p }: Omit<CommitFieldProps<number>, 'parse' | 'format'> & { range?: readonly [number, number] }) {
   const parse = range ? (t: string) => parseField({ kind: 'time', range, offAllowed: false }, t) : parseLogicalTime
   return <CommitField {...p} parse={parse} format={logicalClock} placeholder={p.placeholder ?? 'np. 7:05'} />
+}
+
+/**
+ * The end of a block (D464): the hour it ends at, from its `startMin` and `durationMin`. Typing it commits the new length
+ * (`onCommit(durationMin)` – the start stays); an end at or before the start is the next day's, said beside the field
+ * („+1 dzień”, `data-testid` + „-day”). Refused (under 5 min, over 24 h) with the message under the field as every field.
+ */
+export function EndField({ startMin, durationMin, onCommit, ...p }: Omit<CommitFieldProps<number>, 'parse' | 'format' | 'value' | 'onCommit'> & { startMin: number; durationMin: number; onCommit: (durationMin: number) => void }) {
+  const end = startMin + durationMin
+  const note = nextDayNote(startMin, end)
+  const id = p['data-testid']
+  return (
+    <span className="flex items-center gap-2">
+      <CommitField {...p} value={end} onCommit={(e) => onCommit(e - startMin)} parse={(t) => parseEnd(t, startMin)} format={logicalClock} placeholder={p.placeholder ?? 'np. 9:30'} />
+      {note && (
+        <span className="shrink-0 text-[12px] text-muted" data-testid={id ? `${id}-day` : undefined}>
+          {note}
+        </span>
+      )}
+    </span>
+  )
 }
 
 /** A wall time of another zone (a session's hours in New York time): 00:00–23:59, no „+1”. */

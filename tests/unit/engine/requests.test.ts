@@ -210,7 +210,7 @@ describe('prośby w dniu', () => {
     expect(act(s, '10:00', { a: 'requestNow', request: 'r1', person: null, urgent: true, estimateMin: 0 }).ok).toBe(false)
     expect(act(s, '10:00', { a: 'requestNow', request: 'r1', person: null, urgent: true, estimateMin: 100_000 }).ok).toBe(false)
     expect(act(s, '10:00', { a: 'requestNow', request: 'r1', person: null, urgent: true })).toMatchObject({ ok: true, events: [expect.objectContaining({ estimateMin: 15 })] })
-    const w = new Scenario({ date: DATE, plan: [block({ id: 'x', cat: 'analiza', at: '10:00', min: 60, tag: 'weeklyAnalysis' })] }).observe('07:00', null)
+    const w = new Scenario({ date: DATE, plan: [block({ id: 'x', cat: 'sesja', at: '10:00', min: 60, fixed: true })] }).observe('07:00', null)
     const info = w.state('10:00').blocks.find((b) => b.id === 'x')!
     expect(info.waits).toBe(true)
     act(w, '10:00', { a: 'start', block: 'x' })

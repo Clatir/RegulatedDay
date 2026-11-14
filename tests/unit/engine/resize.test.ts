@@ -1,8 +1,8 @@
 /**
  * D365: the end of a running block dragged on the axis of „Dziś” – the bottom edge changes its planned length, never
  * before now rounded up to 5 min; up to the boundary at once, past it the cost of „Przedłuż” (the same cost and the same
- * event) and nothing changes without „Potwierdź”. A session, a lecture, a class of a „zjazd”, the second shift (and a
- * block after another one or begun outside the plan) have no handle – „Przedłuż” on the bar stays theirs.
+ * event) and nothing changes without „Potwierdź”. A session, a lecture, a class of a „zjazd” (and a block after another
+ * one or begun outside the plan) have no handle – „Przedłuż” on the bar stays theirs.
  */
 import { describe, expect, it } from 'vitest'
 import { activityOf } from '@shared/engine/activity'
@@ -13,6 +13,7 @@ import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
 import { variantTriggers } from '@shared/engine/variants'
 import { sessionsOf } from '@shared/engine/week'
 import { isKnown, parseEvent, RULES_VERSION } from '@shared/model/events'
+import { planBlockFrom } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { block, hhmm, lm, Scenario } from './dsl'
 
@@ -360,21 +361,21 @@ describe('D365 – krócej: planowany koniec wcześniej, nie przed teraz', () =>
   })
 })
 
-describe('D365 – bez uchwytu: sesja, wykład, zjazd, druga zmiana (dalej „Przedłuż” w pasku)', () => {
-  it('trwające sesja, wykład, zajęcia zjazdu, druga zmiana, blok po innym i blok spoza planu nie mają dolnej krawędzi', () => {
+describe('D365 – bez uchwytu: sesja, wykład, zjazd (dalej „Przedłuż” w pasku)', () => {
+  it('trwające sesja, wykład, zajęcia zjazdu, blok po innym i blok spoza planu nie mają dolnej krawędzi; blok z dawnym oznaczeniem drugiej zmiany ma (D467)', () => {
     const s = day([
       block({ id: 'a', cat: 'inne', at: '09:00', min: 60 }),
       block({ id: 'p', cat: 'inne', after: 'a', min: 30 }),
       block({ id: 'ny', cat: 'sesja', at: '15:30', min: 120, fixed: true, origin: 'session' }),
       block({ id: 'wy', cat: 'wyklad', at: '15:30', min: 90, fixed: true, origin: 'lecture' }),
       block({ id: 'zj', cat: 'zajecia-zdalne', at: '15:30', min: 90, fixed: true, origin: 'zjazd' }),
-      block({ id: 'dz', cat: 'inne', at: '15:30', min: 60, tag: 'secondShift' })
+      planBlockFrom({ id: 'dz', categoryId: 'inne', startMin: lm('15:30'), durationMin: 60, tag: 'secondShift', origin: 'template' })!
     ])
     for (const id of ['a', 'p', 'ny', 'wy', 'zj', 'dz']) s.start(id, '15:30')
     s.start('x', '15:30', { cat: 'inne', min: 30 })
     const t = s.at('15:40')
-    expect([...edges(s, t).keys()]).toEqual(['a'])
-    for (const id of ['p', 'ny', 'wy', 'zj', 'dz', 'x']) {
+    expect([...edges(s, t).keys()]).toEqual(['a', 'dz'])
+    for (const id of ['p', 'ny', 'wy', 'zj', 'x']) {
       expect(preview(s, t, id, '18:00')).toBeNull()
       expect(click(s, t, { a: 'resize', block: id, to: s.at('18:00') }).ok).toBe(false)
     }

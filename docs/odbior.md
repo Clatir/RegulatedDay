@@ -173,6 +173,14 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] SNT1.7 Przeniesienie przy zmianie z drugiego komputera (Tylko Ty – OneDrive)
    - [ ] SNT1.8 Nazwy bloków elastycznych w miesiącu (1.18.1)
    - [ ] SNT1.9 Nazwa bloku – pole „Nazwa” (panel i okienko „Tygodnia”, Enter dodaje), kafelek z kategorią przy godzinach, szablon i seria, zjazdy i zadania w „Tygodniu” (1.19.0)
+   - [ ] U2 Nowy blok zapisuje się sam – bez „Dodaj”, „Dodano blok · Cofnij”, przypadkowe kliknięcie osi nic nie tworzy (1.20.0)
+   - [ ] U7 Szkic na osi „Dziś” przed zapisem (1.20.0)
+   - [ ] U5 Pole „Koniec” w panelu bloku, okienku „Tygodnia”, „Postaw na osi”, wykładach (1.20.0)
+   - [ ] U1 Kroki z rutyny i czas kroku (1.20.0)
+   - [ ] U6 Powtarzanie zadań w Sprawach (1.20.0)
+   - [ ] U3 Del z potwierdzeniem (1.20.0)
+   - [ ] U4 „+ Nowa…” w listach Rutyna, Wariant, Kategoria (1.20.0)
+   - [ ] U8 Bez „Oznaczenia” i drugiej zmiany – wieczorny blok liczy się według kategorii (1.20.0)
    - [ ] SNT2.1 Ustawienia → „Kalendarze”: dodawanie do 12, nazwa, kolor, usuwanie z „Cofnij”
    - [ ] SNT2.2 Kategoria i wydarzenie całodniowe w kalendarzu (pole „Kalendarz”)
    - [ ] SNT2.3 Żetony nad widokami, „ukryte: N”, zapamiętane na tym komputerze
@@ -2399,6 +2407,59 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** w „Dziś” kliknij „+ Blok” i od razu pisz „Analiza rynku” (bez klikania w pole), wybierz kategorię „Analiza”, „Dodaj”. Kliknij „+ Blok” jeszcze raz, wpisz nazwę i wciśnij Enter. W „Tygodniu” kliknij puste miejsce, wpisz nazwę w okienku i wciśnij Enter; drugi raz wpisz nazwę i kliknij „Więcej”. Obejrzyj dzień z zajęciami z PDF zjazdów i blok zadania w „Tygodniu”, „Agendzie” i miesiącu. Zacznij blok dodany przez „+ Blok” z nazwą i usuń go w trakcie. Otwórz panel bloku bez nazwy i zobacz podpowiedź w polu. Zmień nazwę istniejącego bloku, potem wyczyść ją. Zobacz blok z nazwą w „Tygodniu”, „3 dniach”, „Agendzie”, w miesiącu i na pasku pulpitu, gdy trwa. W „Szablonach” kliknij pustą oś (kursor stoi w „Nazwa”), nadaj nazwę blokowi szablonu i zobacz dzień z tego szablonu; zmień tam nazwę w jednym dniu. Nadaj nazwę serii („Szablony” → seria) i zmień ją w jednym wystąpieniu w „Dziś”. Wpisz nazwę w Ctrl K.
 - **Oczekiwany efekt:** pole „Nazwa” jest na samej górze panelu, nad „Kategorią”, i na górze okienka „Nowy blok” w „Tygodniu”; przy każdym nowym bloku kursor stoi w nim, a Enter dodaje blok jak „Dodaj”; w istniejącym bloku Enter tylko zatwierdza nazwę; „Więcej” przenosi nazwę do panelu dnia; blok usunięty w trakcie zostaje na osi „poza planem” ze swoją nazwą i kategorią przy godzinach, na pasku pulpitu też z nazwą; puste pole – blok nazywa się jak dotąd, podpowiedź w polu mówi jak; kafelek bloku z nazwą ma nazwę w miejscu kategorii, a przy godzinach małym drukiem kategorię („09:00–09:45 · Analiza”); blok bez nazwy wygląda jak przedtem; „Agenda” – nazwa i kategoria raz; miesiąc i pasek pulpitu – sama nazwa; dzień z szablonu ma nazwę bloku szablonu, a zmiana w jednym dniu zmienia tylko ten dzień; zmiana nazwy wystąpienia serii pyta „Tylko to · To i następne · Cała seria”; Ctrl K znajduje blok po nazwie; zajęcia z PDF mają swoją nazwę także w „Tygodniu”, „3 dniach”, „Agendzie” i miesiącu, a blok zadania – tytuł zadania jak w „Dziś” (D430, D431).
 - **Nie przechodzi, gdy:** pola nie ma albo stoi pod „Kategorią” (w panelu albo w okienku „Tygodnia”); po „+ Blok” albo w okienku trzeba kliknąć w pole, żeby pisać; Enter w nazwie nowego bloku go nie dodaje albo w istniejącym bloku robi coś więcej niż zatwierdzenie; „Więcej” gubi nazwę; blok zadania w „Tygodniu” nazywa się kategorią; same spacje zapisują pustą nazwę zamiast nazwy jak dotąd; kafelek z nazwą nie pokazuje kategorii przy godzinach albo pokazuje ją dwa razy; blok bez nazwy wygląda inaczej niż przedtem; zmiana nazwy w jednym dniu zmienia szablon albo inne dni; wystąpienie serii nie pyta o zakres; pasek pulpitu albo miesiąc pokazują kategorię zamiast nazwy.
+
+---
+
+### U – uwagi po 1.19.0 (1.20.0, D460–D467)
+
+#### U2 i U7 Nowy blok zapisuje się sam, szkic na osi (D461, D466)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/block-autosave.spec.ts`, `tests/web/block-end.test.ts`.
+- **Jak sprawdzić:** w „Dziś” przeciągnij po pustej osi 10:00–11:30, wpisz nazwę i kliknij w tytuł dnia. Kliknij raz w pustą oś i od razu w tytuł dnia. Kliknij „+ Blok”, wpisz początek 20:00, Enter, a potem „Cofnij” w dymku. W „Tygodniu” przeciągnij przez dwa dni i kliknij obok okienka.
+- **Oczekiwany efekt:** po puszczeniu myszy na osi stoi kafelek z przerywaną ramką i godzinami; blok zapisuje się bez „Dodaj”, z dymkiem „Dodano blok · Cofnij”; samo kliknięcie osi i kliknięcie obok nie zostawia bloku; „+ Blok” zapisuje się przy pierwszym polu; „Cofnij” zdejmuje blok; w „Tygodniu” dwa bloki i „Dodano 2 bloki · Cofnij”.
+- **Nie przechodzi, gdy:** przycisk „Dodaj” dalej jest; wpisane pole ginie po zapisie; przypadkowe kliknięcie osi tworzy blok; kafelka szkicu nie widać albo nie idzie za polami panelu.
+
+#### U5 Pole „Koniec” (D464)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/block-end.test.ts`, `tests/web/block-end.test.ts`, `tests/unit/engine/case-block-length.test.ts`.
+- **Jak sprawdzić:** w panelu bloku 22:00 wpisz koniec 9:00; w bloku 9:00 wpisz koniec 10:30, potem długość 45 min; obejrzyj blok „po bloku”; w Sprawach przy „Postaw na osi” wpisz koniec.
+- **Oczekiwany efekt:** 22:00 → 9:00 daje 11 h i „+1 dzień”; koniec 10:30 daje 1 h 30 min, długość 45 min daje koniec 9:45; blok „po bloku” pokazuje „ok. HH:MM”; w Sprawach początek zostaje, zmienia się długość bloku.
+- **Nie przechodzi, gdy:** zmiana końca przesuwa początek; koniec przed początkiem jest odrzucany zamiast następnej doby; w którymś formularzu z godziną początku nie ma „Końca”.
+
+#### U1 Kroki z rutyny i czas kroku (D460)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/steps-time.test.ts`, `tests/web/steps-time.test.ts`.
+- **Jak sprawdzić:** w bloku kategorii rutyn wybierz rutynę z kilkoma krokami; dodaj krok z czasem i bez; ustaw kroki dłuższe niż blok; zmień rutynę w definicji i obejrzyj zaplanowany blok.
+- **Oczekiwany efekt:** kroki rutyny są w „Krokach” z nazwami i czasami; napis „kroki: X min z Y”; ostrzeżenie, gdy kroki trwają dłużej niż blok, długość bloku się nie zmienia; zmiana definicji rutyny nie rusza zaplanowanego bloku.
+- **Nie przechodzi, gdy:** kroki się nie kopiują; czas kroku ginie po ponownym otwarciu; długość bloku zmienia się od kroków.
+
+#### U6 Powtarzanie zadań (D465)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/cases-repeat.test.ts`, `tests/web/cases-repeat.test.ts`, `tests/fs/cases-repeat.test.ts`.
+- **Jak sprawdzić:** zadanie z „Wykonać” na dziś, „Powtarzaj” co tydzień w poniedziałek i czwartek, „Zapisz powtarzanie”; odhacz je; „Cofnij”; odhacz znowu. Drugie zadanie bez dat – codziennie, koniec po 2 razach.
+- **Oczekiwany efekt:** po odhaczeniu dymek „Następne: …” i nowe zadanie z najbliższym dniem zasady, kroki nieodhaczone; „Cofnij” zdejmuje oba skutki; zadanie „po 2 razach” po drugim odhaczeniu nie ma następnego.
+- **Nie przechodzi, gdy:** następne nie powstaje albo powstaje dwa razy (także na dwóch komputerach); data następnego jest w przeszłości.
+
+#### U3 Del z potwierdzeniem (D462)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/delete-key.test.ts`, `tests/e2e/delete-key.spec.ts`.
+- **Jak sprawdzić:** kliknij blok w „Dziś” i wciśnij Del; Esc; znowu Del i Enter, potem „Cofnij”. To samo na sprawie, kroku, załączniku, rutynie, wydarzeniu całodniowym. Del w polu nazwy. Del na bloku serii. Klik w blok w „Tygodniu”, potem Del.
+- **Oczekiwany efekt:** okno „Usunąć „…”?” na środku, Enter usuwa, Esc nic nie robi; po usunięciu „Cofnij”; blok z szablonu – „Odwołać „…” na ten dzień?”; blok serii – pytanie o zakres zamiast drugiego okna; w polu tekstowym Del kasuje tylko tekst; klik w blok „Tygodnia” otwiera „Dziś” z zaznaczonym blokiem.
+- **Nie przechodzi, gdy:** Del usuwa bez pytania; Del w polu usuwa element; po usunięciu nie ma „Cofnij”.
+
+#### U4 „+ Nowa…” w listach bloku (D463)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/new-thing.test.ts`, `tests/e2e/delete-key.spec.ts` (rutyna).
+- **Jak sprawdzić:** w panelu bloku rutyn wybierz „+ Nowa…” w „Rutynie”, wpisz nazwę i dwa kroki, zapisz; w „Kategorii” „+ Nowa…”; w „Wariancie” (kategoria z wariantami) „+ Nowa…”; raz zamknij okno Esc.
+- **Oczekiwany efekt:** okno na środku w stylu aplikacji; po zapisie nowa rutyna, kategoria, wariant jest od razu wybrana w bloku (rutyna z krokami i długością) i widać ją w „Rutynach” albo Ustawieniach; Esc nic nie zmienia.
+- **Nie przechodzi, gdy:** okno nie jest na środku; po zapisie trzeba wybrać rzecz ręcznie; Esc coś zapisuje.
+
+#### U8 Bez oznaczeń i drugiej zmiany (D467)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/no-marks-d467.test.ts`, `tests/e2e/wizard.spec.ts`.
+- **Jak sprawdzić:** otwórz panel bloku pracy; przejdź kreator (podgląd); obejrzyj dzień z wieczornym blokiem dawnej drugiej zmiany z Twojego szablonu.
+- **Oczekiwany efekt:** brak pola „Oznaczenie” i kroku „Druga zmiana”; wieczorny blok zachowuje się jak każdy blok swojej kategorii (sesja czeka na „Zacznij”, liczy się do pracy i granicy); stare dni i szablony otwierają się bez błędu, także na drugim komputerze ze starszą wersją.
+- **Nie przechodzi, gdy:** pole albo krok dalej są; plik ze starym oznaczeniem daje błąd; starsza wersja na drugim komputerze psuje dzień.
 
 ---
 

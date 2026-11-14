@@ -4,6 +4,8 @@
  * that says where a sprawa stands („zaplanowane …”, „wróciło z Dziś …”, „porzucone”), and the texts that name a sprawa (a task by its title, a request by its person).
  */
 import { deadlineCases, doText, type DueBadge } from '@shared/engine/caseDates'
+import { repeatText } from '@shared/engine/caseRepeat'
+import { SERIES_MARK } from '@shared/seriesText'
 import { priorityLine, priorityWithoutPlace } from '@shared/engine/casePriority'
 import { caseCompare, caseName, todayHeader, todayMinutes, weekEndOf, type CaseItem } from '@shared/engine/cases'
 import { countLabel, logicalClock, plDate } from '@shared/format'
@@ -40,10 +42,12 @@ export const caseTitle = (r: RequestRecord, rd: Pick<RdFile, 'people'>): string 
 /**
  * Where a sprawa stands, in words (D383, D384, D402): the block it was put into („zaplanowane 12.11.2026 10:00” – the hour
  * as long as the day's file is read), the „Dziś” it came back from at 04:00, the date of doing that does not decide the list
- * yet („wykonać pn 23.11” – D451, with `today`), what was done or let go. Empty – nothing to say.
+ * yet („wykonać pn 23.11” – D451, with `today`), what was done or let go, the rule of a task that repeats („↻ codziennie” –
+ * D465, not done). Empty – nothing to say.
  */
 export function statusParts(x: CaseItem, today?: string): string[] {
   const out: string[] = []
+  if (x.record.repeat && x.list !== 'done') out.push(`${SERIES_MARK} ${repeatText(x.record.repeat, today ?? '')}`)
   if (x.scheduled) out.push(`zaplanowane ${plDate(x.scheduled.day)}${x.scheduled.startMin != null ? ` ${logicalClock(x.scheduled.startMin)}` : ''}`)
   if (x.rolledFrom) out.push(`wróciło z „Dziś” ${plDate(x.rolledFrom)}`)
   const doing = today ? doText(x.record, today) : null

@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { powerNeedOf } from '@shared/engine/power'
+import { planBlockFrom } from '@shared/model/plan'
 import { PowerKeeper } from '../../src/main/power'
 import { block, Scenario } from './engine/dsl'
 
@@ -36,6 +37,17 @@ describe('kto trzyma blokadę usypiania', () => {
     const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).start('a', '08:00')
     const now = s.at('08:30')
     expect(powerNeedOf(s.contextAt(now), s.stateAt(now), { computer: 'pca', leads: true, lastPresence: now, lastInput: now, now })).toEqual({ system: false, display: false, reason: null })
+  })
+
+  it('D467: blok z dawnym oznaczeniem drugiej zmiany trzyma komputer tylko według kategorii', () => {
+    const old = planBlockFrom({ id: 'ds', categoryId: 'inne', startMin: 20 * 60, durationMin: 60, fixed: true, tag: 'secondShift', origin: 'template' })!
+    const s = new Scenario({ date: DATE, plan: [old] }).start('ds', '20:00')
+    const now = s.at('20:30')
+    const who = { computer: 'pca', leads: true, lastPresence: now, lastInput: now, now }
+    expect(powerNeedOf(s.contextAt(now), s.stateAt(now), who)).toEqual({ system: false, display: false, reason: null })
+    // A category of its own with „nie usypiaj komputera” (not a session): held, said as such.
+    const own = new Scenario({ date: DATE, plan: [old], settings: { categories: { inne: { noSleep: true } } } }).start('ds', '20:00')
+    expect(powerNeedOf(own.contextAt(now), own.stateAt(now), who)).toMatchObject({ system: true, reason: 'Regulated Day: blok bez usypiania' })
   })
 })
 

@@ -138,6 +138,24 @@ z wydaniem, wersja – następna wolna przy scaleniu.
 | **Łącznie** | Parzystość z Google Calendar, Notion i Sunsama | – | – | **17** | **65–97 h** |
 | *Odłożone* | FBL1 – własne bazy jak w Notion (D364) | – | – | 1 | *10–15 h* |
 
+## Uwagi po 1.19.0 – jedno wydanie 1.20.0 (D460–D467)
+
+Jedna gałąź `claude/1.20.0-uwagi` (drzewo `.claude/worktrees/w120`), jeden PR, jeden run CI na PR i jeden na `main`
+(wypchnięcie bez PR nie uruchamia CI). Bez pauz do wydania (polecenie użytkownika 14.11). Numery: D460–D469,
+T1030–T1069. Wykonawcy równolegle w drzewach `w120a` (U1 + U6), `w120b` (U2 + U7 + U5), `w120c` (U8), potem
+`w120d` (U3 + U4) na scalonej gałęzi.
+
+| # | Zadanie | Rodzaj | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
+| --- | --- | --- | --- | --- | --- |
+| U1 | Kroki z rutyny, czas kroku (D460) | format danych | `wykonawca-opus` · xhigh | 3–4 h | wybór rutyny kopiuje kroki z czasem; krok z czasem i bez; starsza wersja czyta plik |
+| U6 | Powtarzanie zadań w Sprawach (D465) | folder danych | `wykonawca-opus` · xhigh | 3–4 h | odhaczenie tworzy następne według zasady serii; dwa komputery bez duplikatu |
+| U2 | Autozapis nowego bloku (D461) | ekrany | `wykonawca-sonnet` · high | 2 h | bez „Dodaj” w „Dziś” i „Tygodniu”; Esc odrzuca nietknięty szkic |
+| U7 | Szkic na osi „Dziś” (D466) | ekrany | z U2 | 1 h | kafelek szkicu od puszczenia myszy do zapisu |
+| U5 | Pole „Koniec” (D464) | ekrany | z U2 | 1,5–2 h | koniec ↔ długość we wszystkich formularzach z godziną początku |
+| U8 | Bez oznaczeń i drugiej zmiany (D467) | silnik dnia | `wykonawca-opus` · xhigh | 4–6 h | brak `tag` w logice, kreatorze i pytaniach; stare pliki czytają się |
+| U3 | Del z potwierdzeniem (D462) | ekrany | `wykonawca-sonnet` · high | 2–3 h | zaznaczenie i Del na każdym usuwalnym elemencie |
+| U4 | „+ Nowa…” w listach wyboru (D463) | ekrany | `wykonawca-sonnet` · high | 2–3 h | okno na środku dla rutyny, wariantu, kategorii |
+
 ## Gotowe, gdy
 
 - **F–H:** każda pozycja z `docs/archiwum/vm/przyczyny.md` ma poprawkę w wydaniu albo poprawiony opis odbioru, każda poprawka

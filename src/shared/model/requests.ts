@@ -9,9 +9,11 @@
  * HKU2 (D409, D451): „Termin” (`dueDate`) and „Wykonać” (`doDate`) of every sprawa, and the day of the last move by hand
  * (`listSetDay`) – the date of doing puts it on „Dziś” on its day, counted like the lists (never written at 04:00).
  * HKU3 (D450): the quarter of the Eisenhower matrix (`priority`) of every sprawa – none by default.
+ * D465: a task may repeat (`repeat`, `taskRepeat.ts`) – ticked off, the next one is made at once (`engine/caseRepeat.ts`).
  */
 import { isIsoDate } from '../time/zone'
 import { doneSetFrom, stepsFrom, type Step } from './steps'
+import { taskRepeatFrom, type TaskRepeat } from './taskRepeat'
 
 export const REQUEST_SCHEMA = 1
 
@@ -94,7 +96,12 @@ export interface RequestRecord {
    * copy of the list, and a tick in the block ticks it here too (`engine/steps.ts`). A version that does not know them keeps them.
    */
   steps: Step[]
+  /** „Powtarzaj” of a task (D465); null – it does not repeat (a request never does). */
+  repeat: TaskRepeat | null
 }
+
+/** The week a weekly repeat without its own counts from when the file lost it: the task's date, else a fixed Monday (the same on every computer). */
+const REPEAT_ANCHOR = '2026-01-05'
 
 /** The estimate's range (a field of whole minutes, like a block's length). */
 export const ESTIMATE_RANGE = [1, 8 * 60] as const
@@ -136,7 +143,8 @@ export function requestFrom(v: unknown): RequestRecord | null {
     doDate: dateFrom(v.doDate),
     listSetDay: dateFrom(v.listSetDay),
     priority: priorityFrom(v.priority),
-    steps: stepsFrom(v.steps, doneSetFrom(v.stepsDone))
+    steps: stepsFrom(v.steps, doneSetFrom(v.stepsDone)),
+    repeat: v.kind === 'task' ? taskRepeatFrom(v.repeat, dateFrom(v.doDate) ?? dateFrom(v.dueDate) ?? REPEAT_ANCHOR) : null
   }
 }
 

@@ -1,7 +1,7 @@
 /**
  * A data folder whose today is an ordinary day with the blocks given and no night's quiet in it (the bar's lines are
  * not there then – D346): the day's wake 04:00, tomorrow's 12:00 and the ordinary day's bedtime 03:59 of the night after.
- * No sessions and no second shift (the ordinary template without blocks): nothing else stands between the blocks. A test
+ * No sessions (the ordinary template has no blocks): nothing else stands between the blocks. A test
  * that needs the bar's lines runs at any hour but the end of the logical day (it says how much of it it needs).
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -17,7 +17,7 @@ export function seedAwake(dir: string, blocks: ReadonlyArray<Record<string, unkn
   const today = logicalToday()
   const settings = { ...DEFAULT_SETTINGS, dayTypes: { ...DEFAULT_SETTINGS.dayTypes, zwykly: { ...DEFAULT_SETTINGS.dayTypes.zwykly, bedtimeMin: 27 * 60 + 59 } } }
   const records = firstComputerRecords(
-    { settings, general: DEFAULT_GENERAL, categories: rdFrom(undefined).categories, people: [], templates: defaultTemplates({ on: false, startMin: 20 * 60, durationMin: 60 }), lectures: [], days: {} },
+    { settings, general: DEFAULT_GENERAL, categories: rdFrom(undefined).categories, people: [], templates: defaultTemplates(), lectures: [], days: {} },
     Date.now(),
     'seed'
   )

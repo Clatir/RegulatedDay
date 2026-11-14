@@ -7,6 +7,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { allDayDraft } from '@shared/model/allDay'
+import { Dialog } from '@renderer/components/Dialog'
 import { AllDayCard } from '@renderer/features/allday/AllDayCard'
 import { installEscape } from '@renderer/lib/escape'
 import { useData } from '@renderer/store/data'
@@ -41,5 +42,29 @@ describe('karta wydarzenia bez widoku danych', () => {
     const warned = errors.mock.calls.map((c) => String(c[0])).filter((t) => /getSnapshot|Maximum update depth/.test(t))
     errors.mockRestore()
     expect(warned).toEqual([])
+  })
+})
+
+describe('karta i okno dialogowe nad nią', () => {
+  it('naciśnięcie na tle okna (pytanie Del) nie zamyka karty; gdzie indziej – zamyka (przegląd 2)', async () => {
+    const onClose = vi.fn()
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    const card = (asking: boolean) =>
+      createElement(
+        'div',
+        null,
+        createElement(AllDayCard, { event: allDayDraft('k1', '2026-11-18', '2026-11-18'), base: null, today: '2026-11-18', place: { left: 0, top: 0 }, brightness: 1, onClose, onRemoved: () => undefined, onFree: () => undefined }),
+        asking ? createElement(Dialog, { title: 'Usunąć?', onClose: () => undefined, 'data-testid': 'ask', children: null }) : null,
+        createElement('div', { 'data-testid': 'elsewhere' })
+      )
+    await act(async () => root!.render(card(true)))
+    const backdrop = host.querySelector('[data-testid="ask"]')!.parentElement!
+    act(() => void backdrop.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true })))
+    expect(onClose).not.toHaveBeenCalled()
+    await act(async () => root!.render(card(false)))
+    act(() => void host!.querySelector('[data-testid="elsewhere"]')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true })))
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

@@ -43,7 +43,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
   const sprawaOf = new Map(names.requests.map((r) => [r.id, r]))
   const yesterday = addDays(model.date, -1)
   const nowIdx = now != null ? Math.round((now - g.start) / 60_000) : null
-  // D365: a block running now (of its own hour – not a session, a lecture, a class of a „zjazd”, the second shift) has its bottom edge.
+  // D365: a block running now (of its own hour – not a session, a lecture nor a class of a „zjazd”) has its bottom edge.
   const edges = now != null ? runningEdges(state, now) : null
   const items: TimelineItem[] = []
   const placed = new Map(state.forecast.map((p) => [p.block.id, p]))
@@ -88,7 +88,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
       ...(counter ? { steps: counter } : {}),
       ...(edge ? { resize: 'end' as const } : {}),
       // D305: a block not begun nor gone, with its own hour (`ownHourBlock`: not after another block, not a session, a lecture,
-      // a class imported from the PDF of „zjazdy” – D357, nor the second shift – D192), not passed – the one rule of
+      // nor a class imported from the PDF of „zjazdy” – D357), not passed – the one rule of
       // `movableBlock`, also for the columns of „Tydzień” and „3 dni” (D417).
       movable: movableBlock(info, f, to, nowIdx)
     })

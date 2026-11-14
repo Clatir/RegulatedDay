@@ -159,9 +159,9 @@ export const DEFAULT_CATEGORIES: readonly Category[] = [
   })
 ]
 
-/** The category id the session layer and the second shift use. */
+/** The category id the session layer uses. */
 export const SESSION_CATEGORY = 'sesja'
-/** The weekly analysis of the Saturday template. */
+/** The analysis of the default Saturday template. */
 export const ANALYSIS_CATEGORY = 'analiza'
 export const LECTURE_CATEGORY = 'wyklad'
 export const REMOTE_CLASS_CATEGORY = 'zajecia-zdalne'
