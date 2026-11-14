@@ -181,20 +181,23 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] U3 Del z potwierdzeniem (1.20.0)
    - [ ] U4 „+ Nowa…” w listach Rutyna, Wariant, Kategoria (1.20.0)
    - [ ] U8 Bez „Oznaczenia” i drugiej zmiany – wieczorny blok liczy się według kategorii (1.20.0)
+   - [ ] 1.22-B.4 „Wstałeś później?” po przesunięciu rutyny (1.22.0) – rano, zanim odhaczysz kroki rutyny
    - [ ] KR1 Kroki rutyny w bloku z szablonu i serii, wybór rutyny bez kopii, wersja na gorsze dni (także od razu z paska), zmiana rutyny, jedno odhaczenie z kartą rutyny i paskiem (1.22.0)
    - [ ] KR2 Ostatni krok kończy blok – „Skończono · Cofnij” w oknie i na pasku (1.22.0)
    - [ ] KR3 Ukończony blok na osi „Dziś” z ✓ (1.22.0)
-   - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
-   - [ ] 1.22-B.2 Posiłek zaczyna się sam, gdy odejdziesz od komputera (1.22.0)
-   - [ ] 1.22-B.3 Dojazd sam, koniec o planowanym końcu (1.22.0)
-   - [ ] 1.22-B.4 „Wstałeś później?” po przesunięciu rutyny (1.22.0)
-   - [ ] R1 Blok upuszczony na inny staje obok niego (1.23.0)
-   - [ ] R2 Wyjście z grupy i „Cofnij” bez przesunięcia (1.23.0)
-   - [ ] R3 Limit bloków naraz (1.23.0)
-   - [ ] R4 „Tydzień” i „3 dni” – bloki równoległe (1.23.0)
-   - [ ] R5 Nakładające się bloki obok siebie (1.23.0)
+   - [ ] I5 Klik w puste miejsce osi „Dziś” nic nie tworzy – nowy blok przeciągnięciem (1.21.0)
+   - [ ] R1 Blok upuszczony na prawą część innego staje obok niego (1.23.0)
+   - [ ] R2 Wyjście z grupy, „Cofnij” bez przesunięcia, „Początek” wyjmuje z grupy (1.23.0)
+   - [ ] R3 Limit „Najwięcej bloków naraz” (1.23.0)
+   - [ ] R5 Nakładające się bloki obok siebie w „Dziś” i „Szablonach” (1.23.0)
+   - [ ] R4 Bloki równoległe w „Tygodniu” i „3 dniach” (1.23.0)
    - [ ] 1.23-B.1 Start grupy i pierwszy plan (1.23.0)
    - [ ] 1.23-B.2 Grupa a reszta dnia (1.23.0)
+   - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
+   - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
+   - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
+   - [ ] 1.22-B.2 Posiłek zaczyna się sam, gdy odejdziesz od komputera (1.22.0)
+   - [ ] 1.22-B.3 Dojazd sam, koniec o planowanym końcu (1.22.0) – w dzień z dojazdem
    - [ ] SNT2.1 Ustawienia → „Kalendarze”: dodawanie do 12, nazwa, kolor, usuwanie z „Cofnij”
    - [ ] SNT2.2 Kategoria i wydarzenie całodniowe w kalendarzu (pole „Kalendarz”)
    - [ ] SNT2.3 Żetony nad widokami, „ukryte: N”, zapamiętane na tym komputerze
@@ -212,6 +215,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E6c.4 Odczuwany koszt
    - [ ] E8k.3 Godzina w rytuale: błędny tekst i odcinek „nie odpoczynek”
    - [ ] E6c.5 Rano: niezamknięte dni
+   - [ ] I1 „Cofnij” zamknięcia dnia rano – dymek „Zamknięto <dzień>: … · Cofnij” (1.21.0)
    - [ ] E5b.4 Prośba przez 04:00 (tylko gdy się zdarzy)
    - [ ] E6a.2 Czas po bloku pracy, który skończył się sam
    - [ ] E6a.3 Czas po projekcie, który skończył się sam – powiadomienie o twardym końcu
@@ -224,6 +228,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E3.7 Ustawienia – budżet od jutra
    - [ ] E3.13 Przeciąganie bloków na osi
    - [ ] E3.14 Ustawienia i Próba w menu bocznym
+   - [ ] I4 Pokój przy wyłączonej grze – „Otwórz Ustawienia”; statystyki – „zamrożone” (1.21.0)
    - [ ] E4b.12 Pasek przeciągnięty za uchwyt – po poprawce (27.10 nie przeszedł)
 6. Laptop i noc (gdy masz laptopa pod ręką):
    - [ ] E6d.3 Kopia – cały folder do nowego

@@ -48,3 +48,21 @@ uszkodzony plik minionego dnia z `movedTo` na dziś – zmiana kroków zadania i
 rekordu (`persist` EPERM/ENOSPC) daje w oknie „nic nie zapisano” (`afterSend`) – możliwy duplikat; `taskDay` przez `caseDays`
 (log na każdy dzień drogi); reguła `check-code` „każde `BrowserWindow` ma `keepOnPage`”. **Rejestr T po scaleniu z SNT4:** obowiązuje
 podział T400–T499 (T840), nasz T400–T599 (T794) usunięty; T786–T793 i T795–T799 na końcu `docs/decyzje-techniczne.md`.
+
+## Ciąg L – stan (przeniesione z `docs/postep.md` 14.11.2026)
+Numery: D404, T700–T719 (L1), T750–T799 (L2, L3 – uzgodnione z sesją HKU1 12.11); kolejne D – osobno od HKU1 (ma D405, D406). „Przed etapem” pominięte na
+polecenie użytkownika (pytania zadane w D380–D386, D401–D403).
+**Dalej (13.11):** L3 po przeglądzie K (D380 zostaje). L2 wydane (1.14.0), SNT5 wydane (1.16.0); D442–D444 (noc 12/13.11, D441) potwierdzone 13.11.
+Numery: D440–D449, T786–T799 (T772–T779 – ostatnie poprawki L2). SNT4 = sesja regulatedday-ab (D410–D439, T800–T849), HKU = regulatedday-d7 (D450–D459, T850–T899).
+
+| Zadanie | Wersja | PR | Stan | Czas faktyczny (szacunek) |
+| --- | --- | --- | --- | --- |
+| L1 OPS1 serie powtarzalne | 1.12.0 | #77 | scalone 12.11, wydanie 1.12.0 opublikowane 12.11; wpis i uwagi – `docs/archiwum/postep-ciag-L.md` | ok. 5 h (5–8 h) |
+| L2 OPS2 „Sprawy” | 1.14.0 | #79 | scalone 12.11, wydanie 1.14.0 opublikowane 13.11 (run na `main` padł raz na chwiejnym teście wydajności `note-markdown`, ponowiony); wpis i uwagi – `docs/archiwum/postep-ciag-L.md` | ok. 4 h (wykonawcy; plan 8–12 h) |
+| SNT5 podzadania (kroki) | 1.16.0 | #81 | scalone 13.11, wydanie 1.16.0 opublikowane 13.11; D442–D444 potwierdzone 13.11; wpis i uwagi – `docs/archiwum/postep-ciag-L.md` | ok. 4 h (wykonawcy; plan 3–4,5 h) |
+
+## Ciąg L – pozycja kolejki (przeniesione z `docs/postep.md` 14.11.2026)
+5. Ciąg L (blok 2, D380) – w toku od 12.11 w osobnej sesji (drzewo `.claude/worktrees/wl1`, bez pauz między pozycjami –
+   polecenie użytkownika 12.11): L1 OPS1 serie (1.12.0, scalone) → L2 OPS2 „Sprawy” (1.14.0, wydane 13.11) → SNT5 kroki
+   (1.16.0, gotowe na gałęzi) → L3 OPS3 bufory (po K). Równolegle sesja HKU1 (blok 4, numery D405+, T720–T749, wydaje 1.13.0); do `main` scala naraz
+   jedna – HKU1 pierwsze, L2 po nim. FBL1 odłożone (D364).

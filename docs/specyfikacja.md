@@ -804,9 +804,11 @@ Wszystko w aplikacji jest blokiem. Nie ma osobnej listy zadań, więc aplikacja 
 **Rodzaje szczególne**
 
 - **Rutyna** to blok z sekwencją kroków i czasem każdego kroku, w dwóch wersjach: zwykłej i na gorsze dni. Wersję
-  wybierasz jednym kliknięciem przy odhaczaniu kroków. Poranna rutyna idzie za pobudką dnia (Model dnia). Sprzed
-  pierwszego użycia komputera liczy się według planu, a gdy pierwsze użycie wypada po progu późnego wstania, według
-  Twojej odpowiedzi na propozycję przesunięcia, bez odpowiedzi według planu. Aplikacja nigdy nie zmienia kolejności
+  wybierasz jednym kliknięciem przy odhaczaniu kroków. Poranna rutyna idzie za pobudką dnia (Model dnia). Jako blok
+  bez komputera zaczyna się sama o swojej godzinie, gdy od 10 min nie ma wejścia na żadnym komputerze (D475, D487),
+  także przed pierwszym użyciem komputera (D488), i liczy się tam, gdzie stoi na osi. Gdy jest pierwszym blokiem dnia
+  (zwykle), o późnym wstaniu mówisz, przesuwając ją: co najmniej 20 min później niż w planie, rano przed 12:00, pada
+  „Wstałeś później?”, a resztę poranka przesuwa dopiero „Tak” (D488, D489, „Późne wstanie” w Modelu dnia). Aplikacja nigdy nie zmienia kolejności
   kroków, najwyżej przesuwa całą rutynę w czasie. Kroki odhaczasz po powrocie do komputera, wszystkie naraz albo
   pojedynczo. Wybór rutyny w panelu bloku tylko ją wskazuje (z długością) – kroków nie kopiuje; blok, który ma własne
   kroki (także kopię z 1.20–1.21), zostaje z nimi (D480, „Podzadania” w specyfikacji rozszerzeń). Blok z rutyną bez własnych kroków (także z
@@ -1167,7 +1169,8 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   bezczynnością poniżej 5 s jest wejściem (wejście to to, co Windows liczy jako aktywność: mysz, klawiatura, dotyk,
   pióro, także program symulujący ruch myszy; pad do gier nie), a próbki z przerwami do 15 s łączą się w jeden ciąg. Nie
   liczy się obsługa samej aplikacji: czas, gdy okno główne albo panel ikony ma fokus, i 10 s wokół kliknięcia w pasek
-  pulpitu albo w ikonę. Użycie komputera decyduje o pierwszym bloku pracy, późnym wstaniu i blokach „do potwierdzenia”,
+  pulpitu albo w ikonę. Użycie komputera decyduje o pierwszym bloku pracy i blokach „do potwierdzenia” (o późnym
+  wstaniu – przesunięcie pierwszego bloku dnia, D488),
   a o nadgodzinach i końcu bloku bez zobaczonego „Dalej?” decyduje wejście (próg bezczynności, D231); samo nigdy nie
   odbiera regeneracji, poza czasem do wyjaśnienia po projekcie (do pierwszej przerwy od 30 min, Model dnia, D250, D281;
   po bloku pracy wstępnie odpoczynek, a przy zamrożeniu bez odpowiedzi odpoczynek, D262, D265). Pierwsze użycie
@@ -1176,8 +1179,8 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   04:00) i końcu bloku poprzedniego dnia trwającego przez 04:00. Nocne kodowanie po 04:00 nie jest więc pierwszym
   użyciem, a noc bez takiej przerwy liczy pierwsze użycie od godziny 1 h przed pobudką. Gdy po pierwszym użyciu zacznie
   się jeszcze taka przerwa (np. krótkie użycie o 05:10, potem sen do 09:00), pierwsze użycie przesuwa się na później, a
-  późne wstanie i części „do potwierdzenia” liczą się raz od nowa; propozycja późnego wstania, która jeszcze się nie
-  pokazała, pokazuje się wtedy normalnie, a już pokazana się nie powtarza. Tej samej definicji używa okno korekty. Każdy
+  części „do potwierdzenia” liczą się raz od nowa (późne wstanie nie zależy od pierwszego użycia, D488). Tej samej
+  definicji używa okno korekty. Każdy
   komputer dopisuje do logu dnia przerwy w wejściu od 2 min (każde wejście, także w aplikacji, z ostatnim wejściem poza
   aplikacją przed przerwą) i przerwy w użyciu od 2 min (według definicji wyżej): przerwę zapisuje, gdy dojdzie do 2 min,
   a zamyka przy następnym wejściu albo użyciu, a przerwę przez 04:00 dzieli między oba dni. Dopisuje też odcinki
@@ -2405,7 +2408,7 @@ Wersja 1.0 to etapy E0–E8, z czego E8 to stabilizacja i odbiór. Po okresie ka
 | D136 | Komunikat o twardym końcu pokazuje się raz także przy wyłączonym module projektów (kiedy: D143) |
 | D137 | Pobudka dla pojedynczego dnia w planie i kalendarzu (rutyna według D154) |
 | D138 | Zmiana jutrzejszego dnia wieczorem od razu przelicza dzisiejszą porę snu, twardy koniec i pulę; minuty już sklasyfikowane bez zmian (granice przeliczenia według T143) |
-| D139 | Poranna rutyna sprzed pierwszego użycia komputera liczy się według planu; wersja przy odhaczaniu (przy późnym wstaniu według T155) |
+| D139 | Poranna rutyna sprzed pierwszego użycia komputera liczy się według planu (zastąpione przez D488: zaczyna się sama także przed pierwszym użyciem i liczy się tam, gdzie stoi na osi); wersja przy odhaczaniu (przy późnym wstaniu według T155) |
 | D140 | Automatyczna instalacja aktualizacji bez „Cofnij”, tylko informacja (tak samo koniec „Odcinam się” o 04:00 i zamrożenie dnia, T146) |
 | D141 | Bez dodatkowej próby na prawdziwych danych po E4; plan bez zmian |
 | D142 | Używanie komputera nie wyklucza regeneracji (np. gra): czas wolny po końcu pracy jest regeneracją, poza blokami pracy, projektów, życia i opieki oraz prośbami; w rytuale można oznaczyć odcinek, który nie był odpoczynkiem (od pierwszego końca pracy według D144; wyjątek: czas do wyjaśnienia, D166 i D172) |
@@ -2465,7 +2468,7 @@ Wersja 1.0 to etapy E0–E8, z czego E8 to stabilizacja i odbiór. Po okresie ka
 | D196 | Czas bez bloku w przerwie w ciągu dnia trwający co najmniej 30 min jest odpoczynkiem, jak wieczorem, także przy komputerze (do minimum najwyżej jedna trzecia według D208) |
 | D197 | Czas przy komputerze poza blokami i ostatnie użycie po porze snu tylko w „Stronie B tygodnia”; rytuał bez liczby godzin |
 | D198 | „Odcinam się” niczego nie parkuje: biegnący blok pauzuje, po „Wracam” plan biegnie dalej (sesja kończy się według D206) |
-| D199 | Późne wstanie zaczyna się od pytania „Wstałeś później? · Tak · Nie”; „Nie” zamyka propozycję bez zmian |
+| D199 | Późne wstanie zaczyna się od pytania „Wstałeś później? · Tak · Nie”; „Nie” zamyka propozycję bez zmian (wyzwalacz – pierwsze użycie komputera po końcu rutyny – zastąpiony przez D488: pytanie pada po przesunięciu pierwszego bloku dnia) |
 | D200 | Nuta za trafne szacowanie także za bloki życia i opieki, nadal najwyżej 3 dziennie (bez preferencji, przyjęta propozycja; tylko bloki z realnym startem i końcem według T312) (blok z odliczoną nieobecnością według D269 i D272) |
 | D201 | Przy trzecim przeniesieniu bez pytania; licznik przeniesień widoczny przy bloku (bez preferencji, przyjęta propozycja; licznik bez zerowania według T312) |
 | D202 | Sesja w tle za innym blokiem (np. grą albo nauką) nic nie kosztuje; liczy się tylko blok na pierwszym planie |
@@ -2594,7 +2597,7 @@ Wersja 1.0 to etapy E0–E8, z czego E8 to stabilizacja i odbiór. Po okresie ka
 | T38 | Start przed OneDrive: ponawianie co 30 s; pusty folder wymaga potwierdzenia |
 | T39 | CHANGELOG jako „Co nowego”, lista „do sprawdzenia” w postep.md, sprawdzenie publikacji po scaleniu |
 | T40 | Czcionki dołączone lokalnie, nazwy tokenów CSS jak w FI, zmienne RD\_\* w testach |
-| T41 | Przypomnienie o planie porannym 30 min po pobudce, najpóźniej 20 min przed pierwszym blokiem stałym pracy, nigdy w sesji; granica zatwierdza się sama przy starcie pierwszego bloku pracy; późne wstanie = pierwsze użycie później niż godzinę po pobudce bez planu; pierwszy check-in dnia zawsze bezwzględny (późne wstanie według T92 i D199) |
+| T41 | Przypomnienie o planie porannym 30 min po pobudce, najpóźniej 20 min przed pierwszym blokiem stałym pracy, nigdy w sesji; granica zatwierdza się sama przy starcie pierwszego bloku pracy; późne wstanie = pierwsze użycie później niż godzinę po pobudce bez planu (zastąpione przez D488, T1144); pierwszy check-in dnia zawsze bezwzględny (późne wstanie według T92 i D199) |
 | T42 | Bloki stałe w tle z przyciskami „Zakończ teraz” i „Przedłuż”; koniec sesji kończy tryb sesji i uruchamia bloki zakotwiczone (warunki według T224, T259, T271 i T280; od D194 bloki zakotwiczone zawsze czekają) |
 | T43 | Przerwania: obie prośby natychmiastowe pauzują blok elastyczny, który potem wznawia się sam (po granicy według T271); blok stały przechodzi w tło z pełnym kosztem i wraca (sesja bez kosztu według D202); z dwóch bloków stałych na pierwszym planie droższy; w sesji „osoba: ?” (pierwszy plan według T85) |
 | T44 | Definicje statusów dni; dzień kreatora bez danych; mianownik naklejki = dni dotrzymane i liczone jako niedotrzymane; bloki stałe bez użycia komputera „do potwierdzenia” (zawężone przez T155 i T213); księgowanie nadgodzin zatrzymują bezczynność, uśpienie i blokada (dzień kreatora poza grą według T116) |
@@ -2645,9 +2648,9 @@ Wersja 1.0 to etapy E0–E8, z czego E8 to stabilizacja i odbiór. Po okresie ka
 | T89 | Animacje tylko w widocznym oknie głównym z fokusem, wstrzymane na baterii; bez ruchu ostrzeżenia 5 i 0 min zmieniają kolor |
 | T90 | Kalendarz świąt: reguły i lista wyjątków w wydaniach, FX według CME; nieplanowane zamknięcia przez odwołanie sesji |
 | T91 | Plan budowy: obecność, prowadzący, szkielet terminów i znak życia w E1; E4 podzielony na E4a i E4b; próba widgetu w E0 |
-| T92 | Późne wstanie: pierwsze użycie ponad 30 min po planowanym końcu rutyny; propozycja czeka na koniec sesji (najpierw pytanie według D199) |
+| T92 | Późne wstanie: pierwsze użycie ponad 30 min po planowanym końcu rutyny (zastąpione przez D488, T1144: przesunięcie pierwszego bloku dnia o co najmniej 20 min); propozycja czeka na koniec sesji (najpierw pytanie według D199) |
 | T93 | Zamknięcie aplikacji kończy księgowanie; przy starcie pytanie z odpowiedzią „skończył się przy wyłączeniu” |
-| T94 | Obecność przy komputerze (każde wejście, także w aplikacji) wybiera prowadzącego; użycie komputera (wejście poza aplikacją) decyduje o pierwszym bloku pracy, późnym wstaniu, blokach „do potwierdzenia” i nadgodzinach (o nadgodzinach i końcu bloku bez odpowiedzi decyduje wejście według T345) |
+| T94 | Obecność przy komputerze (każde wejście, także w aplikacji) wybiera prowadzącego; użycie komputera (wejście poza aplikacją) decyduje o pierwszym bloku pracy, późnym wstaniu (zastąpione przez D488, T1144), blokach „do potwierdzenia” i nadgodzinach (o nadgodzinach i końcu bloku bez odpowiedzi decyduje wejście według T345) |
 | T95 | Komputer „nieustalony” po starcie, wybudzeniu, blokadzie ponad 10 min i powrocie sieci: do 60 s bez nadchodzących zmian, najdłużej 3 min, bez zadań prowadzącego (po starcie i wybudzeniu według T124) |
 | T96 | „Nowsza obecność” według lokalnego czasu zobaczenia zmiany pliku; stan „zamknięty” to natychmiastowe przejęcie; ostrzeżenie o zegarze przy różnicy ponad 2 min (pierwszy odczyt według T123) |
 | T97 | Wykrywanie braku synchronizacji (ponad 15 min bez zmian obecności innych przy używaniu albo brak OneDrive): ostrzeżenie i oddanie zadań prowadzącego (zastąpione przez T122) |
@@ -2708,7 +2711,7 @@ Wersja 1.0 to etapy E0–E8, z czego E8 to stabilizacja i odbiór. Po okresie ka
 | T152 | „Koniec pracy” parkuje pozostałe elastyczne bloki pracy i zakotwiczone, z „Cofnij”, i pyta o bloki stałe; „Dalej” nie zaczyna bloku stałego ani pracy po potwierdzonym końcu; pytanie „Koniec pracy?” po ostatnim bloku pracy (według D165, T215 i T261; „Dalej” po granicy według T271; kliknięcie będące tylko przerwą bez parkowania według D216, bloki z opcją „po końcu pracy jak projekt” zostają według T307) |
 | T153 | Przełączenie na dzień regeneracyjny: biegnący blok liczy się jak zostawiony; minimum nie niższe niż przed przełączeniem |
 | T154 | Przesunięte maksimum = koniec bloku plus bufor granicy |
-| T155 | Pierwsze użycie komputera w dniu nie wcześniej niż 1 h przed pobudką i poza blokiem poprzedniego dnia; rutyna przy późnym wstaniu według odpowiedzi na propozycję; jedna definicja części „do potwierdzenia” (pierwsze użycie według T213) |
+| T155 | Pierwsze użycie komputera w dniu nie wcześniej niż 1 h przed pobudką i poza blokiem poprzedniego dnia; rutyna przy późnym wstaniu według odpowiedzi na propozycję (zastąpione przez D488–D490: rutyna zaczyna się sama i stoi tam, gdzie ją przesunąłeś, a „Tak” przesuwa resztę poranka); jedna definicja części „do potwierdzenia” (pierwsze użycie według T213) |
 | T156 | Bloki zakotwiczone do drugiej zmiany mają jej oznaczenie; wcześniejszy start drugiej zmiany z jednym pytaniem „Przesunąć drugą zmianę na teraz?” (zastąpione przez „Przesuń na teraz” przy koszcie, T271) |
 | T157 | Skrócona sesja kończy się o wcześniejszej z godzin; przed polskim świętem pytanie o wykłady |
 | T158 | Komputer nagrywający bez dźwięków widgetu w czasie wykładu |
@@ -2818,7 +2821,7 @@ Wersja 1.0 to etapy E0–E8, z czego E8 to stabilizacja i odbiór. Po okresie ka
 | T262 | Blok stały niezaczęty albo w całości niepotwierdzony do planowanego końca liczy się od tej chwili jak odwołany, a potwierdzenie go przywraca; przy zamrożeniu z bloku potwierdzonego w części liczy się tylko potwierdzona część |
 | T263 | Blokada usypiania przy regeneracji przed blokiem stałym i w „Odcinam się” bez blokady wygaszania ekranu (poza nagrywającym według D184); blokada sesji także na komputerach z obecnością w czasie bloku |
 | T264 | Komputer ze starszymi regułami przejmuje prowadzenie też po oddaniu przez nowszy; pytanie prowadzącego niewidziane 2 min cicho na komputerze z obecnością; dźwięk tylko przy obecności w 2 min; bez OneDrive prowadzenie według lokalnej chwili ostatniej widzianej zmiany, po 10 min z notatką (dźwięk i prowadzący bez OneDrive według T274) (kopia według obecności, T333) |
-| T265 | Prośba w trybie ciszy kończy się najpóźniej po 60 min, o porze snu albo z końcem trybu; sygnały „mniej pytań” w 60 min łączone; propozycja późnego wstania po przesunięciu pierwszego użycia, jeśli się nie pokazała; bloki zaparkowane przez „Odcinam się” w propozycji granicy (parkowanie usunięte przez D198) (prośby w każdym trybie według T335 i T339) |
+| T265 | Prośba w trybie ciszy kończy się najpóźniej po 60 min, o porze snu albo z końcem trybu; sygnały „mniej pytań” w 60 min łączone; propozycja późnego wstania po przesunięciu pierwszego użycia, jeśli się nie pokazała (nieaktualne od D488 – późne wstanie nie zależy od pierwszego użycia); bloki zaparkowane przez „Odcinam się” w propozycji granicy (parkowanie usunięte przez D198) (prośby w każdym trybie według T335 i T339) |
 | T266 | Instalacja: plik zadania ze stanem, manifest plików z SHA-256, „zainstalowano X” = DisplayVersion i zgodność z manifestem; strażnik usuwa się sam, odkłada przy sesji i zajęciach, naprawia, przestaje po 2 próbach; deinstalator usuwa strażnika i update; instalator bez --force-run w obiekcie zadania; stały nsis.guid (zastępuje części T238, T239; zakończenie i strażnik według T277) |
 | T267 | Start aplikacji: odczyt pliku zadania bez pomocnika i bez opóźnienia, guard.lock z sygnałem życia co 5 s, plik przekazania z argumentami startu, porzucony mutex wolny, zgodność wersji z manifestem; limity 10 min i 180 s (zastępuje sprawdzanie mutexu z T244; guard.lock i zawieszony strażnik według T276) |
 | T268 | Awaria: brak ważnego zapisu zamknięcia w tej samej sesji logowania (ulotny klucz rejestru) albo nowy zrzut procesu głównego; zapis zamknięcia nieważny, gdy po nim jest znacznik życia; zdarzenia końca sesji w każdym oknie, okno widgetu nigdy nie jest niszczone (zastępuje definicję z T241; zrzuty i instalator według T278) |
