@@ -8,11 +8,13 @@
  * A block of a series (`inSeries`, also the one edited in the list of „Szablony”) has its own hour and no marks: no „po bloku”, no „Oznaczenie” (D401).
  * D460: choosing a routine copies its usual steps into „Kroki” in the same change (`routineStepsCopy`) – a block of a task
  * keeps its list (it goes with the task's, T792); „bez rutyny” leaves the steps.
+ * D463: the lists „Kategoria”, „Wariant” and „Rutyna” end with „+ Nowa…” – a window in the middle of the screen with all the fields of the thing
+ * (`NewThingDialogs`); once saved, the new one is chosen in the block like one picked from the list (a field committed, D461).
  */
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
 import { BLOCK_NAME_MAX, type PlanBlock } from '@shared/model/plan'
-import { routineMinutes } from '@shared/model/routines'
+import { routineMinutes, type Routine } from '@shared/model/routines'
 import { routineStepsCopy } from '@shared/model/steps'
 import type { SessionDef } from '@shared/model/settings'
 import { SESSION_ANCHOR } from '@shared/engine/createDay'
@@ -29,6 +31,11 @@ import { routineCutText } from '../steps/stepsUi'
 import { AttachmentsSection } from '../attachments/AttachmentsSection'
 import { NoteEditor } from '../note/NoteEditor'
 import { anchorCandidates, blockName, categoryOptions, type Names } from './blockView'
+import { NewCategoryDialog, NewRoutineDialog, NewVariantDialog } from './NewThingDialogs'
+
+/** The last item of the lists „Kategoria”, „Wariant”, „Rutyna” (D463): it makes a new one in a window and chooses it. */
+const NEW_THING = '__new__'
+const NEW_OPTION = { value: NEW_THING, label: '+ Nowa…' }
 
 export function BlockEditor({
   block,
@@ -98,6 +105,14 @@ export function BlockEditor({
         ...anchorCandidates(plan, block.id).map((b) => ({ value: b.id, label: `po: ${blockName(b, names)}${b.startMin != null ? ` (${logicalClock(b.startMin)})` : ''}` }))
       ]
   const routine = block.routine ? names.routines.find((r) => r.id === block.routine) : undefined
+  const [making, setMaking] = useState<'routine' | 'variant' | 'category' | null>(null)
+  // D460: its steps with the routine, as one change of the block (the copy of the routine chosen before is replaced).
+  const pickRoutine = (r: Routine | undefined) => {
+    const was = block.routine ? names.routines.find((x) => x.id === block.routine) : null
+    const copy = r && !block.task && r.normal.length ? routineStepsCopy(block.steps, was, r) : null
+    const out = set({ routine: r ? r.id : null, ...(r && routineMinutes(r) > 0 ? { durationMin: routineMinutes(r) } : {}), ...(copy ? { steps: copy.steps } : {}) })
+    if (copy?.cut) void Promise.resolve(out).then((saved) => saved !== false && toast(routineCutText(copy.cut), 'info', 6000))
+  }
   return (
     <aside className="flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3" data-testid="block-editor" {...drop.bind}>
       <div className="flex items-center gap-2">
@@ -122,14 +137,20 @@ export function BlockEditor({
         />
       </Field>
       <Field label="Kategoria" labelWidth={92}>
-        <Choice value={block.categoryId} options={categoryOptions(names, block.categoryId)} onChange={(categoryId) => set({ categoryId, variantId: null })} aria-label="Kategoria" data-testid="block-category" />
+        <Choice
+          value={block.categoryId}
+          options={[...categoryOptions(names, block.categoryId), ...(readOnly ? [] : [NEW_OPTION])]}
+          onChange={(categoryId) => (categoryId === NEW_THING ? setMaking('category') : set({ categoryId, variantId: null }))}
+          aria-label="Kategoria"
+          data-testid="block-category"
+        />
       </Field>
       {variants.length > 0 && (
         <Field label="Wariant" labelWidth={92}>
           <Choice
             value={block.variantId ?? '-'}
-            options={[{ value: '-', label: 'bez wariantu' }, ...variants.map((v) => ({ value: v.id, label: v.name }))]}
-            onChange={(v) => set({ variantId: v === '-' ? null : v })}
+            options={[{ value: '-', label: 'bez wariantu' }, ...variants.map((v) => ({ value: v.id, label: v.name })), ...(readOnly ? [] : [NEW_OPTION])]}
+            onChange={(v) => (v === NEW_THING ? setMaking('variant') : set({ variantId: v === '-' ? null : v }))}
             aria-label="Wariant"
             data-testid="block-variant"
           />
@@ -217,15 +238,8 @@ export function BlockEditor({
         <Field label="Rutyna" labelWidth={92}>
           <Choice
             value={block.routine ?? '-'}
-            options={[{ value: '-', label: 'bez rutyny' }, ...names.routines.filter((r) => !r.archived || r.id === block.routine).map((r) => ({ value: r.id, label: r.name }))]}
-            onChange={(v) => {
-              const r = names.routines.find((x) => x.id === v)
-              // D460: its steps with the routine, as one change of the block (the copy of the routine chosen before is replaced).
-              const was = block.routine ? names.routines.find((x) => x.id === block.routine) : null
-              const copy = r && !block.task && r.normal.length ? routineStepsCopy(block.steps, was, r) : null
-              const out = set({ routine: r ? r.id : null, ...(r && routineMinutes(r) > 0 ? { durationMin: routineMinutes(r) } : {}), ...(copy ? { steps: copy.steps } : {}) })
-              if (copy?.cut) void Promise.resolve(out).then((saved) => saved !== false && toast(routineCutText(copy.cut), 'info', 6000))
-            }}
+            options={[{ value: '-', label: 'bez rutyny' }, ...names.routines.filter((r) => !r.archived || r.id === block.routine).map((r) => ({ value: r.id, label: r.name })), ...(readOnly ? [] : [NEW_OPTION])]}
+            onChange={(v) => (v === NEW_THING ? setMaking('routine') : pickRoutine(names.routines.find((x) => x.id === v)))}
             aria-label="Rutyna"
             data-testid="block-routine"
           />
@@ -242,6 +256,36 @@ export function BlockEditor({
       {place && <AttachmentsSection block={block} place={place} owner={owner} dropOver={drop.over} />}
       {block.moves > 0 && <p className="text-[12px] text-muted">Przeniesiony {block.moves}×.</p>}
       {actions && <div className="flex flex-wrap gap-2 border-t border-line pt-3">{actions}</div>}
+      {/* D463: the windows of „+ Nowa…” (over the page: `fixed`, in the middle of the screen). */}
+      {making === 'routine' && (
+        <NewRoutineDialog
+          onClose={() => setMaking(null)}
+          onCreated={(r) => {
+            setMaking(null)
+            pickRoutine(r)
+          }}
+        />
+      )}
+      {making === 'variant' && (
+        <NewVariantDialog
+          categoryId={block.categoryId}
+          costs={rules?.costs ?? { head: 1, emotions: 1, senses: 1 }}
+          onClose={() => setMaking(null)}
+          onCreated={(variantId) => {
+            setMaking(null)
+            void set({ variantId })
+          }}
+        />
+      )}
+      {making === 'category' && (
+        <NewCategoryDialog
+          onClose={() => setMaking(null)}
+          onCreated={(categoryId) => {
+            setMaking(null)
+            void set({ categoryId, variantId: null })
+          }}
+        />
+      )}
     </aside>
   )
 }

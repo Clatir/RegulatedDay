@@ -13,6 +13,7 @@ import { addStepOp, STEP_NO_TITLE, STEP_TITLE_MAX, stepsCounter, type Step, type
 import { CommitField, FieldShell, TextField } from '../../components/fields'
 import { cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
+import { DEL_RING, deleteMark, removeTarget, useDeleteResolver } from '../../lib/deleteKey'
 import type { SaveAnswer } from '../../store/data'
 import { toast } from '../../store/ui'
 import { dropMove, keyMove, refusedOp, stepMinParse, stepMinText, stepsTimeLine } from './stepsUi'
@@ -58,6 +59,12 @@ export function StepsEditor({
       if (document.activeElement !== input) input.focus()
     }
   }, [steps])
+
+  // D462: Del on the selected step (a click beside its fields, on its box or handle) removes it, as „×” does.
+  useDeleteResolver('step', (id) => {
+    const step = readOnly ? undefined : steps.find((x) => x.id === id)
+    return step ? removeTarget(step.title || 'krok', () => send({ op: 'remove', id })) : null
+  })
 
   const send = async (op: StepOp): Promise<boolean> => {
     const refused = refusedOp(steps, op, kind)
@@ -137,7 +144,8 @@ export function StepsEditor({
             return (
               <li
                 key={s.id}
-                className={cx('flex items-center gap-1.5 rounded border border-transparent', dragging && 'opacity-50', mark === 'before' && 'border-t-lamp', mark === 'after' && 'border-b-lamp')}
+                {...deleteMark('step', s.id)}
+                className={cx('flex items-center gap-1.5 rounded border border-transparent', DEL_RING, dragging && 'opacity-50', mark === 'before' && 'border-t-lamp', mark === 'after' && 'border-b-lamp')}
                 data-testid="step"
                 data-step-id={s.id}
                 data-done={ticks && s.done ? 'true' : undefined}

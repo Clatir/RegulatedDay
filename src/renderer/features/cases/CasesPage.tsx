@@ -25,6 +25,7 @@ import { EmptyState, Section, cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
+import { DEL_RING, deleteMark, removeTarget, useDeleteResolver } from '../../lib/deleteKey'
 import { caseAnswer, changeCase, createRequest, createTask, moveCase, removeCase, undoCase, useCases } from '../../store/cases'
 import { addPerson, saveRd, useData } from '../../store/data'
 import { useDay } from '../../store/day'
@@ -240,11 +241,13 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
     const res = await removeCase(r.id)
     if (res.saved) undoToast(isTask ? 'Zadanie usunięte' : 'Prośba usunięta', () => void undoCase(res.undo))
   }
+  // D462: Del on the selected row (a click on it) removes the case, as „Usuń” does.
+  useDeleteResolver('case', (id) => (id === r.id ? removeTarget(caseTitle(r, rd), () => remove()) : null))
   const parts = statusParts(x, today)
   const badge = dueBadge(r, today)
   const done = x.list === 'done'
   return (
-    <div className={cx('relative flex flex-col gap-1 rounded border px-3 py-1.5', marked ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')} data-testid="case-row" data-case={r.id} data-kind={r.kind} data-list={x.list}>
+    <div {...deleteMark('case', r.id)} className={cx('relative flex flex-col gap-1 rounded border px-3 py-1.5', DEL_RING, marked ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')} data-testid="case-row" data-case={r.id} data-kind={r.kind} data-list={x.list}>
       {!done && r.priority && <PriorityMark priority={r.priority} />}
       <div className="grid items-center gap-2" style={{ gridTemplateColumns: '220px 110px minmax(0,1fr) 150px' }}>
         {isTask ? (

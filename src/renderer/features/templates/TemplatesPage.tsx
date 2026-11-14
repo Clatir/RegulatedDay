@@ -31,6 +31,7 @@ import { EmptyState, Field, Segmented, cx } from '../../components/ui'
 import { isSaved, saveRecord, storedAnswer, tryUpdateRecord, updateRecord, useData, type SaveAnswer, type SendState } from '../../store/data'
 import { countDay } from '../../store/day'
 import { useNewShortcut } from '../../lib/escape'
+import { removeTarget, useDeleteResolver, useDeleteSelected } from '../../lib/deleteKey'
 import { takeFoundPick, useUi } from '../../store/ui'
 import { attachTransfer } from '../attachments/attachDrop'
 import { withAttachCounts } from '../attachments/attachView'
@@ -119,6 +120,7 @@ export function TemplatesPage() {
                   key={t.id}
                   type="button"
                   onClick={() => setSelected(t.id)}
+                  data-del={`template:${t.id}`}
                   className={cx('flex flex-col rounded border px-2.5 py-1.5 text-left', selected === t.id ? 'border-lamp bg-lamp-soft' : 'border-line hover:bg-hover', t.archived && 'border-dashed text-muted')}
                   data-testid="template-item"
                 >
@@ -139,6 +141,7 @@ export function TemplatesPage() {
                   key={s.id}
                   type="button"
                   onClick={() => openSeries(s.id)}
+                  data-del={`series:${s.id}`}
                   className={cx('flex flex-col rounded border px-2.5 py-1.5 text-left', selectedSeries === s.id ? 'border-lamp bg-lamp-soft' : 'border-line hover:bg-hover', ended && 'border-dashed text-muted')}
                   data-testid="series-item"
                 >
@@ -286,6 +289,11 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const remove = async () => {
     if (await removeTemplate(template.id, template.name)) onRemoved()
   }
+  // D462: Del on the selected template (its row of the list, clicked) or its selected block (a tile, or the panel open) removes it, as „Usuń” does.
+  useDeleteResolver('template', (id) => (id === template.id ? removeTarget(template.name, remove) : null))
+  const removeBlockOf = (b: PlanBlock) => removeTemplateBlock(template.id, from, b, blockName(b, names)).then(() => setSelected(null))
+  useDeleteResolver('block', (id) => (block && block.id === id ? removeTarget(blockName(block, names), () => removeBlockOf(block)) : null))
+  useDeleteSelected(block ? removeTarget(blockName(block, names), () => removeBlockOf(block)) : null)
 
   return (
     <div className="flex min-h-0 flex-1" data-testid="template-editor">
@@ -426,7 +434,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           onClose={() => setSelected(null)}
           actions={
             // D415: out of the version from the date shown, with its attachments when no later version keeps it; „Cofnij”.
-            <button type="button" className="btn" onClick={() => void removeTemplateBlock(template.id, from, block, blockName(block, names)).then(() => setSelected(null))} data-testid="template-block-remove">
+            <button type="button" className="btn" onClick={() => void removeBlockOf(block)} data-testid="template-block-remove">
               Usuń z szablonu ({blockName(block, names)})
             </button>
           }

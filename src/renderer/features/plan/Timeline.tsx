@@ -414,6 +414,8 @@ export function Timeline({
         data-block-title={i.title}
         data-movable={draggable ? 'true' : undefined}
         data-selected={selected === i.id ? 'true' : undefined}
+        // D462: Del on the focused tile removes the block (the screen says what – `useDeleteResolver('block')`).
+        data-del={`block:${i.id}`}
         onClick={(e) => {
           e.stopPropagation()
           if (dropped.current) {

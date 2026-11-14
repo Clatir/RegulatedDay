@@ -13,6 +13,7 @@ import { TextField } from '../../components/fields'
 import { cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { useEscapeLayer } from '../../lib/escape'
+import { DEL_RING, deleteMark, removeTarget, useDeleteResolver } from '../../lib/deleteKey'
 import { addLink, openAllAttachments, openAttachment, pickFiles, removeAttachments, renameAttachment, restoreAttachments, showAttachment } from '../../store/attachments'
 import { useData } from '../../store/data'
 import { undoToast } from '../../store/ui'
@@ -74,8 +75,10 @@ function AttachmentRow({ a, place }: { a: Attachment; place: BlockPlace }) {
       const undo = await removeAttachments([a.id])
       if (undo) undoToast(`Usunięto załącznik „${a.name}”`, () => void restoreAttachments(undo))
     })
+  // D462: Del on the selected attachment (a click on its row) removes it, as „Usuń” does.
+  useDeleteResolver('attachment', (id) => (id === a.id ? removeTarget(a.name, () => remove()) : null))
   return (
-    <li className="flex flex-col gap-1 rounded border border-line bg-raised px-2 py-1.5" data-testid="attachment" data-name={a.name} data-kind={a.kind} data-missing={missing ? 'true' : undefined}>
+    <li {...deleteMark('attachment', a.id)} className={cx('flex flex-col gap-1 rounded border border-line bg-raised px-2 py-1.5', DEL_RING)} data-testid="attachment" data-name={a.name} data-kind={a.kind} data-missing={missing ? 'true' : undefined}>
       <div className="flex items-center gap-2">
         {renaming ? (
           <div ref={rename} className="min-w-0 flex-1" onBlur={() => setRenaming(false)}>

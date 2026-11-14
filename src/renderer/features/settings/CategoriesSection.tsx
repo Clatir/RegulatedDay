@@ -22,7 +22,7 @@ import { saveCalendars } from './calendarEdits'
 import { SettingNumber } from './SettingNumber'
 import { useShared } from './SharedSettings'
 
-const FLAGS: Array<[keyof CategoryRules, string]> = [
+export const FLAGS: Array<[keyof CategoryRules, string]> = [
   ['background', 'może biec w tle'],
   ['startsInBackground', 'zaczyna się w tle'],
   ['protected', 'chroniony (warianty go nie skracają)'],
@@ -33,13 +33,20 @@ const FLAGS: Array<[keyof CategoryRules, string]> = [
   ['keepsRegen', 'nie przerywa regeneracji'],
   ['afterWorkAsProject', 'po końcu pracy jak projekt']
 ]
-const POOLS = [
+export const POOLS = [
   ['head', 'głowa'],
   ['emotions', 'emocje'],
   ['senses', 'bodźce']
 ] as const
 
-const setMeta = (id: string, patch: Record<string, unknown>) =>
+/** D463: the window of a new category (the panel of a block) sets the same fields. */
+export const PLACE_OPTIONS = [
+  { value: 'computer', label: 'przy komputerze' },
+  { value: 'passive', label: 'pasywnie przy komputerze' },
+  { value: 'away', label: 'poza komputerem' }
+] as const
+
+export const setMeta = (id: string, patch: Record<string, unknown>) =>
   saveRd((raw) => {
     const cats = raw.categories && typeof raw.categories === 'object' ? (raw.categories as Record<string, Record<string, unknown>>) : {}
     return { ...raw, categories: { ...cats, [id]: { ...(cats[id] ?? {}), ...patch } } }
@@ -111,11 +118,7 @@ export function CategoriesSection() {
                   <span className="text-[12px] text-muted">Miejsce</span>
                   <Choice
                     value={c.place}
-                    options={[
-                      { value: 'computer', label: 'przy komputerze' },
-                      { value: 'passive', label: 'pasywnie przy komputerze' },
-                      { value: 'away', label: 'poza komputerem' }
-                    ]}
+                    options={[...PLACE_OPTIONS]}
                     onChange={(place) => save({ categories: { [id]: { place } } })}
                     className="w-[220px]"
                     aria-label="Miejsce"
