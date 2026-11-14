@@ -250,7 +250,8 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
     // runs behind (D476, T1199).
     const why = p.bg ? (p.running ? (lastWhy.get(p.block.id) ?? 'planned') : p.block.alongside != null && !p.block.bg ? 'group' : 'planned') : null
     const groupId = p.running ? (day.facts.blocks.get(p.block.id)?.group ?? null) : (p.block.alongside ?? null)
-    spans.push(span(p.block, from, to, p.bg, { why, planned: !p.running, groupId }))
+    const order = p.running ? day.facts.blocks.get(p.block.id)?.runs.at(-1)?.begun : undefined
+    spans.push(span(p.block, from, to, p.bg, { why, planned: !p.running, groupId, ...(order ? { order } : {}) }))
   }
   const upToNow = (to: number) => Math.min(to === OPEN ? now : to, now)
   const requests = day.facts.requests.map((r) => ({ id: r.id, from: r.from, to: upToNow(r.to) }))
@@ -330,8 +331,16 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
       // counted above); behind another block – as a block set aside (flexible: its share) or sent behind (fixed: full, T1199).
       if (x.why === 'group') {
         const front = frontSpan[k]
-        if (!front || front === x || front.groupId === x.groupId || (front.block.id === x.groupId)) continue
-        add(k, costOf(x, s), isSession(x) ? 0 : x.flexible ? (x.bgPct ?? s.backgroundCostPct) : 100)
+        // A request or „Odcinam się” in front: a fixed block of a group goes on behind at full cost, as any fixed one (T1209).
+        if (!front && (reqAt[k] != null || discAt[k]) && !x.flexible && !isRegen(x)) {
+          add(k, costOf(x, s), isSession(x) ? 0 : 100)
+          continue
+        }
+        if (!front || front.groupId === x.groupId || front.block.id === x.groupId) continue
+        // As without the group: set aside (its share) when flexible, or fixed of a category that may run behind a flexible
+        // block in front; else sent behind – full cost.
+        const aside = x.flexible || (x.rules.background && front.flexible)
+        add(k, costOf(x, s), isSession(x) ? 0 : aside ? (x.bgPct ?? s.backgroundCostPct) : 100)
         continue
       }
       add(k, costOf(x, s), isSession(x) ? (hasFront[k] ? 0 : 100) : x.why === 'forced' ? 100 : (x.bgPct ?? s.backgroundCostPct))

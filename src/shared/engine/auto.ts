@@ -427,7 +427,10 @@ function fixedStartLists(inp: AutoInput, t: TimerNow, shutdowns: Map<string, Shu
     if (!due(from)) continue
     let bg = b.bg
     const list: AutoEvent[] = []
-    if (!bg && front) {
+    const root = groupRootIn(inp.ctx.plan, b.id)
+    // A fixed block of the group in front joins it (T1209): behind, pausing nothing – the group runs on in parallel.
+    if (!bg && front && root != null && front.fact.group === root) bg = true
+    else if (!bg && front) {
       if (front.info.protectedLife || isFixedLike(front.info)) bg = true
       else {
         list.push(auto(date, 'fixedStart', { k: 'block.pause', block: front.info.id, at: from }))
@@ -446,7 +449,7 @@ function fixedStartLists(inp: AutoInput, t: TimerNow, shutdowns: Map<string, Shu
         planned: startPlanned(b, inp.ctx.plan),
         confirmUntil: null,
         how: 'auto',
-        ...(groupRootIn(inp.ctx.plan, b.id) != null ? { group: groupRootIn(inp.ctx.plan, b.id)! } : {})
+        ...(root != null ? { group: root } : {})
       })
     )
     // D499 (T1197): a block of a parallel group begun by itself begins the whole group, as „Zacznij” does.

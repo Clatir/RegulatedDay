@@ -377,3 +377,96 @@ describe('grupa z blokiem stałym albo sesją (T1208)', () => {
     expect(t.ok && t.events.map((e) => e.block)).not.toContain('s')
   })
 })
+
+describe('grupa – poprawki po drugim przeglądzie (T1206, T1209)', () => {
+  const beside = (b: ReturnType<typeof block>, root: string) => ({ ...b, alongside: root })
+  const checkin: Parameters<Scenario['checkin']>[1] = { head: [2, 2], emotions: [2, 2], senses: [2, 2] }
+  const day = (plan: ReturnType<typeof block>[]) => new Scenario({ date: DATE, plan }).observe('07:00', null)
+  const groupABC = () => [block({ id: 'a', cat: 'analiza', at: '08:00', min: 60 }), beside(block({ id: 'b', cat: 'nauka', at: '08:00', min: 120 }), 'a'), beside(block({ id: 'c', cat: 'inne', at: '08:00', min: 120 }), 'a')]
+  const fixedGroup = () => [block({ id: 'f', cat: 'zajecia-zdalne', at: '09:00', min: 60, fixed: true }), beside(block({ id: 'n', cat: 'nauka', at: '09:00', min: 60 }), 'f')]
+
+  it('blok stały tej samej grupy zaczyna się obok niej, niczego nie pauzuje', () => {
+    const s = day(fixedGroup())
+    click(s, '08:30', { a: 'start', block: 'n' })
+    const out = leader(s, '09:00')
+    expect(out.map((e) => [e.k, e.block, e.bg])).toEqual([['block.start', 'f', true]])
+    expect(fgOf(s, '09:01')).toBe('n')
+    expect(bgOf(s, '09:01')).toEqual(['f'])
+  })
+
+  it('„Cofnij” startu bloku bez komputera nie zabiera bloku grupy, który Ty już skończyłeś', () => {
+    const s = day([block({ id: 'p', cat: 'posilek', at: '13:00', min: 30 }), beside(block({ id: 'r', cat: 'regeneracja', at: '13:00', min: 30 }), 'p')]).gap('12:50', null)
+    const [lead] = leader(s, '13:10')
+    click(s, '13:12', { a: 'finish', block: 'r' })
+    const r = click(s, '13:13', { a: 'undo', target: lead!.id })
+    expect(r.ok && r.events.map((e) => e.target)).toEqual([lead!.id])
+    expect(s.state('13:14').facts.blocks.get('r')?.startedAt).not.toBeNull()
+    expect(s.state('13:14').facts.problems).toEqual([])
+  })
+
+  it('„Cofnij” startu bloku stałego wraca całą grupę, nie tylko blok z przodu', () => {
+    const s = day([...groupABC(), block({ id: 'f', cat: 'zajecia-zdalne', at: '08:30', min: 60, fixed: true })])
+    click(s, '08:00', { a: 'start', block: 'a' })
+    const out = leader(s, '08:30')
+    const fStart = out.find((e) => e.k === 'block.start' && e.block === 'f')!
+    const r = click(s, '08:35', { a: 'undo', target: fStart.id })
+    expect(r.ok && r.events.length).toBe(4)
+    expect(fgOf(s, '08:36')).toBe('a')
+    expect(bgOf(s, '08:36')).toEqual(['b', 'c'])
+  })
+
+  it('prognoza energii po przejęciu: z przodu ten sam blok co timer', () => {
+    const s = day(groupABC()).checkin('07:30', checkin)
+    click(s, '08:00', { a: 'start', block: 'b' })
+    s.end('b', '08:20')
+    const cFront = day(groupABC()).checkin('07:30', checkin).start('b', '08:00').end('b', '08:20').start('c', '08:20')
+    const slope = (x: Scenario) => {
+      const e = x.energy('08:25').series.head
+      return e[(8 - 4) * 60 + 50]! - e[(8 - 4) * 60 + 30]!
+    }
+    expect(slope(s)).toBe(slope(cFront))
+  })
+
+  it('blok stały grupy w tle za prośbą kosztuje pełno, jak każdy stały', () => {
+    const run = (plan: ReturnType<typeof block>[]) => {
+      const s = day(plan).checkin('07:30', checkin)
+      leader(s, '09:00')
+      const t = s.at('09:10')
+      const req = requestAction(s.stateAt(t), { a: 'requestNow', request: 'q', person: null }, t)
+      if (!req.ok) throw new Error(req.why)
+      s.write(req.events, t)
+      return s.energy('09:40').now!.head - s.energy('09:20').now!.head
+    }
+    expect(run(fixedGroup())).toBe(run([fixedGroup()[0]!]))
+  })
+
+  it('blok stały grupy w tle za blokiem spoza grupy kosztuje jak stały w tle (T1206)', () => {
+    const outside = block({ id: 'x', cat: 'inne', at: '11:00', min: 30 })
+    const run = (plan: ReturnType<typeof block>[]) => {
+      const s = day(plan).checkin('07:30', checkin)
+      leader(s, '09:00')
+      click(s, '09:10', { a: 'start', block: 'x' })
+      // The minutes gone by (the forecast of „now” differs by the paused block of the group to come).
+      const e = s.energy('09:50').series.head
+      return e[(9 - 4) * 60 + 40]! - e[(9 - 4) * 60 + 20]!
+    }
+    expect(run([...fixedGroup(), outside])).toBe(run([fixedGroup()[0]!, outside]))
+  })
+
+  it('koszt grupy: zaparkowany blok obok nie pyta; „Dalej” i „Wznów” pytają o pracę grupy po granicy', () => {
+    const plan = [block({ id: 'x', cat: 'inne', at: '17:30', min: 30 }), block({ id: 'm', cat: 'posilek', at: '18:00', min: 30 }), beside(block({ id: 'w', cat: 'inne', at: '18:00', min: 60 }), 'm')]
+    const parked = day(plan)
+    parked.approve('17:00', '07:30').raw({ k: 'block.park', block: 'w', at: parked.at('17:00'), rule: 'user' }, '17:00')
+    expect(click(parked, '18:00', { a: 'start', block: 'm' }).ok).toBe(true)
+    const next = day(plan)
+    next.approve('17:00', '07:30')
+    click(next, '17:30', { a: 'start', block: 'x', confirm: true })
+    expect(click(next, '18:00', { a: 'next' })).toMatchObject({ ok: true, confirm: { block: 'w' } })
+    const resume = day(plan)
+    resume.approve('17:00', '07:30')
+    click(resume, '18:00', { a: 'start', block: 'm', confirm: true })
+    click(resume, '18:05', { a: 'cutOff' })
+    click(resume, '18:10', { a: 'back' })
+    expect(click(resume, '18:12', { a: 'start', block: 'm' })).toMatchObject({ ok: false, confirm: { block: 'w' } })
+  })
+})
