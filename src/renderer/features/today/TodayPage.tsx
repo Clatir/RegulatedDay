@@ -267,7 +267,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const lateWake = useMemo(() => (isToday ? detectLateWake(model.ctx, model.state, model.dayFile) : null), [isToday, model])
   const nowMin = logicalMinuteOf(date, now)
   // „Wstałeś później?” waits for the answer once shown (D337): the window reports it as seen (the first in the log wins) with
-  // the end of the routine and the wake it is counted from in the id, and the proposal is counted from that end.
+  // the hour the day's first block was moved to and the wake in the id (D488), and the proposal is counted from that hour.
   const lateShown = lateWake != null && (lateWake.waitUntilMin == null || nowMin >= lateWake.waitUntilMin)
   const lateSeenId = lateShown && dayUsable(model.data) ? lateWakeSeenId(date, lateWake) : null
   useEffect(() => {

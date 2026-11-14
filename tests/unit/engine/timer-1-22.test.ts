@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { activityOf } from '@shared/engine/activity'
-import { autoActions, nextDeadline, type AutoEvent } from '@shared/engine/auto'
+import { autoActions, nextDeadline, questionsOf, type AutoEvent } from '@shared/engine/auto'
 import { blockAt, pausedPlaceOf } from '@shared/engine/facts'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
 import { autoText, engineView } from '@shared/engineView'
@@ -37,6 +37,13 @@ function barView(s: Scenario, time: string) {
   const state = s.stateAt(t)
   const care = { waterOn: false, waterEveryMin: 45, breakAfterMin: 90, solitudeAfterMin: 30 }
   return engineView({ ctx, state, energy: null, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t, name: () => 'Inne obowiązki', care, modePrefs: { sessionMode: true, classMode: true }, pending: null })
+}
+
+function questions(s: Scenario, time: string) {
+  const t = s.at(time)
+  const ctx = s.contextAt(t)
+  const state = s.stateAt(t)
+  return questionsOf({ ctx, state, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t })
 }
 
 const fgId = (s: Scenario, time: string) => timerNow(s.state(time)).fg?.info.id ?? null
@@ -185,9 +192,57 @@ describe('bloki bez komputera zaczynają się same (D475)', () => {
     expect(click(s, '13:21', { a: 'start', block: 'p' }).ok).toBe(true)
   })
 
-  it('rutyny, prośby domowe, sprawy i regeneracja tak samo; dojazd, wariant przy komputerze i praca nie (T1134)', () => {
+  it('rutyny, prośby domowe, sprawy, regeneracja i dojazd tak samo (D486); wariant przy komputerze i praca nie', () => {
     for (const cat of ['rutyny', 'prosby', 'sprawy', 'regeneracja']) expect(leader(used([block({ id: 'p', cat, at: '13:00', min: 30 })]), '13:10').map((e) => e.block)).toEqual(['p'])
-    for (const b of [block({ id: 'p', cat: 'dojazd', at: '13:00', min: 30 }), block({ id: 'p', cat: 'regeneracja', variant: 'gra', at: '13:00', min: 30 }), block({ id: 'p', cat: 'inne', at: '13:00', min: 30 })]) expect(leader(used([b]), '13:10')).toEqual([])
+    expect(leader(used([block({ id: 'p', cat: 'dojazd', variant: 'dojazd', at: '13:00', min: 30 })]), '13:10').map((e) => e.block)).toEqual(['p'])
+    // Stationary classes and the category without a variant end by their plan or „Tak” (D224, T1146): not by themselves.
+    for (const b of [block({ id: 'p', cat: 'dojazd', variant: 'zajecia', at: '13:00', min: 90 }), block({ id: 'p', cat: 'dojazd', at: '13:00', min: 30 }), block({ id: 'p', cat: 'regeneracja', variant: 'gra', at: '13:00', min: 30 }), block({ id: 'p', cat: 'inne', at: '13:00', min: 30 })])
+      expect(leader(used([b]), '13:10')).toEqual([])
+  })
+
+  it('dojazd zaczęty sam kończy powrót do komputera, najpóźniej planowany koniec (D486, T1142)', () => {
+    const commute = () => block({ id: 'p', cat: 'dojazd', variant: 'dojazd', at: '13:00', min: 30 })
+    const back = used([commute()], '12:50', '13:20')
+    expect(leader(back, '13:10').map((e) => e.autoRule)).toEqual(['awayStart'])
+    expect(leader(back, '13:21')).toMatchObject([{ k: 'block.end', block: 'p', at: back.at('13:20'), autoRule: 'firstUse' }])
+    const away = used([commute()], '12:50')
+    leader(away, '13:10')
+    expect(leader(away, '13:29')).toEqual([])
+    expect(leader(away, '13:31')).toMatchObject([{ k: 'block.end', block: 'p', at: away.at('13:30'), autoRule: 'awayPlan' }])
+    const a = away.state('13:32').facts.autos.find((x) => x.rule === 'awayPlan')!
+    expect(autoText(a, 'Dojazd', '13:30')).toBe('Dojazd skończony o 13:30 (według planu)')
+    // Back later than its planned end: it ended at its planned end.
+    const late = used([commute()], '12:50', '14:00')
+    leader(late, '13:10')
+    expect(leader(late, '14:01')).toMatchObject([{ k: 'block.end', at: late.at('13:30'), autoRule: 'awayPlan' }])
+    // The return after its planned end: a quiet question, as after a limit (T1146).
+    expect(questions(late, '14:02').map((q) => q.kind)).toContain('return')
+    // A commute you started yourself keeps ending by „Dalej” or „Tak” (D224).
+    const clicked = used([commute()], '13:00')
+    click(clicked, '13:00', { a: 'start', block: 'p' })
+    expect(leader(clicked, '14:00')).toEqual([])
+  })
+
+  it('dojazd zapauzowany i wznowiony kończy się o planowanym końcu z pauzą, nie od razu (T1146)', () => {
+    const s = used([block({ id: 'p', cat: 'dojazd', variant: 'dojazd', at: '13:00', min: 30 })], '12:50')
+    leader(s, '13:10')
+    click(s, '13:10', { a: 'pause' })
+    click(s, '13:35', { a: 'start', block: 'p' })
+    expect(leader(s, '13:36')).toEqual([])
+    expect(leader(s, '13:56')).toMatchObject([{ k: 'block.end', at: s.at('13:55'), autoRule: 'awayPlan' }])
+  })
+
+  it('dojazd (blok pracy) nie zaczyna się sam przed pierwszym użyciem dnia (T1147)', () => {
+    const s = day([block({ id: 'p', cat: 'dojazd', variant: 'dojazd', at: '07:30', min: 30 }), block({ id: 'a', cat: 'inne', at: '10:00', min: 60 })]).observe('09:20', null)
+    expect(leader(s, '09:21')).toEqual([])
+    expect(s.state('09:22').boundary.approvedAt).toBeNull()
+  })
+
+  it('także przed pierwszym użyciem komputera w dniu – poranna rutyna (D488, T1143)', () => {
+    const s = day([block({ id: 'r', cat: 'rutyny', at: '07:00', min: 45 })]).observe('09:20', null)
+    expect(leader(s, '09:21')).toMatchObject([{ k: 'block.start', block: 'r', at: s.at('07:00'), autoRule: 'awayStart' }])
+    // Nobody at a computer until 09:20: it ended at its limit (45 + 30 min) – „Cofnij” and moving it later asks „Wstałeś później?”.
+    expect(leader(s, '09:21')).toMatchObject([{ k: 'block.end', block: 'r', at: s.at('08:15'), autoRule: 'limit' }])
   })
 
   it('regeneracja zaczęta sama ma limit jak posiłek – długa nieobecność to nie godziny odpoczynku (T1139)', () => {
@@ -209,7 +264,7 @@ describe('bloki bez komputera zaczynają się same (D475)', () => {
     expect(leader(late, '13:55')).toEqual([])
   })
 
-  it('nigdy: zakotwiczony (D194), w tle, po porze snu, w „Odcinam się”, w czasie prośby, przed pierwszym użyciem dnia (D337)', () => {
+  it('nigdy: zakotwiczony (D194), w tle, po porze snu, w „Odcinam się”, w czasie prośby', () => {
     const anchored = used([block({ id: 'a', cat: 'inne', at: '12:00', min: 30 }), block({ id: 'p', cat: 'posilek', after: 'a', min: 30 })], '12:30')
     click(anchored, '12:00', { a: 'start', block: 'a' })
     click(anchored, '12:30', { a: 'finish', block: 'a' })
@@ -220,12 +275,6 @@ describe('bloki bez komputera zaczynają się same (D475)', () => {
     expect(leader(night, '23:45')).toEqual([])
     expect(leader(used([meal()]).disconnect('12:30', null), '13:15')).toEqual([])
     expect(leader(used([meal()]).request('q', '12:55', null), '13:15')).toEqual([])
-    expect(leader(day([meal()]), '13:15')).toEqual([])
-    // A late wake: nobody used a computer before 09:20 – the morning routine is not written as done while you slept.
-    const lateWake = day([block({ id: 'r', cat: 'rutyny', at: '07:00', min: 45 })]).observe('09:20', null)
-    expect(leader(lateWake, '09:21')).toEqual([])
-    lateWake.gap('09:30', null)
-    expect(leader(lateWake, '09:45')).toEqual([])
   })
 
   it('„Cofnij” zabiera start i jego koniec; ten blok nie zaczyna się już sam tego dnia', () => {

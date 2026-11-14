@@ -87,7 +87,7 @@ const CHECK: Partial<Record<RitualKind, string>> = { workEnd: 'ok', silent: 'ok'
 export const ritualRowId = (date: string, kind: RitualKind, key: string): string => `ritual:${date}:${kind}:${key}`
 
 const SILENT_RULES = ['twoQuestions', 'idle']
-const AWAY_RULES = ['limit', 'bedtime']
+const AWAY_RULES = ['limit', 'bedtime', 'awayPlan']
 
 /** The use of the computers as the engine reads it from a day's log (`computeDay` does the same): what rows measure. */
 export const ritualActivity = (ctx: DayContext, state: DayState): Activity => activityOf(ctx.events, state.grid.start, ctx.now)

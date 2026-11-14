@@ -1,6 +1,6 @@
 /**
- * Getting up later (spec „Późne wstanie”, D199): „Wstałeś później? · Tak · Nie”; „Tak” shows the routines, care and
- * meals moved by the delay and the work shortened or parked so the day fits the boundary again – the plan changes only
+ * Getting up later (spec „Późne wstanie”, D488 – the day's first block moved later): „Wstałeś później? · Tak · Nie”; „Tak”
+ * shows the routines, care and meals moved by the delay and the work shortened or parked so the day fits the boundary again – the plan changes only
  * after „Zastosuj”. Asked once a day (the answer is the day's, on every computer).
  */
 import { useState } from 'react'
@@ -35,7 +35,7 @@ export function LateWakeCard({ model, lw, names }: { model: DayModel; lw: LateWa
       {stage === 'ask' ? (
         <div className="flex flex-wrap items-center gap-2">
           <span className="flex-1">
-            Wstałeś później? Pierwsze użycie komputera o {logicalClock(lw.routineEndMin + lw.delayMin)}, {durationLabel(lw.delayMin)} po planowanym końcu porannej rutyny.
+            Wstałeś później? {blockName(lw.first, names)} stoi o {logicalClock(lw.movedMin)}, {durationLabel(lw.delayMin)} później niż w planie.
           </span>
           <button type="button" className="btn" onClick={() => setStage('proposal')} data-testid="late-wake-yes">
             Tak
@@ -63,7 +63,7 @@ export function LateWakeCard({ model, lw, names }: { model: DayModel; lw: LateWa
             ))}
             {lw.passed.map((b) => (
               <li key={b.id} className="text-muted">
-                {blockName(b, names)} ({logicalClock(b.startMin!)}) minął przed pierwszym użyciem – do potwierdzenia
+                {blockName(b, names)} ({logicalClock(b.startMin!)}) minął przed {logicalClock(lw.movedMin)} – do potwierdzenia
               </li>
             ))}
             {!lw.shifts.length && !lw.shortens.length && !lw.parks.length && <li>Plan mieści się bez zmian.</li>}

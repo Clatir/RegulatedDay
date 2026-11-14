@@ -97,6 +97,8 @@ export function autoText(a: AutoAction, blockName: string, clock: string): strin
       return a.k === 'block.pause' ? `${name} – pauza o ${clock} (blok stały według planu)` : `${name} zaczęty o ${clock} (blok stały według planu)`
     case 'awayStart':
       return `${name} zaczęty o ${clock} (bez komputera, według planu)`
+    case 'awayPlan':
+      return `${name} skończony o ${clock} (według planu)`
     case 'plan':
       return `${name} skończony o ${clock} (według planu)`
     case 'fixedNoReaction':

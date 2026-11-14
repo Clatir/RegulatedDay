@@ -173,12 +173,21 @@ function idleEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; due: numb
 function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: string } | null {
   const { state, activity } = c.inp
   if (f.startedAt == null || placeOf(info) !== 'away') return null
-  // A commute and stationary classes end by their plan or „Tak” (D224); regeneration waiting before a fixed block too.
-  if (info.rules.kind === 'commute') return null
   const start = atOf(state.grid, f.startedAt)
   const length = (f.planned?.durationMin ?? info.durationMin) + endShiftOf(f)
+  const begunByItself = state.facts.autos.some((a) => a.k === 'block.start' && a.rule === 'awayStart' && a.block === info.id)
+  // A commute and stationary classes end by their plan or „Tak” (D224); regeneration waiting before a fixed block too. A
+  // commute the app began by itself (D486, T1142) ends at the return to a computer, at the latest at its planned end.
+  if (info.rules.kind === 'commute') {
+    if (!begunByItself) return null
+    // Its planned end with its pauses (`plannedEndOf`), the return counted from its last run (a resume after a pause).
+    const plannedEnd = atOf(state.grid, plannedEndOf(state, info, f))
+    const back = firstUseAfter(activity, runFromOf(state.grid, f), AWAY_GAP_MIN)
+    if (back && back.use < plannedEnd) return { at: back.use, rule: 'firstUse' }
+    return c.inp.now >= plannedEnd ? { at: plannedEnd, rule: AWAY_PLAN_RULE } : null
+  }
   // A regeneration the app began by itself (D475) has the same limit (T1139): a long absence is no hours of rest.
-  const autoRegen = info.isRegen && state.facts.autos.some((a) => a.k === 'block.start' && a.rule === 'awayStart' && a.block === info.id)
+  const autoRegen = info.isRegen && begunByItself
   const limited = info.rules.kind === 'meal' || info.rules.kind === 'routine' || info.categoryId === 'sprawy' || autoRegen
   const listening = info.isWork || info.isProject
   const limit = limited ? start + (length + AWAY_LIMIT_EXTRA_MIN) * MIN : listening ? start + length * MIN : null
@@ -194,6 +203,9 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
   return null
 }
 
+/** The end of a commute begun by itself at its planned end (D486): „według planu”, on its own row with „Cofnij”. */
+export const AWAY_PLAN_RULE = 'awayPlan'
+
 /** The automatic end of a block away from the computer by `awayEnd` (one id for the rule and the check that waits for it). */
 const awayEndEvent = (date: string, block: string, away: { at: number; rule: string }): AutoEvent => auto(date, away.rule, { k: 'block.end', block, at: away.at, done: null, rule: away.rule })
 
@@ -205,18 +217,20 @@ function ctxOf(inp: AutoInput, t: TimerNow): Ctx {
 
 /**
  * A flexible block of the plan away from the computer with its own hour (D475): what may begin by itself – a meal,
- * routines, home requests, a regeneration, home affairs (the variant's place, else the category's). Not a commute (T1134:
- * no rule ends a flexible one by itself), nor one planned in the background, nor one anchored to another (D194).
+ * routines, home requests, a commute (D486 – the variant „Dojazd” only, not stationary classes, D224; it ends by itself
+ * then, `awayEnd`, T1146), a regeneration, home affairs (the variant's place, else the category's). Not one planned in
+ * the background, nor one anchored to another (D194).
  */
-const awayOwnHour = (b: BlockInfo): boolean => !b.fixed && !b.waits && b.inPlan && !b.bg && b.anchor == null && b.start != null && b.rules.kind !== 'commute' && placeOf(b) === 'away'
+const awayOwnHour = (b: BlockInfo): boolean =>
+  !b.fixed && !b.waits && b.inPlan && !b.bg && b.anchor == null && b.start != null && (b.rules.kind !== 'commute' || b.variantId === 'dojazd') && placeOf(b) === 'away'
 
 /**
  * D475 (T1133, T1134): such a block (`awayOwnHour`), not begun, parked nor cancelled, begins by itself once you are away
  * from the computer within its planned time – at its hour when nothing runs in the foreground and no computer has input,
  * else when input stops (a stretch without input on every computer of at least `AWAY_START_MIN`, from its beginning) or
  * the foreground is free again; it ends then by the rules of a block away from the computer (the first use, the limit).
- * Never before the day's first use of a computer (nobody knows you were up – a late wake, D337, decides those blocks), nor
- * from the effective bedtime, nor in „Odcinam się” or while a request runs, nor from when a fixed block starts in the
+ * Also before the day's first use of a computer, the morning routine too (D488, T1143 – a late wake is told by moving the
+ * day's first block later, `lateWake.ts`); never from the effective bedtime, nor in „Odcinam się” or while a request runs, nor from when a fixed block starts in the
  * foreground (`fixedFgAt`, ms – its start in the same pass). One block a pass, the earliest; its id holds its planned
  * start, not when it began, so one undone by „Cofnij” never starts by itself again that day.
  */
@@ -224,12 +238,13 @@ function awayStarts(inp: AutoInput, t: TimerNow, fixedFgAt: number): AutoEvent[]
   const { state, activity } = inp
   if (t.fg) return []
   if (state.facts.disconnect.some((d) => d.to === OPEN) || state.facts.requests.some((r) => r.to === OPEN)) return []
-  const firstUse = dayFirstUse(state, activity)
-  if (firstUse == null) return []
   const date = state.grid.date
   const at = (idx: number) => atOf(state.grid, idx)
   // Since when the foreground is free (ms): the last run of the foreground that stopped, request or „Odcinam się”.
-  let free = firstUse
+  let free = state.grid.start
+  // A block of work (a commute) not before the day's first use (T1147): begun while you slept it would make work and
+  // approve the boundary.
+  const firstUse = dayFirstUse(state, activity)
   for (const [, f] of state.facts.blocks) for (const r of f.runs) if (!r.bg && r.to !== OPEN) free = Math.max(free, at(r.to))
   for (const r of state.facts.requests) if (r.to !== OPEN) free = Math.max(free, at(r.to))
   for (const d of state.facts.disconnect) if (d.to !== OPEN) free = Math.max(free, at(d.to))
@@ -238,7 +253,8 @@ function awayStarts(inp: AutoInput, t: TimerNow, fixedFgAt: number): AutoEvent[]
   for (const b of candidates) {
     const f = state.facts.blocks.get(b.id)
     if (f && (f.startedAt != null || f.parkedAt != null || f.cancelledAt != null)) continue
-    const lo = Math.max(at(b.start!), free)
+    if (b.isWork && firstUse == null) continue
+    const lo = Math.max(at(b.start!), free, b.isWork ? firstUse! : Number.NEGATIVE_INFINITY)
     const hi = Math.min(at(b.start! + b.durationMin), bedtime)
     // The first stretch without input from `lo` long enough to tell you left (an open one up to now).
     const away = activity.idle.find((x) => x.to - Math.max(x.from, lo) >= AWAY_START_MIN * MIN && Math.max(x.from, lo) < hi)
@@ -549,7 +565,7 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
   // Automatic ends that a later log shows wrong (input within the threshold, an earlier first use): undone, and the rule
   // judges the block again (spec „log, który przyjdzie później i pokaże wejście w tym progu, go unieważnia”).
   for (const a of state.facts.autos) {
-    if (a.k !== 'block.end' || !a.block || !['idle', 'firstUse', 'limit', 'absence', 'lastInput'].includes(a.rule)) continue
+    if (a.k !== 'block.end' || !a.block || !['idle', 'firstUse', 'limit', 'absence', 'lastInput', AWAY_PLAN_RULE].includes(a.rule)) continue
     const f = state.facts.blocks.get(a.block)
     const info = byId.get(a.block)
     if (!f || !info || f.endId !== a.id) continue
@@ -566,7 +582,7 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
         continue
       }
       still = idleEnd(c, info, open)?.at ?? null
-    } else if (a.rule === 'firstUse' || a.rule === 'limit') {
+    } else if (a.rule === 'firstUse' || a.rule === 'limit' || a.rule === AWAY_PLAN_RULE) {
       const r = awayEnd(c, info, open)
       still = r && r.rule === a.rule ? r.at : null
     } else if (a.rule === 'absence') {
@@ -650,7 +666,7 @@ export function questionsOf(inp: Omit<AutoInput, 'gate'> & { setsWorkEnd?: (id: 
     if (a.k !== 'block.end' || !a.block) continue
     const f = state.facts.blocks.get(a.block)
     if (!f || f.endId !== a.id) continue
-    const kind = a.rule === 'firstUse' || a.rule === 'limit' || a.rule === 'bedtime' ? 'return' : a.rule === 'absence' ? 'absence' : a.rule === 'shutdown' ? 'shutdown' : null
+    const kind = a.rule === 'firstUse' || a.rule === 'limit' || a.rule === 'bedtime' || a.rule === AWAY_PLAN_RULE ? 'return' : a.rule === 'absence' ? 'absence' : a.rule === 'shutdown' ? 'shutdown' : null
     if (!kind) continue
     const id = questionId(date, kind, a.block, a.at)
     if (state.facts.answers.has(id)) continue
