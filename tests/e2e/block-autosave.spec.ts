@@ -281,6 +281,28 @@ test('nowy blok (D461): po zapisie „Dodano blok · Cofnij” zdejmuje blok; w 
   }
 })
 
+test('nowy blok (T1080): szkic z dodanym krokiem jest ruszony – Esc go nie odrzuca, tylko zapisuje, jaki jest, i zamyka panel', async () => {
+  const { app, page, userData, errors, dataDir, tomorrow } = await tomorrowPage('rd-e2e-autosave-esc-')
+  try {
+    await withMainLog(userData, async () => {
+      await page.getByTestId('day-add').click()
+      await expect(page.getByTestId('draft-tile')).toBeVisible()
+      // A step goes into the draft only: nothing is written yet.
+      await page.getByTestId('step-add').fill('Zadzwonić')
+      await page.getByTestId('step-add').press('Enter')
+      await expect(page.getByTestId('step-title')).toHaveValue('Zadzwonić')
+      expect(blocksOn(dataDir, tomorrow)).toEqual([])
+      await page.keyboard.press('Escape')
+      await expect.poll(() => blocksOn(dataDir, tomorrow).map((b) => b.steps.map((s) => s.title)), { timeout: 15_000 }).toEqual([['Zadzwonić']])
+      await expect(page.getByTestId('block-editor')).toHaveCount(0)
+      await expect(page.getByTestId('draft-tile')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('„Postaw na osi” w Sprawach (D464): koniec zmienia długość bloku, szacunek sprawy zostaje; wykład w ustawieniach ma „Koniec”', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-autosave-cases-'))
   const { today } = seedAwake(dataDir, [])

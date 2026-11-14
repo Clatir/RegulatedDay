@@ -80,7 +80,7 @@ describe('szkic nowego bloku przetrwa przejście na inny ekran (A6-17)', () => {
     // The page is drawn anew (another screen and back): the draft is in the window's state.
     patchBlockDraft('2026-10-21', { durationMin: 90 })
     patchBlockDraft('2026-10-21', { note: 'notatka' })
-    expect(useUi.getState().blockDraft).toEqual({ date: '2026-10-21', block: { ...b, durationMin: 90, note: 'notatka' }, intended: true })
+    expect(useUi.getState().blockDraft).toEqual({ date: '2026-10-21', block: { ...b, durationMin: 90, note: 'notatka' }, intended: true, touched: true })
     setBlockDraft('2026-10-22', null)
     expect(useUi.getState().blockDraft?.date).toBe('2026-10-21')
     setBlockDraft('2026-10-21', null)
