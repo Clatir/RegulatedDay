@@ -76,12 +76,12 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    `BlockEditor.pickRoutine`), D474 ostatni odhaczony krok kończy blok („Skończono: … · Cofnij”), D475 elastyczne bloki kategorii
    „poza komputerem” zaczynają się same o swojej godzinie, gdy nic nie biegnie, D477 ✓ przed nazwą ukończonego bloku na osi
    „Dziś”, D478 „Zacznij” na innym bloku zamienia go miejscami z biegnącym (biegnący nie znika). Równolegle w dwóch sesjach
-   (zlecenia 14.11 ok. 10:40, raporty do regulatedday-ab): 1.22-A kroki (D473, D474, D477) – sesja regulatedday-d7, gałąź
+   (zlecenia 14.11 ok. 10:40, raporty do regulatedday-ab): 1.22-A kroki (D473, D474, D477) – od 14.11 11:20 przejęte przez regulatedday-ab (d7 stała, decyzja użytkownika; wykonawca-opus w `w122k`, drzewo przestawione na 1.21.0 a83ee79), gałąź
    `claude/1.22-kroki`, numery D479–D484, T1100–T1129; 1.22-B timer (D475, D478) – sesja regulatedday-a8, gałąź
    `claude/1.22-timer`, D485–D490, T1130–T1159. Ta sesja scala obie do `claude/1.21.0-intuicyjnosc`, przegląd xhigh, Setup.exe.
 10. **1.23.0 – bloki równoległe (D476, po 1.22.0):** przeciągnięcie bloku na inny = biegną razem, najwyżej N (Ustawienia, domyślnie 3),
    pierwszy plan = ostatnio zaczęty, energia tylko z niego; widoki pokazują nakładające się bloki obok siebie. Szacunek 6–10 h.
-   1.23-A (plan, gest, widoki, ustawienie) – regulatedday-d7 po 1.22-A, gałąź `claude/1.23-widoki`, D492–D495, T1160–T1189;
+   1.23-A (plan, gest, widoki, ustawienie) – regulatedday-ab po 1.22-A (przejęte od d7 14.11), gałąź `claude/1.23-widoki`, D492–D495, T1160–T1189;
    timer bloków równoległych – po 1.22-B. Potem jeden PR paczki do `main` z pełnym CI (D491).
 
 
