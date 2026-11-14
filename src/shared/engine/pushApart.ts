@@ -14,7 +14,7 @@ import type { PlanBlock } from '../model/plan'
 import { PLAN_MAX } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
 import { blockInfos, ownHourBlock, plannedSpan, type BlockInfo } from './blocks'
-import { settingsAtMinute, shownForecaster, type DayContext, type DayState } from './day'
+import { routineCostsIn, settingsAtMinute, shownForecaster, type DayContext, type DayState } from './day'
 import type { DayFacts } from './facts'
 import type { Placed } from './forecast'
 import { atOf, idxOfLogical, logicalSpan } from './grid'
@@ -87,7 +87,7 @@ export function pushApart(ctx: DayContext, state: DayState, plan: readonly PlanB
   const g = state.grid
   const before = byId(state.forecast)
   const typeAt = (k: number) => settingsAtMinute(ctx.snapshot, state.facts, k).dayType
-  const after = blockInfos(g, plan, state.facts, ctx.snapshot.settings, typeAt)
+  const after = blockInfos(g, plan, state.facts, ctx.snapshot.settings, routineCostsIn(ctx), typeAt)
   const x = after.find((b) => b.id === id)
   // A block in the background takes no place of the foreground: it pushes nothing. One beside another block (D492) pushes
   // what comes after its group when it is not „w tle” by its kind (the forecast lets the group hold the foreground to its end).
@@ -194,14 +194,14 @@ export function axisMoves(ctx: DayContext, state: DayState, plan: readonly PlanB
   const out = new Map<string, { startMin: number; endMin: number }>()
   if (axis === 'forecast') {
     const now = byId(state.forecast)
-    for (const p of shownForecaster(ctx, state)(blockInfos(g, plan, state.facts, ctx.snapshot.settings, typeAt))) {
+    for (const p of shownForecaster(ctx, state)(blockInfos(g, plan, state.facts, ctx.snapshot.settings, routineCostsIn(ctx), typeAt))) {
       const was = now.get(p.block.id)
       if (!was || was.from !== p.from || was.to !== p.to) out.set(p.block.id, logicalSpan(g, p.from, p.to))
     }
     return out
   }
   const spans = (p: readonly PlanBlock[]) => {
-    const infos = blockInfos(g, p, state.facts, ctx.snapshot.settings, typeAt)
+    const infos = blockInfos(g, p, state.facts, ctx.snapshot.settings, routineCostsIn(ctx), typeAt)
     const ids = new Map(infos.map((b) => [b.id, b]))
     return new Map(infos.flatMap((b) => {
       const s = b.inPlan ? plannedSpan(b, ids) : null

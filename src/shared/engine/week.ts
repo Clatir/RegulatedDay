@@ -21,7 +21,7 @@ import { blockInfos, movableBlock, plannedSpan, type BlockInfo } from './blocks'
 import { columnEnergy, type EnergyTrack } from './energyTrack'
 import { namingOf } from './context'
 import { snapshotEntries } from './createDay'
-import { computeDay, type DayContext, type DayState } from './day'
+import { computeDay, routineCostsIn, type DayContext, type DayState } from './day'
 import { foldFacts, isPassive, lastRunEnd, OPEN, pausedPlaceOf, ranMinutes, type BlockFact } from './facts'
 import { countedEvents, isFreeDay } from './freeze'
 import { atOf, gridOf } from './grid'
@@ -395,7 +395,7 @@ export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay
  */
 function quietDay(ctx: DayContext): HorizonDay {
   const g = gridOf(ctx.date)
-  const infos = blockInfos(g, ctx.plan, foldFacts(g, []), ctx.snapshot.settings)
+  const infos = blockInfos(g, ctx.plan, foldFacts(g, []), ctx.snapshot.settings, routineCostsIn(ctx))
   const byId = new Map(infos.map((b) => [b.id, b]))
   const lm = (idx: number) => logicalMinuteOf(ctx.date, atOf(g, idx))
   const blocks: HorizonBlock[] = []

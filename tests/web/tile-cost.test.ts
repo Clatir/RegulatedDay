@@ -21,12 +21,12 @@ import { block, Scenario } from '../unit/engine/dsl'
 
 const DATE = '2026-10-21'
 
-function axis(s: Scenario, now: string | null, today: string | null = DATE) {
+function axis(s: Scenario, now: string | null, today: string | null = DATE, planCosts = false) {
   const ctx = s.contextAt(s.at(now ?? '04:00'))
   const state = computeDay(ctx)
   const model = { date: DATE, ctx, state, energy: computeEnergy(ctx, state) } as unknown as DayModel
   const names = { rd: rdFrom({}), settings: s.settings, routines: [], requests: [] }
-  return new Map(dayAxis(model, names, now ? s.at(now) : null, today).items.map((i) => [i.id, i]))
+  return new Map(dayAxis(model, names, now ? s.at(now) : null, today, planCosts).items.map((i) => [i.id, i]))
 }
 
 describe('koszt na kafelku osi (D501)', () => {
@@ -46,9 +46,23 @@ describe('koszt na kafelku osi (D501)', () => {
     expect(m.get('sleep')!.cost!.costs).toEqual({ head: -3, emotions: -1, senses: -2 })
   })
 
-  it('osie Szablonów i kreatora (bez dnia okna) nie mają kosztu', () => {
+  it('oś kreatora (bez dnia okna) nie ma kosztu; oś Szablonów (D512) – koszt z planu każdego bloku, z okienkiem', () => {
     const m = axis(new Scenario({ date: DATE, plan }), null, null)
     expect(m.get('a')!.cost).toBeUndefined()
+    const t = axis(new Scenario({ date: DATE, plan }), null, null, true)
+    expect(t.get('a')!.cost).toEqual({ costs: { head: 3, emotions: 1, senses: 1 }, base: { head: 3, emotions: 1, senses: 1 }, own: false, edit: true })
+    expect(t.get('own')!.cost).toEqual({ costs: { head: 5, emotions: 0, senses: -1 }, base: { head: 3, emotions: 1, senses: 1 }, own: true, edit: true })
+    // A fixed block of the template whose hour the sample day would have passed: the template is no day – still changed.
+    expect(t.get('early')!.cost!.edit).toBe(true)
+  })
+
+  it('blok z rutyną z kosztem (D512): kafelek mówi koszt rutyny, „Jak kategoria” wraca do niego; własny wygrywa – także w Szablonach', () => {
+    const R = { head: 4, emotions: -1, senses: 2 }
+    const routinePlan = [{ ...block({ id: 'm', cat: 'rutyny', at: '07:00', min: 30 }), routine: 'poranna' }, { ...block({ id: 'o', cat: 'rutyny', at: '09:00', min: 30 }), routine: 'poranna', costs: { head: 0, emotions: 0, senses: 0 } }]
+    for (const m of [axis(new Scenario({ date: DATE, plan: routinePlan, routineCosts: { poranna: R } }), null), axis(new Scenario({ date: DATE, plan: routinePlan, routineCosts: { poranna: R } }), null, null, true)]) {
+      expect(m.get('m')!.cost).toMatchObject({ costs: R, base: R, own: false })
+      expect(m.get('o')!.cost).toMatchObject({ costs: { head: 0, emotions: 0, senses: 0 }, base: R, own: true })
+    }
   })
 
   it('blok skończony i dzień miniony – sam napis; zaczęty (także poza planem) i ten, który jeszcze nie ruszył – z okienkiem (reguła A)', () => {

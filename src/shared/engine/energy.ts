@@ -10,7 +10,8 @@
  * The check-in and the signals are anchors: a signal carries the exact state before it as its computer knew it, so
  * corrections of times before it never change the state after it; a descent the leader registered stays. A block counts
  * as it began (its start event): a later edit of the plan never changes its past; a change of its cost in the window of its tile
- * (`block.cost`, D501) counts from its minute on (`costChange.ts`).
+ * (`block.cost`, D501) counts from its minute on (`costChange.ts`). The order of a block's cost (D512): its own, its routine's, its
+ * variant's, its category's.
  */
 import { POOLS, REGEN_CATEGORY, REQUEST_CATEGORY, costsOf, type CategoryRules, type Costs, type Pool, type PoolValues } from '../model/categories'
 import { baseCosts } from '../model/blockCosts'
@@ -99,6 +100,8 @@ interface Kind {
   cat: string
   variant: string | null
   own: Costs | null
+  /** The cost of its routine (D512): from its start (`planned.routineCosts`), not begun – the routine's now; null – none. */
+  routine: Costs | null
   /** Its cost changed from a minute on (D501, `block.cost`), in the order they apply; null – none (the cost of its start all along). */
   changes: readonly CostChange[] | null
   bgPct: number | null
@@ -141,9 +144,9 @@ export function regenVariant(s: RulesSettings, id: string): Costs {
   return cat && v ? (v.costs ?? cat.costs) : costsOf(DEFAULT_SETTINGS.categories[REGEN_CATEGORY]!, id)
 }
 
-/** What a block costs an hour at minute k: its own (changed from a minute on, D501), else its variant's or category's (`baseCosts`). */
+/** What a block costs an hour at minute k: its own (changed from a minute on, D501), else its routine's (D512), variant's or category's (`baseCosts`). */
 function costOf(x: Kind, s: RulesSettings, k: number): Costs {
-  return (x.changes ? ownAt(x.changes, k, x.own) : x.own) ?? baseCosts(s.categories, x.cat, x.variant, x.rules)
+  return (x.changes ? ownAt(x.changes, k, x.own) : x.own) ?? baseCosts(s.categories, x.cat, x.variant, x.rules, x.routine)
 }
 
 /** Among blocks in the foreground at once (minute k): regeneration and a protected life block stay, then the class mode, the costlier, the earlier. */
@@ -200,12 +203,13 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
     let k = kinds.get(b.id)
     if (!k) {
       const p = day.facts.blocks.get(b.id)?.planned
-      const { cat, variant, own } = startCostOf(b, p)
+      const { cat, variant, own, routine } = startCostOf(b, p)
       k = {
         block: b,
         cat,
         variant,
         own,
+        routine,
         changes: changes.get(b.id) ?? null,
         bgPct: p?.bgCostPct !== undefined ? p.bgCostPct : b.bgCostPct,
         rules: ctx.snapshot.settings.categories[cat] ?? b.rules,
