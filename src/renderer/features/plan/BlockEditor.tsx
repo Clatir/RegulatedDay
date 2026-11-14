@@ -1,11 +1,11 @@
 /**
  * The editing panel of a block (D293: on the right of the plan): its own name (D430: „Nazwa” on top – empty, it is named as
  * before; a new block has the cursor in it), its category and variant, its start or the block it
- * follows („po sesji NY”), its end („Koniec”, D464: typed – the length changes; „ok. HH:MM” of the forecast after a block) and length, fixed or flexible, in the foreground or the background, the marks of the second
- * shift and the weekly analysis, its routine, the computer recording a lecture, „Powtarzaj” (`repeat`, D381: a slot of the day's panel),
+ * follows („po sesji NY”), its end („Koniec”, D464: typed – the length changes; „ok. HH:MM” of the forecast after a block) and length, fixed or flexible, in the foreground or the background (no marks of a second
+ * shift or a weekly analysis any more, D467), its routine, the computer recording a lecture, „Powtarzaj” (`repeat`, D381: a slot of the day's panel),
  * its list „Kroki” (`steps`, D440 – a slot of the screen, above the note), its note (a live Markdown editor, D388), its
  * attachments (`place`, D410). Every field saves on leaving it (spec „Edycja pól”); the panel changes nothing by itself.
- * A block of a series (`inSeries`, also the one edited in the list of „Szablony”) has its own hour and no marks: no „po bloku”, no „Oznaczenie” (D401).
+ * A block of a series (`inSeries`, also the one edited in the list of „Szablony”) has its own hour and no marks: no „po bloku” (D401).
  * D460: choosing a routine copies its usual steps into „Kroki” in the same change (`routineStepsCopy`) – a block of a task
  * keeps its list (it goes with the task's, T792); „bez rutyny” leaves the steps.
  * D463: the lists „Kategoria”, „Wariant” and „Rutyna” end with „+ Nowa…” – a window in the middle of the screen with all the fields of the thing
