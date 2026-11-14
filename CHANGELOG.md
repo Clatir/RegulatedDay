@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.20.0
+- Nowy blok zapisuje się sam: w panelu nowego bloku w „Dziś” i w okienku „Nowy blok” w „Tygodniu” nie ma już „Dodaj”. Blok zapisuje się przy pierwszym zatwierdzonym polu albo gdy klikniesz gdzie indziej lub zamkniesz panel, a potem pokazuje „Dodano blok · Cofnij”. Esc odrzuca nietknięty szkic. Przypadkowe kliknięcie osi nie tworzy bloku.
+- Zaznaczony odcinek: po przeciągnięciu po osi „Dziś” (i po „+ Blok”, Ctrl+N) nowy blok od razu stoi na osi jako kafelek z przerywaną ramką i godzinami, zanim go opiszesz.
+- Godzina końca: wszędzie, gdzie wpisujesz godzinę początku (panel bloku, okienko „Tygodnia”, „Postaw na osi” w Sprawach, wykłady), jest pole „Koniec”. Wpisany koniec zmienia długość, początek zostaje; koniec po północy ma dopisek „+1 dzień”.
+- Kroki z rutyny: wybór rutyny w bloku przenosi jej kroki 1:1 do listy „Kroki” – z nazwą i czasem. Krok może mieć czas trwania, nie musi; przy liście widać sumę („kroki: 25 min z 30”) i ostrzeżenie, gdy kroki trwają dłużej niż blok.
+- Powtarzanie zadań: zadanie w Sprawach ma „Powtarzaj” z zasadami serii (codziennie, dni robocze, co N tygodni, dzień miesiąca, n-ty dzień tygodnia; koniec po N razach albo w dniu). Po odhaczeniu od razu pojawia się następne z kolejną datą, z krokami do odhaczenia.
+- Del usuwa: kliknij element (blok, wydarzenie całodniowe, sprawę, krok, załącznik, rutynę, serię) i wciśnij Del – aplikacja zapyta „Usunąć …?”, Enter usuwa, Esc anuluje, a potem jest jeszcze „Cofnij”. Przyciski „Usuń” działają jak dotąd.
+- „+ Nowa…”: listy „Rutyna”, „Wariant” i „Kategoria” w panelu bloku kończą się pozycją „+ Nowa…”, która otwiera okno na środku ekranu ze wszystkimi polami; nowa rzecz jest od razu wybrana w bloku.
+- Bez oznaczeń: znika pole „Oznaczenie” (druga zmiana, analiza tygodniowa), krok kreatora „Druga zmiana” i pytania o drugą zmianę. Każdy blok liczy się według swojej kategorii – wieczorny blok pracy (np. sesja 20:00) liczy się jak zwykła praca, więc może wydłużyć dzień pracy i dać ostrzeżenie o granicy. Jeśli masz taki blok w szablonie, zostaw go albo usuń w „Szablonach”.
+
 ## 1.19.0
 - Nazwa bloku: na górze panelu bloku i okienka „Nowy blok” w „Tygodniu” jest pole „Nazwa” – jak tytuł wydarzenia w Google Calendar. Przy nowym bloku kursor stoi od razu w nim, a Enter dodaje blok. Blok z nazwą pokazuje ją na kafelku zamiast kategorii, a kategorię małym drukiem przy godzinach („09:00–09:45 · Analiza”); pasek pulpitu, miesiąc i wyszukiwarka pokazują nazwę. Nazwę nadasz też blokom szablonów i serii – dni z nich ją dostają, a zmiana w jednym dniu zmienia tylko ten dzień. Puste pole – blok nazywa się jak dotąd.
 - Poprawki: zajęcia z PDF zjazdów pokazują swoją nazwę także w „Tygodniu”, „3 dniach”, „Agendzie” i miesiącu, a bloki zadań – tytuł zadania, jak w „Dziś”; blok usunięty z planu w trakcie zachowuje swoją nazwę na osi i pasku pulpitu.
