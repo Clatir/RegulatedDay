@@ -35,6 +35,7 @@ import { dayPlace as placeOfDay, withAttachCounts } from '../attachments/attachV
 import { BlockEditor } from '../plan/BlockEditor'
 import { BlockSeries, RepeatNote, blockMayRepeat, repeatNote } from '../series/BlockSeries'
 import { askScope } from '../series/scopeAsk'
+import { removeTarget, useDeleteResolver, useDeleteSelected, type DeleteTarget } from '../../lib/deleteKey'
 import { StepsEditor } from '../steps/StepsEditor'
 import { saveBlockSteps } from '../steps/blockSteps'
 import { tickBlockStep } from '../../store/steps'
@@ -337,6 +338,17 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     }
     await removeSeries({ date, blockId: b.id }, scope, scope === 'all' ? `Usunięta seria: ${name}` : `Seria kończy się przed tym dniem: ${name}`)
   }
+  // D462: Del removes the selected block – asked first, then the very code of „Usuń” / „Odwołaj na ten dzień” (a block of a series asks
+  // its scope itself). A tile focused but not selected is no target (the panel shows the selected one).
+  const cancelWord = block != null && byCancel && !started && block.origin !== 'series'
+  const deleteTarget: DeleteTarget | null =
+    block && !draft
+      ? cancelWord
+        ? { title: `Odwołać „${blockName(block, names)}” na ten dzień?`, yes: 'Odwołaj', run: () => removeBlock(block) }
+        : removeTarget(blockName(block, names), () => removeBlock(block), seriesOfBlock(series, block, date) != null)
+      : null
+  useDeleteResolver('block', (id) => (block && !draft && block.id === id ? deleteTarget : null))
+  useDeleteSelected(deleteTarget)
   /** A block of the plan that may be dragged (D305): what its drag to `span` changes and pushes apart (D367). */
   const movableChange = (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan): DayChange | null => (axis.items.find((i) => i.id === id)?.movable ? dragChange(model, id, span, edge, shown, pushes) : null)
 

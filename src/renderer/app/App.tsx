@@ -10,6 +10,8 @@ import { navigate, openRitual, PAGES, useUi, type Page } from '../store/ui'
 import { useWidget } from '../store/widget'
 import { commitActiveField } from '../lib/commit'
 import { modalOpen } from '../lib/escape'
+import { useDeleteKey } from '../lib/deleteKey'
+import { DeleteDialog } from '../components/DeleteDialog'
 import { Bar } from '../widget/Bar'
 import { Palette } from '../features/search/Palette'
 import { SeriesScopeDialog } from '../features/series/scopeAsk'
@@ -138,6 +140,7 @@ export function App() {
   const wizardOpen = useWizard((s) => s.open)
   const wizardAsked = useWizard((s) => s.asked)
   useHotkeys()
+  useDeleteKey()
   useGameFeed()
   useEffect(() => window.rd.onNavigate((p) => (p === 'ritual' ? openRitual() : (PAGES as string[]).includes(p) && navigate(p as Page))), [])
   // No folder on this computer: the wizard (until „Później”). A folder that did not open (OneDrive not ready at the
@@ -163,6 +166,7 @@ export function App() {
       )}
       <Palette />
       <SeriesScopeDialog />
+      <DeleteDialog />
       <Toasts />
       <Celebration />
     </div>

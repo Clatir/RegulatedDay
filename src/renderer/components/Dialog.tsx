@@ -15,6 +15,7 @@ export function Dialog({
   actions,
   onClose,
   wide,
+  centered,
   ...rest
 }: {
   title: ReactNode
@@ -22,6 +23,8 @@ export function Dialog({
   actions?: ReactNode
   onClose: () => void
   wide?: boolean
+  /** In the middle of the screen, not at its top (D463: the window of a new thing made from a list). */
+  centered?: boolean
   'data-testid'?: string
 }) {
   useEscapeLayer(true, onClose)
@@ -53,7 +56,7 @@ export function Dialog({
     }
   }, [])
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 px-4 py-10" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className={cx('fixed inset-0 z-50 flex justify-center overflow-y-auto bg-black/50 px-4 py-10', centered ? 'items-center' : 'items-start')} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={box}
         tabIndex={-1}

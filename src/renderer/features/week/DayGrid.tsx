@@ -18,7 +18,7 @@ import { weekday } from '@shared/time/zone'
 import { cx } from '../../components/ui'
 import { useData } from '../../store/data'
 import { useMachine } from '../../store/machine'
-import { openDay, setBlockDraft, toast } from '../../store/ui'
+import { openDay, openPick, setBlockDraft, toast } from '../../store/ui'
 import { showWeekPush } from '../../store/weekPush'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockColor, blockKind, blockName, type Names } from '../plan/blockView'
@@ -505,7 +505,8 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
     <button
       type="button"
       onClick={() => {
-        if (!grab?.consumed()) openDay(date)
+        // D462: the click selects the block – its day opens with it selected (as in „Agenda”); Del there removes it. A block outside the plan only opens the day.
+        if (!grab?.consumed()) b.outsidePlan ? openDay(date) : openPick({ page: 'today', day: date }, { kind: 'block', id: b.id, date })
       }}
       onPointerDown={grab?.down}
       {...NO_GRID}
