@@ -1,8 +1,8 @@
 /**
  * The columns of days on one axis of hours (D356; „Tydzień” – seven of them, „3 dni” – three, D417, in a larger scale): above
  * each its type, the boundary (kept, not kept, in progress, free, no data) and the regeneration against the minimum; the
- * blocks as planned, on days gone by as it was, with the energy's curve behind them (D417, D422). A click on the heading of a
- * day or on a block opens its plan, as in the calendar (D295); a click on an empty place of a column (or a drag over it) opens
+ * blocks as planned, on days gone by as it was, the energy as a strip at the left edge of a column (D500). A click on the
+ * heading of a day or on a block opens its plan, as in the calendar (D295); a click on an empty place of a column (or a drag over it) opens
  * the small window of a new block there (D366). A block that may be moved (`HorizonBlock.movable`) is dragged to another hour
  * or another day (D305, D417, D422): the place it would take is shown while it is held, the drop is `moveWeekBlock`.
  */
@@ -27,11 +27,11 @@ import { DEFAULT_NEW_BLOCK_MIN, dragStarted, snapMinute, type GridRange } from '
 import { NO_GRID, RangeBand, useGridCreate } from '../plan/gridDrag'
 import { AllDayBar } from '../allday/AllDayBar'
 import { attachBadge, attachBadgeTitle, dayPlace } from '../attachments/attachView'
-import { EnergyBackdrop } from './EnergyBackdrop'
-import { TileCost } from '../plan/TileCost'
+import { EnergyStrip, STRIP_WIDTH } from './EnergyStrip'
+import { costRoom, TileCost } from '../plan/TileCost'
 import { NewBlockPopover } from './NewBlockPopover'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
-import { saveWeekCosts } from './weekCosts'
+import { saveTileCosts } from '../plan/costSave'
 import { moveWeekBlock } from './weekMove'
 import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, regenLine, WEEKDAY_FULL, type Tone } from './weekText'
 import { DENIED_TEXT, dropOn, dropStart, dropStays, sameDrop, weekOnto, type BlockDrop } from './weekViews'
@@ -476,6 +476,7 @@ function DayColumn({
     onRange: (r, _rect, x) => onPick(index, columnUnder(x, index), r)
   })
   const shown = held ?? (waiting ? { startMin: waiting.startMin, endMin: waiting.startMin + waiting.durationMin } : null)
+  const stripped = day.energy != null && day.energy.samples.length > 0
   return (
     <div
       className={cx('relative overflow-hidden rounded-sm border-x border-line', day.when === 'today' ? 'bg-panel' : 'bg-transparent')}
@@ -487,10 +488,13 @@ function DayColumn({
       {marks.map((h) => (
         <div key={h} className="pointer-events-none absolute right-0 left-0 border-t border-line/60" style={{ top: axisY(h, lo, ppm) }} />
       ))}
-      <EnergyBackdrop date={day.date} track={day.energy} lo={lo} ppm={ppm} height={height} />
-      {lanes.map(({ item, lane, lanes: n }) => (
-        <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} onCosts={(costs) => saveWeekCosts(day.date, item.id, costs)} />
-      ))}
+      {/* D500: the energy as a strip at the left edge; the blocks stand right of it (nothing under them). */}
+      <EnergyStrip date={day.date} track={day.energy} lo={lo} ppm={ppm} height={height} />
+      <div className="absolute inset-y-0 right-0" style={{ left: stripped ? STRIP_WIDTH + 1 : 0 }} data-testid={`week-blocks-${day.date}`}>
+        {lanes.map(({ item, lane, lanes: n }) => (
+          <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} onCosts={(costs) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs)} />
+        ))}
+      </div>
       {shown && <RangeBand range={shown} lo={lo} ppm={ppm} testId={held ? 'week-range' : 'week-range-waiting'} />}
       {drop && <DropBand range={{ startMin: drop.startMin, endMin: drop.startMin + drop.durationMin }} lo={lo} ppm={ppm} denied={drop.denied} note={drop.onto?.text} />}
     </div>
@@ -588,7 +592,7 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
         <span className="block truncate pt-px text-fg">{nameContent}</span>
       )}
       {height >= 30 && (
-        <span className={cx('num block truncate text-muted', costAt === 'corner' && 'pr-[58px]')}>
+        <span className={cx('num block truncate text-muted', costAt === 'corner' && costRoom(tight))} data-testid={`week-hours-${date}-${b.id}`}>
           {logicalClock(b.startMin)}–{logicalClock(b.endMin)}
           {kind ? ` · ${kind}` : ''}
           {attach > 0 && (

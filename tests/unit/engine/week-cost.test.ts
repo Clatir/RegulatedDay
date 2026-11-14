@@ -25,6 +25,18 @@ describe('koszt na kafelku widoków wielodniowych (D501)', () => {
     expect(by.reg).toMatchObject({ costs: { head: -1, emotions: -2, senses: -3 }, own: false, edit: true })
   })
 
+  it('dziś: zaczęty blok (także poza planem) – koszt, którym silnik liczy teraz, z okienkiem; skończony – sam napis (reguła A)', () => {
+    const s = new Scenario({ date: DATE, plan: plan.map((b) => ({ ...b })) })
+    s.start('own', '10:00').start('x', '10:05', { cat: 'analiza', min: 20 }).ran('a', '08:05', '09:00')
+    s.opts.plan[1] = { ...s.opts.plan[1]!, costs: { head: 1, emotions: 1, senses: 1 } }
+    const t = s.at('10:10')
+    s.write([{ k: 'energy.cost', dom: 'energy', block: 'x', at: t, costs: { head: 0, emotions: 0, senses: 0 } }], t)
+    const by = Object.fromEntries(horizonDay(s.contextAt(s.at('10:15')), 'today').blocks.map((b) => [b.id, b]))
+    expect(by.own!.cost).toMatchObject({ costs: { head: 5, emotions: 0, senses: -1 }, own: true, edit: true })
+    expect(by.x).toMatchObject({ outsidePlan: true, cost: { costs: { head: 0, emotions: 0, senses: 0 }, own: true, edit: true } })
+    expect(by.a!.cost).toMatchObject({ edit: false })
+  })
+
   it('dzień miniony: koszt jest, zmienić go nie wolno (zaczęty, niezaczęty, poza planem)', () => {
     const s = new Scenario({ date: DATE, plan })
     s.ran('a', '08:05', '09:00')

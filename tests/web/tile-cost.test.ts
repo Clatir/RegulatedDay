@@ -15,6 +15,7 @@ import { rdFrom } from '@shared/model/rd'
 import { dayAxis } from '@renderer/features/plan/dayItems'
 import { Timeline, type TimelineItem } from '@renderer/features/plan/Timeline'
 import { installEscape } from '@renderer/lib/escape'
+import { askScope, SeriesScopeDialog } from '@renderer/features/series/scopeAsk'
 import type { DayModel } from '@renderer/store/day'
 import { block, Scenario } from '../unit/engine/dsl'
 
@@ -50,16 +51,30 @@ describe('koszt na kafelku osi (D501)', () => {
     expect(m.get('a')!.cost).toBeUndefined()
   })
 
-  it('zaczęty blok, dzień minionych i blok poza planem – koszt jest, okienka nie ma; blok, który jeszcze nie ruszył – ma', () => {
+  it('blok skończony i dzień miniony – sam napis; zaczęty (także poza planem) i ten, który jeszcze nie ruszył – z okienkiem (reguła A)', () => {
     const s = new Scenario({ date: DATE, plan }).start('a', '08:00').start('loose', '09:00', { cat: 'analiza' })
     const today = axis(s, '09:30')
-    expect(today.get('a')!.cost!.edit).toBe(false)
-    expect(today.get('loose')!.cost).toMatchObject({ edit: false, costs: { head: 3, emotions: 1, senses: 1 } })
+    expect(today.get('a')!.cost!.edit).toBe(true)
+    expect(today.get('loose')!.cost).toMatchObject({ edit: true, costs: { head: 3, emotions: 1, senses: 1 } })
     expect(today.get('own')!.cost!.edit).toBe(true)
+    s.end('a', '09:40').end('loose', '09:45')
+    const after = axis(s, '10:00')
+    expect(after.get('a')!.cost!.edit).toBe(false)
+    expect(after.get('loose')!.cost!.edit).toBe(false)
     // A day gone by: nothing is changed there.
     expect(axis(new Scenario({ date: DATE, plan }), null, '2026-10-22').get('own')!.cost!.edit).toBe(false)
     // A fixed block whose time has passed unbegun: dimmed, nothing to change.
     expect(axis(new Scenario({ date: DATE, plan }), '11:00').get('early')!.cost!.edit).toBe(false)
+  })
+
+  it('zaczęty blok mówi koszt, którym silnik liczy teraz: ze startu (nie z planu zmienionego później), po zmianie – nowy', () => {
+    const s = new Scenario({ date: DATE, plan: plan.map((b) => ({ ...b })) }).start('own', '10:00')
+    // The plan changed after the start: the engine counts the start's cost – so does the tile.
+    s.opts.plan[1] = { ...s.opts.plan[1]!, costs: { head: 1, emotions: 1, senses: 1 } }
+    expect(axis(s, '10:10').get('own')!.cost).toMatchObject({ costs: { head: 5, emotions: 0, senses: -1 }, own: true, edit: true })
+    const t = s.at('10:20')
+    s.write([{ k: 'energy.cost', dom: 'energy', block: 'own', at: t, costs: null }], t)
+    expect(axis(s, '10:20').get('own')!.cost).toMatchObject({ costs: { head: 3, emotions: 1, senses: 1 }, own: false, edit: true })
   })
 })
 
@@ -125,6 +140,16 @@ describe('napis kosztu na kafelku', () => {
     expect(q('block-t-cost')).toBeNull()
   })
 
+  it('uchwyty zmiany długości leżą nad napisem kosztu – działają na całej szerokości kafelka (także pod napisem w rogu)', async () => {
+    await mount([item('a', 600, 660, cost({ head: 3, emotions: 1, senses: 1 })), item('x', 800, 830, cost({ head: 3, emotions: 1, senses: 1 })), item('y', 800, 830, cost({ head: 1, emotions: 1, senses: 1 }))], { onResize: vi.fn() })
+    const z = (el: HTMLElement) => Number(/(?:^|\s)z-(\d+)(?:\s|$)/.exec(el.className)?.[1] ?? 0)
+    expect(q('block-a-cost')!.getAttribute('data-place')).toBe('corner')
+    expect(z(q('block-a-edge-end')!)).toBeGreaterThan(z(q('block-a-cost')!))
+    expect(q('block-x-cost')!.getAttribute('data-place')).toBe('hover')
+    expect(z(q('block-x-edge-top')!)).toBeGreaterThan(z(q('block-x-cost')!))
+    expect(q('block-a-edge-end')!.className).toContain('inset-x-0')
+  })
+
   it('miejsce napisu: w rogu na wysokim kafelku, na końcu wiersza nazwy na niskim, po najechaniu na niskim obok innego', async () => {
     await mount([
       item('tall', 600, 660, cost({ head: 3, emotions: 1, senses: 1 })),
@@ -167,8 +192,72 @@ describe('okienko kosztu bloku', () => {
     expect(onCosts).toHaveBeenLastCalledWith('a', { head: 4, emotions: 1, senses: 1 })
     expect(q('cost-pop-head-value')!.textContent).toBe('4')
     click(q('cost-pop-senses-minus')!)
-    // Over what the window shows now: the clicks that follow each other do not undo one another.
+    // Over what the window shows now: the clicks that follow each other do not undo one another (saved one after another).
+    await act(async () => undefined)
     expect(onCosts).toHaveBeenLastCalledWith('a', { head: 4, emotions: 1, senses: 0 })
+  })
+
+  it('zapisy idą po kolei: następny klik czeka na poprzedni, a po odmowie poprzedniego – przepada; okienko mówi to, co zapisane', async () => {
+    let answer!: (a: boolean) => void
+    const onCosts = vi.fn(() => new Promise<boolean>((r) => (answer = r)))
+    await mount([item('a', 600, 660, cost({ head: 3, emotions: 1, senses: 1 }))], { onCosts })
+    click(q('block-a-cost')!)
+    click(q('cost-pop-head-plus')!)
+    click(q('cost-pop-head-plus')!)
+    expect(q('cost-pop-head-value')!.textContent).toBe('5')
+    // The second waits for the first.
+    expect(onCosts).toHaveBeenCalledTimes(1)
+    await act(async () => answer(false))
+    expect(onCosts).toHaveBeenCalledTimes(1)
+    expect(q('cost-pop-head-value')!.textContent).toBe('3')
+    // Written: the next one goes, over what was clicked.
+    click(q('cost-pop-head-plus')!)
+    click(q('cost-pop-head-plus')!)
+    await act(async () => answer(true))
+    expect(onCosts).toHaveBeenCalledTimes(3)
+    expect(onCosts).toHaveBeenLastCalledWith('a', { head: 5, emotions: 1, senses: 1 })
+  })
+
+  it('zapis, który stał się pytaniem albo ma wynik nieznany (asked) – okienko wraca do zapisanego', async () => {
+    const onCosts = vi.fn().mockResolvedValue('asked')
+    await mount([item('a', 600, 660, cost({ head: 3, emotions: 1, senses: 1 }))], { onCosts })
+    click(q('block-a-cost')!)
+    click(q('cost-pop-head-plus')!)
+    expect(q('cost-pop-head-value')!.textContent).toBe('4')
+    await act(async () => undefined)
+    expect(q('cost-pop-head-value')!.textContent).toBe('3')
+  })
+
+  it('otwarte ponownie – liczby z kafelka, nie z poprzedniego otwarcia', async () => {
+    const onCosts = vi.fn().mockResolvedValue(true)
+    await mount([item('a', 600, 660, cost({ head: 3, emotions: 1, senses: 1 }))], { onCosts })
+    click(q('block-a-cost')!)
+    click(q('cost-pop-head-plus')!)
+    await act(async () => undefined)
+    act(() => void window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })))
+    // The tile still says 3 (the save did not change it): so does the window.
+    click(q('block-a-cost')!)
+    expect(q('cost-pop-head-value')!.textContent).toBe('3')
+  })
+
+  it('pytanie o zakres serii zamyka okienko (stałoby nad pytaniem); klik czekający za tym, który pyta, przepada – nikt nie pyta drugi raz', async () => {
+    const onCosts = vi.fn(async () => {
+      // The save of a block of a series: first the day is read, then the question.
+      await Promise.resolve()
+      return (await askScope('change', 'Blok a', 'codziennie')) === 'only'
+    })
+    await mount([item('a', 600, 660, cost({ head: 3, emotions: 1, senses: 1 }))], { onCosts })
+    act(() => root!.render(createElement('div', null, createElement(Timeline, { items: [item('a', 600, 660, cost({ head: 3, emotions: 1, senses: 1 }))], markers: [], selected: null, onSelect: vi.fn(), onMove: vi.fn(), onCosts, from: 6 * 60, to: 22 * 60 }), createElement(SeriesScopeDialog))))
+    click(q('block-a-cost')!)
+    click(q('cost-pop-head-plus')!)
+    click(q('cost-pop-head-plus')!)
+    await act(async () => undefined)
+    expect(q('series-scope')).not.toBeNull()
+    expect(q('cost-pop')).toBeNull()
+    await act(async () => click(q('series-scope-only')!))
+    await act(async () => undefined)
+    expect(onCosts).toHaveBeenCalledTimes(1)
+    expect(q('series-scope')).toBeNull()
   })
 
   it('[+] przy 5 i [−] przy −5 nic nie zmieniają ani nie zapisują', async () => {

@@ -2,7 +2,7 @@
 /**
  * D501: the cost per hour on the tiles of „Tydzień” („3·1·1”, no spaces) and „3 dni” („3 · 1 · 1”) – and its small window: a click on the label
  * opens the window for that block alone (it neither opens the day nor starts a drag), [+] / [−] and „Jak kategoria” save the block's own cost
- * of that day (`saveWeekCosts`); a tile that may not be changed only tells.
+ * of that day (`saveTileCosts` – the path of „Dziś”); a tile that may not be changed only tells.
  */
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -12,14 +12,14 @@ import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import type { TileCost } from '@shared/model/blockCosts'
 import { DayGrid } from '@renderer/features/week/DayGrid'
 import { THREE_DAYS_PPM, WEEK_PPM } from '@renderer/features/week/weekLayout'
-import { saveWeekCosts } from '@renderer/features/week/weekCosts'
+import { saveTileCosts } from '@renderer/features/plan/costSave'
 import { moveWeekBlock } from '@renderer/features/week/weekMove'
 import { installEscape } from '@renderer/lib/escape'
 import { useData } from '@renderer/store/data'
 import { useUi } from '@renderer/store/ui'
 
 vi.mock('@renderer/features/week/weekMove', async (orig) => ({ ...(await orig<typeof import('@renderer/features/week/weekMove')>()), moveWeekBlock: vi.fn() }))
-vi.mock('@renderer/features/week/weekCosts', () => ({ saveWeekCosts: vi.fn() }))
+vi.mock('@renderer/features/plan/costSave', () => ({ saveTileCosts: vi.fn() }))
 
 const TODAY = '2026-11-18'
 const DATES = [TODAY, '2026-11-19']
@@ -55,7 +55,7 @@ let root: Root | null = null
 let host: HTMLElement | null = null
 beforeEach(() => {
   vi.mocked(moveWeekBlock).mockReset()
-  vi.mocked(saveWeekCosts).mockReset().mockResolvedValue(true)
+  vi.mocked(saveTileCosts).mockReset().mockResolvedValue(true)
   useData.setState({ view: { today: TODAY, allDay: [], computers: [] } as unknown as DataView })
   useUi.setState({ page: 'week', day: null, toasts: [] })
   Element.prototype.scrollIntoView = () => undefined
@@ -116,16 +116,27 @@ describe('koszt na kafelku „Tygodnia” i „3 dni” (D501)', () => {
     expect(useUi.getState().page).toBe('week')
     expect(useUi.getState().day).toBeNull()
     click(q('cost-pop-emotions-plus')!)
-    expect(saveWeekCosts).toHaveBeenLastCalledWith(DATES[1], 'f', { head: 3, emotions: 2, senses: 1 })
+    expect(saveTileCosts).toHaveBeenLastCalledWith(expect.objectContaining({ date: DATES[1], blockId: 'f', ofSeries: false }), { head: 3, emotions: 2, senses: 1 })
+    await act(async () => undefined)
     click(q('cost-pop-reset')!)
-    expect(saveWeekCosts).toHaveBeenLastCalledWith(DATES[1], 'f', null)
+    await act(async () => undefined)
+    expect(saveTileCosts).toHaveBeenLastCalledWith(expect.objectContaining({ date: DATES[1], blockId: 'f' }), null)
+  })
+
+  it('wiersz godzin zostawia miejsce na napis w rogu według trybu: „3 dni” – na napis ze spacjami, „Tydzień” – na skrót', async () => {
+    const hours = (date: string, id: string) => q(`week-hours-${date}-${id}`)!.className
+    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(-5, -5, -5) })]), day(DATES[1]!, [])], THREE_DAYS_PPM)
+    expect(hours(TODAY, 'a')).toContain('pr-[84px]')
+    act(() => root?.unmount())
+    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(-5, -5, -5) })]), day(DATES[1]!, [])])
+    expect(hours(TODAY, 'a')).toContain('pr-[58px]')
   })
 
   it('[+] przy 5 nic nie zmienia', async () => {
     await mount([day(TODAY, [block('a', 600, 660, { cost: cost(5, 1, 1, { own: true }) })]), day(DATES[1]!, [])])
     click(labelOf(TODAY, 'a')!)
     click(q('cost-pop-head-plus')!)
-    expect(saveWeekCosts).not.toHaveBeenCalled()
+    expect(saveTileCosts).not.toHaveBeenCalled()
   })
 
   it('wciśnięcie na napisie bloku do przeniesienia nie zaczyna przeciągania', async () => {

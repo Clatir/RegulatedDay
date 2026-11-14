@@ -12,6 +12,7 @@
  */
 import { namedById, namedOf, namedOfPlan, type NamedBlock } from '../blockName'
 import { blockCosts, type TileCost } from '../model/blockCosts'
+import { begunCosts, costChangesOf, costEditable } from './costChange'
 import { isKnown } from '../model/events'
 import type { Step } from '../model/steps'
 import type { BoundaryOutcome } from './outcome'
@@ -214,6 +215,14 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
   // D478: a block a start swapped with waits, paused, where the forecast puts the rest of it – as „Dziś” draws it.
   const swapped = (f: BlockFact) => (nowIdx != null && pausedPlaceOf(f) != null ? placed.get(f.id) : undefined)
   const naming = namingOf(ctx, state.facts)
+  // D501: the cost on the tile – a begun block's as the engine counts it now (its start, its changes), another's as planned; changed there
+  // on a day not gone by: a block still to come (into the plan), a begun one until it ends (from now on) – `costEditable`.
+  const changes = costChangesOf(ctx.events, g)
+  const tileCost = (info: BlockInfo, st: HorizonBlockState): TileCost => {
+    const f = state.facts.blocks.get(info.id)
+    const costs = f?.startedAt != null ? begunCosts(ctx, state, info, changes) : blockCosts(info, state.settings.categories, info.rules)
+    return { ...costs, edit: costEditable(f, when === 'past', st === 'missed') }
+  }
   const out: HorizonBlock[] = []
   const push = (info: BlockInfo, named: NamedBlock, from: number, to: number, st: HorizonBlockState, outsidePlan: boolean, steps?: Step[], movable = false) =>
     out.push({
@@ -230,8 +239,7 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen): Horizo
       ...(info.fixed ? { fixed: true as const } : {}),
       ...(isSessionBlock(info) ? { session: true as const } : {}),
       ...(info.alongside != null ? { alongside: info.alongside } : {}),
-      // D501: changed on the tile only for a block of the plan still to come (not begun, not passed, not taken off; no day gone by).
-      cost: { ...blockCosts(info, state.settings.categories, info.rules), edit: !outsidePlan && st === 'planned' }
+      cost: tileCost(info, st)
     })
   for (const p of ctx.plan) {
     const info = byId.get(p.id)

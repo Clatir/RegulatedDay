@@ -17,6 +17,7 @@ import { runningEdges } from '@shared/engine/resize'
 import { plannedEndOf } from '@shared/engine/timer'
 import { durationLabel, logicalClock } from '@shared/format'
 import { blockCosts } from '@shared/model/blockCosts'
+import { begunCosts, costChangesOf, costEditable } from '@shared/engine/costChange'
 import { shownSteps } from '@shared/model/routineSteps'
 import { stepsCounter } from '@shared/model/steps'
 import { logicalMinuteOf } from '@shared/time/day'
@@ -56,6 +57,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
   const edges = now != null ? runningEdges(state, now) : null
   const items: TimelineItem[] = []
   const placed = new Map(state.forecast.map((p) => [p.block.id, p]))
+  // D501: the changes of begun blocks' costs, once for the day.
+  const changes = costChangesOf(ctx.events, g)
   for (const p of ctx.plan) {
     const info = byId.get(p.id)
     if (!info) continue
@@ -104,10 +107,15 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
       ...taskPriority(sprawa),
       // D440: the counter of its steps on the tile (none – nothing).
       ...(counter ? { steps: counter } : {}),
-      // D501: the cost per hour on the tile – only for a day's window (`today` given: not the templates' nor the wizard's axis); changed on the
-      // tile only while the block has not begun, is not taken off and its day is not gone by (the engine counts a begun block by its start).
+      // D501: the cost per hour on the tile – only for a day's window (`today` given: not the templates' nor the wizard's axis); a begun block's
+      // as the engine counts it now (its start, its changes from a minute on), another's as planned; `costEditable` – whether it may be changed.
       ...(today != null
-        ? { cost: { ...blockCosts(p, model.state.settings.categories, info.rules), edit: !gone && f?.startedAt == null && model.date >= today && (nowIdx == null || to > nowIdx) } }
+        ? {
+            cost: {
+              ...(f?.startedAt != null ? begunCosts(ctx, state, info, changes) : blockCosts(p, state.settings.categories, info.rules)),
+              edit: costEditable(f, model.date < today, f?.startedAt == null && nowIdx != null && to <= nowIdx)
+            }
+          }
         : {}),
       ...(edge ? { resize: 'end' as const } : {}),
       // D305: a block not begun nor gone, with its own hour (`ownHourBlock`: not after another block, not a session, a lecture,
@@ -141,8 +149,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
       background: false,
       dim: f.endedAt != null,
       ...(finishedBlock(f) ? { finished: true } : {}),
-      // D501: begun outside the plan – its cost says the tile, no window to change it.
-      ...(today != null ? { cost: { ...blockCosts({ costs: info.costs, categoryId: info.categoryId, variantId: info.variantId }, model.state.settings.categories, info.rules), edit: false } } : {}),
+      // D501: begun outside the plan – its cost as the engine counts it now; changed from now on until it ends.
+      ...(today != null ? { cost: { ...begunCosts(ctx, state, info, changes), edit: costEditable(f, model.date < today, false) } } : {}),
       waits: false
     })
   }
@@ -154,7 +162,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
   markers.push({ at: lm(b.max), label: `maksimum ${logicalClock(lm(b.max))}`, tone: 'rose', dashed: true })
   if (!state.hardEnd.unreachable && state.hardEnd.at < state.bedtime.forecast) markers.push({ at: lm(state.hardEnd.at), label: `twardy koniec ${logicalClock(lm(state.hardEnd.at))}`, tone: 'sea', dashed: true })
   markers.push({ at: lm(state.bedtime.forecast), label: `pora snu ${logicalClock(lm(state.bedtime.forecast))}`, tone: 'muted' })
-  if (nowIdx != null && nowIdx >= 0 && nowIdx <= g.length) markers.push({ at: lm(nowIdx), label: `teraz ${logicalClock(lm(nowIdx))}`, tone: 'fg' })
+  if (nowIdx != null && nowIdx >= 0 && nowIdx <= g.length) markers.push({ at: lm(nowIdx), label: `teraz ${logicalClock(lm(nowIdx))}`, tone: 'fg', now: true })
 
   // The one sampling of the curve (`energyTrack` – the columns of „Tydzień” and „3 dni” draw the same, D417).
   const energy = energyTrack(model.date, g, model.energy)

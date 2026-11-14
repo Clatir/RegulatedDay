@@ -7,12 +7,14 @@
  * morning plan proposes the review the day after the period, with „Nie teraz” without a limit; after the third deferral
  * it waits in the settings. Pure.
  */
+import { COST_MAX, COST_MIN } from '../model/blockCosts'
 import { POOLS, type Costs, type Pool } from '../model/categories'
 import { compareEvents, isKnown, type AnyEvent, type CloseHow, type EnergyEvent, type FeltCost } from '../model/events'
 import { templateVersionOn, type Template } from '../model/plan'
 import type { RulesSettings } from '../model/settings'
 import { addDays } from '../time/zone'
 import { settingsAtMinute, type DayContext, type DayState } from './day'
+import { costChangesOf, ownAt } from './costChange'
 import { anchorEffect } from './energy'
 import { OPEN, ranMinutes } from './facts'
 import { blockEvidence } from './game'
@@ -141,13 +143,18 @@ export function costEvidence(ctx: DayContext, state: DayState, energyOn: boolean
   const from = Math.min(...checkins)
   const now = Math.min(state.now, g.length)
   const fg: Array<string | null> = new Array(Math.max(0, now)).fill(null)
-  const runs: Array<{ from: number; to: number; key: string | null }> = []
+  // D501: a begun block's cost changed from a minute on (`energy.cost`) – a minute of its own cost is no evidence for its category.
+  const changes = costChangesOf(events, g)
+  const runs: Array<{ from: number; to: number; key: (k: number) => string | null }> = []
   for (const f of state.facts.blocks.values()) {
     if (!f.planned) continue
-    const key = costKey(state.settings, f.planned)
-    for (const r of f.runs) if (!r.bg) runs.push({ from: r.from, to: r.to === OPEN ? now : r.to, key })
+    const planned = f.planned
+    const key = costKey(state.settings, planned)
+    const changed = changes.get(f.id)
+    const keyAt = changed ? (k: number) => costKey(state.settings, { ...planned, costs: ownAt(changed, k, planned.costs ?? null) }) : () => key
+    for (const r of f.runs) if (!r.bg) runs.push({ from: r.from, to: r.to === OPEN ? now : r.to, key: keyAt })
   }
-  for (const r of runs.sort((a, b) => a.from - b.from)) for (let k = Math.max(r.from, from); k < Math.min(r.to, now); k++) fg[k] = r.key
+  for (const r of runs.sort((a, b) => a.from - b.from)) for (let k = Math.max(r.from, from); k < Math.min(r.to, now); k++) fg[k] = r.key(k)
   const minutes: Record<string, number> = {}
   for (let k = from; k < now; k++) if (fg[k]) minutes[fg[k]!] = (minutes[fg[k]!] ?? 0) + 1
   const residual: Record<string, Costs> = {}
@@ -246,7 +253,7 @@ export function costProposals(days: readonly CostEvidence[], settings: RulesSett
     const to = { ...from }
     for (const p of POOLS as readonly Pool[]) {
       const r = withIt.reduce((s, d) => s + (d.residual[key]?.[p] ?? 0), 0)
-      to[p] = Math.max(-5, Math.min(5, Math.round(from[p] - r / (3 * hours))))
+      to[p] = Math.max(COST_MIN, Math.min(COST_MAX, Math.round(from[p] - r / (3 * hours))))
     }
     const [category, variant] = key.split(':') as [string, string | undefined]
     if (POOLS.some((p) => to[p] !== from[p])) out.push({ category, variant: variant ?? null, days: withIt.length, hours: Math.round(hours * 10) / 10, from: { ...from }, to })

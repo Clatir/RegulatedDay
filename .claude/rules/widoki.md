@@ -54,10 +54,10 @@ T950–T955, T960–T969, T980–T986 (część A; D426), T936–T939 (ekrany).
   `BlockBox` eksportowany z `DayGrid` (T959). Przeciąganie bloku: nasłuch okna ustawiany przy naciśnięciu na bloku `movable`,
   miejsce z `dropStart` + `dropOn` (`mayMoveBetween`), podgląd `week-drop[data-start][data-denied]`, wynik `moveWeekBlock` →
   `showWeekPush`; klik po przeciągnięciu wyciszony do następnego kliknięcia (`BlockGrab.consumed`), Esc w fazie przechwytywania (T957). Agenda: klik w blok = `openPick` (T956).
-- `EnergyBackdrop` (`week-energy-<data>[data-assumed]`, podpis `week-energy-assumed-<data>`), `AgendaView` (`agenda-day-`,
+- `EnergyStrip` (D500, T1281–T1282: pasek `week-energy-<data>[data-assumed]` z odcinkami `rect[data-pool][data-state]`, bloki w `week-blocks-<data>` od 6 px, najechanie `week-energy-hit-` → `week-energy-hover-`, podpis `week-energy-assumed-<data>`, legenda `week-energy-legend` w `WeekPage`; wygładzenie i odcienie – `plan/energyDraw.ts`), `AgendaView` (`agenda-day-`,
   `agenda-heading-`, `agenda-block-<dzień>-<id>`, `agenda-empty-`), komórka miesiąca – `monthCellView` + `MonthGrid` (`detail`):
   `month-bar-`, `month-more-`, `month-load-` – **bez prefiksu `day-`** (E2E wybierają komórki przez `[data-testid^="day-"]`);
   `data-counted` na stronie Kalendarza = miesiąc policzony (testy czekają na to przed odczytem tekstu komórki).
-- Koszt na kafelku (D501, T1270–T1274): `HorizonBlock.cost` (`TileCost` – `blockCosts` z `model/blockCosts.ts`, jedna reguła z silnikiem; `edit` tylko dla bloku z planu, niezaczętego, nieminionego), `BlockBox` rysuje `plan/TileCost` („Tydzień” `tight` – „3·1·1”, „3 dni” „3 · 1 · 1”;
-  miejsce: róg / koniec wiersza nazwy / po najechaniu przy 2+ ścieżkach), zapis `week/weekCosts.ts` `saveWeekCosts` (tylko ten dzień). Testy: `tests/web/tile-cost-week.test.ts`, `week-costs.test.ts`, `tests/unit/engine/week-cost.test.ts`.
+- Koszt na kafelku (D501): `HorizonBlock.cost` (zaczęty – `begunCosts`, inny – `blockCosts`; `edit` – `costEditable`), `BlockBox` rysuje `plan/TileCost` („Tydzień” `tight` – „3·1·1”, „3 dni” „3 · 1 · 1”;
+  miejsce: róg / koniec wiersza nazwy / po najechaniu przy 2+ ścieżkach), zapis `plan/costSave.ts` `saveTileCosts` – ta sama droga co „Dziś”, blok serii pyta o zakres (reguły `koszt.md`).
 - Testy: `tests/web/week-views.test.ts`, `day-grid.test.ts`, `week-page-modes.test.ts`, `month-cells.test.ts`; E2E `week.spec.ts`.

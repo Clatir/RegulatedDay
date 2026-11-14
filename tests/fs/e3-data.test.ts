@@ -201,6 +201,14 @@ describe('folder danych dla okna głównego', () => {
     expect(snap.at).toBe(placeLogical(DAY, 10 * 60))
   })
 
+  it('zmiana kosztu zaczętego bloku z okna (D501): energy.cost w dziedzinie energii, chwila z zegara procesu głównego; zły koszt – odmowa', async () => {
+    const { folder } = await make()
+    await folder.userEvents([{ k: 'energy.cost', day: DAY, block: 'x', costs: { head: 4, emotions: 0, senses: -2 } }])
+    await expect(folder.userEvents([{ k: 'energy.cost', day: DAY, block: 'x', costs: { head: 9, emotions: 0, senses: 0 } }])).rejects.toThrow(/costs/)
+    const events = readLogText(readFileSync(join(dataDir, paths.log(DAY, 'pca')), 'utf8')).events
+    expect(events.filter((e) => e.k === 'energy.cost')).toEqual([expect.objectContaining({ dom: 'energy', block: 'x', costs: { head: 4, emotions: 0, senses: -2 }, at: expect.any(Number) })])
+  })
+
   it('kopia konfliktowa rd.json: różnice tylko z jednej strony się łączą, po obu stronach – pytanie; odpowiedź zamyka kopię', async () => {
     write(paths.settings, { schema: 1, general: { waterEveryMin: 45, breakMin: 15 }, people: [{ id: 'a', name: 'Mama' }] })
     write('rd-DESKTOP-B.json', { schema: 1, general: { waterEveryMin: 60, breakMin: 15 }, people: [{ id: 'a', name: 'Mama' }, { id: 'b', name: 'Tata' }] })

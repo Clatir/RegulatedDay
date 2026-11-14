@@ -26,6 +26,9 @@ const SCOPES: readonly SeriesScope[] = ['only', 'following', 'all']
 
 const useAsk = create<{ ask: Ask | null }>(() => ({ ask: null }))
 
+/** A question of a series' scope is open now – a small window over the page (the cost of a tile, D501) steps aside for it. */
+export const useScopeAsked = (): boolean => useAsk((s) => s.ask != null)
+
 /** Shows the question; a question already open is closed first (null). */
 export function askScope(mode: ScopeMode, name: string, rule: string, scopes: readonly SeriesScope[] = SCOPES): Promise<SeriesScope | null> {
   return new Promise((resolve) => {

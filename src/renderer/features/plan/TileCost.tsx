@@ -3,16 +3,19 @@
  * „3·1·1” in the week) and, on a click, a small window beside the tile for this block alone – „głowa”, „emocje”, „bodźce” with [−] and
  * [+] between −5 and 5, and „Jak kategoria (3·1·1)”, which gives the block's own cost up. The tile places the label (`className`);
  * a press and a click on it stop here, so they neither drag the block nor open its panel. The window stands over the page (a portal,
- * the tile clips what is inside it), closes with Esc, a press elsewhere, a scroll and a resize.
+ * the tile clips what is inside it), closes with Esc, a press elsewhere, a scroll, a resize and the question of a series' scope (it would
+ * stand over the question). Its clicks are saved one after another; it shows what is saved – a click at once, and what the tile says
+ * again when a save does not surely write (refused, a question, unknown; the clicks queued after it are dropped).
  */
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { costNumber, costStep, costsText, sameCosts, type TileCost as TileCostInfo } from '@shared/model/blockCosts'
+import { COST_MAX, COST_MIN, costNumber, costStep, costsText, sameCosts, type TileCost as TileCostInfo } from '@shared/model/blockCosts'
 import { POOLS as POOL_ORDER, type Costs, type Pool } from '@shared/model/categories'
 import { cx } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
 import { useOutsidePointer } from '../../lib/outside'
 import type { SaveAnswer } from '../../store/data'
+import { useScopeAsked } from '../series/scopeAsk'
 import { POOL_COLOR, POOL_NAME } from './energyDraw'
 import { NO_GRID } from './gridDrag'
 
@@ -21,6 +24,12 @@ const POP_W = 232
 const POP_H = 156
 const GAP = 4
 const MARGIN = 8
+
+/**
+ * The room the label in the tile's corner takes from the row of the hours beside it (that row ends with an ellipsis before it): the
+ * label with spaces („−5 · −5 · −5”, „Dziś” and „3 dni”) is wider than the week's tight one („−5·−5·−5”).
+ */
+export const costRoom = (tight: boolean): string => (tight ? 'pr-[58px]' : 'pr-[84px]')
 
 /** Where the window stands: under the label, its right edge at the label's, kept inside the screen; above the label when there is no room below. */
 export function popPlace(anchor: { left: number; right: number; top: number; bottom: number }, view: { width: number; height: number }): { left: number; top: number } {
@@ -64,9 +73,18 @@ export function TileCost({
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null)
   const open = place != null
   const close = () => setPlace(null)
-  // What the window shows: the block's cost as it was saved, and – at once – what a click just asked for (the saves come one by one).
-  const [shown, setShown] = useState({ costs: cost.costs, own: cost.own })
-  useEffect(() => setShown({ costs: cost.costs, own: cost.own }), [cost.costs.head, cost.costs.emotions, cost.costs.senses, cost.own])
+  // What the window shows: the block's cost as it is saved (the tile's), and – at once – what a click just asked for.
+  const saved = (c: TileCostInfo) => ({ costs: c.costs, own: c.own })
+  const [shown, setShown] = useState(() => saved(cost))
+  const latest = useRef(cost)
+  latest.current = cost
+  // The clicks are saved one after another (`queue`); `pending` – sent or waiting; `round` – a click of an older round is dropped.
+  const queue = useRef<Promise<void>>(Promise.resolve())
+  const pending = useRef(0)
+  const round = useRef(0)
+  useEffect(() => {
+    if (pending.current === 0) setShown(saved(cost))
+  }, [cost.costs.head, cost.costs.emotions, cost.costs.senses, cost.own])
   useEscapeLayer(open, close)
   useOutsidePointer(open, `[data-cost-of="${id}"]`, close)
   useEffect(() => {
@@ -78,21 +96,43 @@ export function TileCost({
       window.removeEventListener('resize', close)
     }
   }, [open])
-  // The tile became one that may not be changed (it began, its day went by): its window goes.
+  // The tile became one that may not be changed (it ended, its day went by): its window goes.
   useLayoutEffect(() => {
     if (!editable) setPlace(null)
   }, [editable])
+  // The question of a series' scope opens (the save of a click asks it): the window goes – it would stand over the question – and the
+  // clicks queued behind that one are dropped (none asks a second time).
+  const asked = useScopeAsked()
+  useLayoutEffect(() => {
+    if (!asked) return
+    setPlace(null)
+    round.current++
+  }, [asked])
 
   const toggle = () => {
     if (open) return close()
     const r = label.current?.getBoundingClientRect()
-    if (r) setPlace(popPlace(r, { width: window.innerWidth, height: window.innerHeight }))
+    if (!r) return
+    // Opened again: what the tile says (unless a click is still being saved – then what it asked for).
+    if (pending.current === 0) setShown(saved(cost))
+    setPlace(popPlace(r, { width: window.innerWidth, height: window.innerHeight }))
   }
   const save = (next: Costs | null) => {
+    if (!onChange) return
     setShown({ costs: next ?? cost.base, own: next != null })
-    const answer = onChange?.(next)
-    // Refused for good: back to what the tile says (a question asked, an unknown result – the number stays).
-    if (answer) void answer.then((a) => a === false && setShown({ costs: cost.costs, own: cost.own }))
+    const mine = round.current
+    const run = async () => {
+      // A save that answers nothing (`void`) is taken as written.
+      let answer: SaveAnswer = false
+      if (mine === round.current) answer = (await Promise.resolve(onChange(next)).catch((): SaveAnswer => false)) ?? true
+      pending.current--
+      if (mine !== round.current || answer === true) return
+      // Not surely written (refused, a question, unknown): the clicks after it are dropped and the window shows what is saved.
+      round.current++
+      setShown(saved(latest.current))
+    }
+    // Nothing on its way: sent at once; else after the click before it.
+    queue.current = pending.current++ === 0 ? run() : queue.current.then(run)
   }
   const step = (pool: Pool, by: 1 | -1) => {
     const next = costStep(shown.costs, pool, by)
@@ -159,13 +199,13 @@ export function TileCost({
                 <span className="w-[58px] shrink-0" style={{ color: POOL_COLOR[p] }}>
                   {POOL_NAME[p]}
                 </span>
-                <button type="button" className="btn px-2 py-0" disabled={shown.costs[p] <= -5} onClick={() => step(p, -1)} aria-label={`${POOL_NAME[p]}: mniej`} data-testid={`cost-pop-${p}-minus`}>
+                <button type="button" className="btn px-2 py-0" disabled={shown.costs[p] <= COST_MIN} onClick={() => step(p, -1)} aria-label={`${POOL_NAME[p]}: mniej`} data-testid={`cost-pop-${p}-minus`}>
                   −
                 </button>
                 <span className="w-6 text-center text-fg" data-testid={`cost-pop-${p}-value`}>
                   {costNumber(shown.costs[p])}
                 </span>
-                <button type="button" className="btn px-2 py-0" disabled={shown.costs[p] >= 5} onClick={() => step(p, 1)} aria-label={`${POOL_NAME[p]}: więcej`} data-testid={`cost-pop-${p}-plus`}>
+                <button type="button" className="btn px-2 py-0" disabled={shown.costs[p] >= COST_MAX} onClick={() => step(p, 1)} aria-label={`${POOL_NAME[p]}: więcej`} data-testid={`cost-pop-${p}-plus`}>
                   +
                 </button>
               </div>

@@ -50,8 +50,6 @@ paths:
   podpowiedź = długość miejsca z podglądu (bez `resizeNote`); podgląd = `axisMoves` dnia po zmianie (z przeciąganym). Jeden `tryUpdateRecord`; linia `template-pushed` (`UNDO_LINE_MS`, widoczna póki szablon jak po
   zmianie – `deepEqual`), „Cofnij” = `saveRecord(rel, po, przed)`. Bez `planPushed` i znacznika; dane osi w `useMemo` (memo podglądu).
   Testy okna bez DOM: `tests/web/` (projekt `tsconfig.web.json`).
-- Koszt na kafelku osi (D501, T1270–T1274): `TimelineItem.cost` (`dayAxis` tylko z `today`) → `plan/TileCost.tsx` (napis w kolorach pul, okienko w portalu: [−] [+] −5…5, „Jak kategoria (3·1·1)” = `costs: null`); `Timeline.onCosts` → w „Dziś”
-  `changeBlock(b, { costs })` (jak pole panelu). Nowy napis na kafelku trzymaj w `TileCost` (wciśnięcie i klik zatrzymane – bez przeciągnięcia i wyboru). Testy: `tests/web/tile-cost.test.ts`, `tests/unit/block-costs.test.ts`.
 - `today/` – „Dziś”: `MorningPlan`, `LateWakeCard`, `TypeChangeDialog` (`initialTo` – typ już wybrany), `ExchangeDialog`, `MoveDialogs`, `dayActions`, pas wydarzeń nad osią.
   Plan poranny – karta `EnergyOrder` (D369, D377, `energy-order`): `energyOrderCached` (T616 – `energyOrderFor` od nowa tylko przy
   zmianie `energyOrderKey`: plan, migawka, pobudki, pora snu, log, energia, „Zostaw”, miejsca w prognozie, zegar co 5 min; nazwy po
