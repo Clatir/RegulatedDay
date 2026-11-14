@@ -86,6 +86,15 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    pełne testy, wersja 1.24.0, lokalny Setup.exe w Pobranych; PR do `main` dopiero po zakończonym runie wydania 1.23.0.
    Środowisko: wspólny `node_modules` w katalogu głównym jest ze starego `main` (bez `jsdom`, `@tiptap`) – drzewa paczki
    potrzebują własnego `npm ci`.
+12. **1.25.0 – uwagi po 1.24 (14.11 ok. 23:30, D510–D514, w toku):** gałąź paczki `claude/1.25.0` (drzewo `w125`, od
+   `claude/1.24.0` cfdbab8; po scaleniu PR #91 – `git merge origin/main`), koordynator regulatedday-d7, jeden PR po wydaniu
+   1.24.0. Zadania (plan: „Uwagi po 1.24 – paczka 1.25.0”): A drzewo kategorii (D510) – d7, `claude/1.25-kategorie`
+   (`w125a`, T1310–T1324; A1 model i migracja `wykonawca-opus`, A2 ekran `wykonawca-sonnet`); B sesje w szablonach (D511) –
+   a8, `claude/1.25-sesje` (`w125b`, T1340–T1359); C koszt w szablonach i rutynach (D512) i D Ctrl-kopia (D513) – ab,
+   `w125c`, `w125d` (T1360–T1389); E ✎ szybka edycja (D514) – d7 po A (T1325–T1339). Sesje raportują do d7 (hash,
+   T, „Przyjęte”, odbiór, CHANGELOG); bez PR. Użytkownik niedostępny ok. 10 h – pytania w trakcie: odpowiedź rekomendowana,
+   lista „Przyjęte” po powrocie (także założenia z wiadomości planu 14.11). Środowisko: każde drzewo ma własny
+   `npm ci` i `node node_modules/electron/install.js` – bez dowiązania do katalogu głównego.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
