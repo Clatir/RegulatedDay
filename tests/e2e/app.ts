@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { logicalDayOf } from '../../src/shared/time/day'
 
 export interface Launched {
@@ -27,11 +27,25 @@ export function logicalToday(): string {
 }
 
 /**
+ * What one app's `close()` may take on top of the test's own time. The app's way out (before-quit, will-quit – „aplikacja
+ * zamknięta” in main.log) ends in 0.1–0.2 s, but `close()` returns only when the Electron process has ended, after Chromium's
+ * own processes (the renderers of the hidden windows, the GPU process; the main process waits idle meanwhile). With the
+ * processor taken by other work (tests run beside these, 100 % on 6 threads) that took 1–8 s, at times 41 s, 95 s and
+ * about 170 s – a test of 90 s timed out in its `app.close()` with nothing else waiting (measured 14.11). In CI a whole test
+ * takes 1–15 s. A quit that never ends still fails, this much later.
+ */
+const QUIT_MS = 240_000
+
+/**
  * Launch the built app (out/) or a packaged executable (RD_E2E_EXECUTABLE, Windows CI) with an isolated folder of app
  * data – RD_USER_DATA makes a run without the installation marker the test identity („Regulated Day Test”). The helper
- * is the stand-in unless RD_E2E_REAL_HELPER=1 (Windows CI with the real one).
+ * is the stand-in unless RD_E2E_REAL_HELPER=1 (Windows CI with the real one). Each app launched adds the time of its quit
+ * (QUIT_MS) to the test's.
  */
 export async function launch(opts: { userData?: string; env?: Record<string, string>; args?: string[]; hidden?: boolean; data?: boolean } = {}): Promise<Launched> {
+  // A test without a limit (`--timeout=0`, debugging) keeps none.
+  const info = test.info()
+  if (info.timeout > 0) info.setTimeout(info.timeout + QUIT_MS)
   const base = mkdtempSync(join(tmpdir(), 'rd-e2e-'))
   const userData = opts.userData ?? join(base, 'userData')
   // `data`: an (empty) data folder from RD_DATA_DIR – the screens instead of the wizard of a computer without one.
@@ -50,6 +64,15 @@ export async function launch(opts: { userData?: string; env?: Record<string, str
     )
   await page.emulateMedia({ reducedMotion: 'reduce' })
   return { app, page, userData, errors }
+}
+
+/**
+ * Waits for the data folder to be open in the main process. `launch` returns once the window shows, and the window and its
+ * bar show before the folder opens („Otwieram folder danych…”, the bar without a day – D327): the quick capture of that
+ * moment is refused („Folder danych nie jest otwarty – nic nie zapisano.”) and a page's own Ctrl+N finds no page yet.
+ */
+export async function dataOpen(page: Page): Promise<void> {
+  await expect.poll(() => page.evaluate(() => window.rd.dataView().then((v) => v.status)), { timeout: 30_000 }).toBe('open')
 }
 
 /** The environment of a run: the folder of app data, the stand-in helper, an optional data folder (RD_DATA_DIR). */

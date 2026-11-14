@@ -61,7 +61,10 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
 - Odcinki minut: prowadzący pisze tylko minuty do bramki (`minuteGate`); odcinek nieaktualny, gdy log ma zdarzenie
   timera sprzed jego końca spoza jego stanu wiedzy (T416).
 - Symulator (`tests/sim/onedrive.ts`): nowsza wersja pliku w drodze nie może odkładać jego dostarczenia – plik pisany
-  co minutę nigdy by nie dotarł. Test dwóch komputerów ~25 s, test skali ~15 s (generator 3 lat).
+  co minutę nigdy by nie dotarł. Plik czyta ponownie tylko po zmianie tożsamości, rozmiaru albo czasu modyfikacji.
+  Test dwóch komputerów: sprawdzenia obu komputerów idą obok siebie (`checkAll`); ~30 s w CI na Linuksie, lokalnie na
+  Windows z antywirusem 2–11 min, obok innych testów do 17 min – limit 25 min poza CI (`LIMIT_MS`, w CI 4 min).
+  Test skali ~15 s (generator 3 lat).
 - Zamrażanie, proces pomocniczy, CSV i przywracanie kopii (logika E6, część 2) – reguły `zamrazanie.md`.
 - Numery zdarzeń komputera nigdy nie wracają: przy otwarciu folderu licznik idzie dalej od najwyższego numeru w jego
   logach z 14 dni (`continueOwnNumbers`) – folder przywrócony z kopii ma nowy katalog stanu, ale stare numery (T491).

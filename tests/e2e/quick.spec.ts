@@ -10,7 +10,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { addDays } from '../../src/shared/time/zone'
-import { launch, viewPage, withMainLog } from './app'
+import { dataOpen, launch, viewPage, withMainLog } from './app'
 
 const QUICK_TITLE = 'Regulated Day – do skrzynki'
 
@@ -65,6 +65,8 @@ test('„Do skrzynki”: nie wychodzi sam; Enter zapisuje zadanie w Skrzynce i c
       // The shortcut's state for the settings: Win+Alt+N (another program may hold it on a developer's computer).
       expect(await page.evaluate(() => window.rd.quickShortcut())).toMatchObject({ key: 'Super+Alt+N', state: expect.stringMatching(/^(on|taken)$/) })
 
+      // The window and its bar show before the folder opens: an Enter of that moment is refused, not saved.
+      await dataOpen(page)
       await showAsShortcut(app)
       const q = await quickPage(app)
       await q.getByTestId('quick-title').fill('Zamówić karmę dla kota')
@@ -91,6 +93,8 @@ test('„+” w pasku okna głównego rozwija pole – Enter zapisuje do Skrzynk
     await withMainLog(userData, async () => {
       const bar = page.getByTestId('bar-main')
       await expect(bar).toBeVisible({ timeout: 30_000 })
+      // The bar shows before the folder opens: an Enter of that moment is refused („Folder danych nie jest otwarty”), not saved.
+      await dataOpen(page)
       await bar.getByTestId('bar-quick').click()
       await bar.getByTestId('bar-quick-title').fill('Sprawdzić błąd w kodzie')
       await bar.getByTestId('bar-quick-title').press('Enter')
@@ -119,6 +123,8 @@ test('szybki zapis z „!jutro” (D409): podgląd „Termin: jutro” pod polem
     await withMainLog(userData, async () => {
       const bar = page.getByTestId('bar-main')
       await expect(bar).toBeVisible({ timeout: 30_000 })
+      // The folder open first: a save of the moment before is refused, not saved.
+      await dataOpen(page)
       const today = await page.evaluate(() => window.rd.dataView().then((v) => v.today))
       await showAsShortcut(app)
       const q = await quickPage(app)

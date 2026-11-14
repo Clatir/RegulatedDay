@@ -20,7 +20,7 @@ import { paths } from '../../src/shared/data/paths'
 import { dayFileFrom } from '../../src/shared/model/plan'
 import { newRequest, newTask } from '../../src/shared/model/requests'
 import { addDays } from '../../src/shared/time/zone'
-import { launch, withMainLog } from './app'
+import { dataOpen, launch, withMainLog } from './app'
 import { seedAwake } from './seedAwake'
 
 type Json = Record<string, unknown>
@@ -301,8 +301,11 @@ test('Sprawy: szybki zapis „!jutro” – podgląd pod polem przed Enter, zada
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
-      // Ctrl+N belongs to the page: pressed before „Sprawy” is up, it falls on „Dziś” (failed twice on the 1.20.0 run).
+      // Ctrl+N belongs to the page. The window shows before the data folder opens, and until it does „Sprawy” is „Otwieram
+      // folder danych…” with no page to take the key (failed twice on the 1.20.0 run). „Dziś” shown = the folder open; then
+      // the click mounts „Sprawy”, and the effects of a render from a click (its Ctrl+N) run before the page can be seen.
       await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await dataOpen(page)
       await page.getByTestId('nav-requests').click()
       await expect(page.getByTestId('requests')).toBeVisible()
       await page.keyboard.press('Control+KeyN')

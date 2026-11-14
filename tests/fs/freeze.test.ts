@@ -83,7 +83,10 @@ describe('eksport CSV z folderu danych', () => {
   })
 })
 
-describe('zamrażanie w folderze danych', () => {
+// A test runs up to some 30 checks of the folder (settling and a quiet minute before a freeze), each waiting on the disk:
+// about 1 s a test in CI, but on Windows with the antivirus scanning every file the tests write, and other test files
+// running beside, a check took 1–1.5 s and a test up to 44 s – over the default 30 s while still going on.
+describe('zamrażanie w folderze danych', { timeout: 120_000 }, () => {
   it('po oknie korekty (24 h od otwarcia dnia po jego końcu) prowadzący zamraża dzień raz, z oceną w logu i w pliku ocen', async () => {
     const m = await workedDay(DAY)
     // 23 h after the opening: still the window of corrections.

@@ -31,6 +31,24 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
+/**
+ * The folder moved away (or back) as Explorer or OneDrive would. On Windows a folder with a file held open in it – the
+ * antivirus scanning the log just written, the service's own check under way – cannot be renamed (EPERM) until the file is
+ * let go: tried again until it is, as the user would.
+ */
+async function moveFolder(from: string, to: string): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      renameSync(from, to)
+      return
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code
+      if (attempt >= 200 || (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')) throw e
+      await new Promise((r) => setTimeout(r, 50))
+    }
+  }
+}
+
 const rules = Object.fromEntries(DEFAULT_CATEGORIES.map((c) => [c.id, c]))
 
 function hubFor(name = 'pca') {
@@ -425,14 +443,14 @@ describe('dni „Spraw” – pamięć i folder chwilowo niedostępny (T773)', (
       hub.service!.folder.append({ day, dom: 'meta', k: 'observe.alive', at: Date.now() })
       await hub.service!.folder.log.flush()
       expect((await hub.caseDays([day])).begun).toEqual({ [day]: [] })
-      renameSync(dir, `${dir}-ukryty`)
+      await moveFolder(dir, `${dir}-ukryty`)
       try {
         expect((await hub.service!.folder.readDay(day)).away).toBe(true)
         const out = await hub.caseDays([day])
         expect(out.begun).toEqual({ [day]: [] })
         expect(out.gone).toEqual({ [day]: [] })
       } finally {
-        renameSync(`${dir}-ukryty`, dir)
+        await moveFolder(`${dir}-ukryty`, dir)
       }
     } finally {
       await hub.close('quit')
