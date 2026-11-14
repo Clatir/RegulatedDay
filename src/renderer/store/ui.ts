@@ -37,8 +37,8 @@ interface UiState {
   sideBClosed: string | null
   /** The month whose morning step „Cele” „Pomiń” closed here – at once, whatever the save does (D72, as „Strona B”, A6-15). */
   goalsClosed: string | null
-  /** The new block not saved yet, with its day (D461: saved at its first committed field or when you leave it; Esc throws it away) – it also survives going to another screen when the exchange for it is not answered (spec „Szkice”, A6-17). */
-  blockDraft: { date: string; block: PlanBlock; intended: boolean } | null
+  /** The new block not saved yet, with its day (D461: saved at its first committed field or when you leave it; Esc throws it away while untouched – `touched`: a field or a step changed, T1080) – it also survives going to another screen when the exchange for it is not answered (spec „Szkice”, A6-17). */
+  blockDraft: { date: string; block: PlanBlock; intended: boolean; touched: boolean } | null
   /** What the search selected for the screen it opened (null: nothing waits). */
   pick: SearchPick | null
 }
@@ -59,7 +59,7 @@ export function closeGoals(month: string): void {
  * axis is thrown away then (a changed field saves it at once, so a draft that is left is untouched, but for the steps).
  */
 export function setBlockDraft(date: string, block: PlanBlock | null, intended = false): void {
-  if (block) useUi.setState({ blockDraft: { date, block, intended } })
+  if (block) useUi.setState({ blockDraft: { date, block, intended, touched: false } })
   else if (useUi.getState().blockDraft?.date === date) useUi.setState({ blockDraft: null })
 }
 
@@ -83,10 +83,13 @@ export function onLeaveBlockDraft(fn: (() => void) | null): void {
   leaveDraft = fn
 }
 
-/** A field of the day's new block changed (the latest draft, never one read at the render before) – a draft touched is intended. */
+/**
+ * A field of the day's new block changed (the latest draft, never one read at the render before) – a draft touched is intended, and
+ * touched (Esc no longer throws it away, T1080) unless the change is empty (leaving saves the draft as it stands).
+ */
 export function patchBlockDraft(date: string, patch: Partial<PlanBlock>): void {
   const d = useUi.getState().blockDraft
-  if (d?.date === date) useUi.setState({ blockDraft: { date, block: { ...d.block, ...patch }, intended: true } })
+  if (d?.date === date) useUi.setState({ blockDraft: { date, block: { ...d.block, ...patch }, intended: true, touched: d.touched || Object.keys(patch).length > 0 } })
 }
 
 export function setMovedLater(key: string): void {

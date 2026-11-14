@@ -7,7 +7,8 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { planBlock } from '@shared/model/plan'
-import { FirstSave } from '@renderer/features/today/draftSave'
+import { escapeDraft, FirstSave } from '@renderer/features/today/draftSave'
+import { patchBlockDraft, setBlockDraft, useUi } from '@renderer/store/ui'
 import type { SaveAnswer } from '@renderer/store/data'
 
 const draft = planBlock({ id: 'd1', categoryId: 'inne', startMin: 9 * 60, durationMin: 60, origin: 'user' })
@@ -25,15 +26,15 @@ describe('pierwszy zapis szkicu i zmiany po nim (D461, T1072)', () => {
     const first = deferred<boolean>()
     const run = f.start({ ...draft, startMin: 20 * 60 }, () => first.promise)
     const writes: string[] = []
-    const a = f.after('d1', (saved) => (writes.push(`end:${saved.startMin}`), true))
+    const a = f.after('d1', () => (writes.push('end'), true))
     const b = f.after('d1', () => (writes.push('name'), true))
     await flush()
     expect(writes).toEqual([])
     first.resolve(true)
     expect(await run).toBe(true)
     expect([await a, await b]).toEqual([true, true])
-    // Over the block as the first save wrote it (the file's in its turn), in the order committed.
-    expect(writes).toEqual(['end:1200', 'name'])
+    // In the order committed (each over the file as it is in its turn).
+    expect(writes).toEqual(['end', 'name'])
   })
 
   it('zmiana zatwierdzona, gdy biegnie zapis poprzedniej, też się zapisuje (nic nie ginie)', async () => {
@@ -86,6 +87,53 @@ describe('pierwszy zapis szkicu i zmiany po nim (D461, T1072)', () => {
   })
 })
 
+describe('zmiany po pierwszym zapisie, wyjście w trakcie zapisu, Esc (T1079, T1080)', () => {
+  it('zmiana po pierwszym zapisie nie dostaje zdjęcia bloku z pierwszego zapisu – pisze ją okno nad blokiem, jaki ma przy tej zmianie', async () => {
+    const f = new FirstSave()
+    await f.start({ ...draft, durationMin: 60 }, async () => true)
+    const calls: unknown[][] = []
+    // 60 → 120 → 30: the gap freed by the last one (D368) is counted from 120, never from the 60 the first save wrote.
+    expect(await f.after('d1', (...a: unknown[]) => (calls.push(a), true))).toBe(true)
+    expect(await f.after('d1', (...a: unknown[]) => (calls.push(a), true))).toBe(true)
+    expect(calls).toEqual([[], []])
+  })
+
+  it('trwający pierwszy zapis widać (`pending`) do jego końca – udanego czy nie; wyjście z panelu czeka na niego', async () => {
+    const f = new FirstSave()
+    expect(f.pending()).toBeNull()
+    const first = deferred<boolean>()
+    const run = f.start(draft, () => first.promise)
+    expect(f.pending()).toBe(run)
+    first.resolve(true)
+    await run
+    await flush()
+    expect(f.pending()).toBeNull()
+    const refused = deferred<boolean>()
+    void f.start({ ...draft, id: 'd2' }, () => refused.promise)
+    expect(f.pending()).not.toBeNull()
+    refused.resolve(false)
+    await flush()
+    expect(f.pending()).toBeNull()
+  })
+
+  it('Esc odrzuca tylko szkic nietknięty, którego zapis się nie zaczął; ruszony (pole, krok) albo zapisywany – zamyka panel jak „Zamknij”', () => {
+    expect(escapeDraft(false, false)).toBe('discard')
+    expect(escapeDraft(false, true)).toBe('leave')
+    expect(escapeDraft(true, false)).toBe('leave')
+    expect(escapeDraft(true, true)).toBe('leave')
+  })
+
+  it('szkic w store wie, czy go ruszono: nowy – nie; zmienione pole albo krok – tak; puste wyjście (zapis, jak stoi) – bez zmiany', () => {
+    setBlockDraft('2026-11-18', draft, true)
+    expect(useUi.getState().blockDraft?.touched).toBe(false)
+    patchBlockDraft('2026-11-18', {})
+    expect(useUi.getState().blockDraft?.touched).toBe(false)
+    patchBlockDraft('2026-11-18', { steps: [] })
+    expect(useUi.getState().blockDraft?.touched).toBe(true)
+    setBlockDraft('2026-11-18', null)
+  })
+})
+
 describe('„Dziś” prowadzi szkic przez pierwszy zapis (D461)', () => {
   const page = readFileSync('src/renderer/features/today/TodayPage.tsx', 'utf8')
 
@@ -104,6 +152,21 @@ describe('„Dziś” prowadzi szkic przez pierwszy zapis (D461)', () => {
   it('„+ Blok” i Ctrl+N są zamierzone (zapis przy opuszczeniu); goły klik osi – nie (T1045)', () => {
     expect(page).toMatch(/const newHere = \(\) => create\(nextPlace\(\), undefined, true\)/)
     expect(page).toMatch(/const create = async \(startMin: number, durationMin\?: number, intended = durationMin != null\)/)
+  })
+
+  it('zmiana po pierwszym zapisie – nad szkicem sprzed niej albo blokiem planu (T1079); wyjście bez szkicu czeka na trwający zapis, a jego koniec nie zmienia wyboru zrobionego w międzyczasie', () => {
+    expect(page).toContain('firstSave.after(b.id, () => saveFields(over, patch))')
+    expect(page).toContain('firstSave.after(b.id, () => saveBlockSteps(o, d ?? b, op, false))')
+    expect(page).toMatch(/const leaveDraft = async \(quiet = false\): Promise<boolean> => \{\n\s*if \(!draft\) \{[^}]*firstSave\.pending\(\)[^}]*return true/)
+    expect(page).toContain('if (dateNow.current === date && selectedNow.current === was) setSelected(full.id)')
+  })
+
+  it('Esc w panelu szkicu przez `escapeDraft` (T1080); Del i „Usuń” z jednego warunku; kroki i dzień w panelu (D462, T1067)', () => {
+    expect(page).toContain('escapeDraft(firstSave.of(draft.id) != null, touchedNow(draft.id))')
+    expect(page).toContain("{cancelWord ? 'Odwołaj na ten dzień' : 'Usuń'}")
+    expect(page).toContain("useDeleteResolver('block', (id) => (deleteTarget && block!.id === id ? deleteTarget : null))")
+    expect(page).toContain('removeAsks={() => stepsAskScope({ date, series, scope: stepsScope }, block, draft != null)}')
+    expect(page).toMatch(/<BlockEditor\n\s*key=\{block\.id\}\n\s*day=\{date\}/)
   })
 
   it('rozsunięcie nowego bloku liczone raz (dla zapisu i dla dymka)', () => {
