@@ -184,6 +184,10 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] KR1 Kroki rutyny w bloku z szablonu i serii, wybór rutyny bez kopii, wersja na gorsze dni (także od razu z paska), zmiana rutyny, jedno odhaczenie z kartą rutyny i paskiem (1.22.0)
    - [ ] KR2 Ostatni krok kończy blok – „Skończono · Cofnij” w oknie i na pasku (1.22.0)
    - [ ] KR3 Ukończony blok na osi „Dziś” z ✓ (1.22.0)
+   - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
+   - [ ] 1.22-B.2 Posiłek zaczyna się sam, gdy odejdziesz od komputera (1.22.0)
+   - [ ] 1.22-B.3 Dojazd sam, koniec o planowanym końcu (1.22.0)
+   - [ ] 1.22-B.4 „Wstałeś później?” po przesunięciu rutyny (1.22.0)
    - [ ] SNT2.1 Ustawienia → „Kalendarze”: dodawanie do 12, nazwa, kolor, usuwanie z „Cofnij”
    - [ ] SNT2.2 Kategoria i wydarzenie całodniowe w kalendarzu (pole „Kalendarz”)
    - [ ] SNT2.3 Żetony nad widokami, „ukryte: N”, zapamiętane na tym komputerze
@@ -2438,6 +2442,38 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** skończ jeden blok („Skończyłem”, „Dalej” albo ostatnim krokiem), drugi zacznij i zaparkuj po pauzie, trzeci zacznij i odejdź od komputera, aż aplikacja sama go skończy; spójrz na oś „Dziś”.
 - **Oczekiwany efekt:** skończony blok stoi na osi przygaszony, z „✓” przed nazwą, bez przekreślenia; zaparkowany (niedokończony) i skończony przez aplikację przy Twojej nieobecności – przygaszone bez „✓”; „Cofnij” końca zdejmuje „✓”.
 - **Nie przechodzi, gdy:** brak „✓” przy skończonym; „✓” przy niedokończonym, niezaczętym albo skończonym samoczynnie po nieobecności; nazwa przekreślona; skończony blok znika z osi.
+
+---
+
+### 1.22-B – bloki bez komputera i zamiana przy „Zacznij” (1.22.0, D475, D478, D485–D490)
+
+#### 1.22-B.1 Zamiana przy „Zacznij” (D478, D485)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/timer-1-22.test.ts`, `tests/web/swap-axis.test.ts`.
+- **Jak sprawdzić:** w „Dziś” zacznij blok A (np. 09:00, 60 min), po 20 min kliknij „Zacznij” na bloku C zaplanowanym później (np. 11:00).
+- **Oczekiwany efekt:** C biegnie od teraz; A zostaje na osi o 11:00 z resztą długości (40 min), bez „biegnie”; po C „Dalej” idzie po planie i dochodzi do A, które się wznawia.
+- **Nie przechodzi, gdy:** A znika z osi albo jest „skończony”; A stoi zaraz po C zamiast o 11:00; pasek od razu pokazuje kropkę przy „Wznów: A”.
+
+#### 1.22-B.2 Bloki bez komputera same (D475, D487)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/timer-1-22.test.ts`.
+- **Jak sprawdzić:** zaplanuj posiłek na najbliższą pełną godzinę, nic nie zaczynaj i odejdź od komputera na ponad 10 min od tej godziny; wróć.
+- **Oczekiwany efekt:** posiłek ma start o swojej godzinie (albo od chwili odejścia, jeśli później) i koniec w chwili powrotu; na liście „Zrobione automatycznie” jest „Posiłek zaczęty o HH:MM (bez komputera, według planu)” z „Cofnij”, które usuwa start i koniec.
+- **Nie przechodzi, gdy:** posiłek zaczyna się, choć cały czas pracujesz przy komputerze; po powrocie biegnie dalej; po „Cofnij” zaczyna się znowu sam.
+
+#### 1.22-B.3 Dojazd sam (D486, D490, D483)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/timer-1-22.test.ts`, `tests/web/routine-steps-axis.test.ts` (✓ po końcu według planu).
+- **Jak sprawdzić:** zaplanuj „Dojazd” (wariant „Dojazd”) na najbliższą pełną godzinę i nie dotykaj komputera przez ponad 10 min od tej godziny.
+- **Oczekiwany efekt:** dojazd ma start o swojej godzinie. Po powrocie przed planowanym końcem kończy się w chwili powrotu; bez powrotu – o planowanym końcu, z wierszem „Dojazd skończony o HH:MM (według planu)” i ✓ na osi.
+- **Nie przechodzi, gdy:** dojazd zaczyna się przy pracującym komputerze; biegnie dalej po planowanym końcu; sam zaczyna się blok „Zajęcia”.
+
+#### 1.22-B.4 „Wstałeś później?” po przesunięciu rutyny (D488–D490)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/timer-1-22.test.ts`, `tests/unit/engine/e3-plan.test.ts`, `tests/unit/engine/day-rules-e8.test.ts`.
+- **Jak sprawdzić:** rano przy rutynie zaczętej samej kliknij „Cofnij” na liście „Zrobione automatycznie” i przeciągnij rutynę na osi o 30 min później.
+- **Oczekiwany efekt:** karta „Wstałeś później? <rutyna> stoi o HH:MM, 30 min później niż w planie”; „Tak” pokazuje posiłki i opiekę przed pierwszym blokiem stałym przesunięte o 30 min; „Zastosuj” je przesuwa. Śniadanie albo inny blok, który zaczął się sam przed pobudką, jest na liście z dopiskiem „start zostanie cofnięty” i po „Zastosuj” stoi na nowej godzinie, niezaczęty.
+- **Nie przechodzi, gdy:** karta pojawia się przy samym pierwszym użyciu komputera; pojawia się po przesunięciu o 15 min albo po południu; znika po przesunięciu rutyny z powrotem, zanim odpowiesz; po „Zastosuj” śniadanie zostaje jako zjedzone o planowanej godzinie.
 
 ---
 
