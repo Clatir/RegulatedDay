@@ -16,12 +16,12 @@ import type { PlanBlock } from '@shared/model/plan'
 import { lm, Scenario, block } from './dsl'
 
 const DATE = '2026-10-21'
-const MID: Record<Pool, [Answer, Answer]> = { head: [1, 1], emotions: [1, 1], senses: [1, 1] }
+const MID: Record<Pool, [Answer, Answer]> = { head: [1, 1], emotions: [1, 1], senses: [1, 1], body: [1, 1] }
 /** A work block late in the day: the morning is not a day without work. */
 const LATER = block({ id: 'later', cat: 'analiza', at: '20:00', min: 30, fixed: true })
 const sc = (plan: PlanBlock[]) => new Scenario({ date: DATE, plan: [...plan, LATER], settings: { transitionBufferMin: 0 } })
 const A = () => block({ id: 'a', cat: 'analiza', at: '09:00', min: 60 })
-const HIGH: Costs = { head: 5, emotions: 0, senses: -1 }
+const HIGH: Costs = { head: 5, emotions: 0, senses: -1, body: 2 }
 
 /** The change written as the window writes it (`block.cost`, the timer's domain – T1300) at the instant of `time`. */
 function change(s: Scenario, id: string, time: string, costs: Costs | null, k = 'block.cost'): Scenario {
@@ -33,15 +33,15 @@ const now = (s: Scenario, time: string) => s.energy(time).now!
 const seriesAt = (s: Scenario, at: string, time: string) => {
   const e = s.energy(at)
   const k = lm(time) - 4 * 60
-  return { head: e.series.head[k], emotions: e.series.emotions[k], senses: e.series.senses[k] }
+  return { head: e.series.head[k], emotions: e.series.emotions[k], senses: e.series.senses[k], body: e.series.body[k] }
 }
 
 describe('zmiana kosztu zaczętego bloku (D501, block.cost)', () => {
   it('przed zmianą – koszt ze startu, od minuty zmiany do końca bloku – nowy', () => {
     const s = sc([A()]).checkin('08:00', MID).start('a', '09:00')
     change(s, 'a', '09:30', HIGH).end('a', '10:00')
-    // 3·1·1 for 30 min, then 5·0·−1 for 30 min: a cost k takes 3·k an hour.
-    expect(now(s, '10:00')).toEqual({ head: 65 - 4.5 - 7.5, emotions: 65 - 1.5 - 0, senses: 65 - 1.5 + 1.5 })
+    // 3·1·1·0 for 30 min, then 5·0·−1·2 for 30 min: a cost k takes 3·k an hour.
+    expect(now(s, '10:00')).toEqual({ head: 65 - 4.5 - 7.5, emotions: 65 - 1.5 - 0, senses: 65 - 1.5 + 1.5, body: 65 - 0 - 3 })
   })
 
   it('minione minuty zostają policzone po starym koszcie: stan w chwili zmiany się nie zmienia, zmienia się prognoza', () => {
@@ -52,7 +52,7 @@ describe('zmiana kosztu zaczętego bloku (D501, block.cost)', () => {
     expect(now(s, '09:30')).toEqual(before)
     // The forecast of the rest of the block (to its planned end, 10:00) – by the new cost.
     expect(seriesAt(s, '09:30', '10:00')).not.toEqual(forecast)
-    expect(seriesAt(s, '09:30', '10:00')).toEqual({ head: 53, emotions: 63.5, senses: 65 })
+    expect(seriesAt(s, '09:30', '10:00')).toEqual({ head: 53, emotions: 63.5, senses: 65, body: 62 })
   })
 
   it('przeliczenie od nowa daje to samo: stan każdej minuty liczony później jest tym, który był liczony wtedy', () => {
@@ -72,25 +72,25 @@ describe('zmiana kosztu zaczętego bloku (D501, block.cost)', () => {
     const s = sc([A()]).checkin('08:00', MID).start('a', '09:00')
     change(s, 'a', '09:20', HIGH)
     change(s, 'a', '09:40', null).end('a', '10:00')
-    expect(now(s, '10:00')).toEqual({ head: 65 - 3 - 5 - 3, emotions: 65 - 1 - 0 - 1, senses: 65 - 1 + 1 - 1 })
+    expect(now(s, '10:00')).toEqual({ head: 65 - 3 - 5 - 3, emotions: 65 - 1 - 0 - 1, senses: 65 - 1 + 1 - 1, body: 65 - 0 - 2 - 0 })
     const same = sc([A()]).checkin('08:00', MID).start('a', '09:00')
-    change(same, 'a', '09:30', { head: 1, emotions: 1, senses: 1 })
+    change(same, 'a', '09:30', { head: 1, emotions: 1, senses: 1, body: 1 })
     change(same, 'a', '09:30', HIGH).end('a', '10:00')
-    expect(now(same, '10:00')).toEqual({ head: 53, emotions: 63.5, senses: 65 })
+    expect(now(same, '10:00')).toEqual({ head: 53, emotions: 63.5, senses: 65, body: 62 })
   })
 
   it('własny koszt ze startu też zastępuje zmiana od swojej minuty', () => {
-    const s = sc([{ ...A(), costs: { head: 0, emotions: 0, senses: 0 } }]).checkin('08:00', MID).start('a', '09:00')
+    const s = sc([{ ...A(), costs: { head: 0, emotions: 0, senses: 0, body: -2 } }]).checkin('08:00', MID).start('a', '09:00')
     change(s, 'a', '09:30', null).end('a', '10:00')
-    expect(now(s, '10:00')).toEqual({ head: 65 - 4.5, emotions: 65 - 1.5, senses: 65 - 1.5 })
+    expect(now(s, '10:00')).toEqual({ head: 65 - 4.5, emotions: 65 - 1.5, senses: 65 - 1.5, body: 65 + 3 })
   })
 
   it('blok w tle: nowy koszt razy jego udział tła (D38 – 50%)', () => {
     const lecture = block({ id: 'w', cat: 'wyklad', at: '09:00', min: 60, fixed: true, origin: 'lecture' })
     const s = sc([A(), lecture]).checkin('08:00', MID).start('a', '09:00').start('w', '09:00', { bg: true })
-    change(s, 'w', '09:30', { head: 4, emotions: 2, senses: 0 }).end('a', '10:00').end('w', '10:00')
-    // a 3·1·1 an hour in front; w 1·0·1 for 30 min, then 4·2·0, each at 50%.
-    expect(now(s, '10:00')).toEqual({ head: 65 - 9 - 0.75 - 3, emotions: 65 - 3 - 0 - 1.5, senses: 65 - 3 - 0.75 - 0 })
+    change(s, 'w', '09:30', { head: 4, emotions: 2, senses: 0, body: 1 }).end('a', '10:00').end('w', '10:00')
+    // a 3·1·1·0 an hour in front; w 1·0·1·0 for 30 min, then 4·2·0·1, each at 50%.
+    expect(now(s, '10:00')).toEqual({ head: 65 - 9 - 0.75 - 3, emotions: 65 - 3 - 0 - 1.5, senses: 65 - 3 - 0.75 - 0, body: 65 - 0 - 0 - 0.75 })
   })
 
   it('grupa równoległa: blok w tle grupy nic nie kosztuje także po zmianie, a po przejęciu przodu – nowy koszt (D476)', () => {
@@ -102,7 +102,7 @@ describe('zmiana kosztu zaczętego bloku (D501, block.cost)', () => {
       return s.write(['a', 'b'].map((id) => ({ k: 'block.start', block: id, at: t, bg: id !== 'a', planned: planned(id), confirmUntil: null, how: 'click', group: 'a' })), t)
     }
     const plain = group()
-    const changed = change(group(), 'b', '08:10', { head: 5, emotions: 5, senses: 5 })
+    const changed = change(group(), 'b', '08:10', { head: 5, emotions: 5, senses: 5, body: 5 })
     // Behind its group's front: nothing, before and after the change.
     expect(now(changed, '08:25')).toEqual(now(plain, '08:25'))
     plain.end('a', '08:30')
@@ -112,24 +112,24 @@ describe('zmiana kosztu zaczętego bloku (D501, block.cost)', () => {
     expect(d(changed).head).toBe(d(plain).head - 3 * (5 - 3) * 0.5)
     expect(d(changed).emotions).toBe(d(plain).emotions - 3 * (5 - 1) * 0.5)
     // The block in front of the group changed: from the minute of the change.
-    const front = change(group(), 'a', '08:15', { head: 0, emotions: 0, senses: 0 })
+    const front = change(group(), 'a', '08:15', { head: 0, emotions: 0, senses: 0, body: 0 })
     expect(now(front, '08:30').head).toBe(now(group(), '08:30').head + 3 * 3 * 0.25)
   })
 
   it('kafelek mówi koszt, którym silnik liczy teraz (begunCosts): ze startu, po zmianie – nowy, „Jak kategoria” – koszt kategorii', () => {
     const s = sc([{ ...A(), costs: HIGH }]).checkin('08:00', MID).start('a', '09:00')
     // The plan changed after the start: the engine still counts the start's cost – so does the tile.
-    s.opts.plan[0] = { ...s.opts.plan[0]!, costs: { head: 1, emotions: 1, senses: 1 } }
+    s.opts.plan[0] = { ...s.opts.plan[0]!, costs: { head: 1, emotions: 1, senses: 1, body: 1 } }
     const tile = (time: string) => {
       const ctx = s.contextAt(s.at(time))
       const day = computeDay(ctx)
       return begunCosts(ctx, day, day.blocks.find((b) => b.id === 'a')!)
     }
-    expect(tile('09:10')).toEqual({ costs: HIGH, base: { head: 3, emotions: 1, senses: 1 }, own: true })
+    expect(tile('09:10')).toEqual({ costs: HIGH, base: { head: 3, emotions: 1, senses: 1, body: 0 }, own: true })
     change(s, 'a', '09:20', null)
-    expect(tile('09:20')).toEqual({ costs: { head: 3, emotions: 1, senses: 1 }, base: { head: 3, emotions: 1, senses: 1 }, own: false })
-    change(s, 'a', '09:30', { head: 2, emotions: 2, senses: 2 })
-    expect(tile('09:30').costs).toEqual({ head: 2, emotions: 2, senses: 2 })
+    expect(tile('09:20')).toEqual({ costs: { head: 3, emotions: 1, senses: 1, body: 0 }, base: { head: 3, emotions: 1, senses: 1, body: 0 }, own: false })
+    change(s, 'a', '09:30', { head: 2, emotions: 2, senses: 2, body: 2 })
+    expect(tile('09:30').costs).toEqual({ head: 2, emotions: 2, senses: 2, body: 2 })
   })
 
   it('kalibracja: minuty po zmianie na własny koszt nie są dowodem dla kategorii, po „Jak kategoria” – znów są', () => {
@@ -165,7 +165,7 @@ describe('zmiana kosztu zaczętego bloku (D501, block.cost)', () => {
   it('zmiana z pierwszych wersji 1.24 (energy.cost, dziedzina energii) liczy się tak samo', () => {
     const s = sc([A()]).checkin('08:00', MID).start('a', '09:00')
     change(s, 'a', '09:30', HIGH, 'energy.cost').end('a', '10:00')
-    expect(now(s, '10:00')).toEqual({ head: 53, emotions: 63.5, senses: 65 })
+    expect(now(s, '10:00')).toEqual({ head: 53, emotions: 63.5, senses: 65, body: 62 })
   })
 
   it('zmiana należy do startu, po którym ją zapisano: start cofnięty („Cofnij”) i ponowny – blok kosztuje znów jak w planie', () => {
@@ -184,6 +184,6 @@ describe('zmiana kosztu zaczętego bloku (D501, block.cost)', () => {
     again.write([{ k: 'undo', at: again.at('09:20'), target: 'auto-start' }], again.at('09:20'))
     again.start('a', '09:30')
     change(again, 'a', '09:30', HIGH).end('a', '10:00')
-    expect(now(again, '10:00')).toEqual({ head: 65 - 7.5, emotions: 65, senses: 65 + 1.5 })
+    expect(now(again, '10:00')).toEqual({ head: 65 - 7.5, emotions: 65, senses: 65 + 1.5, body: 65 - 3 })
   })
 })

@@ -73,7 +73,7 @@ const CAT_FALLBACK: CategoryRules = {
   classMode: false,
   keepsRegen: false,
   afterWorkAsProject: false,
-  costs: { head: 0, emotions: 0, senses: 0 },
+  costs: { head: 0, emotions: 0, senses: 0, body: 0 },
   variants: []
 }
 

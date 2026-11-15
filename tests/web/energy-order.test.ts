@@ -122,7 +122,7 @@ describe('karta „Ułóż pod energię” w planie porannym: „Zostaw” chowa
       block({ id: 'w', cat: 'zajecia-zdalne', at: '11:00', min: classMin, fixed: true, origin: 'user' })
     ]
     const s = new Scenario({ date: DATE, plan, wake: '06:30', nextWake, settings: { transitionBufferMin: 0 } }).observe('06:30', null)
-    s.checkin('07:00', { head: [0, 0], emotions: [0, 0], senses: [0, 0] })
+    s.checkin('07:00', { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] })
     const ctx = s.contextAt(s.at(at))
     const state = computeDay(ctx)
     return { ctx, state, energy: computeEnergy(ctx, state), dayFile: dayFileFrom({ schema: 1, date: DATE, asked }, DATE), names: NAMES }

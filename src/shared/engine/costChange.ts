@@ -11,8 +11,8 @@
  * rule for its routine's cost – the base its own cost falls back to – matched here to the begun blocks of that routine (T1431, T1440: one
  * after the start in the log's order always, one before it only when the start did not know the routine's cost).
  */
-import { baseCosts, baseFromOf, type BlockCosts } from '../model/blockCosts'
-import type { Costs } from '../model/categories'
+import { baseCosts, baseFromOf, withBody, type BlockCosts } from '../model/blockCosts'
+import { ROUTINE_CATEGORY, startingBody, type Costs } from '../model/categories'
 import { compareEvents, isKnown, type AnyEvent, type LogEvent, type StartPlanned } from '../model/events'
 import type { PlanBlock } from '../model/plan'
 import { routineCostApplies } from '../model/routines'
@@ -32,6 +32,9 @@ export interface CostChange {
   routine?: true
   was?: Costs | null
 }
+
+/** The body of a routine's cost written before the body (D520, T1520): the starting routines' – as a routine's file reads it (`routineFrom`). */
+const ROUTINE_BODY = startingBody(ROUTINE_CATEGORY)
 
 type CostEvent = Extract<LogEvent, { k: 'block.cost' | 'energy.cost' }>
 type RoutineCostEvent = Extract<LogEvent, { k: 'routine.cost' }>
@@ -71,10 +74,20 @@ export function costChangesOf(ctx: Pick<DayContext, 'events' | 'plan' | 'snapsho
     list.push({ e, change })
   }
   const ofRoutine = new Map<string, Array<RoutineCostEvent & AnyEvent>>()
+  // The plan by id once (a start without its routine or category names the plan's).
+  let planById: Map<string, PlanBlock> | null = null
+  const planOf = (id: string) => (planById ??= new Map(ctx.plan.map((b) => [b.id, b]))).get(id)
+  // A change written before the body (D520, ≤ 1.26 – three pools, T1520): of its own cost – the body of the block's subcategory and variant's
+  // starting cost; of its routine's – the starting routines' (`ROUTINE_BODY`).
+  const bodyOf = (f: Pick<BlockFact, 'id' | 'planned'>) => {
+    const p = f.planned ?? planOf(f.id)
+    return startingBody(p?.categoryId, p?.variantId)
+  }
   for (const e of ctx.events) {
     if (isCostChange(e)) {
-      const start = facts.blocks.get(e.block)?.startOrder
-      if (start != null && compareEvents(e, start) > 0) add(e.block, e, { at: idxOf(facts.grid, e.at), costs: e.costs })
+      const f = facts.blocks.get(e.block)
+      const start = f?.startOrder
+      if (start != null && compareEvents(e, start) > 0) add(e.block, e, { at: idxOf(facts.grid, e.at), costs: withBody(e.costs, bodyOf(f!)) })
     } else if (isRoutineCostChange(e)) {
       let list = ofRoutine.get(e.routine)
       if (!list) ofRoutine.set(e.routine, (list = []))
@@ -82,15 +95,13 @@ export function costChangesOf(ctx: Pick<DayContext, 'events' | 'plan' | 'snapsho
     }
   }
   if (ofRoutine.size) {
-    // The plan by id once (a start without its routine or category names the plan's).
-    const plan = new Map(ctx.plan.map((b) => [b.id, b]))
     for (const f of facts.blocks.values()) {
       if (f.startedAt == null) continue
-      const routine = routineOfStart(f, plan.get(f.id), ctx.snapshot.settings.categories)
+      const routine = routineOfStart(f, planOf(f.id), ctx.snapshot.settings.categories)
       const knew = f.planned?.routineCosts !== undefined && f.startOrder != null
       for (const e of (routine != null ? ofRoutine.get(routine) : undefined) ?? []) {
         if (knew && compareEvents(e, f.startOrder!) < 0) continue
-        add(f.id, e, { at: idxOf(facts.grid, e.at), costs: e.costs, routine: true, was: e.was })
+        add(f.id, e, { at: idxOf(facts.grid, e.at), costs: withBody(e.costs, ROUTINE_BODY), routine: true, was: withBody(e.was, ROUTINE_BODY) })
       }
     }
   }

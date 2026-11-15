@@ -4,7 +4,7 @@
  * day, spec „Model dnia”). The settings of a date are the defaults with every change from that date or earlier laid over
  * them in order. A value outside its range is dropped back to the value before it – the schema refuses only that field.
  */
-import { DEFAULT_CATEGORIES, rulesOf, type CategoryRules } from './categories'
+import { DEFAULT_CATEGORIES, isStartingVariant, rulesOf, type CategoryRules } from './categories'
 import { isIsoDate } from '../time/zone'
 
 export type DayTypeId = 'zwykly' | 'weekend' | 'zjazd-stacjonarny' | 'zjazd-zdalny' | 'regeneracyjny' | 'wolne'
@@ -237,16 +237,25 @@ function dayTypeFrom(v: unknown, fallback: DayTypeParams): DayTypeParams {
   }
 }
 
-function costsFrom(v: unknown, fallback: CategoryRules['costs']): CategoryRules['costs'] {
+/**
+ * Costs field by field: a pool missing or wrong – `fallback`'s; the body (D520) its own `body` when given – a cost written before the body
+ * (≤ 1.26) of a subcategory or variant of yours has none (D523: 0), not its subcategory's (T1521).
+ */
+function costsFrom(v: unknown, fallback: CategoryRules['costs'], body = fallback.body): CategoryRules['costs'] {
   const r = isPlain(v) ? v : {}
-  return { head: int(r.head, RANGES.cost, fallback.head), emotions: int(r.emotions, RANGES.cost, fallback.emotions), senses: int(r.senses, RANGES.cost, fallback.senses) }
+  return {
+    head: int(r.head, RANGES.cost, fallback.head),
+    emotions: int(r.emotions, RANGES.cost, fallback.emotions),
+    senses: int(r.senses, RANGES.cost, fallback.senses),
+    body: int(r.body, RANGES.cost, body)
+  }
 }
 
 const CLASSES = new Set(['work', 'life', 'free'])
 const KINDS = new Set(['session', 'lecture', 'remoteClass', 'commute', 'meal', 'routine', 'request', 'regen', 'project', 'other'])
 const PLACES = new Set(['computer', 'passive', 'away'])
 
-function categoryFrom(v: unknown, fallback: CategoryRules | undefined): CategoryRules | null {
+function categoryFrom(id: string, v: unknown, fallback: CategoryRules | undefined): CategoryRules | null {
   if (!isPlain(v)) return fallback ?? null
   const f: CategoryRules = fallback ?? {
     cls: 'work',
@@ -261,10 +270,11 @@ function categoryFrom(v: unknown, fallback: CategoryRules | undefined): Category
     classMode: false,
     keepsRegen: false,
     afterWorkAsProject: false,
-    costs: { head: 0, emotions: 0, senses: 0 },
+    costs: { head: 0, emotions: 0, senses: 0, body: 0 },
     variants: []
   }
   const bool = (k: keyof CategoryRules) => (typeof v[k] === 'boolean' ? (v[k] as boolean) : (f[k] as boolean))
+  const costs = costsFrom(v.costs, f.costs)
   return {
     cls: CLASSES.has(v.cls as string) ? (v.cls as CategoryRules['cls']) : f.cls,
     kind: KINDS.has(v.kind as string) ? (v.kind as CategoryRules['kind']) : f.kind,
@@ -278,7 +288,7 @@ function categoryFrom(v: unknown, fallback: CategoryRules | undefined): Category
     classMode: bool('classMode'),
     keepsRegen: bool('keepsRegen'),
     afterWorkAsProject: bool('afterWorkAsProject'),
-    costs: costsFrom(v.costs, f.costs),
+    costs,
     variants: Array.isArray(v.variants)
       ? v.variants.filter(isPlain).flatMap((x) => {
           if (typeof x.id !== 'string' || typeof x.name !== 'string') return []
@@ -290,7 +300,15 @@ function categoryFrom(v: unknown, fallback: CategoryRules | undefined): Category
               // null – „jak podkategoria” (D510, T1314): a place or a cost given up; left out – the one before stays (a list written
               // before D510 never left one out on purpose).
               ...(x.place === null ? {} : PLACES.has(x.place as string) ? { place: x.place as CategoryRules['place'] } : fv?.place ? { place: fv.place } : {}),
-              ...(x.costs === null ? {} : x.costs !== undefined ? { costs: costsFrom(x.costs, fv?.costs ?? f.costs) } : fv?.costs ? { costs: fv.costs } : {}),
+              // The body of a variant's cost written before it (D520, T1521): the one before (its cost of the settings before); a starting
+              // variant without its own – its subcategory's (D523, as `costsOf`); a variant of yours – 0, never its subcategory's.
+              ...(x.costs === null
+                ? {}
+                : x.costs !== undefined
+                  ? { costs: costsFrom(x.costs, fv?.costs ?? f.costs, fv?.costs ? fv.costs.body : isStartingVariant(id, x.id) ? costs.body : 0) }
+                  : fv?.costs
+                    ? { costs: fv.costs }
+                    : {}),
               ...(x.archived === true ? { archived: true } : {})
             }
           ]
@@ -383,7 +401,7 @@ export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SET
   const cats = isPlain(r.categories) ? r.categories : {}
   const categories: Record<string, CategoryRules> = {}
   for (const id of new Set([...Object.keys(fallback.categories), ...Object.keys(cats)])) {
-    const c = categoryFrom(cats[id], fallback.categories[id])
+    const c = categoryFrom(id, cats[id], fallback.categories[id])
     if (c) categories[id] = c
   }
   const rem = isPlain(r.reminders) ? r.reminders : {}

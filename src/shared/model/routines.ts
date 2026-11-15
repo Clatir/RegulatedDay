@@ -6,7 +6,7 @@
  * its variant's and category's; none (null, no field in the file) – „jak podkategoria”.
  */
 import { poolCostsFrom } from './blockCosts'
-import type { CategoryRules, Costs } from './categories'
+import { ROUTINE_CATEGORY, startingBody, type CategoryRules, type Costs } from './categories'
 
 export const ROUTINE_SCHEMA = 1
 
@@ -27,7 +27,7 @@ export interface Routine {
   worse: RoutineStep[]
   archived: boolean
   /**
-   * The routine's own cost per hour (D512: three pools of −5…5), null – none („jak podkategoria”: a block of it costs its variant's or
+   * The routine's own cost per hour (D512: four pools of −5…5 – the body since D520), null – none („jak podkategoria”: a block of it costs its variant's or
    * category's). Additive: a file without the field (an older version's) has none; an older version keeps the field when it changes the
    * routine (the editor writes over the raw record) and counts without it. Absent (a routine made in code) – none.
    */
@@ -60,7 +60,8 @@ export function routineFrom(v: unknown): Routine | null {
     normal: stepsFrom(v.normal),
     worse: stepsFrom(v.worse),
     archived: v.archived === true,
-    costs: poolCostsFrom(v.costs)
+    // Written before the body (D520, ≤ 1.26): the body of the starting „Rutyny i opieka nad zwierzętami” (T1520).
+    costs: poolCostsFrom(v.costs, startingBody(ROUTINE_CATEGORY))
   }
 }
 

@@ -1,7 +1,7 @@
 /**
- * The cost per hour on a block's tile (D501): three numbers in the colours of the pools („3 · 1 · 1”, a regeneration „−1 · −2 · −3”,
- * „3·1·1” in the week) and, on a click, a small window beside the tile for this block alone – „głowa”, „emocje”, „bodźce” with [−] and
- * [+] between −5 and 5, and „Jak podkategoria (3·1·1)” – „Jak wariant (…)” when its variant has a cost of its own (D510, `resetLabel`) –,
+ * The cost per hour on a block's tile (D501): four numbers in the colours of the pools, always all four, G · E · B · C (D524: „3 · 1 · 1 · 0”, a regeneration „−1 · −2 · −3 · −1”,
+ * „3·1·1·0” in the week) and, on a click, a small window beside the tile for this block alone – „głowa”, „emocje”, „bodźce”, „ciało” with [−] and
+ * [+] between −5 and 5, and „Jak podkategoria (3·1·1·0)” – „Jak wariant (…)” when its variant has a cost of its own (D510, `resetLabel`) –,
  * which gives the block's own cost up. The tile places the label (`className`);
  * a press and a click on it stop here, so they neither drag the block nor open its panel. The window stands over the page (a portal,
  * the tile clips what is inside it), closes with Esc, a press elsewhere, a scroll and a resize; while a question of a series' scope is open
@@ -23,7 +23,7 @@ import type { CostAsk } from './costSave'
 import { POOL_COLOR, POOL_NAME } from './energyDraw'
 import { NO_GRID } from './gridDrag'
 
-/** What the window shows: three costs and whether they are the block's own. */
+/** What the window shows: four costs and whether they are the block's own. */
 interface Shown {
   costs: Costs
   own: boolean
@@ -32,17 +32,17 @@ const sameShown = (a: Shown, b: Shown): boolean => a.own === b.own && sameCosts(
 /** A click of the window: a step of a pool, or „Jak podkategoria” / „Jak wariant”; `ask` – the memory of the window it was made in. */
 type Op = ({ k: 'step'; pool: Pool; by: 1 | -1 } | { k: 'reset' }) & { ask: CostAsk }
 
-/** The size the window is placed by (its width is fixed, its height a little over three rows and the button). */
+/** The size the window is placed by (its width is fixed, its height a little over four rows and the button). */
 const POP_W = 232
-const POP_H = 156
+const POP_H = 184
 const GAP = 4
 const MARGIN = 8
 
 /**
  * The room the label in the tile's corner takes from the row of the hours beside it (that row ends with an ellipsis before it): the
- * label with spaces („−5 · −5 · −5”, „Dziś” and „3 dni”) is wider than the week's tight one („−5·−5·−5”).
+ * label with spaces („−5 · −5 · −5 · −5”, „Dziś” and „3 dni”) is wider than the week's tight one („−5·−5·−5·−5”).
  */
-export const costRoom = (tight: boolean): string => (tight ? 'pr-[58px]' : 'pr-[84px]')
+export const costRoom = (tight: boolean): string => (tight ? 'pr-[74px]' : 'pr-[108px]')
 
 /** Where the window stands: under the label, its right edge at the label's, kept inside the screen; above the label when there is no room below. */
 export function popPlace(anchor: { left: number; right: number; top: number; bottom: number }, view: { width: number; height: number }): { left: number; top: number } {
@@ -61,7 +61,7 @@ export function resetLabel(cost: Pick<TileCostInfo, 'base' | 'baseFrom'>): strin
 /** The words the label says to a hand that hovers it (and to a reader of the screen). */
 export function costTitle(cost: TileCostInfo, editable: boolean): string {
   const c = cost.costs
-  const said = `Koszt na godzinę: głowa ${costNumber(c.head)}, emocje ${costNumber(c.emotions)}, bodźce ${costNumber(c.senses)}`
+  const said = `Koszt na godzinę: głowa ${costNumber(c.head)}, emocje ${costNumber(c.emotions)}, bodźce ${costNumber(c.senses)}, ciało ${costNumber(c.body)}`
   return `${said}${cost.own ? ' (własny koszt bloku)' : ''}${editable ? ' – kliknij, aby zmienić' : ''}`
 }
 
@@ -78,7 +78,7 @@ export function TileCost({
   /** What the label and its window belong to together (a press on either is „inside”). */
   id: string
   testId: string
-  /** „3·1·1” – no spaces (the week). */
+  /** „3·1·1·0” – no spaces (the week). */
   tight?: boolean
   /** Where the tile puts it (and how it hides); the look of the label is its own. */
   className?: string
@@ -111,7 +111,7 @@ export function TileCost({
     if (running.current) return
     base.current = saved(cost)
     showNow()
-  }, [cost.costs.head, cost.costs.emotions, cost.costs.senses, cost.own])
+  }, [cost.costs.head, cost.costs.emotions, cost.costs.senses, cost.costs.body, cost.own])
   // A question of a series' scope is open: the window steps aside for it (it would stand over the question) and comes back after it.
   const asked = useScopeAsked()
   useEscapeLayer(open, close)

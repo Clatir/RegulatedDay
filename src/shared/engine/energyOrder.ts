@@ -1,6 +1,6 @@
 /**
  * „Ułóż pod energię” (D369, D374, D377, D378, FBL2c): a variant of today's plan that only changes the order of flexible blocks –
- * each within its own gap between fixed blocks – when the lowest energy of the day (the lowest of the three pools from now
+ * each within its own gap between fixed blocks – when the lowest energy of the day (the lowest of the four pools from now
  * to the bedtime's forecast, the energy's forecast) is below `ENERGY_ORDER_BELOW` and the new order clearly raises it:
  * „Ułóż pod energię – najniższa energia dnia 35 → 52”, with the changes of order. Fixed blocks and those waiting for
  * „Zacznij” split the day into gaps; every flexible block of the plan with an hour of its own may move in its gap, a
@@ -60,7 +60,7 @@ const CONTACT = 2 * UNIT
 const FREE_REST_MIN = 30
 
 type PoolUnits = Record<Pool, number>
-const pools = <T>(f: (p: Pool) => T): Record<Pool, T> => ({ head: f('head'), emotions: f('emotions'), senses: f('senses') })
+const pools = <T>(f: (p: Pool) => T): Record<Pool, T> => ({ head: f('head'), emotions: f('emotions'), senses: f('senses'), body: f('body') })
 const clamp = (v: number) => Math.max(0, Math.min(FULL, v))
 const byFrom = (a: Placed, b: Placed) => a.from - b.from || (a.block.id < b.block.id ? -1 : 1)
 
@@ -137,7 +137,8 @@ export function energyOrderVariant(ctx: DayContext, state: DayState, energy: Ene
   const charge = (b: BlockInfo, prevCat: string | null): PoolUnits => ({
     head: prevCat != null && prevCat !== b.categoryId && b.rules.kind !== 'request' && (b.rules.cls === 'work' || b.rules.kind === 'project') ? SWITCH : 0,
     emotions: b.rules.kind === 'request' ? CONTACT : 0,
-    senses: 0
+    senses: 0,
+    body: 0
   })
 
   /**

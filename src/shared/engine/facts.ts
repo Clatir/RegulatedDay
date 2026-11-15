@@ -9,7 +9,7 @@
  * every minute by the values in force when it began.
  */
 import { poolCostsFrom } from '../model/blockCosts'
-import type { Costs } from '../model/categories'
+import { ROUTINE_CATEGORY, startingBody, type Costs } from '../model/categories'
 import { compareEvents, eventAt, isKnown, ROUTINE_COSTS_FROM, type AnyEvent, type CloseHow, type EventBase, type LogEvent, type MinuteClass, type StartPlanned } from '../model/events'
 import { settingsFrom, type DayTypeId, type RulesSettings } from '../model/settings'
 import { blockNameFrom, requestIdsFrom, type PlanBlock } from '../model/plan'
@@ -389,14 +389,17 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         b.group = typeof e.group === 'string' && e.group.length > 0 ? e.group : null
         b.startOrder = orderOf(e)
         // `tag` of a start an older version wrote (D467) is never read – it may ride along in the spread, unused.
-        const { name, task, routine, requests, routineCosts, ...planned } = e.planned
+        const { name, task, routine, requests, routineCosts, costs, ...planned } = e.planned
+        // A start before the body (D520, ≤ 1.26) wrote three pools (T1520): its own cost – the body of its subcategory and variant's
+        // starting cost, its routine's – of the starting routines' (as a routine's file, `routineFrom`).
         b.planned = {
           ...planned,
           variantId: planned.variantId ?? null,
           fixed: planned.fixed === true,
+          ...(costs !== undefined ? { costs: costs === null ? null : poolCostsFrom(costs, startingBody(planned.categoryId, planned.variantId ?? null)) } : {}),
           // D512: the routine's cost at the start – a value that is no cost is none; no field: a start of a version before routine costs
           // had none (null), one of a later version did not know it then (T1372 – no field: the routine's cost as known now).
-          ...(routineCosts !== undefined ? { routineCosts: poolCostsFrom(routineCosts) } : !(e.v >= ROUTINE_COSTS_FROM) ? { routineCosts: null } : {}),
+          ...(routineCosts !== undefined ? { routineCosts: poolCostsFrom(routineCosts, startingBody(ROUTINE_CATEGORY)) } : !(e.v >= ROUTINE_COSTS_FROM) ? { routineCosts: null } : {}),
           ...startNaming({ name, task, routine, requests })
         }
         b.runs.push({ from: at, to: OPEN, bg: e.bg === true, begun: orderOf(e) })

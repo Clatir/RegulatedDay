@@ -32,7 +32,7 @@ function seed(dir: string, days: string[], missing: string[] = []): void {
     let n = 0
     const ev = (k: string, dom: string, at: number, extra: Record<string, unknown> = {}) => lines.push(JSON.stringify({ id: `seed-${day}-${n}`, c: 'seed', n: n++, t: at, l: at, v: 1, day, dom, k, at, ...extra }))
     ev('presence.first', 'meta', placeLogical(day, 7 * 60))
-    ev('energy.checkin', 'energy', placeLogical(day, 8 * 60), { answers: { head: [1, 1], emotions: [1, 1], senses: [1, 1] } })
+    ev('energy.checkin', 'energy', placeLogical(day, 8 * 60), { answers: { head: [1, 1], emotions: [1, 1], senses: [1, 1], body: [1, 1] } })
     ev('request.start', 'timer', placeLogical(day, 12 * 60), { request: `r-${day}`, mode: 'now', person: 'mama', estimateMin: null, hardEndAt: null })
     ev('request.end', 'timer', placeLogical(day, 12 * 60 + 20), { request: `r-${day}` })
     ev('cost.felt', 'energy', placeLogical(day, 21 * 60), { category: 'analiza', feel: 'heavier' })

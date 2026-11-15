@@ -35,7 +35,8 @@ const SIGNALS: Array<[string, string]> = [
 const POOLS: Array<[string, string]> = [
   ['head', 'głowa'],
   ['emotions', 'emocje'],
-  ['senses', 'bodźce']
+  ['senses', 'bodźce'],
+  ['body', 'ciało']
 ]
 const EXTEND = [15, 30, 60]
 /** The engine's questions (their id: rule:day:block:threshold) count as seen where they are shown – not the bar's proposals. */

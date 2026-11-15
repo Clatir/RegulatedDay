@@ -24,7 +24,7 @@ const DATE = '2026-10-28'
 const NAMES: Record<string, string> = { inne: 'Inne obowiązki', analiza: 'Analiza', regeneracja: 'Regeneracja', 'zajecia-zdalne': 'Zajęcia zdalne' }
 const names = (b: { categoryId: string }) => NAMES[b.categoryId] ?? b.categoryId
 type Answers = Record<Pool, [Answer, Answer]>
-const ZERO: Answers = { head: [0, 0], emotions: [0, 0], senses: [0, 0] }
+const ZERO: Answers = { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] }
 
 /** The day with a check-in at 07:00 (every pool 100 – or as `answers` say), counted at `now`, and its variant. */
 function day(plan: PlanBlock[], o: { now?: string; settings?: Record<string, unknown>; events?: (s: Scenario) => void; checkin?: boolean; answers?: Answers; calibration?: boolean } = {}) {
@@ -136,7 +136,7 @@ describe('„Ułóż pod energię” (D369, D374, D377)', () => {
   it('poprawa mniejsza niż próg (5) – bez wariantu', () => {
     // „Inne” without a cost of the head and a quiet regeneration (+3 an hour for the head): no order gains 5.
     const d = day([
-      { ...block({ id: 'c', cat: 'inne', at: '08:00', min: 60 }), costs: { head: 0, emotions: 1, senses: 1 } },
+      { ...block({ id: 'c', cat: 'inne', at: '08:00', min: 60 }), costs: { head: 0, emotions: 1, senses: 1, body: 0 } },
       block({ id: 'r', cat: 'regeneracja', variant: 'cisza', at: '09:00', min: 60 }),
       block({ id: 'e', cat: 'analiza', at: '10:00', min: 60 }),
       block({ id: 'w', cat: 'zajecia-zdalne', at: '11:00', min: 370, fixed: true })
@@ -147,7 +147,7 @@ describe('„Ułóż pod energię” (D369, D374, D377)', () => {
 
   it('stałe i zaczęte zostają na miejscu', () => {
     // „s” (begun at 07:30) is „Analiza” without costs: the head stays 100 before the nap, „Analiza” after it is no switch.
-    const plan = [{ ...block({ id: 's', cat: 'analiza', at: '07:30', min: 30 }), costs: { head: 0, emotions: 0, senses: 0 } }, ...napDay()]
+    const plan = [{ ...block({ id: 's', cat: 'analiza', at: '07:30', min: 30 }), costs: { head: 0, emotions: 0, senses: 0, body: 0 } }, ...napDay()]
     const d = day(plan, { now: '07:40', events: (s) => s.start('s', '07:30') })
     const v = d.v!
     expect(v).not.toBeNull()
@@ -250,7 +250,7 @@ describe('„Ułóż pod energię” (D369, D374, D377)', () => {
     // nap before the costly blocks wins (a tired head, 45; the class at 13:30 holds the end of work).
     const d = day(
       [
-        { ...block({ id: 'a', cat: 'analiza', at: '07:30', min: 60 }), costs: { head: 0, emotions: 0, senses: 0 } },
+        { ...block({ id: 'a', cat: 'analiza', at: '07:30', min: 60 }), costs: { head: 0, emotions: 0, senses: 0, body: 0 } },
         block({ id: 'b', cat: 'inne', at: '08:30', min: 60 }),
         block({ id: 'c', cat: 'analiza', at: '09:40', min: 120 }),
         block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '11:45', min: 90 }),
@@ -311,8 +311,8 @@ describe('„Ułóż pod energię” (D369, D374, D377)', () => {
     // „Analiza”: both regenerating blocks at 100 waste theirs, „Analiza” first (5 min after the fixed block) does not.
     const d = day(
       [
-        { ...block({ id: 'f', cat: 'inne', at: '07:30', min: 60, fixed: true }), costs: { head: 0, emotions: 0, senses: 0 } },
-        { ...block({ id: 'c', cat: 'inne', at: '08:30', min: 60 }), costs: { head: -3, emotions: 0, senses: 0 } },
+        { ...block({ id: 'f', cat: 'inne', at: '07:30', min: 60, fixed: true }), costs: { head: 0, emotions: 0, senses: 0, body: 0 } },
+        { ...block({ id: 'c', cat: 'inne', at: '08:30', min: 60 }), costs: { head: -3, emotions: 0, senses: 0, body: 0 } },
         block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '09:35', min: 60 }),
         block({ id: 'e', cat: 'analiza', at: '10:40', min: 60 }),
         block({ id: 'w', cat: 'zajecia-zdalne', at: '12:00', min: 370, fixed: true })

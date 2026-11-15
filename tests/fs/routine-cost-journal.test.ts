@@ -47,8 +47,8 @@ const { useUi } = await load<{ useUi: { getState: () => { toasts: Array<{ text: 
 const { saveRoutineRecord } = await load<{ saveRoutineRecord: (id: string, patch: Record<string, unknown>) => Promise<{ out: Array<{ status: string }> | null }> }>('../../src/renderer/features/routines/routineCost')
 
 const DAY = '2026-10-21'
-const C0 = { head: 4, emotions: 0, senses: 1 }
-const C1 = { head: 5, emotions: 0, senses: 1 }
+const C0 = { head: 4, emotions: 0, senses: 1, body: 1 }
+const C1 = { head: 5, emotions: 0, senses: 1, body: 2 }
 const rut = paths.record('routine', 'r1')
 let root: string
 let dataDir: string

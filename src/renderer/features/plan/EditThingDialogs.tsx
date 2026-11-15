@@ -151,7 +151,7 @@ export function EditCategoryDialog({ categoryId, onClose }: { categoryId: string
     place: rules?.place ?? 'computer',
     color: rd.categories[categoryId]?.color ?? null,
     calendar: calendarOfCategory(rd, categoryId),
-    costs: rules?.costs ?? { head: 1, emotions: 1, senses: 1 },
+    costs: rules?.costs ?? { head: 1, emotions: 1, senses: 1, body: 0 },
     flags: Object.fromEntries(FLAGS.map(([k]) => [k, rules?.[k] === true]))
   }))
   const [form, set, ref] = useForm<CategoryForm>(initial)
@@ -188,7 +188,7 @@ export function EditVariantDialog({ categoryId, variantId, onClose }: { category
   const settings = useSettingsNow()
   const rules = settings.categories[categoryId]
   const variant = rules?.variants.find((v) => v.id === variantId)
-  const [initial] = useState<VariantForm>(() => ({ name: variant?.name ?? '', same: variant?.costs == null, costs: variant?.costs ?? rules?.costs ?? { head: 1, emotions: 1, senses: 1 }, place: variant?.place ?? VARIANT_PLACE_SAME }))
+  const [initial] = useState<VariantForm>(() => ({ name: variant?.name ?? '', same: variant?.costs == null, costs: variant?.costs ?? rules?.costs ?? { head: 1, emotions: 1, senses: 1, body: 0 }, place: variant?.place ?? VARIANT_PLACE_SAME }))
   const [form, set, ref] = useForm<VariantForm>(initial)
   const [busy, run] = useBusy()
   const change = variantChange(initial, form)

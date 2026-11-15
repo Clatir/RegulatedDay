@@ -1,5 +1,5 @@
 /**
- * The energy of a day (spec „Model energii”): three pools 0–100 – head, emotions, senses – set by the check-in of
+ * The energy of a day (spec „Model energii”): four pools 0–100 – head, emotions, senses, body (D520) – set by the check-in of
  * symptoms and moved by the costs of what runs, the switches between blocks, the contact of requests and the signals.
  * One function for the past and the forecast (spec „Prognoza korzysta z tej samej funkcji”): the past is what the log
  * says ran, from now on the day's forecast stands in, and the regeneration of every minute is the day engine's.
@@ -13,7 +13,7 @@
  * (`block.cost`, D501) counts from its minute on (`costChange.ts`). The order of a block's cost (D512): its own, its routine's, its
  * variant's, its category's.
  */
-import { POOLS, REGEN_CATEGORY, REQUEST_CATEGORY, costsOf, type CategoryRules, type Costs, type Pool, type PoolValues } from '../model/categories'
+import { POOLS, REGEN_CATEGORY, REQUEST_CATEGORY, costsOf, type CategoryRules, type Costs, type LoggedPools, type Pool, type PoolValues } from '../model/categories'
 import { baseCosts } from '../model/blockCosts'
 import { compareEvents, isKnown, type AnyEvent, type EnergyEvent } from '../model/events'
 import { DEFAULT_SETTINGS, type RulesSettings } from '../model/settings'
@@ -127,7 +127,7 @@ interface Span extends Kind {
   order?: EventOrder
 }
 
-const pools = <T>(f: (p: Pool) => T): Record<Pool, T> => ({ head: f('head'), emotions: f('emotions'), senses: f('senses') })
+const pools = <T>(f: (p: Pool) => T): Record<Pool, T> => ({ head: f('head'), emotions: f('emotions'), senses: f('senses'), body: f('body') })
 const clamp = (v: number) => Math.max(0, Math.min(100 * UNIT, v))
 export const toUnits = (v: number): number => Math.round(v * UNIT)
 /** As shown: whole units, halves up (spec). */
@@ -135,9 +135,15 @@ export const shownOf = (units: number): number => Math.floor((units + UNIT / 2) 
 const isSession = (x: Kind) => x.rules.kind === 'session'
 const isRegen = (x: Kind) => x.rules.kind === 'regen'
 
-/** The pools set by the answers of the check-in. */
-export function checkinStates(answers: Record<Pool, readonly [number, number]>): PoolValues {
-  return pools((p) => CHECKIN_STATES[Math.max(0, Math.min(4, answers[p][0] + answers[p][1]))]!)
+/**
+ * The pools set by the answers of the check-in. A check-in without the body's answers (D521 – an older version's, ≤ 1.26) sets the body as
+ * „nie” and „nie” would: 100 (T1522).
+ */
+export function checkinStates(answers: LoggedPools<readonly [number, number]>): PoolValues {
+  return pools((p) => {
+    const a = answers[p]
+    return a ? CHECKIN_STATES[Math.max(0, Math.min(4, a[0] + a[1]))]! : CHECKIN_STATES[0]
+  })
 }
 
 /** A way of regeneration of the settings (a variant without costs has the category's); missing: the starting one. */
@@ -159,17 +165,21 @@ function costOf(x: Kind, s: RulesSettings, k: number): Costs {
 /** Among blocks in the foreground at once (minute k): regeneration and a protected life block stay, then the class mode, the costlier, the earlier. */
 function pickFront(spans: readonly Span[], s: RulesSettings, k: number): Span {
   const rank = (x: Span) => (isRegen(x) ? 0 : x.rules.cls === 'life' && x.rules.protected ? 1 : x.rules.classMode ? 2 : 3)
+  // The costlier: by the sum of the four pools (T1526).
   const sum = (x: Span) => {
     const c = costOf(x, s, k)
-    return c.head + c.emotions + c.senses
+    return c.head + c.emotions + c.senses + c.body
   }
   return [...spans].sort((a, b) => rank(a) - rank(b) || sum(b) - sum(a) || a.from - b.from || (a.block.id < b.block.id ? -1 : 1))[0]!
 }
 
-/** What a signal or a relative assessment does to the pools (spec „Sygnały w ciągu dnia”), in units. */
+/**
+ * What a signal or a relative assessment does to the pools (spec „Sygnały w ciągu dnia”), in units. „Więcej bujania” takes from the head,
+ * the emotions and the senses – never from the body (D522); the relative assessment works for every pool, the body too (D520).
+ */
 export function anchorEffect(e: Extract<EnergyEvent, { k: 'energy.signal' | 'energy.relative' }>, fx: RulesSettings['signalEffects']): PoolValues {
   if (e.k === 'energy.relative') return pools((p) => (p === e.pool ? e.delta : 0))
-  if (e.signal === 'rocking') return pools(() => -fx.rockingAll)
+  if (e.signal === 'rocking') return pools((p) => (p === 'body' ? 0 : -fx.rockingAll))
   if (e.signal === 'questions') return pools((p) => (p === 'emotions' ? -fx.questionsEmotions : 0))
   return pools((p) => (p === 'senses' ? -fx.glassesSenses : 0))
 }
@@ -314,6 +324,7 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
     raw.head[k] = raw.head[k]! + c.head * pct
     raw.emotions[k] = raw.emotions[k]! + c.emotions * pct
     raw.senses[k] = raw.senses[k]! + c.senses * pct
+    raw.body[k] = raw.body[k]! + c.body * pct
   }
   /** A fixed block behind another one: its full cost (a session costs nothing, D202, T319); a flexible one pauses. */
   const behind = (k: number, x: Span, s: RulesSettings) => {
@@ -427,26 +438,42 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
     chargesAt.set(k, [...(chargesAt.get(k) ?? []), ch])
   }
   if (c0 != null) {
-    const cur: Record<Pool, number> = { head: 0, emotions: 0, senses: 0 }
+    const cur: Record<Pool, number> = { head: 0, emotions: 0, senses: 0, body: 0 }
+    // The four pools' arrays at hand (the minute loop's cost grows with the pools – D520): a minute without an anchor or a one-off cost
+    // only takes the cost of the minute before.
+    const [mh, me, ms, mb] = [perMin.head, perMin.emotions, perMin.senses, perMin.body]
+    const [vh, ve, vs, vb] = [vals.head, vals.emotions, vals.senses, vals.body]
     for (let k = c0; k <= end; k++) {
-      if (k > c0) for (const p of POOLS) cur[p] = clamp(cur[p] - perMin[p][k - 1]!)
-      const anchors = anchorsAt.get(k) ?? []
-      for (const e of anchors) {
-        if (e.k !== 'energy.checkin') continue
-        const st = checkinStates(e.answers)
-        for (const p of POOLS) cur[p] = st[p] * UNIT
+      if (k > c0) {
+        cur.head = clamp(cur.head - mh[k - 1]!)
+        cur.emotions = clamp(cur.emotions - me[k - 1]!)
+        cur.senses = clamp(cur.senses - ms[k - 1]!)
+        cur.body = clamp(cur.body - mb[k - 1]!)
       }
-      for (const ch of chargesAt.get(k) ?? []) {
-        const p: Pool = ch.kind === 'switch' ? 'head' : 'emotions'
-        cur[p] = clamp(cur[p] - (ch.kind === 'switch' ? SWITCH_COST : CONTACT_COST) * UNIT)
+      const anchors = anchorsAt.get(k)
+      const once = chargesAt.get(k)
+      if (anchors || once) {
+        for (const e of anchors ?? []) {
+          if (e.k !== 'energy.checkin') continue
+          const st = checkinStates(e.answers)
+          for (const p of POOLS) cur[p] = st[p] * UNIT
+        }
+        for (const ch of once ?? []) {
+          const p: Pool = ch.kind === 'switch' ? 'head' : 'emotions'
+          cur[p] = clamp(cur[p] - (ch.kind === 'switch' ? SWITCH_COST : CONTACT_COST) * UNIT)
+        }
+        for (const e of anchors ?? []) {
+          if (e.k !== 'energy.signal' && e.k !== 'energy.relative') continue
+          // An anchor of an older version (≤ 1.26) knew no body: the body goes on from its own state (T1523).
+          if (e.before) for (const p of POOLS) if (e.before[p] !== undefined) cur[p] = clamp(toUnits(e.before[p]))
+          const delta = anchorEffect(e, settingsBy[k]!.signalEffects)
+          for (const p of POOLS) cur[p] = clamp(cur[p] + delta[p] * UNIT)
+        }
       }
-      for (const e of anchors) {
-        if (e.k !== 'energy.signal' && e.k !== 'energy.relative') continue
-        if (e.before) for (const p of POOLS) cur[p] = clamp(toUnits(e.before[p]))
-        const delta = anchorEffect(e, settingsBy[k]!.signalEffects)
-        for (const p of POOLS) cur[p] = clamp(cur[p] + delta[p] * UNIT)
-      }
-      for (const p of POOLS) vals[p][k] = cur[p]
+      vh[k] = cur.head
+      ve[k] = cur.emotions
+      vs[k] = cur.senses
+      vb[k] = cur.body
     }
   }
   const reserveAt = (k: number) => settingsBy[Math.min(k, end)]!.reserve * UNIT

@@ -189,7 +189,7 @@ function questionLine(q: Question, blockName: string, clock: (ms: number) => str
 }
 
 /** The pools as the bar and the notifications name them. */
-export const POOL_TEXT: Record<Pool, string> = { head: 'Głowa', emotions: 'Emocje', senses: 'Bodźce' }
+export const POOL_TEXT: Record<Pool, string> = { head: 'Głowa', emotions: 'Emocje', senses: 'Bodźce', body: 'Ciało' }
 
 /** How long the regeneration „Zacznij” of the reserve's message starts (D326). */
 export const RESERVE_REGEN_MIN = 15

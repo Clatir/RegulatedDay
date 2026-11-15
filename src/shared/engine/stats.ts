@@ -5,8 +5,9 @@
  * boundaries kept. Only frozen days (confirmed data), each counted as its grade counts it; no judgement, no comparison
  * with anyone, no change of any cost (that is E9). A day that cannot be read is left out and counted.
  *
- * „Energia” of a check-in = the mean of the three pools it sets (head, emotions, senses: 100, 85, 65, 45 or 25 each by
- * the two answers of the pool, `checkinStates`), so 25–100. Pure: `dayStats` counts a day (the helper process runs it),
+ * „Energia” of a check-in = the mean of the pools it asks about (head, emotions, senses and – since 1.27 – the body, D521:
+ * 100, 85, 65, 45 or 25 each by the two answers of the pool, `checkinStates`), so 25–100; a check-in without the body's answers
+ * (an older version's) – the mean of its three (T1522), not with the body it never asked about. Pure: `dayStats` counts a day (the helper process runs it),
  * `statsOf` puts the days together.
  */
 import { compareEvents, isKnown, type FeltCost } from '../model/events'
@@ -79,7 +80,8 @@ export function dayStats(ctx: DayContext, know: Readonly<Record<string, number>>
   for (const e of counted.events.filter(isKnown).sort(compareEvents)) {
     if (e.k === 'energy.checkin' && mods.energy && !state.facts.undone.has(e.id)) {
       const v = checkinStates(e.answers)
-      checkins.push({ minute: logicalMinuteOf(state.grid.date, e.at), energy: POOLS.reduce((s, p) => s + v[p], 0) / POOLS.length })
+      const asked = POOLS.filter((p) => e.answers[p] !== undefined)
+      checkins.push({ minute: logicalMinuteOf(state.grid.date, e.at), energy: asked.reduce((s, p) => s + v[p], 0) / asked.length })
     } else if (e.k === 'cost.felt' && mods.energy) felt[e.category] = e.feel
   }
   const now = Math.min(state.now, state.grid.length)

@@ -11,9 +11,9 @@ import { parseEvent, type Answer } from '@shared/model/events'
 import { planBlockFrom, type PlanBlock } from '@shared/model/plan'
 import { Scenario, block, hhmm } from './dsl'
 
-/** Every pool 1 + 1 → 65. */
-const MID: Record<Pool, [Answer, Answer]> = { head: [1, 1], emotions: [1, 1], senses: [1, 1] }
-const FULL: Record<Pool, [Answer, Answer]> = { head: [0, 0], emotions: [0, 0], senses: [0, 0] }
+/** Every pool 1 + 1 → 65 (the body too, D521). */
+const MID: Record<Pool, [Answer, Answer]> = { head: [1, 1], emotions: [1, 1], senses: [1, 1], body: [1, 1] }
+const FULL: Record<Pool, [Answer, Answer]> = { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] }
 /** A work block late in the day: the morning is not a day without work (where time without a block is regeneration). */
 const LATER = block({ id: 'later', cat: 'analiza', at: '20:00', min: 30, fixed: true })
 
@@ -30,8 +30,8 @@ const own = (b: PlanBlock, costs: PlanBlock['costs'], bgCostPct: number | null =
 
 describe('check-in', () => {
   it('suma odpowiedzi puli 0–4 ustawia stan na 100, 85, 65, 45 albo 25', () => {
-    expect(checkinStates({ head: [0, 0], emotions: [0, 1], senses: [1, 1] })).toEqual({ head: 100, emotions: 85, senses: 65 })
-    expect(checkinStates({ head: [2, 0], emotions: [2, 1], senses: [2, 2] })).toEqual({ head: 65, emotions: 45, senses: 25 })
+    expect(checkinStates({ head: [0, 0], emotions: [0, 1], senses: [1, 1], body: [1, 0] })).toEqual({ head: 100, emotions: 85, senses: 65, body: 85 })
+    expect(checkinStates({ head: [2, 0], emotions: [2, 1], senses: [2, 2], body: [2, 2] })).toEqual({ head: 65, emotions: 45, senses: 25, body: 25 })
   })
 
   it('energia liczy się od najwcześniejszego check-inu, także gdy jego log dotarł później; kolejny check-in ustawia pule od nowa', () => {
@@ -41,7 +41,7 @@ describe('check-in', () => {
     const e = s.energy('09:00')
     expect(hhmm(s.state('09:00'), e.checkinAt)).toBe('07:30')
     expect(e.series.head[s.state('07:45').now]).toBe(100)
-    expect(e.now).toEqual({ head: 65, emotions: 65, senses: 65 })
+    expect(e.now).toEqual({ head: 65, emotions: 65, senses: 65, body: 65 })
   })
 
   it('bez check-inu energia jest „nieznana”; bloki sprzed check-inu liczą się do czasu, nie do energii', () => {
@@ -52,12 +52,12 @@ describe('check-in', () => {
     expect(before.forecast).toBeNull()
     expect(before.descents).toEqual([])
     s.checkin('08:00', MID)
-    expect(now(s, '08:00')).toEqual({ head: 65, emotions: 65, senses: 65 })
+    expect(now(s, '08:00')).toEqual({ head: 65, emotions: 65, senses: 65, body: 65 })
   })
 })
 
 describe('sygnały i kotwice', () => {
-  it('okulary i zatyczki: bodźce −10, więcej bujania: każda pula −5, drażnią pytania: emocje −10, ocena względna ±10 / 0', () => {
+  it('okulary i zatyczki: bodźce −10, więcej bujania: głowa, emocje i bodźce −5 (ciało nie, D522), drażnią pytania: emocje −10, ocena względna ±10 / 0', () => {
     const s = sc([LATER])
       .checkin('08:00', MID)
       .signal('glasses', '08:10')
@@ -67,19 +67,19 @@ describe('sygnały i kotwice', () => {
       .relative('head', 10, '08:50')
       .relative('senses', -10, '09:00')
       .relative('emotions', 0, '09:00')
-    expect(now(s, '08:10')).toEqual({ head: 65, emotions: 65, senses: 55 })
-    expect(now(s, '09:00')).toEqual({ head: 70, emotions: 50, senses: 30 })
+    expect(now(s, '08:10')).toEqual({ head: 65, emotions: 65, senses: 55, body: 65 })
+    expect(now(s, '09:00')).toEqual({ head: 70, emotions: 50, senses: 30, body: 65 })
   })
 
   it('skutki sygnałów są ustawieniem', () => {
     const s = sc([LATER], { signalEffects: { glassesSenses: 20, rockingAll: 1, questionsEmotions: 3 } }).checkin('08:00', MID).signal('glasses', '08:10').signal('rocking', '08:20').signal('questions', '08:30')
-    expect(now(s, '08:30')).toEqual({ head: 64, emotions: 61, senses: 44 })
+    expect(now(s, '08:30')).toEqual({ head: 64, emotions: 61, senses: 44, body: 65 })
   })
 
   it('sygnał sprzed pierwszego check-inu nie zmienia energii', () => {
     const s = sc([LATER]).signal('glasses', '07:00').checkin('08:00', MID)
     expect(s.events.find((e) => e.k === 'energy.signal')).toMatchObject({ before: null })
-    expect(now(s, '08:30')).toEqual({ head: 65, emotions: 65, senses: 65 })
+    expect(now(s, '08:30')).toEqual({ head: 65, emotions: 65, senses: 65, body: 65 })
   })
 
   it('kotwica: blok sprzed sygnału dopisany później nie zmienia stanu po sygnale; bez zapisanego stanu – zmienia', () => {
@@ -99,16 +99,16 @@ describe('sygnały i kotwice', () => {
 describe('koszty', () => {
   it('koszt k zjada 3·k jednostek na godzinę: 30 min przy koszcie 3 to 4,5', () => {
     const s = sc([block({ id: 'a', cat: 'analiza', at: '09:00', min: 30 }), LATER]).checkin('08:00', MID).ran('a', '09:00', '09:30')
-    expect(now(s, '09:30')).toEqual({ head: 60.5, emotions: 63.5, senses: 63.5 })
+    expect(now(s, '09:30')).toEqual({ head: 60.5, emotions: 63.5, senses: 63.5, body: 65 })
   })
 
   it('blok w tle kosztuje 50% (ustawienie, każdy blok może mieć własny udział)', () => {
     const run = (s: Scenario) => s.checkin('08:00', MID).start('a', '09:00').start('w', '09:00', { bg: true }).end('a', '10:00').end('w', '10:00')
     const plan = (w: PlanBlock) => [block({ id: 'a', cat: 'analiza', at: '09:00', min: 60 }), w, LATER]
     const lecture = block({ id: 'w', cat: 'wyklad', at: '09:00', min: 60, fixed: true, origin: 'lecture' })
-    expect(now(run(sc(plan(lecture))), '10:00')).toEqual({ head: 54.5, emotions: 62, senses: 60.5 })
-    expect(now(run(sc(plan({ ...lecture, bgCostPct: 100 }))), '10:00')).toEqual({ head: 53, emotions: 62, senses: 59 })
-    expect(now(run(sc(plan(lecture), { backgroundCostPct: 0 })), '10:00')).toEqual({ head: 56, emotions: 62, senses: 62 })
+    expect(now(run(sc(plan(lecture))), '10:00')).toEqual({ head: 54.5, emotions: 62, senses: 60.5, body: 65 })
+    expect(now(run(sc(plan({ ...lecture, bgCostPct: 100 }))), '10:00')).toEqual({ head: 53, emotions: 62, senses: 59, body: 65 })
+    expect(now(run(sc(plan(lecture), { backgroundCostPct: 0 })), '10:00')).toEqual({ head: 56, emotions: 62, senses: 62, body: 65 })
   })
 
   it('sesja w tle za innym blokiem nic nie kosztuje (D202), sama w tle – pełny koszt; powrót z tła bez przełączenia', () => {
@@ -118,22 +118,22 @@ describe('koszty', () => {
       return (back ? s.fg('ny', false, '15:00') : s).end('ny', '15:30')
     }
     // 14:00–14:30 sesja 3 / 3 / 3, 14:30–15:00 analiza 4,5 / 1,5 / 1,5 i przełączenie 2, 15:00–15:30 sesja 3 / 3 / 3.
-    expect(now(day(true), '15:30')).toEqual({ head: 52.5, emotions: 57.5, senses: 57.5 })
-    expect(now(day(false), '15:30')).toEqual({ head: 52.5, emotions: 57.5, senses: 57.5 })
+    expect(now(day(true), '15:30')).toEqual({ head: 52.5, emotions: 57.5, senses: 57.5, body: 65 })
+    expect(now(day(false), '15:30')).toEqual({ head: 52.5, emotions: 57.5, senses: 57.5, body: 65 })
     expect(charges(day(true), '15:30', 'switch')).toEqual(['14:30'])
   })
 
   it('blok stały odsunięty w tło blokiem elastycznym – koszt tła; zaczęty w tle za chronionym blokiem życia albo odsunięty blokiem stałym – pełny', () => {
     const w = block({ id: 'w', cat: 'wyklad', at: '10:00', min: 60, fixed: true, bg: false })
     const aside = sc([w, LATER]).checkin('08:00', MID).start('w', '10:00').start('a', '10:30', { cat: 'analiza', min: 30 }).fg('w', true, '10:30').end('a', '11:00').end('w', '11:00')
-    expect(now(aside, '11:00')).toEqual({ head: 56.25, emotions: 63.5, senses: 61.25 })
+    expect(now(aside, '11:00')).toEqual({ head: 56.25, emotions: 63.5, senses: 61.25, body: 65 })
     const meal = sc([block({ id: 'obiad', cat: 'posilek', at: '10:00', min: 60 }), w, LATER])
       .checkin('08:00', MID)
       .start('obiad', '10:00')
       .start('w', '10:00', { bg: true })
       .end('obiad', '11:00')
       .end('w', '11:00')
-    expect(now(meal, '11:00')).toEqual({ head: 62, emotions: 62, senses: 59 })
+    expect(now(meal, '11:00')).toEqual({ head: 62, emotions: 62, senses: 59, body: 65 })
     const fixed = sc([w, block({ id: 'zz', cat: 'zajecia-zdalne', at: '10:30', min: 30, fixed: true }), LATER])
       .checkin('08:00', MID)
       .start('w', '10:00')
@@ -141,36 +141,36 @@ describe('koszty', () => {
       .fg('w', true, '10:30')
       .end('zz', '11:00')
       .end('w', '11:00')
-    expect(now(fixed, '11:00')).toEqual({ head: 57, emotions: 62, senses: 59 })
+    expect(now(fixed, '11:00')).toEqual({ head: 57, emotions: 62, senses: 59, body: 65 })
   })
 
   it('suma kosztów bloków biegnących razem mieści się w ±5 na godzinę', () => {
-    const up = sc([own(block({ id: 'a', cat: 'inne', at: '09:00', min: 60 }), { head: 5, emotions: 5, senses: 5 }), own(block({ id: 'b', cat: 'inne', at: '09:00', min: 60, bg: true }), { head: 5, emotions: 5, senses: 5 }, 100), LATER])
+    const up = sc([own(block({ id: 'a', cat: 'inne', at: '09:00', min: 60 }), { head: 5, emotions: 5, senses: 5, body: 5 }), own(block({ id: 'b', cat: 'inne', at: '09:00', min: 60, bg: true }), { head: 5, emotions: 5, senses: 5, body: 5 }, 100), LATER])
       .checkin('08:00', MID)
       .start('a', '09:00')
       .start('b', '09:00', { bg: true })
       .end('a', '10:00')
       .end('b', '10:00')
-    expect(now(up, '10:00')).toEqual({ head: 50, emotions: 50, senses: 50 })
-    const down = sc([own(block({ id: 'r', cat: 'regeneracja', at: '09:00', min: 60 }), { head: -3, emotions: -3, senses: -3 }), own(block({ id: 'b', cat: 'inne', at: '09:00', min: 60, bg: true }), { head: -5, emotions: -5, senses: -5 }, 100), LATER])
+    expect(now(up, '10:00')).toEqual({ head: 50, emotions: 50, senses: 50, body: 50 })
+    const down = sc([own(block({ id: 'r', cat: 'regeneracja', at: '09:00', min: 60 }), { head: -3, emotions: -3, senses: -3, body: -3 }), own(block({ id: 'b', cat: 'inne', at: '09:00', min: 60, bg: true }), { head: -5, emotions: -5, senses: -5, body: -5 }, 100), LATER])
       .checkin('08:00', MID)
       .start('r', '09:00')
       .start('b', '09:00', { bg: true })
       .end('r', '10:00')
       .end('b', '10:00')
-    expect(now(down, '10:00')).toEqual({ head: 80, emotions: 80, senses: 80 })
+    expect(now(down, '10:00')).toEqual({ head: 80, emotions: 80, senses: 80, body: 80 })
   })
 
   it('prośba na pierwszym planie: blok stały za nią z pełnym kosztem, kontakt −2, powrót do pracy to przełączenie', () => {
     const s = sc([block({ id: 'zz', cat: 'zajecia-zdalne', at: '10:00', min: 60, fixed: true }), LATER]).checkin('08:00', MID).start('zz', '10:00').request('q', '10:20', '10:30').end('zz', '11:00')
-    expect(now(s, '11:00')).toEqual({ head: 56.5, emotions: 55.5, senses: 58 })
+    expect(now(s, '11:00')).toEqual({ head: 56.5, emotions: 55.5, senses: 58, body: 64.5 })
     expect(charges(s, '11:00', 'contact')).toEqual(['10:20'])
     expect(charges(s, '11:00', 'switch')).toEqual(['10:30'])
   })
 
   it('sesja za prośbą nic nie kosztuje (T319); powrót do sesji po prośbie kosztuje przełączenie', () => {
     const s = sc([block({ id: 'ny', cat: 'sesja', at: '14:00', min: 180, fixed: true, origin: 'session', source: 'ny' }), LATER]).checkin('13:00', MID).start('ny', '14:00').request('q', '14:30', '14:40').end('ny', '15:00')
-    expect(now(s, '15:00')).toEqual({ head: 57.5, emotions: 56.5, senses: 59 })
+    expect(now(s, '15:00')).toEqual({ head: 57.5, emotions: 56.5, senses: 59, body: 64.5 })
     expect(charges(s, '15:00', 'switch')).toEqual(['14:40'])
   })
 
@@ -230,41 +230,41 @@ describe('przełączenia', () => {
 describe('czas bez bloku i „Odcinam się”', () => {
   it('przerwa krótsza niż 30 min w ciągu dnia nie zmienia stanu; od 30 min liczy się od początku jak „gra, film”', () => {
     const short = sc([block({ id: 'a', cat: 'analiza', at: '09:00', min: 30 }), block({ id: 'a2', cat: 'analiza', at: '09:50', min: 30 }), LATER]).checkin('08:00', MID).ran('a', '09:00', '09:30').start('a2', '09:50')
-    expect(now(short, '09:50')).toEqual({ head: 60.5, emotions: 63.5, senses: 63.5 })
+    expect(now(short, '09:50')).toEqual({ head: 60.5, emotions: 63.5, senses: 63.5, body: 65 })
     const long = sc([block({ id: 'a', cat: 'analiza', at: '09:00', min: 30 }), block({ id: 'a2', cat: 'analiza', at: '10:10', min: 30 }), LATER]).checkin('08:00', MID).ran('a', '09:00', '09:30').start('a2', '10:10')
-    expect(now(long, '10:10')).toEqual({ head: 62.5, emotions: 65.5, senses: 63.5 })
+    expect(now(long, '10:10')).toEqual({ head: 62.5, emotions: 65.5, senses: 63.5, body: 65 })
   })
 
   it('czas bez bloku po końcu pracy odnawia jak „gra, film” (−1 / −1 / 0)', () => {
     const s = sc([block({ id: 'a', cat: 'analiza', at: '09:00', min: 30 })]).checkin('08:00', MID).ran('a', '09:00', '09:30')
-    expect(now(s, '10:30')).toEqual({ head: 63.5, emotions: 66.5, senses: 63.5 })
+    expect(now(s, '10:30')).toEqual({ head: 63.5, emotions: 66.5, senses: 63.5, body: 65 })
   })
 
   it('„Odcinam się” liczy się jak cisza, koc obciążeniowy, ciepłe światło (−1 / −2 / −3); nagrywanie w tle kosztuje dalej', () => {
     const plan = [block({ id: 'a', cat: 'analiza', at: '09:00', min: 30 }), LATER]
     const s = sc(plan).checkin('08:00', MID).ran('a', '09:00', '09:30').disconnect('09:30', '10:30')
-    expect(now(s, '10:30')).toEqual({ head: 63.5, emotions: 69.5, senses: 72.5 })
+    expect(now(s, '10:30')).toEqual({ head: 63.5, emotions: 69.5, senses: 72.5, body: 68 })
     const rec = sc([...plan, block({ id: 'w', cat: 'wyklad', at: '09:30', min: 60, fixed: true, origin: 'lecture' })])
       .checkin('08:00', MID)
       .ran('a', '09:00', '09:30')
       .disconnect('09:30', '10:30')
       .ran('w', '09:30', '10:30', { bg: true })
-    expect(now(rec, '10:30')).toEqual({ head: 62, emotions: 69.5, senses: 71 })
+    expect(now(rec, '10:30')).toEqual({ head: 62, emotions: 69.5, senses: 71, body: 68 })
   })
 })
 
 describe('zakres i wyświetlanie', () => {
   it('stan obcięty do 0–100', () => {
     const top = sc([block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '09:00', min: 60 }), LATER]).checkin('08:00', FULL).ran('r', '09:00', '10:00')
-    expect(now(top, '10:00')).toEqual({ head: 100, emotions: 100, senses: 100 })
-    const bottom = sc([own(block({ id: 'h', cat: 'inne', at: '09:00', min: 480 }), { head: 5, emotions: 5, senses: 5 })]).checkin('08:00', MID).ran('h', '09:00', '17:00')
-    expect(now(bottom, '17:00')).toEqual({ head: 0, emotions: 0, senses: 0 })
+    expect(now(top, '10:00')).toEqual({ head: 100, emotions: 100, senses: 100, body: 100 })
+    const bottom = sc([own(block({ id: 'h', cat: 'inne', at: '09:00', min: 480 }), { head: 5, emotions: 5, senses: 5, body: 5 })]).checkin('08:00', MID).ran('h', '09:00', '17:00')
+    expect(now(bottom, '17:00')).toEqual({ head: 0, emotions: 0, senses: 0, body: 0 })
   })
 
   it('wyświetlanie zaokrągla do pełnych jednostek, połówki w górę', () => {
     const s = sc([block({ id: 'a', cat: 'analiza', at: '09:00', min: 30 }), LATER]).checkin('08:00', MID).ran('a', '09:00', '09:30')
-    expect(s.energy('09:30').now).toEqual({ head: 60.5, emotions: 63.5, senses: 63.5 })
-    expect(s.energy('09:30').shown).toEqual({ head: 61, emotions: 64, senses: 64 })
+    expect(s.energy('09:30').now).toEqual({ head: 60.5, emotions: 63.5, senses: 63.5, body: 65 })
+    expect(s.energy('09:30').shown).toEqual({ head: 61, emotions: 64, senses: 64, body: 65 })
   })
 })
 
@@ -289,7 +289,7 @@ describe('rezerwa', () => {
       ['09:05', true],
       ['09:09', false]
     ])
-    expect(e.atReserve).toEqual({ head: true, emotions: false, senses: false })
+    expect(e.atReserve).toEqual({ head: true, emotions: false, senses: false, body: false })
   })
 
   it('równo rezerwa to już rezerwa (porównanie dokładne)', () => {
@@ -301,7 +301,7 @@ describe('rezerwa', () => {
   })
 
   /** Head only: 15 a hour from 09:00, at the reserve (15) at 12:20. */
-  const heavy = () => sc([own(block({ id: 'h', cat: 'inne', at: '09:00', min: 240 }), { head: 5, emotions: 0, senses: 0 })]).checkin('08:00', MID).start('h', '09:00')
+  const heavy = () => sc([own(block({ id: 'h', cat: 'inne', at: '09:00', min: 240 }), { head: 5, emotions: 0, senses: 0, body: 0 })]).checkin('08:00', MID).start('h', '09:00')
 
   it('zarejestrowane zejście zostaje mimo późniejszej poprawki; policzone w tym samym epizodzie nie dubluje się', () => {
     const s = heavy()
@@ -345,19 +345,19 @@ describe('rezerwa', () => {
 
 describe('prognoza', () => {
   it('prognoza na poziomie rezerwy daje ostrzeżenie: pierwsza minuta i najniższy stan do pory snu', () => {
-    const s = sc([own(block({ id: 'h', cat: 'inne', at: '10:00', min: 240 }), { head: 5, emotions: 5, senses: 5 })]).checkin('08:00', MID)
+    const s = sc([own(block({ id: 'h', cat: 'inne', at: '10:00', min: 240 }), { head: 5, emotions: 5, senses: 5, body: 5 })]).checkin('08:00', MID)
     const e = s.energy('09:00')
     const st = s.state('09:00')
-    expect(e.now).toEqual({ head: 65, emotions: 65, senses: 65 })
+    expect(e.now).toEqual({ head: 65, emotions: 65, senses: 65, body: 65 })
     expect(hhmm(st, e.forecast!.reserveAt.head)).toBe('13:20')
-    expect(e.forecast!.min).toEqual({ head: 5, emotions: 5, senses: 5 })
+    expect(e.forecast!.min).toEqual({ head: 5, emotions: 5, senses: 5, body: 5 })
     expect(e.warnings).toContain('prognoza energii na poziomie rezerwy')
     expect(e.descents).toEqual([])
   })
 
   it('bez ostrzeżenia, gdy prognoza zostaje nad rezerwą', () => {
     const e = sc([block({ id: 'a', cat: 'analiza', at: '10:00', min: 60 })]).checkin('08:00', MID).energy('09:00')
-    expect(e.forecast!.reserveAt).toEqual({ head: null, emotions: null, senses: null })
+    expect(e.forecast!.reserveAt).toEqual({ head: null, emotions: null, senses: null, body: null })
     expect(e.warnings).toEqual([])
   })
 })
@@ -365,13 +365,13 @@ describe('prognoza', () => {
 describe('po przeglądzie kodu (E2)', () => {
   it('regeneracja za prośbą nie odnawia – prośba ją przerywa, jak w silniku dnia', () => {
     const s = sc([block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '09:00', min: 60 }), LATER]).checkin('08:00', MID).start('r', '09:00').request('q', '09:10', '09:40').end('r', '09:40')
-    expect(now(s, '09:40')).toEqual({ head: 65, emotions: 59, senses: 63 })
+    expect(now(s, '09:40')).toEqual({ head: 65, emotions: 59, senses: 63, body: 65 })
   })
 
   it('koszty bloku według jego startu: późniejsza zmiana planu nie zmienia przeszłej energii', () => {
     const s = sc([block({ id: 'a', cat: 'analiza', at: '09:00', min: 60 }), LATER]).checkin('08:00', MID).ran('a', '09:00', '10:00')
     const before = now(s, '10:00')
-    s.opts.plan[0] = { ...s.opts.plan[0]!, categoryId: 'projekty', costs: { head: 5, emotions: 5, senses: 5 } }
+    s.opts.plan[0] = { ...s.opts.plan[0]!, categoryId: 'projekty', costs: { head: 5, emotions: 5, senses: 5, body: 5 } }
     expect(now(s, '10:00')).toEqual(before)
   })
 
@@ -390,7 +390,7 @@ describe('po przeglądzie kodu (E2)', () => {
 
   it('kontakt prośby zaczętej w minucie check-inu się liczy', () => {
     const s = sc([LATER]).checkin('08:00', MID).request('q', '08:00', '08:10')
-    expect(now(s, '08:10')).toEqual({ head: 64.5, emotions: 61.5, senses: 64 })
+    expect(now(s, '08:10')).toEqual({ head: 64.5, emotions: 61.5, senses: 64, body: 64.5 })
   })
 
   it('lista poniesionych kosztów nie zawiera przyszłych z prognozy', () => {
@@ -405,7 +405,7 @@ describe('po przeglądzie kodu (E2)', () => {
       .start('a', '09:00')
       .ran('obiad', '09:20', '09:30')
       .end('a', '10:00')
-    expect(now(flex, '10:00')).toEqual({ head: 55.5, emotions: 62, senses: 62 })
+    expect(now(flex, '10:00')).toEqual({ head: 55.5, emotions: 62, senses: 62, body: 65 })
     expect(charges(flex, '10:00', 'switch')).toEqual(['09:30'])
     const fixed = sc([block({ id: 'j', cat: 'journaling', at: '09:30', min: 30 }), block({ id: 'w', cat: 'wyklad', at: '10:00', min: 60, fixed: true, bg: false }), block({ id: 'obiad', cat: 'posilek', at: '10:20', min: 10 }), LATER])
       .checkin('08:00', MID)

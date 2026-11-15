@@ -14,12 +14,13 @@ describe('koszt rutyny w pliku (D512)', () => {
     expect(routineFrom({ ...raw, costs: null })!.costs).toBeNull()
   })
 
-  it('koszt −5…5 w każdej puli jest kosztem rutyny', () => {
-    expect(routineFrom({ ...raw, costs: { head: 5, emotions: -5, senses: 0 } })!.costs).toEqual({ head: 5, emotions: -5, senses: 0 })
+  it('koszt −5…5 w każdej puli jest kosztem rutyny; plik bez ciała (starsza wersja) – ciało jak „Rutyny i opieka nad zwierzętami” (T1520)', () => {
+    expect(routineFrom({ ...raw, costs: { head: 5, emotions: -5, senses: 0, body: -2 } })!.costs).toEqual({ head: 5, emotions: -5, senses: 0, body: -2 })
+    expect(routineFrom({ ...raw, costs: { head: 5, emotions: -5, senses: 0 } })!.costs).toEqual({ head: 5, emotions: -5, senses: 0, body: 1 })
   })
 
   it('wartość spoza zakresu, niecałkowita, brak puli albo nie obiekt – brak kosztu, rutyna czyta się dalej', () => {
-    for (const costs of [{ head: 6, emotions: 0, senses: 0 }, { head: -6, emotions: 0, senses: 0 }, { head: 1.5, emotions: 0, senses: 0 }, { head: 1, emotions: 0 }, '1,1,1', [1, 1, 1], 3]) {
+    for (const costs of [{ head: 6, emotions: 0, senses: 0 }, { head: 1, emotions: 0, senses: 0, body: 6 }, { head: -6, emotions: 0, senses: 0 }, { head: 1.5, emotions: 0, senses: 0 }, { head: 1, emotions: 0 }, '1,1,1', [1, 1, 1], 3]) {
       const r = routineFrom({ ...raw, costs })
       expect(r).not.toBeNull()
       expect(r!.costs).toBeNull()
@@ -36,9 +37,9 @@ describe('koszty rutyn dla silnika (D512)', () => {
   const r = (id: string, costs: Routine['costs']): Routine => ({ ...routineFrom({ ...raw, id })!, costs })
 
   it('tylko rutyny z własnym kosztem, po identyfikatorze (także w archiwum)', () => {
-    const map = routineCostsOf([r('a', { head: 1, emotions: 0, senses: 0 }), r('b', null), { ...r('c', { head: -1, emotions: -1, senses: -1 }), archived: true }])
-    expect(map).toEqual({ a: { head: 1, emotions: 0, senses: 0 }, c: { head: -1, emotions: -1, senses: -1 } })
-    expect(routineCostOf(map, 'a')).toEqual({ head: 1, emotions: 0, senses: 0 })
+    const map = routineCostsOf([r('a', { head: 1, emotions: 0, senses: 0, body: 0 }), r('b', null), { ...r('c', { head: -1, emotions: -1, senses: -1, body: -1 }), archived: true }])
+    expect(map).toEqual({ a: { head: 1, emotions: 0, senses: 0, body: 0 }, c: { head: -1, emotions: -1, senses: -1, body: -1 } })
+    expect(routineCostOf(map, 'a')).toEqual({ head: 1, emotions: 0, senses: 0, body: 0 })
     expect(routineCostOf(map, 'b')).toBeNull()
     expect(routineCostOf(map, null)).toBeNull()
     expect(routineCostOf(undefined, 'a')).toBeNull()
@@ -46,7 +47,7 @@ describe('koszty rutyn dla silnika (D512)', () => {
   })
 
   it('identyfikator będący nazwą pola obiektu (constructor, __proto__) nie jest kosztem', () => {
-    const map = routineCostsOf([r('a', { head: 1, emotions: 0, senses: 0 })])
+    const map = routineCostsOf([r('a', { head: 1, emotions: 0, senses: 0, body: 0 })])
     expect(routineCostOf(map, 'constructor')).toBeNull()
     expect(routineCostOf(map, '__proto__')).toBeNull()
     expect(routineCostOf(map, 'toString')).toBeNull()

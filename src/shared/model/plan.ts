@@ -7,7 +7,9 @@
  */
 import { isIsoDate } from '../time/zone'
 import { NOTE_MAX } from './note'
-import { DAY_TYPES, RANGES, isSessionMarket, isZone, type DayTypeId, type SessionChoice, type SessionMarket } from './settings'
+import { poolCostsFrom } from './blockCosts'
+import { startingBody, type Costs } from './categories'
+import { DAY_TYPES, isSessionMarket, isZone, type DayTypeId, type SessionChoice, type SessionMarket } from './settings'
 import { routineStepsEntries, type RoutineStepsEntry } from './routineSteps'
 import { doneSetFrom, stepsFrom, type Step } from './steps'
 
@@ -79,11 +81,12 @@ export const sessionBlockFields = (b: PlanBlock): SessionBlockFields => ({ categ
 /** The fields of a session's block as read from a snapshot (a whole block an earlier build wrote reads the same), null – none. */
 export function sessionBlockFieldsFrom(v: unknown): SessionBlockFields | null {
   if (!isPlain(v) || typeof v.categoryId !== 'string' || !v.categoryId) return null
+  const variantId = typeof v.variantId === 'string' && v.variantId ? v.variantId : null
   return {
     categoryId: v.categoryId,
-    variantId: typeof v.variantId === 'string' && v.variantId ? v.variantId : null,
+    variantId,
     background: typeof v.background === 'boolean' ? v.background : null,
-    costs: costsFrom(v.costs),
+    costs: costsFrom(v.costs, v.categoryId, variantId),
     bgCostPct: intIn(v.bgCostPct, 0, 100),
     note: str(v.note).slice(0, NOTE_MAX),
     name: blockNameFrom(v.name),
@@ -105,8 +108,8 @@ export interface PlanBlock {
   fixed: boolean
   /** Planned in the background (null: from the category). */
   background: boolean | null
-  /** Its own costs instead of the category's. */
-  costs: { head: number; emotions: number; senses: number } | null
+  /** Its own costs instead of the category's (four pools – D520; a file of an older version without the body: T1520). */
+  costs: Costs | null
   /** Its own share of the cost in the background, 0–100 % (null: the setting, 50 % at the start). */
   bgCostPct: number | null
   note: string
@@ -275,13 +278,11 @@ export const blockNameFrom = (v: unknown): string | null => (typeof v === 'strin
 /** The requests of a block as read from a file or a log: their ids, each once, at most 50. */
 export const requestIdsFrom = (v: unknown): string[] => (Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && !!x))].slice(0, 50) : [])
 
-function costsFrom(v: unknown): PlanBlock['costs'] {
-  if (!isPlain(v)) return null
-  // The schema's range of a pool's cost (`RANGES.cost`), as the settings' categories read it.
-  const k = (x: unknown) => intIn(x, ...RANGES.cost)
-  const [head, emotions, senses] = [k(v.head), k(v.emotions), k(v.senses)]
-  return head == null || emotions == null || senses == null ? null : { head, emotions, senses }
-}
+/**
+ * A block's own cost as a file holds it: the schema's range of a pool's cost (`RANGES.cost`, `poolCostsFrom`), as the settings' categories
+ * read it; written before the body (D520, ≤ 1.26 – three pools) – the body of its subcategory and variant's starting cost (T1520).
+ */
+const costsFrom = (v: unknown, categoryId: string, variantId: string | null): PlanBlock['costs'] => (isPlain(v) ? poolCostsFrom(v, startingBody(categoryId, variantId)) : null)
 
 /** A block from a file, or null when it cannot be one (no id, no category, no start nor anchor, no length). */
 export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'): PlanBlock | null {
@@ -291,16 +292,17 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
   const durationMin = intIn(v.durationMin, 1, MAX_BLOCK_MIN)
   if ((startMin == null && !anchor) || durationMin == null) return null
   const origins = ['template', 'lecture', 'session', 'user', 'zjazd', 'series']
+  const variantId = typeof v.variantId === 'string' && v.variantId ? v.variantId : null
   return {
     id: v.id,
     categoryId: v.categoryId,
-    variantId: typeof v.variantId === 'string' && v.variantId ? v.variantId : null,
+    variantId,
     startMin: anchor ? null : startMin,
     anchor,
     durationMin,
     fixed: v.fixed === true,
     background: typeof v.background === 'boolean' ? v.background : null,
-    costs: costsFrom(v.costs),
+    costs: costsFrom(v.costs, v.categoryId, variantId),
     bgCostPct: intIn(v.bgCostPct, 0, 100),
     note: str(v.note).slice(0, NOTE_MAX),
     name: blockNameFrom(v.name),

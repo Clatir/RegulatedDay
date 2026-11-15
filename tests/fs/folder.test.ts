@@ -555,11 +555,11 @@ describe('zejście do rezerwy (E2)', () => {
     writeFileSync(join(dataDir, paths.settings), JSON.stringify({ schema: 1, settings: [] }))
     const f = await make({ at: '08:00' })
     const yes = [2, 2] as const
-    f.folder.append({ day: DAY, dom: 'energy', k: 'energy.checkin', at: f.now, answers: { head: yes, emotions: yes, senses: yes } })
+    f.folder.append({ day: DAY, dom: 'energy', k: 'energy.checkin', at: f.now, answers: { head: yes, emotions: yes, senses: yes, body: yes } })
     const r = await f.advance(5)
     expect(r.leader.iLead && r.settled).toBe(true)
     // Głowa 25 → 15: rezerwa o 08:05.
-    f.folder.append({ day: DAY, dom: 'energy', k: 'energy.relative', at: f.now, pool: 'head', delta: -10, before: { head: 25, emotions: 25, senses: 25 } })
+    f.folder.append({ day: DAY, dom: 'energy', k: 'energy.relative', at: f.now, pool: 'head', delta: -10, before: { head: 25, emotions: 25, senses: 25, body: 25 } })
     const at = f.now
     // Minuta zejścia nie jest jeszcze zamknięta (zdarzenia do 30 s po niej też do niej należą): bez zapisu.
     await f.folder.check()

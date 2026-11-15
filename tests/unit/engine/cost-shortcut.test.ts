@@ -15,15 +15,15 @@ vi.mock('@shared/model/categories', async (orig) => {
 
 describe('koszt minuty: skrót własnego kosztu', () => {
   it('blok z własnym kosztem – ani jednego costsOf w pętlach energii', () => {
-    const own = { head: 2, emotions: 2, senses: 2 }
+    const own = { head: 2, emotions: 2, senses: 2, body: 2 }
     const plan = [{ ...block({ id: 'a', cat: 'analiza', at: '09:00', min: 120 }), costs: own }, { ...block({ id: 'later', cat: 'analiza', at: '20:00', min: 30, fixed: true }), costs: own }]
-    const s = new Scenario({ date: '2026-10-21', plan, settings: { transitionBufferMin: 0 } }).checkin('08:00', { head: [1, 1], emotions: [1, 1], senses: [1, 1] }).start('a', '09:00')
+    const s = new Scenario({ date: '2026-10-21', plan, settings: { transitionBufferMin: 0 } }).checkin('08:00', { head: [1, 1], emotions: [1, 1], senses: [1, 1], body: [1, 1] }).start('a', '09:00')
     const ctx = s.contextAt(s.at('10:00'))
     const day = computeDay(ctx)
     const spy = vi.mocked(categories.costsOf)
     spy.mockClear()
     const e = computeEnergy(ctx, day)
     expect(spy).not.toHaveBeenCalled()
-    expect(e.now).toEqual({ head: 65 - 6, emotions: 65 - 6, senses: 65 - 6 })
+    expect(e.now).toEqual({ head: 65 - 6, emotions: 65 - 6, senses: 65 - 6, body: 65 - 6 })
   })
 })

@@ -22,14 +22,14 @@ import { DEFAULT_SETTINGS } from '@shared/model/settings'
 import { block, Scenario } from './dsl'
 
 const DATE = '2026-11-18'
-const R: Costs = { head: 5, emotions: 4, senses: -2 }
-const ZERO_COSTS: Costs = { head: 0, emotions: 0, senses: 0 }
-const ANSWERS: Record<Pool, [Answer, Answer]> = { head: [0, 0], emotions: [0, 0], senses: [0, 0] }
+const R: Costs = { head: 5, emotions: 4, senses: -2, body: 2 }
+const ZERO_COSTS: Costs = { head: 0, emotions: 0, senses: 0, body: 0 }
+const ANSWERS: Record<Pool, [Answer, Answer]> = { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [1, 1] }
 
 /** A block of the plan pointing at a routine. */
 const withRoutine = (b: PlanBlock, routine: string): PlanBlock => ({ ...b, routine })
 /** The day's energy at every minute (the past and the forecast) – what two days are compared by. */
-const curve = (e: EnergyState) => (['head', 'emotions', 'senses'] as const).map((p) => Array.from(e.series[p]))
+const curve = (e: EnergyState) => (['head', 'emotions', 'senses', 'body'] as const).map((p) => Array.from(e.series[p]))
 
 /**
  * A day with a check-in at 07:00 and `plan`; `routineCosts` – the routines' costs the window knows (none – a version without them);
@@ -56,7 +56,7 @@ describe('koszt rutyny w silniku energii (D512)', () => {
   })
 
   it('rutyna przed wariantem: wariant „Rutyn” z własnym kosztem, blok z rutyną – kosztuje jak rutyna', () => {
-    const settings = { categories: { rutyny: { variants: [{ id: 'krotka', name: 'Krótka', costs: { head: -2, emotions: -2, senses: -2 } }] } } }
+    const settings = { categories: { rutyny: { variants: [{ id: 'krotka', name: 'Krótka', costs: { head: -2, emotions: -2, senses: -2, body: -2 } }] } } }
     const short = (o: Partial<PlanBlock>) => m({ variantId: 'krotka', ...o })
     expect(curve(day([withRoutine(short({}), 'r')], { r: R }, settings).energy('07:30'))).toEqual(curve(day([short({ costs: R })], undefined, settings).energy('07:30')))
     // Without the routine the variant's cost counts (the variant is there).
@@ -75,11 +75,11 @@ describe('koszt rutyny w silniku energii (D512)', () => {
     s.start('m', '08:00')
     const ctx2 = s.contextAt(s.at('08:10'))
     const state2 = computeDay(ctx2)
-    expect(begunCosts(ctx2, state2, state2.blocks.find((b) => b.id === 'm')!)).toEqual({ costs: { head: 1, emotions: 1, senses: 1 }, base: { head: 1, emotions: 1, senses: 1 }, own: false })
+    expect(begunCosts(ctx2, state2, state2.blocks.find((b) => b.id === 'm')!)).toEqual({ costs: { head: 1, emotions: 1, senses: 1, body: 1 }, base: { head: 1, emotions: 1, senses: 1, body: 1 }, own: false })
   })
 
   it('własny koszt bloku wygrywa z kosztem rutyny', () => {
-    const own: Costs = { head: -1, emotions: 2, senses: 0 }
+    const own: Costs = { head: -1, emotions: 2, senses: 0, body: 1 }
     expect(curve(day([withRoutine(m({ costs: own }), 'poranna')], { poranna: R }).energy('07:30'))).toEqual(curve(day([m({ costs: own })]).energy('07:30')))
   })
 
@@ -146,7 +146,7 @@ describe('koszt rutyny na kafelku i w zdarzeniu startu (D512)', () => {
     const state = computeDay(ctx)
     const info = state.blocks.find((b) => b.id === 'm')!
     expect(begunCosts(ctx, state, info)).toEqual({ costs: R, base: R, baseFrom: 'routine', own: false })
-    const own: Costs = { head: 1, emotions: 1, senses: 1 }
+    const own: Costs = { head: 1, emotions: 1, senses: 1, body: -1 }
     s.write([{ k: 'block.cost', block: 'm', at: s.at('08:20'), costs: own }], s.at('08:20'))
     const ctx2 = s.contextAt(s.at('08:30'))
     const state2 = computeDay(ctx2)
@@ -185,14 +185,14 @@ describe('kopie reguły kosztu z rutyną (D512)', () => {
     const settings = { categories: { rutyny: { protected: false, noMoveTomorrow: false } } }
     const s = new Scenario({ date: DATE, plan, settings, routineCosts: { poranna: R } }).observe('07:00', null)
     const st = s.state('12:00')
-    const energy = { known: true, enabled: true, variants: true, atReserve: { head: true, emotions: false, senses: false }, descents: [{ pool: 'head', at: st.now, silent: false }] } as unknown as EnergyState
+    const energy = { known: true, enabled: true, variants: true, atReserve: { head: true, emotions: false, senses: false, body: false }, descents: [{ pool: 'head', at: st.now, silent: false }] } as unknown as EnergyState
     const cause = variantCauses(st, energy).find((c) => c.kind === 'energy')!
     const v = variantsFor(s.contextAt(s.at('12:00')), st, cause, (b) => b.categoryId)
     expect(v[0]!.changes).toContainEqual({ k: 'tomorrow', block: 'a' })
   })
 
   it('„Ułóż pod energię”: koszt z rutyny układa dzień tak samo jak ten sam koszt własny bloku', () => {
-    const DEAR: Costs = { head: 5, emotions: 2, senses: 1 }
+    const DEAR: Costs = { head: 5, emotions: 2, senses: 1, body: 1 }
     const plan = (e: Partial<PlanBlock>) => [
       block({ id: 'c', cat: 'inne', at: '08:00', min: 60 }),
       block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '09:00', min: 60 }),
@@ -216,7 +216,7 @@ describe('kopie reguły kosztu z rutyną (D512)', () => {
     const st = s.state('12:00')
     // The block's rules are „Analiza”'s; only its id is a name of Object.prototype's (no category of the settings has it).
     for (const p of st.forecast) if (p.block.id === 'b') (p.block as { categoryId: BlockInfo['categoryId'] }).categoryId = 'constructor'
-    const energy = { known: true, enabled: true, variants: true, atReserve: { head: true, emotions: false, senses: false }, descents: [{ pool: 'head', at: st.now, silent: false }] } as unknown as EnergyState
+    const energy = { known: true, enabled: true, variants: true, atReserve: { head: true, emotions: false, senses: false, body: false }, descents: [{ pool: 'head', at: st.now, silent: false }] } as unknown as EnergyState
     const cause = variantCauses(st, energy).find((c) => c.kind === 'energy')!
     expect(variantsFor(s.contextAt(s.at('12:00')), st, cause, (b) => b.categoryId)[0]!.changes).toContainEqual({ k: 'tomorrow', block: 'b' })
   })

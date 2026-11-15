@@ -28,7 +28,7 @@ test('✎ przy podkategorii (D514): okno wypełnione, Esc nic nie zmienia, „Za
       await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
       await expect(page.getByTestId('block-k1')).toBeVisible({ timeout: 30_000 })
       const cost = page.getByTestId('block-k1-cost')
-      await expect(cost).toHaveText(/^1\D+1\D+1$/)
+      await expect(cost).toHaveText(/^1\D+1\D+1\D+1$/)
       await page.getByTestId('block-k1').click()
       await expect(page.getByTestId('block-editor')).toBeVisible()
       // Esc: nothing changed, nothing saved.
@@ -37,6 +37,8 @@ test('✎ przy podkategorii (D514): okno wypełnione, Esc nic nie zmienia, „Za
       await expect(dialog).toContainText('Podkategoria Inne obowiązki')
       await expect(page.getByTestId('new-category-name')).toHaveValue('Inne obowiązki')
       await expect(page.getByTestId('new-cost-head')).toHaveValue('1')
+      // D520, D523: the body is the fourth field – 1 for „Inne obowiązki”.
+      await expect(page.getByTestId('new-cost-body')).toHaveValue('1')
       await expect(page.getByTestId('edit-scope')).toHaveText('Nic nie zmieniono.')
       const box = (await dialog.boundingBox())!
       expect(Math.abs(box.x + box.width / 2 - 640)).toBeLessThan(80)
@@ -46,7 +48,7 @@ test('✎ przy podkategorii (D514): okno wypełnione, Esc nic nie zmienia, „Za
       await page.keyboard.press('Escape')
       await expect(dialog).toHaveCount(0)
       expect(settingsOf(dataDir).filter((c) => c.patch.categories?.inne?.costs)).toEqual([])
-      await expect(cost).toHaveText(/^1\D+1\D+1$/)
+      await expect(cost).toHaveText(/^1\D+1\D+1\D+1$/)
 
       // „Zapisz”: from today on, whatever „Od kiedy” says (the default is tomorrow).
       await page.getByTestId('edit-category').click()
@@ -54,7 +56,7 @@ test('✎ przy podkategorii (D514): okno wypełnione, Esc nic nie zmienia, „Za
       await page.getByTestId('new-cost-head').press('Tab')
       await page.getByTestId('new-thing-save').click()
       await expect(dialog).toHaveCount(0)
-      await expect(cost).toHaveText(/^4\D+1\D+1$/, { timeout: 15_000 })
+      await expect(cost).toHaveText(/^4\D+1\D+1\D+1$/, { timeout: 15_000 })
       const change = settingsOf(dataDir).find((c) => c.patch.categories?.inne?.costs)!
       expect(change.from).toBe(today)
       expect(change.at).not.toBeNull()

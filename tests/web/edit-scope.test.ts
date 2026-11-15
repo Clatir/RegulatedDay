@@ -14,7 +14,7 @@ import { Scenario } from '../unit/engine/dsl'
 const categories = DEFAULT_SETTINGS.categories
 const b = (p: Partial<PlanBlock> & { id: string }): PlanBlock => planBlock({ categoryId: 'projekty', startMin: 600, durationMin: 30, origin: 'user', ...p })
 const day = (date: string, blocks: PlanBlock[], extra: Record<string, unknown> = {}) => ({ schema: 1, date, blocks: blocks.map((x) => ({ ...x })), ...extra })
-const costs = { head: 2, emotions: 2, senses: 2 }
+const costs = { head: 2, emotions: 2, senses: 2, body: 0 }
 
 describe('reaches', () => {
   it('koszt podkategorii: tylko bloki bez własnego kosztu i bez wariantu z własnym kosztem; inne pola – wszystkie bloki podkategorii', () => {
@@ -54,7 +54,7 @@ describe('reaches', () => {
     expect(reaches(b({ id: 'x', categoryId: 'rutyny', routine: 'r3' }), rutyny, 'costs', categories, routines)).toBe(true)
     // A routine left on a block of another kind costs nothing (T1371): the subcategory's cost reaches it.
     expect(reaches(b({ id: 'x', categoryId: 'projekty', routine: 'r1' }), { kind: 'category', id: 'projekty' }, 'costs', categories, routines)).toBe(true)
-    const withVariant = { ...categories, rutyny: { ...categories.rutyny!, variants: [{ id: 'krotka', name: 'Krótka', costs: { head: 0, emotions: 0, senses: 0 } }] } }
+    const withVariant = { ...categories, rutyny: { ...categories.rutyny!, variants: [{ id: 'krotka', name: 'Krótka', costs: { head: 0, emotions: 0, senses: 0, body: 0 } }] } }
     const krotka = { kind: 'variant', categoryId: 'rutyny', id: 'krotka' } as const
     expect(reaches(b({ id: 'x', categoryId: 'rutyny', variantId: 'krotka', routine: 'r1' }), krotka, 'costs', withVariant, routines)).toBe(false)
     expect(reaches(b({ id: 'x', categoryId: 'rutyny', variantId: 'krotka', routine: 'r2' }), krotka, 'costs', withVariant, routines)).toBe(true)
@@ -194,7 +194,7 @@ describe('countScope', () => {
 
 describe('zaczęty dziś blok liczony jak silnik (begunToday, T1434)', () => {
   const today = '2026-11-18'
-  const R = { head: 3, emotions: 1, senses: 1 }
+  const R = { head: 3, emotions: 1, senses: 1, body: 0 }
   const nulls = () => Object.fromEntries(scopeDates(today).map((d) => [d, null])) as Record<string, Record<string, unknown> | null>
   const m = b({ id: 'm', categoryId: 'rutyny', routine: 'r1', startMin: 8 * 60, durationMin: 90 })
   const n = b({ id: 'n', categoryId: 'rutyny', routine: 'r1', startMin: 12 * 60 })
@@ -278,7 +278,7 @@ describe('overriddenFrom (T1336)', () => {
 })
 
 describe('zmiany z okna', () => {
-  const was = { name: 'Projekty', group: 'g-wolne', cls: 'free', place: 'computer', color: null, calendar: 'default', costs: { head: 3, emotions: 0, senses: 1 }, flags: {} } as const
+  const was = { name: 'Projekty', group: 'g-wolne', cls: 'free', place: 'computer', color: null, calendar: 'default', costs: { head: 3, emotions: 0, senses: 1, body: 0 }, flags: {} } as const
   it('podkategoria: pisze tylko pola, które się zmieniły; koszt tylko w puli, która się zmieniła', () => {
     expect(categoryChange(was, { ...was })).toMatchObject({ patch: null, meta: null, group: null, calendar: null, what: null })
     const c = categoryChange(was, { ...was, costs: { ...was.costs, head: 4 } })
@@ -289,12 +289,12 @@ describe('zmiany z okna', () => {
     expect(categoryChange(was, { ...was, cls: 'work', flags: { noSleep: true } })).toMatchObject({ patch: { cls: 'work', noSleep: true }, what: 'all' })
   })
   it('wariant: koszt „jak podkategoria” ↔ własny, miejsce', () => {
-    const v = { name: 'Gra', same: false, costs: { head: -1, emotions: -1, senses: 0 }, place: 'computer' }
+    const v = { name: 'Gra', same: false, costs: { head: -1, emotions: -1, senses: 0, body: 0 }, place: 'computer' }
     expect(variantChange(v, { ...v })).toMatchObject({ patch: null, what: null })
     expect(variantChange(v, { ...v, same: true })).toMatchObject({ patch: { costs: null }, what: 'costs' })
-    expect(variantChange(v, { ...v, costs: { ...v.costs, head: 0 } })).toMatchObject({ patch: { costs: { head: 0, emotions: -1, senses: 0 } }, what: 'costs' })
+    expect(variantChange(v, { ...v, costs: { ...v.costs, head: 0 } })).toMatchObject({ patch: { costs: { head: 0, emotions: -1, senses: 0, body: 0 } }, what: 'costs' })
     expect(variantChange(v, { ...v, place: '-' })).toMatchObject({ patch: { place: null }, what: 'all' })
-    expect(variantChange({ ...v, same: true }, { ...v, same: true, costs: { head: 5, emotions: 5, senses: 5 } })).toMatchObject({ patch: null, what: null })
+    expect(variantChange({ ...v, same: true }, { ...v, same: true, costs: { head: 5, emotions: 5, senses: 5, body: 0 } })).toMatchObject({ patch: null, what: null })
   })
   it('rutyna: nazwa i kroki; kroki bez nazwy nie są zmianą', () => {
     const r = { name: 'Poranna', normal: [{ id: 's1', name: 'Woda', min: 5 }], worse: [] }

@@ -1,6 +1,6 @@
 /**
  * Block categories (spec „Kategorie”, „Koszty startowe kategorii”): every block has a category with a class (work, life
- * and care, free), costs per hour for the three pools and the properties the engine reads. Ids are stable; removing a
+ * and care, free), costs per hour for the four pools and the properties the engine reads. Ids are stable; removing a
  * category archives it. The values are shared settings with a date they apply from (rd.json, spec „Macierz ustawień”).
  */
 
@@ -29,6 +29,13 @@ export type Pool = keyof Costs
 export const POOLS: readonly Pool[] = ['head', 'emotions', 'senses', 'body']
 /** A state of the four pools, 0–100. */
 export type PoolValues = Record<Pool, number>
+
+/**
+ * The pools as a log of a version before the body (D520, ≤ 1.26) may hold them: the three first always, the body only from 1.27 on –
+ * the answers of a check-in (`energy.checkin`), the state before an anchor (`before`) and the costs of an event (`block.start.planned`,
+ * `block.cost`, `routine.cost`). Costs read through `startingBody` (T1520), the answers and `before` as the energy says (T1522, T1523).
+ */
+export type LoggedPools<T> = Omit<Record<Pool, T>, 'body'> & { body?: T }
 
 export interface Variant {
   id: string
@@ -172,6 +179,8 @@ export const REGEN_CATEGORY = 'regeneracja'
 export const REQUEST_CATEGORY = 'prosby'
 export const PROJECT_CATEGORY = 'projekty'
 export const OTHER_WORK_CATEGORY = 'inne'
+/** The starting subcategory of the kind „rutyna” – the one a routine's cost (D512) stands before in the starting settings. */
+export const ROUTINE_CATEGORY = 'rutyny'
 
 /** The rules part of a category (what a day's snapshot keeps). */
 export function rulesOf(cat: Category): CategoryRules {
@@ -193,3 +202,20 @@ export function costsOf(rules: CategoryRules, variantId?: string | null): Costs 
 export function variantHasCosts(rules: CategoryRules, variantId?: string | null): boolean {
   return !!(variantId && rules.variants.find((v) => v.id === variantId)?.costs)
 }
+
+const STARTING = new Map(DEFAULT_CATEGORIES.map((c) => [c.id, c]))
+
+/**
+ * The body's cost (D520) of a cost written before the body (≤ 1.26: three pools – an own cost of a block, a routine's, a start's, a change's;
+ * T1520): the starting cost (D523) of its subcategory and variant (a variant not among the starting ones – its subcategory's), a subcategory
+ * not among the starting ones (or none known) – 0; a routine's – of the starting subcategory of routines (`ROUTINE_CATEGORY`). By the ids
+ * only (`Map` – an id such as „constructor” is none): the reading of a file or an event knows no settings, and a day's snapshot keeps the
+ * costs of its blocks as they were when it was made.
+ */
+export function startingBody(categoryId: string | null | undefined, variantId?: string | null): number {
+  const c = categoryId != null ? STARTING.get(categoryId) : undefined
+  return c ? costsOf(c, variantId).body : 0
+}
+
+/** Whether the variant is one of the starting ones of its subcategory (D523: a variant of yours has no starting cost of the body – 0). */
+export const isStartingVariant = (categoryId: string, variantId: string): boolean => !!STARTING.get(categoryId)?.variants.some((v) => v.id === variantId)

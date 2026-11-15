@@ -484,7 +484,7 @@ function DayColumn({
   waiting: NewPick | null
   grab: (b: HorizonBlock) => BlockGrab
   drop: (BlockDrop & { durationMin: number }) | null
-  /** The cost on a tile without spaces („3·1·1” – the week, D501). */
+  /** The cost on a tile without spaces („3·1·1·0” – the week, D501, D524). */
   tight: boolean
 }) {
   const lanes = useMemo(() => laneLayout(day.blocks), [day.blocks])

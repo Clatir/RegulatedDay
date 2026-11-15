@@ -344,7 +344,7 @@ describe('kopia Ctrl + przeciągnięciem (D513) i klawisze w trakcie', () => {
 
 describe('pasek energii przy lewej krawędzi kolumny (D500, D422)', () => {
   // 06:00 bodźce 99 (the weakest – a tie would be głowa); 10:00 bodźce 40 (uwaga at the reserve 30); 15:00 bodźce 20 (below the reserve).
-  const track = (assumed?: true) => ({ samples: [{ at: 360, head: 100, emotions: 100, senses: 99 }, { at: 600, head: 80, emotions: 90, senses: 40 }, { at: 900, head: 50, emotions: 60, senses: 20 }], reserve: 30, ...(assumed ? { assumed } : {}) })
+  const track = (assumed?: true) => ({ samples: [{ at: 360, head: 100, emotions: 100, senses: 99, body: 100 }, { at: 600, head: 80, emotions: 90, senses: 40, body: 100 }, { at: 900, head: 50, emotions: 60, senses: 20, body: 100 }], reserve: 30, ...(assumed ? { assumed } : {}) })
   const rects = (date: string) => [...q(`week-energy-${date}`)!.querySelectorAll('rect')]
   it('dzień ze znaną energią: wąski pasek przy lewej krawędzi w kolorze najsłabszej puli, w trzech odcieniach', async () => {
     const list = days()
@@ -362,6 +362,14 @@ describe('pasek energii przy lewej krawędzi kolumny (D500, D422)', () => {
     // From the first sample to the last, touching.
     expect(r[0]!.getAttribute('data-from')).toBe('360')
     expect(r.at(-1)!.getAttribute('data-to')).toBe('900')
+  })
+  it('ciało jest pulą jak inne (D520): gdy jest najsłabsze, pasek ma kolor ciała', async () => {
+    const list = days()
+    list[1] = { ...list[1]!, energy: { samples: [{ at: 360, head: 100, emotions: 100, senses: 100, body: 90 }, { at: 600, head: 80, emotions: 90, senses: 90, body: 40 }], reserve: 30 } }
+    await mount(list)
+    const r = rects(TODAY)
+    expect(new Set(r.map((x) => x.getAttribute('data-pool')))).toEqual(new Set(['body']))
+    expect(r.every((x) => x.getAttribute('fill') === POOL_COLOR.body)).toBe(true)
   })
   it('nic pod blokami: bloki stoją na prawo od paska; dzień bez energii – od krawędzi', async () => {
     const list = days()
@@ -392,7 +400,7 @@ describe('pasek energii przy lewej krawędzi kolumny (D500, D422)', () => {
     expect(r[0]!.getAttribute('y')).toBe('0')
     expect(Number(r.at(-1)!.getAttribute('y')) + Number(r.at(-1)!.getAttribute('height'))).toBeCloseTo(540 * THREE_DAYS_PPM, 6)
   })
-  it('najechanie na pasek: godzina i trzy wartości', async () => {
+  it('najechanie na pasek: godzina i cztery wartości', async () => {
     stubClientWidth(1000)
     const list = days()
     list[1] = { ...list[1]!, energy: track() }
@@ -404,7 +412,7 @@ describe('pasek energii przy lewej krawędzi kolumny (D500, D422)', () => {
     })
     act(() => void hit.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: colLeft(1) + 2, clientY: COL_TOP + 240 * WEEK_PPM })))
     const hover = document.querySelector<HTMLElement>(`[data-testid="week-energy-hover-${TODAY}"]`)!
-    expect(hover.textContent).toBe('10:00 · głowa 80 · emocje 90 · bodźce 40')
+    expect(hover.textContent).toBe('10:00 · głowa 80 · emocje 90 · bodźce 40 · ciało 100')
     // Whole: out of the column, which clips what leaves it (T1287) – on the page, right of the strip, at the sample's height.
     expect(q(`week-col-${TODAY}`)!.contains(hover)).toBe(false)
     expect(hover.className).toContain('fixed')
@@ -460,11 +468,11 @@ describe('pasek energii przy lewej krawędzi kolumny (D500, D422)', () => {
   it('po przeliczeniu prognozy przy stojącym kursorze podpowiedź ma nowe liczby (T1291)', async () => {
     stubClientWidth(1000)
     const list = await hoverOn(track())
-    expect(hoverOf()!.textContent).toBe('10:00 · głowa 80 · emocje 90 · bodźce 40')
+    expect(hoverOf()!.textContent).toBe('10:00 · głowa 80 · emocje 90 · bodźce 40 · ciało 100')
     const again = [...list]
-    again[1] = { ...list[1]!, energy: { ...track(), samples: [{ at: 360, head: 100, emotions: 100, senses: 99 }, { at: 600, head: 70, emotions: 85, senses: 35 }, { at: 900, head: 50, emotions: 60, senses: 20 }] } }
+    again[1] = { ...list[1]!, energy: { ...track(), samples: [{ at: 360, head: 100, emotions: 100, senses: 99, body: 100 }, { at: 600, head: 70, emotions: 85, senses: 35, body: 100 }, { at: 900, head: 50, emotions: 60, senses: 20, body: 100 }] } }
     await act(async () => root!.render(grid(again, WEEK_PPM)))
-    expect(hoverOf()!.textContent).toBe('10:00 · głowa 70 · emocje 85 · bodźce 35')
+    expect(hoverOf()!.textContent).toBe('10:00 · głowa 70 · emocje 85 · bodźce 35 · ciało 100')
   })
   it('dzień traci energię i ją odzyskuje: po drodze nie wraca duch podpowiedzi (T1292)', async () => {
     stubClientWidth(1000)
@@ -480,7 +488,7 @@ describe('pasek energii przy lewej krawędzi kolumny (D500, D422)', () => {
   })
   it('jedna próbka (nic do narysowania): bez paska, bloki od krawędzi kolumny (T1286)', async () => {
     const list = days()
-    list[1] = { ...list[1]!, energy: { samples: [{ at: 600, head: 80, emotions: 90, senses: 40 }], reserve: 30 } }
+    list[1] = { ...list[1]!, energy: { samples: [{ at: 600, head: 80, emotions: 90, senses: 40, body: 100 }], reserve: 30 } }
     await mount(list)
     expect(q(`week-energy-${TODAY}`)).toBeNull()
     expect(q(`week-blocks-${TODAY}`)!.style.left).toBe('0px')

@@ -199,7 +199,7 @@ export function costEvidence(ctx: DayContext, state: DayState, energyOn: boolean
     if (!total) continue
     const effect = anchorEffect(e, settingsAtMinute(ctx.snapshot, state.facts, at).settings.signalEffects)
     for (const [key, min] of Object.entries(window)) {
-      const r = (residual[key] ??= { head: 0, emotions: 0, senses: 0 })
+      const r = (residual[key] ??= { head: 0, emotions: 0, senses: 0, body: 0 })
       for (const p of POOLS) r[p] += (effect[p] * min) / total
     }
   }

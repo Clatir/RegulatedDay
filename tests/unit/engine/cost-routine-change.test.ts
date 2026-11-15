@@ -19,18 +19,18 @@ import type { PlanBlock } from '@shared/model/plan'
 import { block, lm, Scenario } from './dsl'
 
 const DATE = '2026-11-18'
-const R: Costs = { head: 5, emotions: 4, senses: -2 }
-const R2: Costs = { head: -1, emotions: 2, senses: 3 }
-const R3: Costs = { head: 3, emotions: 3, senses: 0 }
-const OWN: Costs = { head: 2, emotions: 2, senses: 2 }
-/** The category „Rutyny” (the kind „rutyna”): 1 · 0 · 1. */
-const RUTYNY: Costs = { head: 1, emotions: 0, senses: 1 }
-const ANSWERS: Record<Pool, [Answer, Answer]> = { head: [0, 0], emotions: [0, 0], senses: [0, 0] }
+const R: Costs = { head: 5, emotions: 4, senses: -2, body: 2 }
+const R2: Costs = { head: -1, emotions: 2, senses: 3, body: -1 }
+const R3: Costs = { head: 3, emotions: 3, senses: 0, body: 0 }
+const OWN: Costs = { head: 2, emotions: 2, senses: 2, body: 2 }
+/** The category „Rutyny” (the kind „rutyna”): 1 · 0 · 1 · 1. */
+const RUTYNY: Costs = { head: 1, emotions: 0, senses: 1, body: 1 }
+const ANSWERS: Record<Pool, [Answer, Answer]> = { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [1, 1] }
 
-const curve = (e: EnergyState) => (['head', 'emotions', 'senses'] as const).map((p) => Array.from(e.series[p]))
+const curve = (e: EnergyState) => (['head', 'emotions', 'senses', 'body'] as const).map((p) => Array.from(e.series[p]))
 const at = (e: EnergyState, time: string) => {
   const k = lm(time) - 4 * 60
-  return { head: e.series.head[k], emotions: e.series.emotions[k], senses: e.series.senses[k] }
+  return { head: e.series.head[k], emotions: e.series.emotions[k], senses: e.series.senses[k], body: e.series.body[k] }
 }
 /** A block of „Rutyny” with the routine „poranna”, 08:00–09:30. */
 const m = (o: Partial<PlanBlock> = {}): PlanBlock => ({ ...block({ id: 'm', cat: 'rutyny', at: '08:00', min: 90 }), routine: 'poranna', ...o })

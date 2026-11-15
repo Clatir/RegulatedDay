@@ -31,7 +31,8 @@ export interface CsvFiles {
 export const CSV_HEADERS = {
   'bloki.csv': ['Data', 'Blok', 'Kategoria', 'Klasa', 'Plan od', 'Plan do', 'Start', 'Koniec', 'Minuty', 'Po granicy (min)', 'Po maksimum (min)', 'Stan', 'Uwagi'],
   'prosby.csv': ['Data', 'Osoba', 'Nota', 'Rodzaj', 'Start', 'Koniec', 'Minuty', 'Usprawiedliwiona'],
-  'checkiny.csv': ['Data', 'Godzina', 'Głowa', 'Emocje', 'Bodźce', 'Odpowiedzi']
+  // The body (D520) – a column at the end (T1525): the columns of a file read before keep their places.
+  'checkiny.csv': ['Data', 'Godzina', 'Głowa', 'Emocje', 'Bodźce', 'Odpowiedzi', 'Ciało']
 } as const
 
 const BOM = '﻿'
@@ -127,8 +128,9 @@ function checkinRows(state: DayState, events: readonly AnyEvent[]): string[] {
   for (const e of [...events].sort(compareEvents)) {
     if (!isKnown(e) || e.k !== 'energy.checkin' || state.facts.undone.has(e.id)) continue
     const values = checkinStates(e.answers)
-    const answers = POOLS.map((p) => e.answers[p].map((a: Answer) => ANSWER[a]).join('/')).join(', ')
-    out.push(line([plDate(state.grid.date), time(state, idxOf(state.grid, e.at)), values.head, values.emotions, values.senses, answers]))
+    // The answers of the pools it asked about, in their order; the body's – the fourth (a check-in of an older version has none, T1525).
+    const answers = POOLS.flatMap((p) => e.answers[p]?.map((a: Answer) => ANSWER[a]).join('/') ?? []).join(', ')
+    out.push(line([plDate(state.grid.date), time(state, idxOf(state.grid, e.at)), values.head, values.emotions, values.senses, answers, e.answers.body ? values.body : '']))
   }
   return out
 }

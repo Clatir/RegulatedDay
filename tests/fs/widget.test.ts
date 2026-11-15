@@ -307,7 +307,7 @@ describe('widget w procesie głównym', () => {
     const real = folder.widgetModel.bind(folder)
     folder.widgetModel = async (t?: number) => {
       const m = await real(t)
-      return { ...m, energy: { ...m.energy, enabled: true, known: true, atReserve: { head: false, emotions: true, senses: false }, descents: [{ pool: 'emotions', at: m.state.now - 30, recorded: true, silent: false, message: true }] } }
+      return { ...m, energy: { ...m.energy, enabled: true, known: true, atReserve: { head: false, emotions: true, senses: false, body: false }, descents: [{ pool: 'emotions', at: m.state.now - 30, recorded: true, silent: false, message: true }] } }
     }
     await w.refresh()
     const reserve = () => shown.filter((n) => n.title === 'Energia na poziomie rezerwy')
@@ -864,7 +864,7 @@ describe('widget w procesie głównym', () => {
     folder.widgetModel = async (t?: number) => {
       const m = await real(t)
       const idx = m.state.now
-      return { ...m, energy: { ...m.energy, enabled: true, known: true, atReserve: { head: false, emotions: true, senses: false }, descents: [{ pool: 'emotions', at: idx - 30, recorded: true, silent: false, message: true }, { pool: 'emotions', at: idx - 5, recorded: true, silent: false, message: false }] } }
+      return { ...m, energy: { ...m.energy, enabled: true, known: true, atReserve: { head: false, emotions: true, senses: false, body: false }, descents: [{ pool: 'emotions', at: idx - 30, recorded: true, silent: false, message: true }, { pool: 'emotions', at: idx - 5, recorded: true, silent: false, message: false }] } }
     }
     await w.refresh()
     expect(shown.filter((n) => n.title === 'Energia na poziomie rezerwy')).toHaveLength(1)
@@ -1159,7 +1159,7 @@ describe('widget w procesie głównym', () => {
     folder.widgetModel = async (t?: number) => {
       const m = await real(t)
       const idx = m.state.now
-      return { ...m, energy: { ...m.energy, enabled: true, known: true, atReserve: { head: pools.includes('head'), emotions: pools.includes('emotions'), senses: false }, descents: pools.map((pool) => ({ pool, at: idx - 30, recorded: true, silent: false, message: true })) } }
+      return { ...m, energy: { ...m.energy, enabled: true, known: true, atReserve: { head: pools.includes('head'), emotions: pools.includes('emotions'), senses: false, body: false }, descents: pools.map((pool) => ({ pool, at: idx - 30, recorded: true, silent: false, message: true })) } }
     }
     await w.refresh()
     const lines = () => w.current().lines.filter((l) => l.id.startsWith('reserve:'))
@@ -1201,7 +1201,7 @@ describe('widget w procesie głównym', () => {
     const real = folder.widgetModel.bind(folder)
     folder.widgetModel = async (t?: number) => {
       const m = await real(t)
-      return { ...m, energy: { ...m.energy, enabled: true, known: true, atReserve: { head: true, emotions: false, senses: false }, descents: [{ pool: 'head', at: m.state.now - 5, recorded: true, silent: false, message: true }] } }
+      return { ...m, energy: { ...m.energy, enabled: true, known: true, atReserve: { head: true, emotions: false, senses: false, body: false }, descents: [{ pool: 'head', at: m.state.now - 5, recorded: true, silent: false, message: true }] } }
     }
     // „Mniej pytań”: the message is a quiet line, no notification.
     await folder.timerClick({ a: 'fewer' })

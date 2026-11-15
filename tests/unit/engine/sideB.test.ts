@@ -14,7 +14,7 @@ import { dayEnd } from '@shared/time/day'
 import { block, Scenario } from './dsl'
 
 const DATE = '2026-10-28'
-const MID: Record<Pool, [Answer, Answer]> = { head: [1, 1], emotions: [1, 1], senses: [1, 1] }
+const MID: Record<Pool, [Answer, Answer]> = { head: [1, 1], emotions: [1, 1], senses: [1, 1], body: [1, 1] }
 const ON = { energy: true, projects: true, requests: true }
 
 /** Work 08:00–09:00 („Koniec pracy”), a project 18:00–19:00, journaling 19:00–19:30 (after the end of work: a project). */

@@ -22,10 +22,10 @@ const steps = [
 
 describe('copiedBlock – kopia bloku (D513)', () => {
   it('nowe id, Twój, bez kotwicy i grupy, start z upuszczenia; notatka, nazwa, koszt i kroki (nieodhaczone) zostają; bez historii', () => {
-    const b = planBlock({ id: 'a', categoryId: 'analiza', variantId: 'v1', startMin: 600, durationMin: 45, note: '**ważne**', name: 'Raport', costs: { head: 3, emotions: 1, senses: 1 }, anchor: 'x', alongside: 'y', moves: 3, movedFrom: '2099-03-01', byVariant: true, steps, fixed: true, background: true })
+    const b = planBlock({ id: 'a', categoryId: 'analiza', variantId: 'v1', startMin: 600, durationMin: 45, note: '**ważne**', name: 'Raport', costs: { head: 3, emotions: 1, senses: 1, body: 2 }, anchor: 'x', alongside: 'y', moves: 3, movedFrom: '2099-03-01', byVariant: true, steps, fixed: true, background: true })
     const c = copiedBlock(b, 13 * 60)
     expect(c.id).not.toBe('a')
-    expect(c).toMatchObject({ categoryId: 'analiza', variantId: 'v1', startMin: 13 * 60, durationMin: 45, note: '**ważne**', name: 'Raport', costs: { head: 3, emotions: 1, senses: 1 }, fixed: true, background: true })
+    expect(c).toMatchObject({ categoryId: 'analiza', variantId: 'v1', startMin: 13 * 60, durationMin: 45, note: '**ważne**', name: 'Raport', costs: { head: 3, emotions: 1, senses: 1, body: 2 }, fixed: true, background: true })
     expect(c).toMatchObject({ origin: 'user', sourceId: null, anchor: null, alongside: null, moves: 0, movedFrom: null, byVariant: false, task: null, requests: [] })
     expect(c.steps).toEqual([
       { id: 's1', title: 'Pierwszy', order: 0, done: false },

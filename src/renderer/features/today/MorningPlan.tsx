@@ -62,9 +62,11 @@ const QUESTIONS: Array<{ pool: Pool; text: string }> = [
   { pool: 'emotions', text: 'Drażnią mnie pytania i rozmowy?' },
   { pool: 'emotions', text: 'Wczoraj było dużo kontaktu z ludźmi?' },
   { pool: 'senses', text: 'Potrzebuję ciemnych okularów?' },
-  { pool: 'senses', text: 'Potrzebuję zatyczek?' }
+  { pool: 'senses', text: 'Potrzebuję zatyczek?' },
+  { pool: 'body', text: 'Ciało jest ciężkie, bolą mięśnie?' },
+  { pool: 'body', text: 'Spałem niespokojnie?' }
 ]
-const POOL_NAMES: Record<Pool, string> = { head: 'głowa', emotions: 'emocje', senses: 'bodźce' }
+const POOL_NAMES: Record<Pool, string> = { head: 'głowa', emotions: 'emocje', senses: 'bodźce', body: 'ciało' }
 const EXCEPTION_REASONS = ['NFP', 'CPI', 'FOMC', 'inne dane']
 
 export function MorningPlan({ model, names }: { model: DayModel; names: Names }) {
@@ -107,9 +109,9 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
   )
 }
 
-/** The first check-in: 6 questions, two per pool, no / a little / yes (spec „Pierwszy check-in”). */
-function Checkin({ model, onSkip }: { model: DayModel; onSkip: () => void }) {
-  const [answers, setAnswers] = useState<Answer[]>([0, 0, 0, 0, 0, 0])
+/** The first check-in: 8 questions, two per pool (D521: the body's too), no / a little / yes (spec „Pierwszy check-in”). */
+export function Checkin({ model, onSkip }: { model: DayModel; onSkip: () => void }) {
+  const [answers, setAnswers] = useState<Answer[]>([0, 0, 0, 0, 0, 0, 0, 0])
   const byPool = Object.fromEntries(POOLS.map((p) => [p, QUESTIONS.flatMap((q, i) => (q.pool === p ? [answers[i]!] : []))])) as Record<Pool, [Answer, Answer]>
   const result = checkinStates(byPool)
   const [busy, run] = useBusy()

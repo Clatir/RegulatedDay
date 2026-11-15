@@ -4,7 +4,7 @@
  */
 import { computeDay, type DayContext, type DayState } from '@shared/engine/day'
 import { computeEnergy, type EnergyOptions, type EnergyState } from '@shared/engine/energy'
-import type { Costs, Pool } from '@shared/model/categories'
+import type { Costs, LoggedPools, Pool } from '@shared/model/categories'
 import type { AnyEvent, Answer, DaySnapshot, Domain, Signal, TimerEvent } from '@shared/model/events'
 import { RULES_VERSION } from '@shared/model/events'
 import { planBlock, type PlanBlock } from '@shared/model/plan'
@@ -228,20 +228,20 @@ export class Scenario {
     return this.push({ k: 'question.seen', at: this.at(at), question, how: 'main' }, at, computer)
   }
 
-  /** The check-in: two answers per pool (0 no, 1 a little, 2 yes). */
-  checkin(at: string, answers: Record<Pool, [Answer, Answer]>): this {
+  /** The check-in: two answers per pool (0 no, 1 a little, 2 yes); without the body's – as an older version writes it (T1522). */
+  checkin(at: string, answers: LoggedPools<[Answer, Answer]>): this {
     return this.push({ k: 'energy.checkin', at: this.at(at), answers }, at, this.computer, 'energy')
   }
 
   /**
    * A signal, with the state before it as the computer writing it knows it then (null: unknown, or given) – an anchor.
    */
-  signal(signal: Signal, at: string, before?: Record<Pool, number> | null): this {
+  signal(signal: Signal, at: string, before?: LoggedPools<number> | null): this {
     const b = before !== undefined ? before : this.energy(at).now
     return this.push({ k: 'energy.signal', at: this.at(at), signal, before: b }, at, this.computer, 'energy')
   }
 
-  relative(pool: Pool, delta: -10 | 0 | 10, at: string, before?: Record<Pool, number> | null): this {
+  relative(pool: Pool, delta: -10 | 0 | 10, at: string, before?: LoggedPools<number> | null): this {
     const b = before !== undefined ? before : this.energy(at).now
     return this.push({ k: 'energy.relative', at: this.at(at), pool, delta, before: b }, at, this.computer, 'energy')
   }

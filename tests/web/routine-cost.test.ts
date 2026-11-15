@@ -76,7 +76,7 @@ describe('koszt rutyny w „Rutynach” (D512)', () => {
   it('rutyna bez kosztu: napis mówi koszt kategorii rutyn i „jak podkategoria”; [+] zapisuje własny koszt rutyny, inne pola pliku zostają', async () => {
     await open({ ...routine(null), future: { kept: true } })
     const label = q('routine-cost')!
-    expect(label.textContent).toBe('1 · 0 · 1')
+    expect(label.textContent).toBe('1 · 0 · 1 · 1')
     expect(label.getAttribute('data-own')).toBeNull()
     expect(q('routine-cost-from')!.textContent).toBe('jak podkategoria')
     await click(label)
@@ -84,13 +84,13 @@ describe('koszt rutyny w „Rutynach” (D512)', () => {
     await click(q('cost-pop-head-plus'))
     expect(tryUpdateRecord).toHaveBeenCalledTimes(1)
     expect(vi.mocked(tryUpdateRecord).mock.calls[0]![0]).toBe('routines/r1.json')
-    expect(records.get('routines/r1.json')).toMatchObject({ costs: { head: 2, emotions: 0, senses: 1 }, future: { kept: true }, name: 'Poranna' })
+    expect(records.get('routines/r1.json')).toMatchObject({ costs: { head: 2, emotions: 0, senses: 1, body: 1 }, future: { kept: true }, name: 'Poranna' })
   })
 
   it('rutyna z kosztem: napis mówi jej koszt (własny); przycisk okienka wraca do „jak podkategoria” (costs: null)', async () => {
-    await open(routine({ head: -2, emotions: 3, senses: 0 }))
+    await open(routine({ head: -2, emotions: 3, senses: 0, body: 0 }))
     const label = q('routine-cost')!
-    expect(label.textContent).toBe('−2 · 3 · 0')
+    expect(label.textContent).toBe('−2 · 3 · 0 · 0')
     expect(label.getAttribute('data-own')).toBe('true')
     expect(q('routine-cost-from')!.textContent).toBe('własny koszt rutyny')
     await click(label)
@@ -104,7 +104,7 @@ describe('koszt rutyny w „Rutynach” (D512)', () => {
     await click(q('cost-pop-head-plus'))
     await click(q('cost-pop-head-plus'))
     await act(async () => undefined)
-    expect(records.get('routines/r1.json')!.costs).toEqual({ head: 3, emotions: 0, senses: 1 })
+    expect(records.get('routines/r1.json')!.costs).toEqual({ head: 3, emotions: 0, senses: 1, body: 1 })
     expect(tryUpdateRecord).toHaveBeenCalledTimes(2)
     const rd = window.rd as unknown as { dayData: ReturnType<typeof vi.fn>; logEvents: ReturnType<typeof vi.fn> }
     expect(rd.dayData).not.toHaveBeenCalled()
@@ -118,12 +118,12 @@ describe('koszt rutyny w „Rutynach” (D512)', () => {
     await click(q('routine-cost'))
     await click(q('cost-pop-head-plus'))
     await act(async () => undefined)
-    expect(records.get('routines/r1.json')!.costs).toEqual({ head: 2, emotions: 0, senses: 1 })
+    expect(records.get('routines/r1.json')!.costs).toEqual({ head: 2, emotions: 0, senses: 1, body: 1 })
     expect(useUi.getState().toasts).toEqual([])
   })
 
   it('[−] przy −5 jest wyłączony – koszt zostaje w zakresie', async () => {
-    await open(routine({ head: -5, emotions: 0, senses: 0 }))
+    await open(routine({ head: -5, emotions: 0, senses: 0, body: 0 }))
     await click(q('routine-cost'))
     expect((q('cost-pop-head-minus') as HTMLButtonElement).disabled).toBe(true)
   })

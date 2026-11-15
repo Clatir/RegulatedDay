@@ -54,13 +54,13 @@ function writeDay(day: string, o: { extra?: boolean } = {}): number {
   const ev = (k: string, dom: string, at: number, extra: Record<string, unknown> = {}) => lines.push(JSON.stringify({ id: `pca-${day}-${n}`, c: 'pca', n: n++, t: at, l: at, v: 1, day, dom, k, at, ...extra }))
   const at = (hhmm: number) => placeLogical(day, hhmm)
   ev('presence.first', 'meta', at(7 * 60))
-  ev('energy.checkin', 'energy', at(8 * 60), { answers: { head: [1, 1], emotions: [1, 1], senses: [1, 1] } })
+  ev('energy.checkin', 'energy', at(8 * 60), { answers: { head: [1, 1], emotions: [1, 1], senses: [1, 1], body: [1, 1] } })
   ev('request.start', 'timer', at(12 * 60), { request: 'r1', mode: 'now', person: 'mama', estimateMin: null, hardEndAt: null })
   ev('request.end', 'timer', at(12 * 60 + 20), { request: 'r1' })
   ev('cost.felt', 'energy', at(21 * 60), { category: 'analiza', feel: 'heavier' })
   const know = n - 1
   // What came after the freeze: „poza oceną”.
-  if (o.extra) ev('energy.checkin', 'energy', at(15 * 60), { answers: { head: [2, 2], emotions: [2, 2], senses: [2, 2] } })
+  if (o.extra) ev('energy.checkin', 'energy', at(15 * 60), { answers: { head: [2, 2], emotions: [2, 2], senses: [2, 2], body: [2, 2] } })
   writeFileSync(join(dataDir, paths.log(day, 'pca')), lines.join('\n') + '\n')
   return know
 }

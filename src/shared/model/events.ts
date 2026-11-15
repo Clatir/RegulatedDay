@@ -10,7 +10,7 @@
  */
 import { isIsoDate } from '../time/zone'
 import { isPoolCost } from './blockCosts'
-import { POOLS, type Costs, type Pool, type PoolValues } from './categories'
+import { POOLS, startingBody, type Costs, type LoggedPools, type Pool } from './categories'
 import { MAX_BLOCK_MIN, type PlanBlock } from './plan'
 import { MAX_STEPS, ROUTINE_VERSIONS, type RoutineVersion } from './routines'
 import { settingsFrom, type DayTypeId, type RulesSettings } from './settings'
@@ -54,9 +54,13 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * with them (an hour earlier in the weeks of the shift, shortened by an early close, asked about on a weekday „pytaj”, none on a
  * weekday „nie”) – an older version reads the entries as fixed blocks of their category at their Polish hour on every day of their
  * template, „nie” too (no shift, no early close, no question, never twice: the layer is empty from the move, T1403); it gives way to
- * this one as the leader and freezes no day.
+ * this one as the leader and freezes no day. 16 – the fourth pool, the body (D520–D523, T1524): an older version counts three pools – it
+ * registers no descent of the body (`energy.reserve`) and freezes the day's reward „Reakcja na rezerwę” without it; it gives way to this
+ * one as the leader. It loses nothing: the body's answers of a check-in and the body in `before` and in costs are fields it does not read
+ * (kept in the files and the logs as written); a relative assessment or a descent of the body (`pool: 'body'`) is a broken line to it –
+ * skipped and listed, the line stays in its writer's log.
  */
-export const RULES_VERSION = 15
+export const RULES_VERSION = 16
 
 /** The rules since which a block's start writes the cost of its routine (D512, `planned.routineCosts`): an earlier start had none. */
 export const ROUTINE_COSTS_FROM = 14
@@ -80,6 +84,12 @@ export interface StartPlanned {
   routine?: string | null
   requests?: string[]
 }
+
+/**
+ * What a block's start wrote of its plan as the log holds it: a start before the body (D520, ≤ 1.26) wrote three pools of its costs –
+ * `foldFacts` reads them with the body of their subcategory's starting cost (T1520) into `StartPlanned`.
+ */
+export type LoggedStartPlanned = Omit<StartPlanned, 'costs' | 'routineCosts'> & { costs?: LoggedPools<number> | null; routineCosts?: LoggedPools<number> | null }
 
 export interface EventBase {
   /** Unique: `<computer>-<n>` for your actions, derived from the data for automatic ones (both computers write the same). */
@@ -151,7 +161,7 @@ export type TimerEvent =
        * `routine`, `requests` – what named it then (D431, 1.19.0; null – none): a block taken out of the plan after it began
        * keeps its name. Absent – a start by an older version, or of a block outside the plan: named by the snapshot (`namedById`).
        */
-      planned: StartPlanned
+      planned: LoggedStartPlanned
       /** Minutes after the boundary confirmed in advance up to this instant (two clicks, „Dodaj bez wymiany”). */
       confirmUntil: number | null
       /** 'plan' – it happened at its planned time, said afterwards (the ritual): its times are no measure. */
@@ -169,7 +179,7 @@ export type TimerEvent =
    * (`costChange.ts`). Passive for the day engine (`PASSIVE`). The timer's domain on purpose (T1300): an older version keeps it as
    * an unknown event of the timer, counts the block by its start and installs the new version without the 24 h.
    */
-  | (EventBase & { k: 'block.cost'; block: string; at: number; costs: Costs | null })
+  | (EventBase & { k: 'block.cost'; block: string; at: number; costs: LoggedPools<number> | null })
   /**
    * The cost of a routine changed (D514 with D512, T1430): the main process writes one whenever this computer writes the routine's record
    * (`routines/<id>.json`) with another cost – a save of „Rutyny” or ✎, an answer to a question of a conflict, „Przywróć” of an older
@@ -181,7 +191,7 @@ export type TimerEvent =
    * its start (T1431); the last of a minute wins. Passive for the day engine (`PASSIVE`); the timer's domain on purpose (T1300): an older
    * version keeps it as an unknown event of the timer and installs the new version without the 24 h.
    */
-  | (EventBase & { k: 'routine.cost'; routine: string; at: number; costs: Costs | null; was: Costs | null })
+  | (EventBase & { k: 'routine.cost'; routine: string; at: number; costs: LoggedPools<number> | null; was: LoggedPools<number> | null })
   /**
    * The tree of categories changed in the window (D510, T1313): a group added, renamed, removed, a subcategory moved, a variant changed.
    * Nothing reads it – passive (`PASSIVE`); the timer's domain on purpose, as `block.cost` (T1300): an older version, which knows no tree,
@@ -316,16 +326,18 @@ export const SIGNALS: readonly Signal[] = ['glasses', 'earplugs', 'rocking', 'qu
  * its computer knew it, so corrections of times before it never change the state after it.
  */
 export type EnergyEvent =
-  | (EventBase & { k: 'energy.checkin'; at: number; answers: Record<Pool, [Answer, Answer]> })
-  | (EventBase & { k: 'energy.signal'; at: number; signal: Signal; before: PoolValues | null })
+  /** The answers of a check-in by pool (D521: two of the body since 1.27; an older version's has none – T1522). */
+  | (EventBase & { k: 'energy.checkin'; at: number; answers: LoggedPools<[Answer, Answer]> })
+  /** `before` – the state before it as its computer knew it (an older version's has no body – T1523). */
+  | (EventBase & { k: 'energy.signal'; at: number; signal: Signal; before: LoggedPools<number> | null })
   /** The relative assessment: a pool worse, the same or better. */
-  | (EventBase & { k: 'energy.relative'; at: number; pool: Pool; delta: -10 | 0 | 10; before: PoolValues | null })
+  | (EventBase & { k: 'energy.relative'; at: number; pool: Pool; delta: -10 | 0 | 10; before: LoggedPools<number> | null })
   /** A descent to the reserve as the leader registered it: it stays whatever later corrections say. */
   | (EventBase & { k: 'energy.reserve'; at: number; pool: Pool; silent: boolean })
   /** The energy module switched on or off (a shared setting that works at once), with the state before. */
   | (EventBase & { k: 'energy.module'; at: number; on: boolean; was?: boolean })
   /** `block.cost` as the first builds of 1.24 wrote it (the energy's domain) – read the same, never written (T1300). */
-  | (EventBase & { k: 'energy.cost'; at: number; block: string; costs: Costs | null })
+  | (EventBase & { k: 'energy.cost'; at: number; block: string; costs: LoggedPools<number> | null })
 
 /** An event of a kind this version does not know: kept, skipped by the rules. */
 export type UnknownEvent = EventBase & { k: string; unknown: true; raw: Record<string, unknown> }
@@ -354,10 +366,12 @@ const isPool = (v: unknown): v is Pool => (POOLS as readonly unknown[]).includes
 const isLength = (v: unknown): v is number => Number.isInteger(v) && (v as number) > 0 && (v as number) <= MAX_BLOCK_MIN
 /** A change of a block's planned end („Przedłuż”, a shortening): minutes, more than 0, at most a block's longest. */
 const isChange = (v: unknown): v is number => isNum(v) && v > 0 && v <= MAX_BLOCK_MIN
-const isAnswers = (v: unknown) => isPlain(v) && POOLS.every((p) => Array.isArray(v[p]) && (v[p] as unknown[]).length === 2 && (v[p] as unknown[]).every((a) => a === 0 || a === 1 || a === 2))
-/** Three costs of the pools in the schema's range (`RANGES.cost`). */
-const isCosts = (v: unknown) => isPlain(v) && POOLS.every((p) => isPoolCost(v[p]))
-const isValues = (v: unknown) => v == null || (isPlain(v) && POOLS.every((p) => isNum(v[p]) && (v[p] as number) >= 0 && (v[p] as number) <= 100))
+/** Every pool `ok` – the body may be missing (D520: an event of a version before it, ≤ 1.26, T1528); a body that is there is checked too. */
+const allPools = (v: Record<string, unknown>, ok: (x: unknown) => boolean) => POOLS.every((p) => (p === 'body' && v[p] === undefined) || ok(v[p]))
+const isAnswers = (v: unknown) => isPlain(v) && allPools(v, (x) => Array.isArray(x) && x.length === 2 && x.every((a) => a === 0 || a === 1 || a === 2))
+/** The costs of the pools in the schema's range (`RANGES.cost`). */
+const isCosts = (v: unknown) => isPlain(v) && allPools(v, isPoolCost)
+const isValues = (v: unknown) => v == null || (isPlain(v) && allPools(v, (x) => isNum(x) && x >= 0 && x <= 100))
 
 /** The fields every kind needs beyond the base: name → check. */
 const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
@@ -463,8 +477,16 @@ export function daySnapshotOf(events: readonly AnyEvent[]): DaySnapshot | null {
     if (!isKnown(e) || (e.k !== 'day.create' && e.k !== 'day.reissue')) continue
     if (!found || compareEvents(e, found.e) > 0) found = { e, s: e.snapshot }
   }
-  // Settings written by an older version lack the fields added since: they take their defaults (tolerant schemas).
-  return found ? { ...found.s, settings: settingsFrom(found.s.settings) } : null
+  // Settings written by an older version lack the fields added since: they take their defaults (tolerant schemas); the own costs of its
+  // blocks lack the body (D520, ≤ 1.26) – their subcategory's starting body (T1520, T1527).
+  return found ? { ...found.s, settings: settingsFrom(found.s.settings), blocks: withBodies(found.s.blocks) } : null
+}
+
+/** The blocks of a snapshot with the body in their own costs: one an older version wrote has three pools (T1527); as written otherwise. */
+function withBodies(blocks: DaySnapshot['blocks']): DaySnapshot['blocks'] {
+  const lacks = (b: DaySnapshot['blocks'][number]) => isPlain(b.costs) && (b.costs as Record<string, unknown>).body === undefined
+  if (!Array.isArray(blocks) || !blocks.some(lacks)) return blocks
+  return blocks.map((b) => (lacks(b) ? { ...b, costs: { ...b.costs!, body: startingBody(b.categoryId, b.variantId) } } : b))
 }
 
 /** The kind's own instant (`at`, `from` …) – what the rules place the event at. */

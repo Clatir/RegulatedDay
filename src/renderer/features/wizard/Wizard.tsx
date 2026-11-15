@@ -527,7 +527,7 @@ function StepRegenWays() {
           className="btn"
           disabled={!name.trim()}
           onClick={() => {
-            setVariants([...regen.variants, { id: newId(10), name: name.trim(), costs: { head: -1, emotions: -1, senses: -1 } }])
+            setVariants([...regen.variants, { id: newId(10), name: name.trim(), costs: { head: -1, emotions: -1, senses: -1, body: 0 } }])
             setName('')
           }}
         >
@@ -538,7 +538,7 @@ function StepRegenWays() {
   )
 }
 
-const POOL_NAMES: Record<Pool, string> = { head: 'głowa', emotions: 'emocje', senses: 'bodźce' }
+const POOL_NAMES: Record<Pool, string> = { head: 'głowa', emotions: 'emocje', senses: 'bodźce', body: 'ciało' }
 
 function StepCosts() {
   const s = useWizard((x) => x.settings)
@@ -570,7 +570,7 @@ function StepCosts() {
           <Segmented value={machine.stationaryClasses ? 'yes' : 'no'} options={[{ value: 'no', label: 'nie' }, { value: 'yes', label: 'tak' }]} onChange={(v) => patchWizard({ machine: { ...machine, stationaryClasses: v === 'yes' } })} data-testid="wizard-stationary" />
         </Field>
       </div>
-      <div className="grid items-center gap-x-2 gap-y-1.5" style={{ gridTemplateColumns: 'minmax(0,1fr) repeat(3, 64px)' }}>
+      <div className="grid items-center gap-x-2 gap-y-1.5" style={{ gridTemplateColumns: 'minmax(0,1fr) repeat(4, 64px)' }}>
         <span />
         {POOLS.map((p) => (
           <span key={p} className="text-center text-[12px] text-muted">

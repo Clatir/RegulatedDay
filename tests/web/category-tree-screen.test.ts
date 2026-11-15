@@ -371,6 +371,40 @@ describe('usunięcie kategorii', () => {
   })
 })
 
+describe('nazwy pul przy polach kosztu (D525, D520)', () => {
+  const names = ['głowa', 'emocje', 'bodźce', 'ciało']
+  /** The labels of the cost fields of a row, in order: the pool's name, then its field. */
+  const costLabels = (row: ParentNode) => [...row.querySelectorAll('label')].filter((l) => l.querySelector('input')).map((l) => l.textContent ?? '')
+
+  it('wiersz podkategorii: przed każdym z czterech pól stoi nazwa puli – głowa, emocje, bodźce, ciało', async () => {
+    await show()
+    const labels = costLabels(category('analiza')).slice(0, 4)
+    expect(labels).toHaveLength(4)
+    names.forEach((name, i) => expect(labels[i]!.startsWith(name)).toBe(true))
+    expect(category('analiza').querySelector('input[aria-label="Analiza: ciało"]')).not.toBeNull()
+  })
+
+  it('wiersz wariantu z własnym kosztem ma te same cztery nazwy; bez własnego kosztu – żadnej', async () => {
+    await show()
+    await click(q('category-more', category('nauka')))
+    const row = category('nauka').querySelector<HTMLElement>('[data-testid="variant-row"][data-variant="sluchanie"]')!
+    const labels = costLabels(row)
+    expect(labels).toHaveLength(4)
+    names.forEach((name, i) => expect(labels[i]!.startsWith(name)).toBe(true))
+    await click(q('variant-costs-same', row))
+    expect(costLabels(category('nauka').querySelector<HTMLElement>('[data-testid="variant-row"][data-variant="sluchanie"]')!)).toEqual([])
+  })
+
+  it('pole ciała podkategorii zapisuje tylko ciało (od jutra), reszta kosztu zostaje', async () => {
+    await show()
+    const before = { ...settingsFrom(TOMORROW).categories.analiza!.costs }
+    commitText(category('analiza').querySelector<HTMLInputElement>('input[aria-label="Analiza: ciało"]')!, '2')
+    await act(async () => undefined)
+    expect(settingsFrom(TOMORROW).categories.analiza!.costs).toEqual({ ...before, body: 2 })
+    expect(settingsFrom(TODAY).categories.analiza!.costs).toEqual(before)
+  })
+})
+
 describe('warianty podkategorii', () => {
   const open = async (id: string) => click(q('category-more', category(id)))
   const variant = (cat: string, id: string) => category(cat).querySelector<HTMLElement>(`[data-testid="variant-row"][data-variant="${id}"]`)!

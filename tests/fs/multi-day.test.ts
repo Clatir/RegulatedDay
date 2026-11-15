@@ -76,7 +76,7 @@ describe('„3 dni” i „Agenda” w folderze danych', () => {
     const thu = v.days[2]!
     expect(thu.blocks.find((b) => b.id === 'a')).toMatchObject({ movable: true, startMin: 11 * 60, endMin: 13 * 60 })
     expect(thu.energy).toMatchObject({ assumed: true })
-    expect(thu.energy!.samples[0]).toEqual({ at: 240, head: 100, emotions: 100, senses: 100 })
+    expect(thu.energy!.samples[0]).toEqual({ at: 240, head: 100, emotions: 100, senses: 100, body: 100 })
     // No check-in today: unknown, as „Dziś” shows it.
     expect(v.days[1]!.energy).toBeNull()
     expect(thu.budget!.limitMin).toBe(DEFAULT_SETTINGS.dayTypes.zwykly.budgetMin)
@@ -118,7 +118,7 @@ describe('krzywa energii w folderze danych – moduł dnia i kto ją liczy (T914
     const { folder } = await make()
     // Tuesday: you used it and gave a check-in; today at 08:00 the module went off (its state before: on).
     folder.append({ day: TUE, dom: 'meta', k: 'presence.first', at: placeLogical(TUE, 7 * 60) })
-    folder.append({ day: TUE, dom: 'energy', k: 'energy.checkin', at: placeLogical(TUE, 7 * 60 + 30), answers: { head: [0, 0], emotions: [0, 0], senses: [0, 0] } })
+    folder.append({ day: TUE, dom: 'energy', k: 'energy.checkin', at: placeLogical(TUE, 7 * 60 + 30), answers: { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] } })
     folder.append({ day: WED, dom: 'energy', k: 'energy.module', at: placeLogical(WED, 8 * 60), on: false, was: true })
     const v = await folder.daysView([TUE, THU])
     expect(v.days[0]!.energy).not.toBeNull()
@@ -154,7 +154,7 @@ describe('krzywa energii w folderze danych – moduł dnia i kto ją liczy (T914
   it('kolumny minione nie czytają logów innych dni; nieczytelny log dziś nie gasi ich krzywych (T950)', async () => {
     const { folder } = await make()
     folder.append({ day: TUE, dom: 'meta', k: 'presence.first', at: placeLogical(TUE, 7 * 60) })
-    folder.append({ day: TUE, dom: 'energy', k: 'energy.checkin', at: placeLogical(TUE, 7 * 60 + 30), answers: { head: [0, 0], emotions: [0, 0], senses: [0, 0] } })
+    folder.append({ day: TUE, dom: 'energy', k: 'energy.checkin', at: placeLogical(TUE, 7 * 60 + 30), answers: { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] } })
     const log = (folder as unknown as { log: { readDay: (d: string) => Promise<unknown> } }).log
     const read = log.readDay.bind(log)
     const reads: string[] = []
