@@ -86,7 +86,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    pełne testy, wersja 1.24.0, lokalny Setup.exe w Pobranych; PR do `main` dopiero po zakończonym runie wydania 1.23.0.
    Środowisko: wspólny `node_modules` w katalogu głównym jest ze starego `main` (bez `jsdom`, `@tiptap`) – drzewa paczki
    potrzebują własnego `npm ci`.
-12. **1.25.0 – uwagi po 1.24 (14.11 ok. 23:30, D510–D514, w toku):** gałąź paczki `claude/1.25.0` (drzewo `w125`, od
+12. **1.25.0 – uwagi po 1.24 (14.11 ok. 23:30, D510–D515; wydane 15.11 07:09, PR #92, `main` 0a140ac, run 43676056865 – raz ponowiony po `tests/fs/horizon.test.ts:180`):** gałąź paczki `claude/1.25.0` (drzewo `w125`, od
    `claude/1.24.0` cfdbab8; po scaleniu PR #91 – `git merge origin/main`), koordynator regulatedday-d7, jeden PR po wydaniu
    1.24.0. Zadania (plan: „Uwagi po 1.24 – paczka 1.25.0”): A drzewo kategorii (D510) – d7, `claude/1.25-kategorie`
    (`w125a`, T1310–T1324; A1 model i migracja `wykonawca-opus`, A2 ekran `wykonawca-sonnet`); B sesje w szablonach (D511) –
@@ -99,7 +99,10 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    T1420–T1426), C (ab, T1360–T1374), D (ab, T1375–T1389), E (✎, przegląd high 10 uwag, T1325–T1338), F (koszt rutyny w ✎
    i na zaczętym bloku – zdarzenie `routine.cost` z procesu głównego, T1395–T1399, T1430–T1447; dwie rundy xhigh – 11 + 9); wersja 1.25.0, CHANGELOG, odbiór KT, ED,
    KS, KP, RE. B (sesje) poza 1.25.0 – D515 (użytkownik w sesji a8), a8 przerabia na `claude/1.25-sesje`, wyjdzie jako 1.26.0.
-   Pełne testy 3843, build, lint zielone (20e9a24). Dalej: E2E, `npm run dist:win` → Setup w Pobranych, PR (D285), wydanie.
+   Pełne testy 3843, build, lint, E2E zielone; Setup 1.25.0 zbudowany w `w125/release/` (kopia do Pobranych – ręcznie, brak zgody
+   na kopiowanie). Niestabilne: `tests/e2e/screens.spec.ts:67` (CI Linux raz), `:853` (lokalnie raz), `tests/fs/horizon.test.ts:180`
+   (run na `main` raz – dzień liczony 9 razy zamiast 8; podejrzenie: pamięć rutyn 60 s i klucz `routinesSig` w trakcie testu).
+   Do odbioru: KT1–KT6, ED1–ED5, KS1–KS6, KP1–KP10, RE1–RE5. Drzewa `w125*` do usunięcia (własne `node_modules`, bez dowiązań).
    **Przyjęte bez użytkownika (pokazać):** właściwości na podkategorii, kategoria bez kosztu i koloru, te same id; „Jak
    podkategoria / wariant / rutyna (…)”; nowy wariant „jak podkategoria”; „Usuń” podkategorii = archiwum; kategoria bez
    podkategorii znika bez pytania (z „Cofnij”); „Inne” zawsze jest, nie da się usunąć; kreator zostawia krok „Sposoby
@@ -113,10 +116,12 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    kolumna „Kategoria” to podkategorie; „+ Nowa rutyna” bez pola kosztu (pytanie); okienko kosztu w ✎ nie zamyka się
    klikiem obok; `variants.ts`/`energyOrder.ts` nie widzą zmian kosztu zaczętego bloku; kopia: pytanie o tekst „(z Ctrl –
    kopię)” w podpowiedzi „Spraw”, `copiedDay` zostawia `task`; ✎ – liczba przy częściowym nadpisaniu przybliżona.
-13. **1.26.0 – sesje w szablonach (D511, D515; w toku 15.11):** gałąź `claude/1.25-sesje`, drzewo `w125b`, sesja a8. Dwie rundy
+13. **1.26.0 – sesje w szablonach (D511, D515; scalone w 1.26.1 15.11, T1501):** gałąź `claude/1.25-sesje`, drzewo `w125b`, sesja a8. Dwie rundy
    przeglądu xhigh na wariancie z kopiami (po 15 uwag, utrata danych), zmiana na D515 (potwierdzona przez użytkownika),
    dwie rundy xhigh na D515, poprawki (T1340–T1359, T1400–T1419, T1450–T1461). Testy: pełny vitest 3915 ×2, E2E lokalnie
-   117/127 (10 pominiętych); PR – do uzupełnienia. Odbiór: SE1–SE13.
+   117/127 (10 pominiętych – `bar-windows`, `quick-windows`, tylko z prawdziwym pomocnikiem); Setup 1.26.0 w Pobranych
+   (15.11 05:25). Bez osobnego wydania 1.26.0 (decyzja użytkownika 15.11, T1501): kod wszedł do `main` w PR #93
+   razem z 1.26.1; PR #94 niesie już tylko dokumenty. Odbiór: SE1–SE13.
    **Przyjęte bez użytkownika (do potwierdzenia):**
    - T1341: godzina wpisu w czasie polskim „jak zwykle”, strefa trzyma sesję przy swoim zegarze;
    - T1350/T1417/T1456: „Według czasu” (NY / Londyn / Polska / zwykły blok, inna strefa jako dodatkowa opcja), kreator z tą samą listą;
@@ -146,7 +151,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 14. **1.26.1 – uchwyt paska (E4b.12 znów nie przechodzi, 15.11, T1500):** wciśnięcie lewego przycisku nie dochodzi
    do strony paska (okno bez aktywacji) – przeciąganie zaczyna się też od ruchu z przyciskiem, pasek prowadzi proces główny,
    puszczenie mówi pomocnik (`mouse.watch`). Gałąź `claude/pasek-uchwyt` (drzewo `wdrag`), przegląd xhigh dwie rundy
-   (15 + 14 uwag, poprawione). Wydanie 1.26.1 po 1.26.0 (decyzja użytkownika 15.11; gałąź wciągnęła `claude/1.25-sesje`), PR #93 do `main` po scaleniu i wydaniu 1.26.0. Uwagi na później: bez pomocnika
+   (15 + 14 uwag, poprawione). Gałąź wciągnęła `claude/1.25-sesje`; PR #93 scalony 15.11 (CI 7/7) – wydanie v1.26.1 opublikowane 15.11 10:22 –
+   1.26.1 z kodem 1.26.0 (T1501), run na `main` 43691670890. Setup 1.26.1 w Pobranych (07:00). Uwagi na później: bez pomocnika
    pasek przykryty oknem po nieusłyszanym puszczeniu jedzie za kursorem, aż ten na niego wróci (najdłużej 2 min);
    E2E D303 raz padł lokalnie (miejsce paska po samym kliknięciu uchwytu ≠ start; ścieżka bez zmian, 6 kolejnych przebiegów
    zielonych).
