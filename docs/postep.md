@@ -119,7 +119,9 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 13. **1.26.0 – sesje w szablonach (D511, D515; w toku 15.11):** gałąź `claude/1.25-sesje`, drzewo `w125b`, sesja a8. Dwie rundy
    przeglądu xhigh na wariancie z kopiami (po 15 uwag, utrata danych), zmiana na D515 (potwierdzona przez użytkownika),
    dwie rundy xhigh na D515, poprawki (T1340–T1359, T1400–T1419, T1450–T1461). Testy: pełny vitest 3915 ×2, E2E lokalnie
-   117/127 (10 pominiętych); PR – do uzupełnienia. Odbiór: SE1–SE13.
+   117/127 (10 pominiętych – `bar-windows`, `quick-windows`, tylko z prawdziwym pomocnikiem); Setup 1.26.0 w Pobranych
+   (15.11 05:25); PR #94 otwarty 15.11, czeka na CI → scalenie i sprawdzenie wydania (a8). Odbiór: SE1–SE13.
+   Gałąź `claude/pasek-uchwyt` (1.26.1) stoi na tym PR.
    **Przyjęte bez użytkownika (do potwierdzenia):**
    - T1341: godzina wpisu w czasie polskim „jak zwykle”, strefa trzyma sesję przy swoim zegarze;
    - T1350/T1417/T1456: „Według czasu” (NY / Londyn / Polska / zwykły blok, inna strefa jako dodatkowa opcja), kreator z tą samą listą;
