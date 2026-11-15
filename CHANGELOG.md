@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.26.0
+- Sesje tradingowe są teraz wpisami w szablonach typów dni. W panelu bloku sesji w „Szablonach” wybierasz „według czasu” (Nowy Jork, Londyn, Polska albo zwykły blok) i dla każdego dnia tygodnia ✓ tak, ? pytaj rano albo ✗ nie. Sekcja „Sesje” zniknęła z Ustawień.
+- Aktualizacja sama przenosi Twoje sesje i odpowiedzi tak/nie/pytaj z Ustawień do szablonów, od dziś. Szablony się nie dzielą, a Twoje zmiany przyszłych dni i załączniki zostają. Dni minione się nie zmieniają.
+- Typ dnia z sesjami bez własnego szablonu (np. zjazd zdalny) dostaje szablon z samymi sesjami.
+- Przesunięcie przy zmianie czasu w USA, święta i skrócone dni giełd, pytanie tydzień przed świętem i blok „po sesji NY” działają jak dotąd. Oś w „Szablonach” pokazuje sesje w całości i z przesunięciem pobudki w tygodniu zmiany czasu.
+- Zmiana typu dnia przenosi sesję, którą dzień już ma, na godzinę z szablonu nowego typu. Twoja nazwa, notatka i koszt zostają, a godziny, która już minęła, zmiana nie bierze.
+- Kreator: w kroku „Sesje” są strefy Nowy Jork, Londyn i Polska; po „Zakończ” sesje trafiają do szablonów.
+- Starsza wersja na drugim komputerze pokazuje sesje jako zwykłe stałe bloki, także w dniu „nie” – zaktualizuj ją.
+
 ## 1.25.0
 - Kategorie to teraz drzewo: kategoria → podkategoria → wariant. Kategoria jest ogólna i nie ma kosztu („Praca”, „Nauka”, „Dom i opieka”, „Wolne”, „Inne”), podkategoria ma koszt i wszystkie dotychczasowe właściwości, a wariant może mieć własny koszt i miejsce albo być „jak podkategoria”. Twoje dotychczasowe kategorie stały się podkategoriami w tych grupach – bloki, historia i statystyki się nie zmieniają. W Ustawieniach dodajesz, przenosisz i usuwasz rzeczy na każdym poziomie.
 - Usunięcie kategorii, która ma podkategorie, pyta, dokąd je przenieść (domyślnie „Inne”), albo usuwa je razem z nią; „Cofnij” przywraca.

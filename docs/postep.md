@@ -113,6 +113,36 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    kolumna „Kategoria” to podkategorie; „+ Nowa rutyna” bez pola kosztu (pytanie); okienko kosztu w ✎ nie zamyka się
    klikiem obok; `variants.ts`/`energyOrder.ts` nie widzą zmian kosztu zaczętego bloku; kopia: pytanie o tekst „(z Ctrl –
    kopię)” w podpowiedzi „Spraw”, `copiedDay` zostawia `task`; ✎ – liczba przy częściowym nadpisaniu przybliżona.
+13. **1.26.0 – sesje w szablonach (D511, D515; w toku 15.11):** gałąź `claude/1.25-sesje`, drzewo `w125b`, sesja a8. Dwie rundy
+   przeglądu xhigh na wariancie z kopiami (po 15 uwag, utrata danych), zmiana na D515 (potwierdzona przez użytkownika),
+   dwie rundy xhigh na D515, poprawki (T1340–T1359, T1400–T1419, T1450–T1461). Testy: pełny vitest 3915 ×2, E2E lokalnie
+   117/127 (10 pominiętych); PR – do uzupełnienia. Odbiór: SE1–SE13.
+   **Przyjęte bez użytkownika (do potwierdzenia):**
+   - T1341: godzina wpisu w czasie polskim „jak zwykle”, strefa trzyma sesję przy swoim zegarze;
+   - T1350/T1417/T1456: „Według czasu” (NY / Londyn / Polska / zwykły blok, inna strefa jako dodatkowa opcja), kreator z tą samą listą;
+   - T1351: rynki ze strefy;
+   - T1400: „pytaj rano” jako odpowiedź dnia;
+   - T1402: typ z sesjami bez szablonu dostaje `sesje-<typ>`;
+   - T1403: starsza wersja pokazuje wpis jako stały blok także w dniu „nie”;
+   - T1404: nowa sesja ma „tak” każdego dnia;
+   - T1405/T1412/T1450: drugi komputer, który dostanie rd.json przed szablonami, liczy dzień z dawnej warstwy; szablon „w drodze” najwyżej 3 dni;
+   - T1406: zwykły blok o id sesji zostaje, wpis dostaje `<id>-sesja`;
+   - T1407/T1457: załączniki wpisu na sesji dnia, usuwane tylko w dniach tego szablonu;
+   - T1413/T1453: wersja szablonu bez sesji zrobiona przed przeniesieniem dostaje wpisy;
+   - T1414: zarchiwizowane szablony też dostają wpisy;
+   - T1415/T1451/T1452/T1459: zmiana typu przenosi sesję, nie rusza Twoich zmian, nie bierze minionej godziny;
+   - T1416: blok z „według czasu” jest sesją bez względu na kategorię;
+   - T1418: nieczytelne pliki dni – usunięcie z szablonu bez zdejmowania załączników dni;
+   - T1461: kopia Ctrl wpisu sesji jest osobną sesją.
+   **Uwagi na później:**
+   - specyfikacja poza „Sesje tradingowe” nadal mówi o „warstwie sesji” (ok. linii 188, 285, 1670);
+   - mediana typowej długości sesji nie jest liczona w aplikacji (stara luka);
+   - domyślny szablon typu z samymi przyszłymi wersjami – dni do jego startu bez sesji;
+   - szablon `sesje-<typ>`, który nie dotarł po 3 dniach – dni bez sesji, dopóki nie dojdzie;
+   - okno zmiany typu pokazuje starą godzinę sesji, która zostanie przeniesiona;
+   - zmiana dnia z ✓ na ✗ nie zdejmuje załączników sesji z tego dnia tygodnia;
+   - okno ✎ D514 dla podkategorii „sesja” – nie sprawdzone, czy liczy wpisy szablonów;
+   - `.claude/rules/interfejs.md` na limicie 20 KB.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
