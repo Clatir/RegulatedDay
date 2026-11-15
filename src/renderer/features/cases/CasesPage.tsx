@@ -20,12 +20,13 @@ import { settingsOn } from '@shared/model/settings'
 import { parseQuickDates } from '@shared/quickDates'
 import { logicalDayOf, logicalMinuteOf } from '@shared/time/day'
 import { FilterBar, useFilters } from '../../components/FilterBar'
+import { GroupLine } from '../../components/GroupLine'
 import { Choice, DateField, DurationField, EndField, TextField, TimeField } from '../../components/fields'
 import { EmptyState, Section, cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
-import { DEL_RING, deleteMark, removeTarget, useDeleteResolver } from '../../lib/deleteKey'
+import { DEL_RING, deleteMark, removeTarget, useDeleteResolver, useDeleteSelected, type DeleteTarget } from '../../lib/deleteKey'
 import { caseAnswer, changeCase, createRequest, createTask, moveCase, removeCase, undoCase, useCases } from '../../store/cases'
 import { addPerson, saveRd, useData } from '../../store/data'
 import { useDay } from '../../store/day'
@@ -39,6 +40,7 @@ import { readCasesView, rememberCasesView, type CasesView } from './casesView'
 import { DueMark } from './DueMark'
 import { PriorityMark } from './PriorityMark'
 import { nextFreeStart, submitTitle } from './casesUi'
+import { useCasesGroup, type CasesGroup } from './useCasesGroup'
 import { planOnAxis } from './planOnAxis'
 import { SeriesFields } from '../series/SeriesFields'
 import { draftProblem, repeatChanged, repeatDraft, repeatInputOf, type SeriesDraft } from '../series/seriesForm'
@@ -99,8 +101,24 @@ export function CasesPage() {
     row.querySelector<HTMLElement>('[data-testid="case-title"], [data-testid="request-note"]')?.focus()
   }, [bring, filters, showOlder, all, view])
 
-  const sections = sectionsOf(all, { showOlder, keep })
+  // The lists as the page shows them – one array while the sprawy, the filters and „Pokaż starsze” stay (the selection reads it).
+  const sections = useMemo(() => sectionsOf(all, { showOlder, keep: filterOf(filters) }), [all, showOlder, filters])
   const shown = sections.reduce((n, s) => n + s.items.length, 0)
+  // D527: many sprawy selected – Ctrl+click joins lists, Shift and Ctrl+A go within one; the right button opens „Zmień N spraw” (D528). Only the lists have it.
+  const page = useRef<HTMLDivElement>(null)
+  const lists = useMemo(() => (view === 'lists' ? sections.map((s) => s.items.map((x) => x.record.id)) : []), [view, sections])
+  const group = useCasesGroup({
+    view: 'cases',
+    items: all,
+    lists,
+    scope: view,
+    enabled: view === 'lists',
+    // The focus is on the page (or on nothing): Ctrl+A and Esc are this page's.
+    when: () => document.activeElement === document.body || page.current?.contains(document.activeElement) === true,
+    today
+  })
+  // Del with the focus on no row: the selection of two and more (a row of the selection asks for it itself).
+  useDeleteSelected(group.removeTarget)
   const options = [
     { id: 'kind:task', label: 'zadania', count: all.filter((x) => x.record.kind === 'task').length },
     ...(requestsOn
@@ -112,8 +130,9 @@ export function CasesPage() {
       : [])
   ].filter((o) => o.count > 0 || filters.includes(o.id))
   return (
-    <div className="flex flex-col gap-4 p-4" data-testid="requests">
+    <div ref={page} className="flex flex-col gap-4 p-4" data-testid="requests">
       <ViewSwitch view={view} onChange={setView} />
+      <GroupLine view="cases" />
       {requestsOn && <Counters />}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className="btn btn-accent" onClick={() => setAdding(true)} data-testid="case-new">
@@ -128,6 +147,11 @@ export function CasesPage() {
       </div>
       {adding && <NewTask onClose={() => setAdding(false)} />}
       {view === 'lists' && <FilterBar listKey="cases" options={options} shown={shown} total={all.length} />}
+      {view === 'lists' && group.summary && (
+        <p className="text-[12.5px] text-muted" data-testid="cases-selection">
+          {group.summary}
+        </p>
+      )}
       {all.length === 0 && !adding && <EmptyState why="Nic tu jeszcze nie ma. Zadanie „na kiedyś” wpiszesz tutaj albo skrótem Win+Alt+N z dowolnego miejsca – ląduje w Skrzynce, a rano wybierzesz je w planie." action={{ label: '+ Zadanie', run: () => setAdding(true) }} />}
       {all.length > 0 && view === 'matrix' && <CasesMatrix items={all} today={today} />}
       {all.length > 0 &&
@@ -141,7 +165,7 @@ export function CasesPage() {
             {s.items.length ? (
               <div className="flex flex-col gap-1.5" data-testid={`cases-${s.list}-list`}>
                 {s.items.map((x) => (
-                  <CaseRow key={x.record.id} x={x} today={today} marked={x.record.id === chosen} />
+                  <CaseRow key={x.record.id} x={x} today={today} marked={x.record.id === chosen} group={group} />
                 ))}
               </div>
             ) : (
@@ -159,6 +183,7 @@ export function CasesPage() {
           <People />
         </Section>
       )}
+      {group.overlay}
     </div>
   )
 }
@@ -225,7 +250,7 @@ function NewTask({ onClose }: { onClose: () => void }) {
   )
 }
 
-function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boolean }) {
+function CaseRow({ x, today, marked, group }: { x: CaseItem; today: string; marked: boolean; group: CasesGroup }) {
   const rd = useData((s) => s.rd)
   const r = x.record
   const isTask = r.kind === 'task'
@@ -242,13 +267,15 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
     const res = await removeCase(r.id)
     if (res.saved) undoToast(isTask ? 'Zadanie usunięte' : 'Prośba usunięta', () => void undoCase(res.undo))
   }
-  // D462: Del on the selected row (a click on it) removes the case, as „Usuń” does.
-  useDeleteResolver('case', (id) => (id === r.id ? removeTarget(caseTitle(r, rd), () => remove()) : null))
+  // D462: Del on the selected row (a click on it) removes the case, as „Usuń” does; a row of a selection of two and more asks for the whole selection (D528).
+  const selected = group.sel.isSelected(r.id)
+  const groupDelete: DeleteTarget | null = selected ? group.removeTarget : null
+  useDeleteResolver('case', (id) => (id === r.id ? (groupDelete ?? removeTarget(caseTitle(r, rd), () => remove())) : null))
   const parts = statusParts(x, today)
   const badge = dueBadge(r, today)
   const done = x.list === 'done'
   return (
-    <div {...deleteMark('case', r.id)} className={cx('relative flex flex-col gap-1 rounded border px-3 py-1.5', DEL_RING, marked ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')} data-testid="case-row" data-case={r.id} data-kind={r.kind} data-list={x.list}>
+    <div {...deleteMark('case', r.id)} {...group.rowProps(x)} className={cx('relative flex flex-col gap-1 rounded border px-3 py-1.5', DEL_RING, marked || selected ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')} data-testid="case-row" data-case={r.id} data-kind={r.kind} data-list={x.list}>
       {!done && r.priority && <PriorityMark priority={r.priority} />}
       <div className="grid items-center gap-2" style={{ gridTemplateColumns: '220px 110px minmax(0,1fr) 150px' }}>
         {isTask ? (
@@ -297,7 +324,7 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
       {dating && !done && <DatesForm x={x} set={set} />}
       {repeating && isTask && !done && <RepeatForm x={x} today={today} onSaved={() => setRepeating(false)} />}
       {isTask && stepsOpen && (
-        <div className="border-t border-line pt-1.5" data-testid="case-steps">
+        <div className="border-t border-line pt-1.5" data-row-form="" data-testid="case-steps">
           <StepsEditor steps={r.steps} ticks kind="task" onTick={(id, d) => tickCaseStep(r.id, id, d, caseTitle(r, rd), today)} onOp={async (op) => stepsAnswer(op, await changeTaskSteps(r.id, op))} />
         </div>
       )}
@@ -316,7 +343,7 @@ export function DatesForm({ x, set }: { x: CaseItem; set: (patch: { dueDate?: st
   // note, the buttons „Dziś” / „Jutro” and a date typed without its year all count from it. Rendered again after every save.
   const today = logicalDayOf(Date.now())
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 border-t border-line pt-1.5 text-[12px]" data-testid="case-dates-form">
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 border-t border-line pt-1.5 text-[12px]" data-row-form="" data-testid="case-dates-form">
       <DateRow label="Termin" id="due" value={r.dueDate} today={today} onSet={(dueDate) => set({ dueDate })} />
       <DateRow label="Wykonać" id="do" value={r.doDate} today={today} note={doDateNote(r.doDate, today)} onSet={(doDate) => set({ doDate })} />
     </div>
@@ -354,7 +381,7 @@ function RepeatForm({ x, today, onSaved }: { x: CaseItem; today: string; onSaved
       if ((await changeCase(r.id, { repeat: input })).saved) onSaved()
     })
   return (
-    <div className="flex max-w-[460px] flex-col gap-2 border-t border-line pt-1.5 text-[12px]" data-testid="case-repeat-form">
+    <div className="flex max-w-[460px] flex-col gap-2 border-t border-line pt-1.5 text-[12px]" data-row-form="" data-testid="case-repeat-form">
       <SeriesFields
         draft={draft}
         onChange={(p) => {
@@ -423,7 +450,7 @@ function PlanForm({ x, today, title, onDone }: { x: CaseItem; today: string; tit
     }
   }
   return (
-    <div className="flex flex-wrap items-center gap-2 border-t border-line pt-1.5 text-[12px]" data-testid="case-plan-form">
+    <div className="flex flex-wrap items-center gap-2 border-t border-line pt-1.5 text-[12px]" data-row-form="" data-testid="case-plan-form">
       <span className="text-muted">Dzień</span>
       <DateField value={date} today={today} onCommit={(d) => (setDate(d), setStart(null))} shellClassName="w-[130px]" aria-label="Dzień" data-testid="case-plan-date" />
       <span className="text-muted">od</span>

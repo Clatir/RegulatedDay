@@ -13,8 +13,10 @@ import { computeDay } from '@shared/engine/day'
 import { dayFileFrom } from '@shared/model/plan'
 import { newRequest, newTask, requestFrom } from '@shared/model/requests'
 import { logicalDayOf } from '@shared/time/day'
-import { groupFreeStart, planGroupOnAxis, planningOfGroup, plannableOf } from '@renderer/features/cases/groupPlan'
+import { groupFreeStart, lowestEnergyChange, planGroupOnAxis, planningOfGroup, plannableOf } from '@renderer/features/cases/groupPlan'
 import { DAY_UNREADABLE } from '@renderer/store/cases'
+import { casesLineText, planGroupDrop } from '@renderer/features/cases/groupActions'
+import { clearGroupLine, undoGroupLine, useGroupLine } from '@renderer/store/groupLine'
 import { useData } from '@renderer/store/data'
 import { categoryCases, doneCases, estimateCases, moveCases, planCases, removeCases, restoreCases, undoGroup } from '@renderer/store/casesGroup'
 import type { DayModel } from '@renderer/store/day'
@@ -23,6 +25,7 @@ import { block, lm, Scenario } from '../unit/engine/dsl'
 
 const data = useData.getState()
 afterEach(() => {
+  clearGroupLine('today')
   delete (globalThis as { window?: unknown }).window
   useData.setState(data, true)
   useUi.setState({ toasts: [] })
@@ -67,7 +70,7 @@ const startsOf = (file: RawRecord | null, date = TODAY) => dayFileFrom(file, dat
 function dayOf(date: string, plan = [block({ id: 'a', cat: 'inne', at: '10:00', min: 60, origin: 'user' }), block({ id: 'b', cat: 'inne', at: '11:00', min: 60, origin: 'user' })]) {
   const s = new Scenario({ date, plan }).observe('07:00', null)
   const ctx = s.contextAt(s.at('08:00'))
-  return { date, ctx, state: computeDay(ctx), data: { dayFile: null } } as unknown as DayModel
+  return { date, ctx, state: computeDay(ctx), data: { date, dayFile: null, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false } } as unknown as DayModel
 }
 
 describe('zmiany grupowe spraw – lista, kategoria, szacunek, zrobione, usuń', () => {
@@ -327,6 +330,53 @@ describe('„Zaplanuj…” grupy i upuszczenie na oś (D530)', () => {
     expect(back.saved).toBe(true)
     lay(back.undo)
     expect(dayFileFrom(day(TODAY), TODAY).blocks.map((b) => [b.id, b.startMin])).toEqual([['a', lm('10:00')], ['b', lm('11:00')]])
+  })
+
+  it('upuszczenie grupy z panelu (D530): „Zaplanowano 3 sprawy” w linii okna „Dziś”, „Cofnij” z linii zdejmuje bloki i przywraca rekordy; z Ctrl – „Skopiowano 3 sprawy”, „Cofnij” zdejmuje kopie', async () => {
+    const model = dayOf(TODAY)
+    const items = ['a', 'b', 'c'].map((id, i) => task(`t${id}`, { estimateMin: [30, 15, 30][i]! }))
+    const { sent, lay, record, day } = stub(items, { [TODAY]: { schema: 1, date: TODAY, blocks: model.ctx.plan.map((b) => ({ ...b })) } })
+    const list = caseItems(items.map((x) => requestFrom(x)!), TODAY, () => undefined)
+    const r = await planGroupDrop(model, TODAY, list, lm('10:00'))
+    expect(r).toMatchObject({ saved: true, changed: 3, moved: 2 })
+    expect(useGroupLine.getState().lines.today?.text).toBe('Zaplanowano 3 sprawy')
+    // One edit: the day's file (the three blocks and the two it pushed) and the three records, each planned in its block.
+    expect(sent).toHaveLength(1)
+    expect(sent[0]!.map((e) => e.rel).sort()).toEqual([paths.day(TODAY), ...['ta', 'tb', 'tc'].map(rel)].sort())
+    const planned = sent[0]!.find((e) => e.rel === rel('tb'))!.edits
+    expect(planned.find((e) => e.path.join('.') === 'block')!.value).toBe(r.blocks[1]!.block.id)
+    // The folder as the change left it; the line's „Cofnij” takes the change back: the day as before, the records without blocks.
+    lay(r.undo)
+    expect(startsOf(day(TODAY))).toHaveLength(5)
+    await undoGroupLine('today')
+    expect(useGroupLine.getState().lines.today).toBeUndefined()
+    expect(sent).toHaveLength(2)
+    expect(sent[1]!.map((e) => e.rel).sort()).toEqual([paths.day(TODAY), ...['ta', 'tb', 'tc'].map(rel)].sort())
+    expect(sent[1]!.find((e) => e.rel === rel('ta'))!.edits.find((e) => e.path.join('.') === 'block')!.value).toBeNull()
+    // Ctrl: the originals stay, the copies are new sprawy – taken away by the same „Cofnij”.
+    const c = await planGroupDrop(model, TODAY, list, lm('10:00'), true)
+    expect(useGroupLine.getState().lines.today?.text).toBe('Skopiowano 3 sprawy')
+    expect(sent[2]!.filter((e) => e.create && e.rel !== paths.day(TODAY))).toHaveLength(3)
+    expect(record('ta')).toBeTruthy()
+    lay(c.undo)
+    await undoGroupLine('today')
+    expect(sent[3]!.filter((e) => e.remove)).toHaveLength(3)
+  })
+
+  it('linia po zaplanowaniu: najniższa energia dnia przed i po (D529) – 52 → 44 tylko, gdy dzień ma prognozę energii i zmiana ją zmienia', () => {
+    // Today with a check-in at 07:00: the plan of an hour of work lowers the lowest energy of the day.
+    const s = new Scenario({ date: TODAY, plan: [], wake: '06:30' }).observe('06:30', null).checkin('07:00', { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] })
+    const data = { date: TODAY, dayFile: null, nextFile: null, prevFile: null, events: s.events, complete: true, unknown: false, away: false }
+    const model = { date: TODAY, data } as unknown as DayModel
+    const after = { schema: 1, date: TODAY, blocks: [{ id: 'w', categoryId: 'analiza', startMin: lm('09:00'), durationMin: 240, origin: 'user', task: null, requests: [] }] }
+    const change = lowestEnergyChange(model, after, s.at('08:00'))
+    expect(change).not.toBeNull()
+    expect(change!.to).toBeLessThan(change!.from)
+    expect(casesLineText('Zaplanowano', { changed: 3, skipped: [] }, change)).toBe(`Zaplanowano 3 sprawy · najniższa energia ${change!.from} → ${change!.to}`)
+    // A day with no check-in has no forecast: no part about the energy; a change that leaves it as it is – none either.
+    expect(lowestEnergyChange({ date: TODAY, data: { ...data, events: [] } } as unknown as DayModel, after, s.at('08:00'))).toBeNull()
+    expect(casesLineText('Zaplanowano', { changed: 3, skipped: [] }, { from: 52, to: 52 })).toBe('Zaplanowano 3 sprawy')
+    expect(lowestEnergyChange(model, undefined)).toBeNull()
   })
 
   it('okno: zaplanowana liczona bez swojego starego bloku (jak planningOf), zrobiona nie rozsuwa dnia, dzień miniony nic nie rozsuwa', () => {

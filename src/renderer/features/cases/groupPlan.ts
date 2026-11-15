@@ -4,15 +4,20 @@
  * several: the blocks are counted one after another to say what they push apart together (D367), `planCases` writes the day's file
  * and the records in one edit. No toast and no line of the bar – the line of the change is the window's (T1541). Without a DOM.
  */
+import type { RawRecord } from '@shared/api'
+import { paths } from '@shared/data/paths'
 import { dayPlan } from '@shared/engine/createDay'
 import { caseBlock, ownTakenBlock, type CaseItem } from '@shared/engine/cases'
 import { groupBlockMinutes, planSkip } from '@shared/engine/casesGroup'
 import { computeDay, type DayContext, type DayState } from '@shared/engine/day'
+import { shownOf } from '@shared/engine/energy'
+import { lowestEnergy } from '@shared/engine/energyOrder'
 import type { PlanBlock } from '@shared/model/plan'
 import type { RequestRecord } from '@shared/model/requests'
 import { planCases, type GroupPlanResult } from '../../store/casesGroup'
 import type { CasePushed } from '../../store/cases'
-import type { DayModel } from '../../store/day'
+import { useData } from '../../store/data'
+import { countDay, type DayModel } from '../../store/day'
 import { addChange, changedPlan } from '../today/dayPush'
 import { nextFreeStart, type StartWhere } from './casesUi'
 
@@ -57,19 +62,50 @@ export function planningOfGroup(model: DayModel, today: string, rs: readonly Req
   return { blocks, pushed }
 }
 
+/** The lowest energy of the day before and after a change (D529), as shown – only for a day with a forecast of energy. */
+export interface EnergyChange {
+  from: number
+  to: number
+}
+
+/**
+ * The lowest energy of `model`'s day before and after its file became `after` (D529: „najniższa energia 52 → 44”): both counted now from the
+ * same data (the plan's inputs of the window, the same instant); null – the day has no forecast of energy (not today, the module off, the day not
+ * known) or the file did not change.
+ */
+export function lowestEnergyChange(model: DayModel, after: RawRecord | null | undefined, at = Date.now()): EnergyChange | null {
+  if (after === undefined) return null
+  const { rd, templates, lectures, seriesPlans, routines, view } = useData.getState()
+  const inputs = { changes: rd.settings, templates, lectures, series: seriesPlans, routines }
+  const lowest = (file: RawRecord | null): number | null => {
+    const e = countDay(model.date, { ...model.data, dayFile: file }, inputs, at, rd.general.modules.energy, view?.calibration === true).energy
+    const units = lowestEnergy(e)
+    return units == null ? null : shownOf(units)
+  }
+  const from = lowest(model.data.dayFile)
+  const to = lowest(after)
+  return from != null && to != null ? { from, to } : null
+}
+
+/** What putting a group on the axis did, with the lowest energy of the day before and after (null – no forecast, nothing changed). */
+export interface GroupAxisResult extends GroupPlanResult {
+  energy: EnergyChange | null
+}
+
 /**
  * The sprawy `items` (in the order of the list) put on the axis of `model`'s day from `startMin`, one after another – a drop of the
- * group (`copy`: Ctrl) or „Zaplanuj…” (D530). The done ones are named in `skipped` by the write (a copy leaves
- * nothing out); the pushed blocks are counted without them and written while the day's plan after the change has them (`planCases`).
+ * group (`copy`: Ctrl) or „Zaplanuj…” (D530). The done ones are named in `skipped` by the write (a copy leaves nothing out); the pushed
+ * blocks are counted without them and written while the day's plan after the change has them (`planCases`).
  */
-export function planGroupOnAxis(model: DayModel, today: string, items: readonly CaseItem[], startMin: number, copy = false): Promise<GroupPlanResult> {
+export async function planGroupOnAxis(model: DayModel, today: string, items: readonly CaseItem[], startMin: number, copy = false): Promise<GroupAxisResult> {
   const { pushed } = planningOfGroup(model, today, plannableOf(items, copy).map((x) => x.record), startMin, copy)
-  return planCases(
+  const r = await planCases(
     items.map((x) => x.record.id),
     model.date,
     startMin,
     { copy, push: { blocks: pushed, planOf: (file) => dayPlan(model.ctx.snapshot, file) }, seen: (date) => (date === model.date ? model.data.dayFile : undefined) }
   )
+  return { ...r, energy: r.saved && r.changed > 0 ? lowestEnergyChange(model, r.undo.find((u) => u.rel === paths.day(model.date))?.after) : null }
 }
 
 /**
