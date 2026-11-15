@@ -21,6 +21,7 @@ import { readLogText } from '@shared/data/logText'
 import { activityOf, type Activity } from '@shared/engine/activity'
 import { answerEvents, autoActions, closedSince, fixedStartPausesClosed, nextDeadline, questionsOf, runFromOf, shutdownActions, type AutoEvent, type Question } from '@shared/engine/auto'
 import { simEvents } from '@shared/engine/sim'
+import { groupLogDrafts, groupLogUndo, type GroupSkip } from '@shared/engine/groupEdit'
 import { createDay, nextWakeForBedtime, type HolidayLookup } from '@shared/engine/createDay'
 import { dayContextOf } from '@shared/engine/context'
 import { computeDay, newSegments, type DayContext, type DayState } from '@shared/engine/day'
@@ -2534,6 +2535,34 @@ export class DataFolder {
    */
   undoClose(day: string, ids: readonly string[]): Promise<DayActionResult> {
     return this.dayAction(day, (state, now, ctx) => closeUndoEvents(state, ctx.events, ids, now))
+  }
+
+  /**
+   * „Odwołaj” / „Zaparkuj” of a group of today's blocks (D528): each as the timer's click of it alone, judged on the day as you see
+   * it now (`dayAction`, `groupLogDrafts`), written at once; `written` – the ids for its „Cofnij”, `taken` / `skipped` – the blocks
+   * it took and those it left out (D529). Only today: the timer's actions.
+   */
+  async groupLog(day: string, kind: 'cancel' | 'park', ids: readonly string[]): Promise<DayActionResult & { taken: string[]; skipped: GroupSkip[] }> {
+    const made: { taken: string[]; skipped: GroupSkip[] } = { taken: [], skipped: [] }
+    const r = await this.dayAction(day, (state, now, ctx) => {
+      if (day !== logicalDayOf(now)) return 'odwołać i zaparkować można tylko dzisiejsze bloki'
+      const g = groupLogDrafts(ctx, state, kind, ids, now)
+      Object.assign(made, { taken: g.taken, skipped: g.skipped })
+      return g.drafts
+    })
+    return { ...r, ...made }
+  }
+
+  /** „Cofnij” of `groupLog` (D529): an `undo` of each of its events (`groupLogUndo`); `restored` – the blocks undone, `kept` – begun since. */
+  async undoGroupLog(day: string, ids: readonly string[]): Promise<DayActionResult & { restored: string[]; kept: string[] }> {
+    const made: { restored: string[]; kept: string[] } = { restored: [], kept: [] }
+    const r = await this.dayAction(day, (state, now, ctx) => {
+      const u = groupLogUndo(state, ctx.events, ids, now)
+      if (typeof u === 'string') return u
+      Object.assign(made, { restored: u.restored, kept: u.kept })
+      return u.drafts
+    })
+    return { ...r, ...made }
   }
 
   /**

@@ -62,7 +62,7 @@ const mapOf = (plan: readonly Linked[]): Map<string, Linked> => new Map(plan.map
  * The planned start of a block, a logical minute (`planEdit.plannedStartMin` with groups): beside another block – that block's,
  * anchored – its anchor's planned end; null when unknown. Here, not in `planEdit`, so that `blocks.ts` may import this module.
  */
-function plannedStart(b: PlanBlock, plan: ReadonlyMap<string, PlanBlock>, depth = 0): number | null {
+export function plannedStart(b: PlanBlock, plan: ReadonlyMap<string, PlanBlock>, depth = 0): number | null {
   if (depth > 20) return null
   const root = groupRootOf(plan, b.id)
   if (root != null) return plannedStart(plan.get(root)!, plan, depth + 1)

@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { AddLinkResult, AttachPrepared, AttachResult, AttachmentOpen, CaseDays, CloseResult, QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
+import type { AddLinkResult, AttachPrepared, AttachResult, AttachmentOpen, CaseDays, CloseResult, GroupLogResult, GroupLogUndone, QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import { blockFactsOf, type CasesRitual } from '@shared/engine/cases'
 import { newId } from '@shared/model/ids'
@@ -1090,6 +1090,22 @@ export class DataHub {
     this.changed()
     if (r.ok) void this.service?.tick()
     return { ok: r.ok, why: r.ok ? null : r.why, confirm: null }
+  }
+
+  /** „Odwołaj” / „Zaparkuj” of a group of today's blocks (D528), with the ids of its events for „Cofnij”. */
+  async groupLog(day: string, kind: 'cancel' | 'park', ids: string[]): Promise<GroupLogResult> {
+    const r = await this.need().groupLog(day, kind, ids)
+    this.changed()
+    if (r.ok) void this.service?.tick()
+    return r.ok ? { ok: true, why: null, confirm: null, written: r.written, taken: r.taken, skipped: r.skipped } : { ok: false, why: r.why, confirm: null, written: [], taken: [], skipped: [] }
+  }
+
+  /** „Cofnij” of a group's „Odwołaj” / „Zaparkuj” (D529): its events undone; a block begun since stays (`kept`). */
+  async undoGroupLog(day: string, ids: string[]): Promise<GroupLogUndone> {
+    const r = await this.need().undoGroupLog(day, ids)
+    this.changed()
+    if (r.ok) void this.service?.tick()
+    return r.ok ? { ok: true, why: null, confirm: null, restored: r.restored, kept: r.kept } : { ok: false, why: r.why, confirm: null, restored: [], kept: [] }
   }
 
   /** The computers of the folder for the settings (A3-13); without a folder only this one. */

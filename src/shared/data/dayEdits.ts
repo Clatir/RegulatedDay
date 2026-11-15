@@ -4,7 +4,7 @@
  * field (a block by its id, a cancel and a move by the block's id), so the queue sends field edits that merge with a
  * change of another field on another computer.
  */
-import { planBlockFrom, type PlanBlock } from '../model/plan'
+import { dayFileFrom, planBlockFrom, type PlanBlock } from '../model/plan'
 import { ROUTINE_STEPS, routineStepsEntries } from '../model/routineSteps'
 import { sameStepList, stepsFrom, stepsJson, withStepsJson, type Step } from '../model/steps'
 import { deepEqual } from './merge'
@@ -68,6 +68,16 @@ export function putBlock(raw: Raw, b: PlanBlock): Raw {
   if (b.startMin == null) return out
   const beside = dayBlocks(out).filter((x): x is Raw => isPlain(x) && x.alongside === b.id && x.id !== b.id && x.startMin !== b.startMin)
   return beside.reduce((r, x) => putRawBlock(r, { ...x, startMin: b.startMin }), out)
+}
+
+/** A block as the day's file holds it now (a change of it made before), or as the window knows it. */
+export function blockNow(raw: Raw, date: string, b: PlanBlock): PlanBlock {
+  return dayFileFrom(raw, date).blocks.find((x) => x.id === b.id) ?? b
+}
+
+/** The day's file with fields of a block changed over the block as the file holds it then (a change made a moment before stays, A6-01). */
+export function patchedBlock(raw: Raw, date: string, b: PlanBlock, patch: Partial<PlanBlock>): Raw {
+  return putBlock(raw, { ...blockNow(raw, date, b), ...patch })
 }
 
 /**

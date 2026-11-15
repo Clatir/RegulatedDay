@@ -37,7 +37,8 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - `engine/forecast.ts` – prognoza planu od minuty m (tryby `window` i `typical`); `day.ts` `shownForecaster(ctx, state)` – ta sama
   prognoza co `DayState.forecast` dla innych bloków (widok, bufor, typowe długości raz), `typicalOf`; `grid.ts` `logicalSpan` – minuty osi
   jak zegar na obu końcach (jak przed J3: doba 25 h – powtórzona godzina raz, bloki po sobie się nie nakładają) – ta sama w `dayAxis` i podglądzie.
-- `engine/pushApart.ts` (D367) – `pushApart(ctx, state, planPoZmianie, id, { atMin, hold, onUnsettled, maxRounds })` →
+- `engine/pushApart.ts` (D367) – `pushApart(ctx, state, planPoZmianie, id, { atMin, hold, onUnsettled, maxRounds, placed })` (`placed` – inne
+  bloki postawione tą samą zmianą, D528: trzymają starty, blok, który stanąłby tuż przed takim, idzie za nim; `ownMinuteIdx` – start z własnym numerem) →
   `PushedBlock[]` (stary start, zapisany `startMin`, `shown` – oś prognozy, dziś; `planned` – oś planu, inne dni i szablon):
   kolejne = pokazane w `state.forecast` od miejsca bloku; zaplanowane nie później idą za nim (ułamkowe starty w kolejności osi);
   kolejność z pierwszego przeliczenia, potem rundy do punktu stałego (starty tylko rosną) – zapis, gdy blok przesunął się później,

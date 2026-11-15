@@ -17,7 +17,7 @@ import { blockInfos, ownHourBlock, plannedSpan, type BlockInfo } from './blocks'
 import { routineCostsIn, settingsAtMinute, shownForecaster, type DayContext, type DayState } from './day'
 import type { DayFacts } from './facts'
 import type { Placed } from './forecast'
-import { atOf, idxOfLogical, logicalSpan } from './grid'
+import { atOf, idxOfLogical, logicalSpan, type Grid } from './grid'
 
 /** A block the change pushes: its planned start before, the one the change writes and where the day then shows it (logical minutes). */
 export interface PushedBlock {
@@ -45,6 +45,12 @@ export interface PushOptions {
   onUnsettled?: () => void
   /** The bound of rounds (`MAX_ROUNDS`; tests). */
   maxRounds?: number
+  /**
+   * The other blocks the change put at new places with the block `id` (a group shifted or moved to another day, D528): they keep the
+   * starts the change gave them – never pushed nor written; a block of the push the count shows right before one of them, which then
+   * stands later than its start, goes behind it (as a block planned no later than the block put goes behind it). Left out – one block.
+   */
+  placed?: ReadonlySet<string>
 }
 
 /**
@@ -61,6 +67,20 @@ export function pushable(b: BlockInfo, facts: DayFacts): boolean {
 }
 
 const byId = (placed: readonly Placed[]): Map<string, Placed> => new Map(placed.map((p) => [p.block.id, p]))
+
+/** The index's minute has a number of its own on the Polish clock (a 25-hour day: the second 02:xx has none). */
+const hasOwnMinute = (g: Grid, k: number): boolean => idxOfLogical(g, logicalMinuteOf(g.date, atOf(g, k))) === k
+
+/**
+ * The first index from `idx` on (rounded up) whose minute has a number of its own on the Polish clock – where the plan can hold a start
+ * (in the doubled hour of a 25-hour day: 03:00) – at most the last start of the day (03:59, `PLAN_MAX`).
+ */
+export function ownMinuteIdx(g: Grid, idx: number): number {
+  const lastIdx = idxOfLogical(g, PLAN_MAX)
+  let k = Math.min(Math.ceil(idx), lastIdx)
+  while (k < lastIdx && !hasOwnMinute(g, k)) k++
+  return k
+}
 
 /** The rounds of counting the changed day again: a start only grows each round, so a few do (a bound for safety). */
 const MAX_ROUNDS = 40
@@ -94,16 +114,14 @@ export function pushApart(ctx: DayContext, state: DayState, plan: readonly PlanB
   if (!x || x.start == null || x.bg) return []
   const at = opts.atMin != null ? idxOfLogical(g, opts.atMin) : x.start
   // The block's own group stays where the block joined it (D492): only what comes after the group makes room.
-  const following = after.filter((b) => b.id !== id && b.id !== x.alongside && pushable(b, state.facts) && before.has(b.id) && before.get(b.id)!.from >= at)
+  const following = after.filter((b) => b.id !== id && b.id !== x.alongside && !opts.placed?.has(b.id) && pushable(b, state.facts) && before.has(b.id) && before.get(b.id)!.from >= at)
   if (!following.length) return []
   const forecastOf = shownForecaster(ctx, state)
   const lm = (idx: number) => logicalMinuteOf(g.date, atOf(g, idx))
   const lastIdx = idxOfLogical(g, PLAN_MAX)
-  const own = (k: number) => idxOfLogical(g, lm(k)) === k
   /** The start the plan can hold for `b` at `idx` or after it (see above). */
   const place = (b: BlockInfo, idx: number): number => {
-    let k = Math.min(Math.ceil(idx), lastIdx)
-    while (k < lastIdx && !own(k)) k++
+    const k = ownMinuteIdx(g, idx)
     return opts.hold ? Math.min(idxOfLogical(g, opts.hold(b, lm(k))), lastIdx) : k
   }
   // The starts tried: those behind the block just after its start, in the order the axis showed them.
@@ -113,15 +131,56 @@ export function pushApart(ctx: DayContext, state: DayState, plan: readonly PlanB
   const lifted = new Set(behind.map((b) => b.id))
   const written = new Set<string>()
   const count = () => byId(forecastOf(after.map((b) => (start.has(b.id) ? { ...b, start: start.get(b.id)! } : b))))
+  // The other blocks the change put (`placed`): each holds its start – a block of the push (one lifted or written already, or shown
+  // later than before the change: the change moved it there) shown right before it while it stands later than its start goes behind it
+  // (fractional starts just after its start: the latest lifted nearest behind it, so the order the axis showed them stays). A block the
+  // change did not touch stays – a placed block after it may stand a transition buffer later, as any block after it. Starts only grow.
+  const others = opts.placed ? after.filter((b) => b.id !== id && opts.placed!.has(b.id) && b.start != null && b.alongside == null && !b.bg) : []
+  const liftsOf = new Map<string, number>()
+  /** The blocks to go behind a placed one in this count (pure): [the block, the placed one]. */
+  const liftsIn = (shown: Map<string, Placed>): Array<[string, BlockInfo]> => {
+    if (!others.length) return []
+    const fg = [...shown.values()].filter((p) => !p.bg).sort((p, q) => p.from - q.from)
+    const out: Array<[string, BlockInfo]> = []
+    for (const q of others) {
+      const i = fg.findIndex((p) => p.block.id === q.id)
+      const prev = i > 0 ? fg[i - 1]!.block.id : null
+      if (prev == null || fg[i]!.from <= q.start! || !start.has(prev) || start.get(prev)! > q.start!) continue
+      if (!lifted.has(prev) && !written.has(prev) && fg[i - 1]!.from <= before.get(prev)!.from) continue
+      out.push([prev, q])
+    }
+    return out
+  }
+  const holdPlaced = (shown: Map<string, Placed>): boolean => {
+    const lifts = liftsIn(shown)
+    for (const [prev, q] of lifts) {
+      const n = (liftsOf.get(q.id) ?? 0) + 1
+      liftsOf.set(q.id, n)
+      start.set(prev, q.start! + 1 / 2 ** n)
+      lifted.add(prev)
+    }
+    return lifts.length > 0
+  }
+  const ordered = (shown: Map<string, Placed>) => following.filter((b) => shown.has(b.id)).sort((p, q) => shown.get(p.id)!.from - shown.get(q.id)!.from || start.get(p.id)! - start.get(q.id)! || (p.id < q.id ? -1 : 1))
   // The order of the blocks after the change, as the first count places them (the lifted ones just behind the block): every
   // round writes them in it, one after another – a later count that met equal starts (ordered by the ids) changes nothing.
-  const first = count()
-  const order = following.filter((b) => first.has(b.id)).sort((p, q) => first.get(p.id)!.from - first.get(q.id)!.from || start.get(p.id)! - start.get(q.id)! || (p.id < q.id ? -1 : 1))
+  let first = count()
+  let k = 0
+  for (; k < (opts.maxRounds ?? MAX_ROUNDS) && holdPlaced(first); k++) first = count()
+  // The bound reached while a block still has to go behind a placed one: said as rounds that ran out (`onUnsettled`).
+  const holding = k === (opts.maxRounds ?? MAX_ROUNDS) && liftsIn(first).length > 0
+  let order = ordered(first)
   let settled = false
   let placed = first
   for (let round = 0; round < (opts.maxRounds ?? MAX_ROUNDS) && !settled; round++) {
     if (round > 0) placed = count()
     settled = true
+    // A block written later may now stand right before a block the change put: it goes behind it, the order counted again.
+    if (round > 0 && holdPlaced(placed)) {
+      placed = count()
+      order = ordered(placed)
+      settled = false
+    }
     let last = Number.NEGATIVE_INFINITY
     for (const b of order) {
       if (!placed.has(b.id)) continue
@@ -145,7 +204,7 @@ export function pushApart(ctx: DayContext, state: DayState, plan: readonly PlanB
   // (after their ends, when it stands after them already; after their starts at least). What cannot be laid so stays
   // as near as it can, and the push is said unsettled.
   const ends = order.filter((b) => written.has(b.id))
-  const held = (b: BlockInfo, k: number) => own(k) && (!opts.hold || idxOfLogical(g, opts.hold(b, lm(k))) === k)
+  const held = (b: BlockInfo, k: number) => hasOwnMinute(g, k) && (!opts.hold || idxOfLogical(g, opts.hold(b, lm(k))) === k)
   const atOrBefore = (b: BlockInfo, idx: number, floor: number): number | null => {
     for (let k = Math.floor(idx); k >= floor; k--) if (held(b, k)) return k
     return null
@@ -171,7 +230,7 @@ export function pushApart(ctx: DayContext, state: DayState, plan: readonly PlanB
       fresh = false
     }
   }
-  if (!settled || overflow) opts.onUnsettled?.()
+  if (!settled || overflow || holding) opts.onUnsettled?.()
   if (!fresh) placed = count()
   const planned = new Map(plan.map((b) => [b.id, b.startMin]))
   return order
