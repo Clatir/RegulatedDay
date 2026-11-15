@@ -257,7 +257,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     return from
   }, [from, template.weekdays])
   const model = useMemo(() => {
-    // D515: every session of the version on the axis, whatever the answer of the sample's weekday (`axisVersion`).
+    // D515, T1417: every session of the version on the axis at its hour as written, whatever the sample's weekday, clocks and
+    // early closes (`axisVersion`).
     const t: Template = { ...template, versions: [{ ...axisVersion(version), from: '2000-01-01' }] }
     return countDay(sample, { date: sample, dayFile: { schema: 1, date: sample, dayType: template.dayType }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rd.settings, templates: [t], lectures, series: [] }, placeLogical(sample, 4 * 60), false)
   }, [template, version, sample, rd.settings, lectures])
@@ -433,8 +434,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           place={attachPlace}
           focusName={fresh === block.id}
           // D511: a block given a category of sessions becomes a session (and stops being one with another category).
-          onChange={(patch) => patchBlock(block.id, templateBlockPatch(block, patch, settings.categories))}
-          session={<SessionFields block={block} kind={settings.categories[block.categoryId]?.kind} weekdays={template.weekdays} onChange={(patch) => void patchBlock(block.id, patch)} />}
+          onChange={(patch) => patchBlock(block.id, templateBlockPatch(block, patch, settings.categories, version.blocks))}
+          session={<SessionFields block={block} blocks={version.blocks} kind={settings.categories[block.categoryId]?.kind} weekdays={template.weekdays} onChange={(patch) => void patchBlock(block.id, patch)} />}
           // D440: the list without boxes – every day made from the template starts with none ticked.
           steps={<StepsEditor steps={block.steps} lengthMin={block.durationMin} ticks={false} onOp={async (op) => stepsAnswer(op, await changeTemplateSteps(template.id, from, block.id, op))} />}
           onClose={() => setSelected(null)}

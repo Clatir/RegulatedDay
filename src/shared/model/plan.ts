@@ -48,6 +48,50 @@ export function blockSessionFrom(v: unknown): BlockSession | null {
 /** The session a template's block is (D511): its own id (`BlockSession.id`), else the block's. */
 export const sessionIdOf = (b: Pick<PlanBlock, 'id' | 'session'>): string => b.session?.id ?? b.id
 
+/** A template's block that is a session (`isSessionEntry`). */
+export type SessionEntry = PlanBlock & { session: BlockSession; startMin: number }
+
+/**
+ * The one rule of what a session of a template is (D511, T1416): a block with the field „według czasu” and its own hour –
+ * whatever its category (the field goes with a category of sessions in „Szablony”, `templateBlockPatch`; a category whose
+ * kind changed later keeps its sessions). The day, the move, the attachments, the markets and the axis of „Szablony” ask it.
+ */
+export const isSessionEntry = (b: PlanBlock): b is SessionEntry => !!b.session && b.startMin != null
+
+/**
+ * What a template's session gives its day's block (T1419): the fields `sessionBlock` reads – a session of a day's snapshot
+ * (`SessionDef.block`) carries nothing else of the entry (its hour, field, anchor …).
+ */
+export interface SessionBlockFields {
+  categoryId: string
+  variantId: string | null
+  background: boolean | null
+  costs: PlanBlock['costs']
+  bgCostPct: number | null
+  note: string
+  name: string | null
+  routine: string | null
+  steps: Step[]
+}
+
+export const sessionBlockFields = (b: PlanBlock): SessionBlockFields => ({ categoryId: b.categoryId, variantId: b.variantId, background: b.background, costs: b.costs, bgCostPct: b.bgCostPct, note: b.note, name: b.name, routine: b.routine, steps: b.steps })
+
+/** The fields of a session's block as read from a snapshot (a whole block an earlier build wrote reads the same), null – none. */
+export function sessionBlockFieldsFrom(v: unknown): SessionBlockFields | null {
+  if (!isPlain(v) || typeof v.categoryId !== 'string' || !v.categoryId) return null
+  return {
+    categoryId: v.categoryId,
+    variantId: typeof v.variantId === 'string' && v.variantId ? v.variantId : null,
+    background: typeof v.background === 'boolean' ? v.background : null,
+    costs: costsFrom(v.costs),
+    bgCostPct: intIn(v.bgCostPct, 0, 100),
+    note: str(v.note).slice(0, NOTE_MAX),
+    name: blockNameFrom(v.name),
+    routine: typeof v.routine === 'string' && v.routine ? v.routine : null,
+    steps: stepsFrom(v.steps)
+  }
+}
+
 export interface PlanBlock {
   id: string
   categoryId: string
@@ -124,6 +168,13 @@ export interface TemplateVersion {
   /** From this version on the template may override its type's budget and maximum. */
   budgetMin: number | null
   maxMin: number | null
+  /**
+   * A version made after the move of the layer of sessions (D511, T1413): the move's date – the move writes it into every
+   * version from its date, and a new version made from one that has it (a copy of the version in force) keeps it. A version
+   * of a moved template from the move's date on without it was made from a view before the move (a computer offline, a
+   * version before D511): the leader gives it its entries (`staleVersionFixes`), the day till then the layer (`daySettingsOf`).
+   */
+  sessionsMoved?: string
 }
 
 export interface Template {
@@ -305,7 +356,8 @@ export function templateFrom(v: unknown): Template | null {
       from: x.from,
       blocks: blocksFrom(x.blocks, 'template'),
       budgetMin: intIn(x.budgetMin, 0, 16 * 60),
-      maxMin: intIn(x.maxMin, 12 * 60, 23 * 60 + 59)
+      maxMin: intIn(x.maxMin, 12 * 60, 23 * 60 + 59),
+      ...(isIsoDate(x.sessionsMoved) ? { sessionsMoved: x.sessionsMoved } : {})
     })
   }
   versions.sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0))

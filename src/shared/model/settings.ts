@@ -59,13 +59,19 @@ export interface SessionDef {
   block?: unknown
 }
 
-/** The layer of sessions a move took (`RulesSettings.movedLayer`). */
+/** The layer of sessions a move took (`RulesSettings.movedLayer`, T1405, T1412). */
 export interface MovedLayer {
+  /** The first date of the move. */
+  from: string
   sessions: SessionDef[]
   /** The answers „tak / nie / pytaj” of every type (Monday first). */
   grid: Record<DayTypeId, SessionChoice[]>
-  /** The templates the move gave entries (ids): a day of one whose file has no `sessionsMoved` yet is made from this layer. */
+  /** The templates the move gave entries (ids, also archived ones): a day of one whose file has not come yet – this layer. */
   templates: string[]
+  /** The templates the move made (`sesje-<type>`, id → type): a day of a type with none of its templates here yet – this layer. */
+  made: Record<string, DayTypeId>
+  /** Made templates you removed since (id → true, `templateActions.removeTemplate`): gone, never „not come yet”. */
+  gone: Record<string, true>
 }
 
 export interface Reminders {
@@ -191,7 +197,8 @@ export interface SettingsChange {
   patch: Record<string, unknown>
 }
 
-const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
+/** An object of a file (not a list). */
+export const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 
 /** `patch` laid over `base`, object by object; a list or a value replaces the one before. */
 export function deepMerge<T>(base: T, patch: unknown): T {
@@ -346,16 +353,24 @@ function sessionsFrom(v: unknown, fallback: SessionDef[]): SessionDef[] {
   return out
 }
 
-const NO_DAYS: SessionChoice[] = ['no', 'no', 'no', 'no', 'no', 'no', 'no']
+/** „Nie” every weekday. */
+export const NO_SESSION_DAYS: readonly SessionChoice[] = ['no', 'no', 'no', 'no', 'no', 'no', 'no']
 
 /** The layer a move took, as read: anything else than an object – the one before (none). */
 function movedLayerFrom(v: unknown, fallback: MovedLayer | null): MovedLayer | null {
   if (!isPlain(v)) return fallback
   const grid = isPlain(v.grid) ? v.grid : {}
+  const made: Record<string, DayTypeId> = {}
+  if (isPlain(v.made)) for (const [id, t] of Object.entries(v.made)) if (isDayTypeId(t)) made[id] = t
+  const gone: Record<string, true> = {}
+  if (isPlain(v.gone)) for (const [id, x] of Object.entries(v.gone)) if (x === true) gone[id] = true
   return {
+    from: typeof v.from === 'string' ? v.from : '',
     sessions: sessionsFrom(v.sessions, []),
-    grid: Object.fromEntries(DAY_TYPES.map((t) => [t, sessionChoices(grid[t], NO_DAYS)])) as Record<DayTypeId, SessionChoice[]>,
-    templates: Array.isArray(v.templates) ? [...new Set(v.templates.filter((x): x is string => typeof x === 'string' && !!x))] : []
+    grid: Object.fromEntries(DAY_TYPES.map((t) => [t, sessionChoices(grid[t], [...NO_SESSION_DAYS])])) as Record<DayTypeId, SessionChoice[]>,
+    templates: Array.isArray(v.templates) ? [...new Set(v.templates.filter((x): x is string => typeof x === 'string' && !!x))] : [],
+    made,
+    gone
   }
 }
 

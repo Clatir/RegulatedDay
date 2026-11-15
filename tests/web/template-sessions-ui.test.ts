@@ -6,9 +6,11 @@
  * not the session's) and shows every entry, whatever the answer of its sample's weekday.
  */
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS, NY_ZONE, type SessionChoice } from '@shared/model/settings'
-import { planBlock, type TemplateVersion } from '@shared/model/plan'
-import { templateBlockPatch } from '@shared/model/templateSessions'
+import { marketDay } from '@shared/calendar/holidays'
+import { createDay } from '@shared/engine/createDay'
+import { DEFAULT_SETTINGS, DAY_TYPES, NY_ZONE, type SessionChoice } from '@shared/model/settings'
+import { planBlock, type Template, type TemplateVersion } from '@shared/model/plan'
+import { templateBlockPatch, zoneChoices } from '@shared/model/templateSessions'
 import { SETTING_SECTIONS } from '@renderer/features/search/records'
 import * as shared from '@renderer/features/settings/SharedSettings'
 import { axisSources, axisVersion, DAY_MARK, DAY_WORD, dayPatch, NO_ZONE, zoneOptions, zonePatch } from '@renderer/features/templates/sessionChoices'
@@ -28,10 +30,13 @@ describe('sesje w szablonach – okno (D511, D515)', () => {
     expect(zoneOptions(NY_ZONE).map((o) => o.label)).toEqual(['Nowy Jork', 'Londyn', 'Polska', 'zwykły blok (bez reguł sesji)'])
     expect(zoneOptions('Asia/Tokyo').map((o) => o.value)).toEqual([NY_ZONE, 'Europe/London', 'Europe/Warsaw', 'Asia/Tokyo', NO_ZONE])
     // A zone with its markets, the days and the session's id kept, fixed; „zwykły blok” – no field.
-    const ny = { session: { zone: NY_ZONE, markets: ['NYSE' as const, 'CME_FX' as const], days: MIXED, id: 'ny' } }
+    const ny = { id: 'ny-sesja', session: { zone: NY_ZONE, markets: ['NYSE' as const, 'CME_FX' as const], days: MIXED, id: 'ny' } }
     expect(zonePatch(ny, 'Europe/London')).toEqual({ session: { zone: 'Europe/London', markets: ['UK'], days: MIXED, id: 'ny' }, fixed: true })
     expect(zonePatch(ny, 'Europe/Warsaw')).toEqual({ session: { zone: 'Europe/Warsaw', markets: [], days: MIXED, id: 'ny' }, fixed: true })
-    expect(zonePatch({ session: null }, NY_ZONE)).toEqual({ session: { zone: NY_ZONE, markets: ['NYSE', 'CME_FX'], days: YES7 }, fixed: true })
+    expect(zonePatch({ id: 'b', session: null }, NY_ZONE)).toEqual({ session: { zone: NY_ZONE, markets: ['NYSE', 'CME_FX'], days: YES7 }, fixed: true })
+    // A block whose id another session of the version has (T1416): a session's id of its own.
+    const other = planBlock({ id: 'x', categoryId: 'sesja', startMin: 14 * 60, durationMin: 60, origin: 'template', session: { zone: NY_ZONE, markets: [], days: YES7, id: 'b' } })
+    expect(zonePatch({ id: 'b', session: null }, 'Europe/Warsaw', [other])).toEqual({ session: { zone: 'Europe/Warsaw', markets: [], days: YES7, id: 'b-2' }, fixed: true })
     expect(zonePatch(ny, NO_ZONE)).toEqual({ session: null })
   })
 
@@ -61,10 +66,13 @@ describe('sesje w szablonach – okno (D511, D515)', () => {
       { id: 'd4', origin: 'user' as const, sourceId: null },
       { id: 'd5', origin: 'session' as const, sourceId: 'gpw' }
     ]
+    const entry = (id: string, session: NonNullable<ReturnType<typeof planBlock>['session']> | undefined) => planBlock({ id, categoryId: 'sesja', startMin: 14 * 60, durationMin: 60, origin: 'template', ...(session ? { session } : {}) })
     const version = [
-      { id: 'an', session: undefined },
-      { id: 'ny', session: { zone: NY_ZONE, markets: [], days: YES7 } },
-      { id: 'gpw-sesja', session: { zone: 'Europe/Warsaw', markets: [], days: YES7, id: 'gpw' } }
+      entry('an', undefined),
+      entry('ny', { zone: NY_ZONE, markets: [], days: YES7 }),
+      entry('gpw-sesja', { zone: 'Europe/Warsaw', markets: [], days: YES7, id: 'gpw' }),
+      // A second entry of a session's id: the first one is the day's (T1416).
+      entry('gpw-2', { zone: 'Europe/Warsaw', markets: [], days: YES7, id: 'gpw' })
     ]
     expect([...axisSources(plan, version)]).toEqual([
       ['d1', 'an'],
@@ -73,14 +81,33 @@ describe('sesje w szablonach – okno (D511, D515)', () => {
     ])
   })
 
-  it('oś „Szablonów” pokazuje każdy wpis, także z „nie” w dniu tygodnia przykładu; panel ma dni jak w pliku', () => {
-    const ny = planBlock({ id: 'ny', categoryId: 'sesja', startMin: 14 * 60, durationMin: 180, fixed: true, origin: 'template', session: { zone: NY_ZONE, markets: [], days: MIXED } })
+  it('oś „Szablonów” pokazuje każdy wpis o jego zapisanej godzinie polskiej, w całości – także z „nie”, w tygodniu zmiany czasu i w dzień skrócony', () => {
+    const ny = planBlock({ id: 'ny', categoryId: 'sesja', startMin: 14 * 60, durationMin: 6 * 60, fixed: true, origin: 'template', session: { zone: NY_ZONE, markets: ['NYSE'], days: MIXED } })
     const an = planBlock({ id: 'an', categoryId: 'analiza', startMin: 9 * 60, durationMin: 60, origin: 'template' })
     const v: TemplateVersion = { from: '2026-10-19', blocks: [an, ny], budgetMin: null, maxMin: null }
     expect(axisVersion(v).blocks.map((b) => b.session?.days ?? null)).toEqual([null, ['yes', 'ask', 'yes', 'yes', 'yes', 'yes', 'yes']])
     expect(v.blocks[1]!.session!.days).toEqual(MIXED)
-    // Nothing „nie” – the version as it is.
+    // The sample day as the axis counts it: a Saturday („nie”), a day of the shift (27.10) and the early close (27.11) –
+    // always 14:00 for 6 h, as written.
+    const sample = (date: string) => {
+      const t: Template = { id: 'zwykly', name: 'Dzień zwykły', dayType: 'zwykly', weekdays: [], archived: false, versions: [{ ...axisVersion(v), from: '2000-01-01' }] }
+      const noLayer = { id: 'm', from: '2000-01-01', at: null, made: 1, patch: { sessions: [], dayTypes: Object.fromEntries(DAY_TYPES.map((x) => [x, { sessions: ['no', 'no', 'no', 'no', 'no', 'no', 'no'] }])) } }
+      const s = createDay({ date, changes: [noLayer], templates: [t], lectures: [], series: [], dayFile: { schema: 1, date, dayType: 'zwykly', wakeMin: null, sessions: {}, blocks: [], cancelled: [], movedTo: {}, asked: {}, stepsDone: {} }, holidays: marketDay, at: null })
+      return s.blocks.filter((b) => b.origin === 'session').map((b) => [b.startMin, b.durationMin])
+    }
+    for (const d of ['2026-10-24', '2026-10-27', '2026-11-27']) expect(sample(d)).toEqual([[14 * 60, 6 * 60]])
+    // Nothing of a session – the version as it is.
     const all = { ...v, blocks: [an] }
     expect(axisVersion(all)).toBe(all)
+  })
+
+  it('kreator: strefy Nowy Jork, Londyn, Polska i strefa spoza listy (np. Tokio w szkicu) jako dodatkowa opcja z jej nazwą', () => {
+    expect(zoneChoices(NY_ZONE).map((o) => o.label)).toEqual(['Nowy Jork', 'Londyn', 'Polska'])
+    expect(zoneChoices('Asia/Tokyo')).toEqual([
+      { value: NY_ZONE, label: 'Nowy Jork' },
+      { value: 'Europe/London', label: 'Londyn' },
+      { value: 'Europe/Warsaw', label: 'Polska' },
+      { value: 'Asia/Tokyo', label: 'Asia/Tokyo' }
+    ])
   })
 })

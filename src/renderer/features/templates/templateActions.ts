@@ -14,7 +14,7 @@ import { defaultDayType } from '@shared/engine/createDay'
 import { ATTACHMENTS_UNREAD_TEXT, attachmentUndoOf, removalEdits, restoreEdits, sessionAttachmentDates, templateRemovalIds, type AttachmentUndo } from '@shared/model/attachment'
 import { templateJson } from '@shared/model/defaults'
 import { dayFileFrom, templateFor, templateFrom, withTemplateVersion, type PlanBlock, type Template } from '@shared/model/plan'
-import { settingsOn } from '@shared/model/settings'
+import { settingsOn, type SettingsChange } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
 import { editOf, isSaved, rawRecord, trySaveWith, useData, withOwner } from '../../store/data'
@@ -26,11 +26,18 @@ const tomorrowOf = (): string => addDays(useData.getState().view?.today || logic
 /**
  * Whether the template makes each day its sessions' attachments are on (D511, T1407): the day's type (its file – with your
  * queued edits – else the week's) and the template for it (`templateFor`). A day whose file cannot be read now – not (its
- * attachments stay).
+ * attachments stay); the files not read at all (T1418) – no day: the change is saved, the days keep their attachments, as
+ * before it, and the window's log says so.
  */
 async function makesDays(templateId: string, dates: readonly string[]): Promise<(date: string) => boolean> {
   if (!dates.length) return () => false
-  const files = await window.rd.dayFiles([...dates])
+  let files: Record<string, RawRecord | null>
+  try {
+    files = await window.rd.dayFiles([...dates])
+  } catch (e) {
+    console.warn(`szablon ${templateId}: pliki dni z załącznikami sesji nieczytelne (${String(e)}) – załączniki dni zostają`)
+    return () => false
+  }
   const { rd, templates } = useData.getState()
   const made = new Set(
     dates.filter((date) => {
@@ -44,7 +51,9 @@ async function makesDays(templateId: string, dates: readonly string[]): Promise<
 
 /**
  * The template's edit (the first entry) and the soft removal of the attachments the change takes (`templateRemovalIds`
- * over the template before and after it), each going with the template's edit; what their „Cofnij” needs.
+ * over the template before and after it), each going with the template's edit; what their „Cofnij” needs. A removed
+ * template the move of sessions made (D511, T1412): rd.json says it is gone (`movedLayer.gone`), with the template's edit
+ * too – its type's days are never made from the layer as „not come yet”.
  */
 async function withAttachments(edit: EditEntry, templateId: string, before: Template | null, after: Template | null): Promise<{ entries: EditEntry[]; undo: AttachmentUndo | null }> {
   const tomorrow = tomorrowOf()
@@ -52,7 +61,18 @@ async function withAttachments(edit: EditEntry, templateId: string, before: Temp
   const { view, attachments } = useData.getState()
   const at = Date.now()
   const removed = removalEdits(view?.attachments ?? [], templateRemovalIds(attachments, templateId, before, after, tomorrow, makes), at)
-  return { entries: withOwner(edit, removed), undo: attachmentUndoOf(removed, at) }
+  const gone = after ? null : goneEdit(templateId, at)
+  return { entries: withOwner(edit, gone ? [...removed, gone] : removed), undo: attachmentUndoOf(removed, at) }
+}
+
+/** rd.json with the change saying a template the move made is gone (T1412) – null: not one of the move's, or said already. */
+function goneEdit(templateId: string, at: number): EditEntry | null {
+  const raw = rawRecord(paths.settings)
+  const moved = settingsOn(useData.getState().rd.settings, tomorrowOf()).movedLayer
+  if (!raw || !moved?.made[templateId] || moved.gone[templateId]) return null
+  const change: SettingsChange = { id: `sesje-usuniety-${templateId}`, from: moved.from, at: null, made: at, patch: { movedLayer: { gone: { [templateId]: true } } } }
+  const list = Array.isArray(raw.settings) ? raw.settings : []
+  return editOf(paths.settings, raw, { ...raw, settings: [...list, change] })
 }
 
 /** „Cofnij”: the template back as `before` over what the change left (`after`), its attachments with it (T923). */

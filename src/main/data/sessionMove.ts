@@ -4,7 +4,8 @@
  * computer or another is a question of the queue, never written over (T1358). One edit: the templates the move changes and
  * makes (each with `sessionsMoved`, over its file – the fields, versions and blocks this version cannot read stay), after
  * them rd.json's changes (`after`) – till they are laid the days keep the layer. No day's file and no attachment: the move
- * keeps every id (T1401). Pure: the folder reads, the queue writes.
+ * keeps every id (T1401). After the move: the versions made from a view before it get their entries (`sessionFixEdits`,
+ * T1413). Pure: the folder reads, the queue writes.
  */
 import type { EditEntry } from '@shared/api'
 import { recordEdit } from '@shared/data/merge'
@@ -12,7 +13,7 @@ import { paths } from '@shared/data/paths'
 import { templateJson } from '@shared/model/defaults'
 import { templateFrom, type Template } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
-import { moveSessions } from '@shared/model/sessionMigration'
+import { moveSessions, staleVersionFixes } from '@shared/model/sessionMigration'
 
 type Raw = Record<string, unknown>
 
@@ -51,4 +52,22 @@ export function sessionMoveEdits(inp: MoveInput): EditEntry[] | null {
   const settings = recordEdit(paths.settings, inp.rd, { ...inp.rd, settings: [...list, ...move.changes] })
   if (settings) entries.push({ ...settings, after: entries.map((_, i) => i) })
   return entries
+}
+
+/**
+ * The edit giving versions of moved templates made from a view before the move their entries (T1413, `staleVersionFixes`),
+ * each template from its file as read (a change made meanwhile is a question); null – none to give.
+ */
+export function sessionFixEdits(inp: Omit<MoveInput, 'today'>): EditEntry[] | null {
+  const rawOf = new Map<string, Raw>()
+  const templates: Template[] = []
+  for (const raw of inp.templates) {
+    const t = templateFrom(raw)
+    if (!t) continue
+    rawOf.set(t.id, raw)
+    templates.push(t)
+  }
+  const fixed = staleVersionFixes(rdFrom(inp.rd).settings, templates)
+  const entries = fixed.map((t) => recordEdit(paths.record('template', t.id), rawOf.get(t.id)!, templateJson(t, rawOf.get(t.id)!))).filter((e): e is EditEntry => e != null)
+  return entries.length ? entries : null
 }

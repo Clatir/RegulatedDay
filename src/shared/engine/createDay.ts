@@ -9,11 +9,11 @@
 import { derivedId } from '../model/ids'
 import { SESSION_CATEGORY } from '../model/categories'
 import type { DaySnapshot } from '../model/events'
-import { PLAN_MAX, PLAN_MIN, planBlock, planBlockFrom, sessionIdOf, type DayFile, type LectureSeries, type PlanBlock, type Template } from '../model/plan'
+import { PLAN_MAX, PLAN_MIN, isSessionEntry, planBlock, sessionBlockFieldsFrom, sessionIdOf, type DayFile, type LectureSeries, type PlanBlock, type SessionBlockFields, type Template } from '../model/plan'
 import type { SeriesPlan } from '../model/series'
 import { stepsFrom, withDone } from '../model/steps'
 import { DEFAULT_SETTINGS, settingsOn, type DayTypeId, type RulesSettings, type SessionDef, type SettingsChange } from '../model/settings'
-import { daySettingsOf, sessionEntries, templateMarkets, usualDiffMin } from '../model/templateSessions'
+import { daySettingsOf, snapshotSettings, templateMarkets, usualDiffMin } from '../model/templateSessions'
 import { dayEnd, dayStart, logicalMinuteOf, placeLogical } from '../time/day'
 import { MINUTE, PL_ZONE, addDays, offsetMin, placeWall, weekday } from '../time/zone'
 import { pushedBySeries, seriesBlocks } from './series'
@@ -75,17 +75,27 @@ export function sessionShiftMin(def: SessionDef, at: number): number {
   return now - usualDiffMin(def.zone, new Date(at).getUTCFullYear())
 }
 
-const parsedBlocks = new WeakMap<object, PlanBlock | null>()
+const byObject = new WeakMap<object, SessionBlockFields | null>()
+const byContent = new Map<string, SessionBlockFields | null>()
+const CONTENT_MEMO = 256
 
-/** The template's block of a session (D511), read once per object (a snapshot's session is raw, a template's read already). */
-function blockOfSession(def: SessionDef): PlanBlock | null {
+/**
+ * The fields of the template's block of a session (D511, T1419), read once: per object, and per content – the settings of
+ * `inputs()` and of a snapshot read again are new objects with the same blocks (a few hundred kept, then forgotten at once).
+ */
+function blockOfSession(def: SessionDef): SessionBlockFields | null {
   const raw = def.block
   if (!raw || typeof raw !== 'object') return null
-  let b = parsedBlocks.get(raw)
+  let b = byObject.get(raw)
+  if (b !== undefined) return b
+  const key = JSON.stringify(raw)
+  b = byContent.get(key)
   if (b === undefined) {
-    b = planBlockFrom(raw, 'template')
-    parsedBlocks.set(raw, b)
+    b = sessionBlockFieldsFrom(raw)
+    if (byContent.size >= CONTENT_MEMO) byContent.clear()
+    byContent.set(key, b)
   }
+  byObject.set(raw, b)
   return b
 }
 
@@ -179,8 +189,9 @@ export function createDay(inp: DayInputs): DaySnapshot {
   // is not on this day is not on it either (a cancelled session cancels the blocks anchored to it). The template's sessions
   // (D511) are the sessions above – a block anchored to one by its id follows it as „session:<id>” does.
   if (tpl) {
-    // The template's entries (D511), whatever their answer of the day: block id → the session's id (`sessionIdOf`, T1406).
-    const entries = new Map(sessionEntries(tpl.version, settings.categories).map((b) => [b.id, sessionIdOf(b)]))
+    // The template's entries (D511), whatever their answer of the day – a second one of a session's id too (T1416): block id →
+    // the session's id (`sessionIdOf`, T1406). None of them is a block of the template on the day.
+    const entries = new Map(tpl.version.blocks.filter(isSessionEntry).map((b) => [b.id, sessionIdOf(b)]))
     const ids = new Map(tpl.version.blocks.map((b) => [b.id, templateBlockId(date, tpl.template.id, b.id)]))
     for (const b of tpl.version.blocks) {
       if (entries.has(b.id)) continue
@@ -221,7 +232,8 @@ export function createDay(inp: DayInputs): DaySnapshot {
   const wakeMin = Math.max(4 * 60, templateWakeMin + shift)
   const snapshot: DaySnapshot = {
     dayType,
-    settings,
+    // Without the layer the move took and its names (T1419) – rd.json's.
+    settings: snapshotSettings(settings),
     templateId: tpl?.template.id ?? null,
     templateFrom: tpl?.version.from ?? null,
     budgetMin: tpl?.version.budgetMin ?? params.budgetMin,

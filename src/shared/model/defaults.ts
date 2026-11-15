@@ -84,7 +84,7 @@ export function templateJson(t: Template, before?: RawRecord | null): RawRecord 
       }),
       ...unreadable
     ]
-    versions[v.from] = { ...raw, blocks, budgetMin: v.budgetMin, maxMin: v.maxMin }
+    versions[v.from] = { ...raw, blocks, budgetMin: v.budgetMin, maxMin: v.maxMin, ...(v.sessionsMoved ? { sessionsMoved: v.sessionsMoved } : {}) }
   }
   return {
     ...(before ?? {}),

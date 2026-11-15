@@ -11,6 +11,7 @@ import { paths } from '@shared/data/paths'
 import { addTypeBlocks, applyTypeChange, planTypeChange, type TypeChangeInput } from '@shared/engine/typeChange'
 import { durationLabel, logicalClock } from '@shared/format'
 import { POOLS } from '@shared/model/categories'
+import { dayFileFrom } from '@shared/model/plan'
 import { DAY_TYPES, DAY_TYPE_NAMES, settingsOn, type DayTypeId } from '@shared/model/settings'
 import { daySettings } from '@shared/model/templateSessions'
 import { atOf } from '@shared/engine/grid'
@@ -89,8 +90,9 @@ function DuringDay({ model, names, to, onlyAdd, onClose }: { model: DayModel; na
   const raw = model.data.dayFile
   const inp: TypeChangeInput = useMemo(
     // The settings with the sessions of the new type's template (D511).
-    () => ({ ctx: model.ctx, state: model.state, energyNow: model.energy.known ? model.energy.now : null, to, settings: daySettings(settingsOn(rd.settings, date, model.ctx.now), templates, to, date), withAdd: onlyAdd }),
-    [model, to, rd.settings, templates, date, onlyAdd]
+    // The day's file: a session a change of type put there leaves it when the new type has none (T1415).
+    () => ({ ctx: model.ctx, state: model.state, energyNow: model.energy.known ? model.energy.now : null, to, settings: daySettings(settingsOn(rd.settings, date, model.ctx.now), templates, to, date), withAdd: onlyAdd, dayFile: raw ? dayFileFrom(raw, date) : null }),
+    [model, to, rd.settings, templates, date, onlyAdd, raw]
   )
   const plan = useMemo(() => planTypeChange(inp), [inp])
   const [park, setPark] = useState<string[]>(plan.park.map((b) => b.id))
@@ -107,6 +109,7 @@ function DuringDay({ model, names, to, onlyAdd, onClose }: { model: DayModel; na
       const out = await trySaveWith(async () => {
         const before = (await dayFilesNow([date], () => raw))[date] ?? null
         let next = dayRaw(before, date)
+        for (const id of r.drop) next = takeBlock(next, id)
         for (const b of r.blocks) next = putBlock(next, b)
         for (const s of r.sessionsYes) next = setSessionAnswer(next, s, 'yes')
         for (const b of r.requestBlocks) next = takeBlock(next, b.id)

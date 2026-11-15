@@ -3,24 +3,26 @@
  * wizard's from the start). The sessions of the settings become entries of the templates (`PlanBlock.session`,
  * `model/templateSessions.ts`) in every version from that date, and the grid „tak / nie / pytaj” goes into each entry as the
  * answers of its weekdays (`BlockSession.days` – the type of the template × the weekday; a weekday a template of weekdays
- * does not make – „nie”). Every template keeps its id, its weekdays and its blocks with their ids, so no day's file and no
- * attachment changes (T1401). A change of the layer or its grid from a later date (made before the move, „od jutra”) is
- * moved too: from its date the templates have the sessions and answers it set (a version from that date where they change),
- * and the layer is emptied from it as well. A type with sessions without a default template gets one with only them
- * (`sesje-<type>`, T1402). An ordinary block of a template with a session's id keeps it: the entry gets another block id and
- * keeps the session's own in its field (`BlockSession.id`, T1406). The changes of the settings from those dates empty the
- * layer (no session, every type „nie”) – a version before D511 sees no session of the layer and shows the entries as fixed
- * blocks of their category, never twice (T1403) – keep the layer as it was (`movedLayer` – a day of a template whose file
- * comes after rd.json is made from it, T1405) and the names of its sessions (`movedSessions`, T1408), and mark the move as
- * made.
+ * does not make – „nie”). Every template – an archived one too (T1414) – keeps its id, its weekdays and its blocks with their
+ * ids, so no day's file and no attachment changes (T1401). A change of the layer or its grid from a later date (made before
+ * the move, „od jutra”) is moved too: from its date the templates have the sessions and answers it set (a version from that
+ * date where they change), and the layer is emptied from it as well. A type with sessions without a default template gets one
+ * with only them (`sesje-<type>`, T1402). An ordinary block of a template with a session's id keeps it: the entry gets
+ * another block id and keeps the session's own in its field (`BlockSession.id`, T1406). Every version the move writes, and
+ * the template, has its date (`sessionsMoved`): a version of a moved template made later from a view before the move is told
+ * by it, and the leader gives it its entries (`staleVersionFixes`, T1413). The changes of the settings from those dates empty
+ * the layer (no session, every type „nie”) – a version before D511 sees no session of the layer and shows the entries as
+ * fixed blocks of their category, never twice (T1403) – keep the layer as it was (`movedLayer` – a day of a template whose
+ * file comes after rd.json is made from it, T1405, T1412) and the names of its sessions (`movedSessions`, T1408), and mark the
+ * move as made.
  *
  * Pure and deterministic: the same files give the same templates and the same changes (their order from the files, no
  * instant of the clock) – two computers moving at once write the same records; a template the move wrote already
  * (`sessionsMoved`) is never changed again, and with the change in the settings the move is not made again.
  */
-import { PLAN_MIN, planBlock, sessionIdOf, templateVersionOn, type PlanBlock, type Template, type TemplateVersion } from './plan'
-import { DAY_TYPES, DAY_TYPE_NAMES, settingsOn, type DayTypeId, type RulesSettings, type SessionChoice, type SessionDef, type SettingsChange } from './settings'
-import { sessionCategoryOf, usualDiffMin } from './templateSessions'
+import { planBlock, sessionIdOf, templateVersionOn, type PlanBlock, type Template, type TemplateVersion } from './plan'
+import { DAY_TYPES, DAY_TYPE_NAMES, NO_SESSION_DAYS, isPlain, settingsOn, type DayTypeId, type MovedLayer, type RulesSettings, type SessionChoice, type SessionDef, type SettingsChange } from './settings'
+import { byTemplateId, entryStartMin, isSessionEntry, sessionCategoryOf } from './templateSessions'
 
 /** The change of the settings that empties the layer of sessions from the date of the move and marks the move as made. */
 export const SESSIONS_CHANGE_ID = 'sesje-w-szablonach'
@@ -39,10 +41,7 @@ export interface SessionsMove {
 export const sessionsMoved = (changes: readonly SettingsChange[]): boolean => changes.some((c) => c.id === SESSIONS_CHANGE_ID)
 
 const ALL_DAYS = [1, 2, 3, 4, 5, 6, 7]
-const NO7: SessionChoice[] = ['no', 'no', 'no', 'no', 'no', 'no', 'no']
 const END = '9999-12-31'
-const byId = (a: Template, b: Template) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
-const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const hasSessions = (days: readonly SessionChoice[]) => days.some((a) => a !== 'no')
 
 /** A change sets the layer: its sessions or a type's grid. */
@@ -56,6 +55,13 @@ function setsLayer(c: SettingsChange): boolean {
 interface Wanted {
   sessions: readonly SessionDef[]
   days: SessionChoice[]
+}
+
+/** What a template of `type` and `weekdays` has with a layer: its sessions with the grid of its type, „nie” on a weekday it does not make; none – no weekday has one. */
+function wantedFrom(sessions: readonly SessionDef[], grid: readonly SessionChoice[], weekdays: readonly number[]): Wanted | null {
+  if (!sessions.length) return null
+  const days = ALL_DAYS.map((w) => (!weekdays.length || weekdays.includes(w) ? (grid[w - 1] ?? 'no') : 'no'))
+  return hasSessions(days) ? { sessions, days } : null
 }
 
 /**
@@ -80,51 +86,52 @@ function entryIds(t: Template, sessionIds: readonly string[]): Map<string, strin
 }
 
 /**
- * A version with the entries of `want` (its other blocks as they are): each session of the layer once, at its place when the
- * version has it already (a copy of the version in force), with the hour in Polish time as usual, its name („Sesja NY”) and
- * the answers of the weekdays of that interval; an entry of a session of the layer that `want` has not (a later date of the
- * layer without it) leaves. A block anchored to a session („session:<id>”) follows its entry by its block id – a version
- * before D511 follows it as an ordinary block.
+ * A version with the entries of `want` (its other blocks as they are) and the move's mark: each session of the layer once,
+ * at its place when the version has it already (a copy of the version in force), with the hour in Polish time as usual, its
+ * name („Sesja NY”) and the answers of the weekdays of that interval; an entry of a session of the layer that `want` has not
+ * (a later date of the layer without it) leaves. A block anchored to a session („session:<id>”) follows its entry by its
+ * block id – a version before D511 follows it as an ordinary block.
  */
-function withEntries(v: TemplateVersion, want: Wanted | null, all: ReadonlySet<string>, ids: ReadonlyMap<string, string>, category: string): TemplateVersion {
+function withEntries(v: TemplateVersion, want: Wanted | null, all: ReadonlySet<string>, ids: ReadonlyMap<string, string>, category: string, mark: string): TemplateVersion {
   const sessions = want?.sessions ?? []
   const wanted = new Set(sessions.map((d) => d.id))
   const year = Number(v.from.slice(0, 4))
   const entry = (d: SessionDef): PlanBlock => {
     const id = ids.get(d.id) ?? d.id
-    const startMin = ((((d.startMin + usualDiffMin(d.zone, year) - PLAN_MIN) % 1440) + 1440) % 1440) + PLAN_MIN
     const durationMin = Math.max(1, Math.min(1440, d.endMin - d.startMin))
     const session = { zone: d.zone, markets: [...d.markets], days: [...want!.days], ...(id !== d.id ? { id: d.id } : {}) }
-    return planBlock({ id, categoryId: category, startMin, durationMin, fixed: true, origin: 'template', name: `Sesja ${d.name}`.slice(0, 120), session })
+    return planBlock({ id, categoryId: category, startMin: entryStartMin(d, year), durationMin, fixed: true, origin: 'template', name: `Sesja ${d.name}`.slice(0, 120), session })
   }
-  const of = (b: PlanBlock) => (b.session && all.has(sessionIdOf(b)) ? sessionIdOf(b) : null)
+  const of = (b: PlanBlock) => (isSessionEntry(b) && all.has(sessionIdOf(b)) ? sessionIdOf(b) : null)
   const blocks = v.blocks.filter((b) => of(b) == null || wanted.has(of(b)!)).map((b) => (of(b) != null ? entry(sessions.find((d) => d.id === of(b))!) : b))
   for (const d of sessions) if (!blocks.some((b) => of(b) === d.id)) blocks.push(entry(d))
   const anchored = blocks.map((b) => {
     const sid = b.anchor?.startsWith('session:') ? b.anchor.slice('session:'.length) : null
     return sid != null && wanted.has(sid) ? { ...b, anchor: ids.get(sid) ?? sid } : b
   })
-  return JSON.stringify(anchored) === JSON.stringify(v.blocks) ? v : { ...v, blocks: anchored }
+  const same = JSON.stringify(anchored) === JSON.stringify(v.blocks)
+  return same && v.sessionsMoved === mark ? v : { ...v, blocks: same ? v.blocks : anchored, sessionsMoved: mark }
 }
 
 /**
  * The template with its entries from the move's date: from each date of the layer to the next the entries of that interval
  * (`wanted`) – a version from the date where the one in force then would change (a copy of it), every later version of the
- * interval with them too. Versions before the move's date stay as they are.
+ * interval with them too, each with the move's mark. Versions before the move's date stay as they are.
  */
 function withSessions(t: Template, dates: readonly string[], wanted: ReadonlyArray<Wanted | null>, all: ReadonlySet<string>, category: string): Template {
   const ids = entryIds(t, [...all])
+  const mark = dates[0]!
   let versions = [...t.versions]
   dates.forEach((d, i) => {
     const end = dates[i + 1] ?? END
     const inForce = templateVersionOn({ ...t, versions }, d)
     if (inForce && inForce.from < d) {
-      const next = withEntries(inForce, wanted[i]!, all, ids, category)
-      if (next !== inForce) versions = [...versions, { ...next, from: d }].sort((a, b) => (a.from < b.from ? -1 : 1))
+      const next = withEntries(inForce, wanted[i]!, all, ids, category, mark)
+      if (next.blocks !== inForce.blocks) versions = [...versions, { ...next, from: d }].sort((a, b) => (a.from < b.from ? -1 : 1))
     }
-    versions = versions.map((v) => (v.from >= d && v.from < end ? withEntries(v, wanted[i]!, all, ids, category) : v))
+    versions = versions.map((v) => (v.from >= d && v.from < end ? withEntries(v, wanted[i]!, all, ids, category, mark) : v))
   })
-  return { ...t, versions }
+  return { ...t, versions, sessionsMoved: mark }
 }
 
 /**
@@ -137,34 +144,33 @@ export function moveSessions(changes: readonly SettingsChange[], templates: read
   const dates = [from, ...new Set(changes.filter((c) => c.from > from && setsLayer(c)).map((c) => c.from))].sort()
   // On the move's date with every change „od dziś” of that day.
   const settings: RulesSettings[] = dates.map((d, i) => settingsOn(changes, d, i === 0 ? Number.MAX_SAFE_INTEGER : null))
-  const grid = (type: DayTypeId, i: number): SessionChoice[] => (settings[i]!.sessions.length ? settings[i]!.dayTypes[type].sessions : NO7)
   const all = new Set(settings.flatMap((s) => s.sessions.map((d) => d.id)))
   const category = sessionCategoryOf(settings[0]!.categories)
-  // What a template of a type and weekdays has from each date: the sessions with the grid of its type, „nie” on a weekday it
-  // does not make; none – no weekday has one.
-  const wantedOf = (type: DayTypeId, weekdays: readonly number[]): Array<Wanted | null> =>
-    dates.map((_, i) => {
-      const days = ALL_DAYS.map((w) => (!weekdays.length || weekdays.includes(w) ? (grid(type, i)[w - 1] ?? 'no') : 'no'))
-      return hasSessions(days) ? { sessions: settings[i]!.sessions, days } : null
-    })
+  const wantedOf = (type: DayTypeId, weekdays: readonly number[]): Array<Wanted | null> => settings.map((s) => wantedFrom(s.sessions, s.dayTypes[type].sessions, weekdays))
 
-  const live = templates.filter((t) => !t.archived).sort(byId)
   const exists = new Set(templates.map((t) => t.id))
   const listed = new Set<string>()
+  const madeTypes: Record<string, DayTypeId> = {}
   const changed: Template[] = []
   const made: Template[] = []
-  for (const t of live) {
+  // Every template, an archived one too (a copy, one you bring back later – T1414).
+  for (const t of [...templates].sort(byTemplateId)) {
     if (!t.versions.length) continue
     const wanted = wantedOf(t.dayType, t.weekdays)
     if (wanted.every((w) => !w)) continue
     listed.add(t.id)
-    // Written by the move already (another computer, its rd.json still on the way): never again – your changes since stay.
-    if (t.sessionsMoved) continue
-    changed.push({ ...withSessions(t, dates, wanted, all, category), sessionsMoved: from })
+    // Written by the move already (another computer, its rd.json still on the way): never again – your changes since stay;
+    // the default the move made for a type is that type's made one again (the same rd.json on both computers).
+    if (t.sessionsMoved) {
+      if (t.id === `sesje-${t.dayType}`) madeTypes[t.id] = t.dayType
+      continue
+    }
+    changed.push(withSessions(t, dates, wanted, all, category))
   }
-  // A type with sessions on a weekday no template of its weekdays makes on the date, and no default template of its own: a
-  // default with only them – the weekdays of its templates of weekdays stay theirs (`templateFor` – a template of the
+  // A type with sessions on a weekday no template of its weekdays makes on the date, and no default template of its own in
+  // use: a default with only them – the weekdays of its templates of weekdays stay theirs (`templateFor` – a template of the
   // weekday first), the others get the sessions they had.
+  const live = templates.filter((t) => !t.archived)
   for (const type of DAY_TYPES) {
     if (live.some((t) => t.dayType === type && !t.weekdays.length)) continue
     const covered = new Set(live.filter((t) => t.dayType === type && templateVersionOn(t, from)).flatMap((t) => t.weekdays))
@@ -172,8 +178,9 @@ export function moveSessions(changes: readonly SettingsChange[], templates: read
     const id = `sesje-${type}`
     if (!wanted.some((w) => w?.days.some((a, i) => a !== 'no' && !covered.has(i + 1))) || exists.has(id)) continue
     const base: Template = { id, name: DAY_TYPE_NAMES[type], dayType: type, weekdays: [], versions: [{ from, blocks: [], budgetMin: null, maxMin: null }], archived: false }
-    made.push({ ...withSessions(base, dates, wanted, all, category), sessionsMoved: from })
+    made.push(withSessions(base, dates, wanted, all, category))
     listed.add(id)
+    madeTypes[id] = type
   }
 
   // The changes that empty the layer, each laid after the changes of its date made before it (from the files, not the clock):
@@ -185,18 +192,14 @@ export function moveSessions(changes: readonly SettingsChange[], templates: read
     for (const s of settings[i]!.sessions) names.set(s.id, s)
     const same = changes.filter((c) => c.from === d)
     const ats = i === 0 ? same.filter((c) => c.at != null && setsLayer(c)).map((c) => c.at!) : []
-    const layerGrid = Object.fromEntries(DAY_TYPES.map((t) => [t, settings[i]!.dayTypes[t].sessions]))
+    const grid = Object.fromEntries(DAY_TYPES.map((t) => [t, settings[i]!.dayTypes[t].sessions]))
+    const movedLayer: Omit<MovedLayer, 'gone'> = { from, sessions: settings[i]!.sessions, grid: grid as MovedLayer['grid'], templates: templateIds, made: madeTypes }
     return {
       id: i === 0 ? SESSIONS_CHANGE_ID : `${SESSIONS_CHANGE_ID}-${d}`,
       from: d,
       at: ats.length ? Math.max(...ats) + 1 : null,
       made: Math.max(0, ...same.map((c) => c.made ?? 0)) + 1,
-      patch: {
-        sessions: [],
-        dayTypes: Object.fromEntries(DAY_TYPES.map((t) => [t, { sessions: NO7 }])),
-        movedSessions: [...names.values()],
-        movedLayer: { sessions: settings[i]!.sessions, grid: layerGrid, templates: templateIds }
-      }
+      patch: { sessions: [], dayTypes: Object.fromEntries(DAY_TYPES.map((t) => [t, { sessions: [...NO_SESSION_DAYS] }])), movedSessions: [...names.values()], movedLayer }
     }
   })
   return { from, changes: out, changed, made }
@@ -208,3 +211,28 @@ export function movedTemplates(templates: readonly Template[], move: Pick<Sessio
   return [...templates.map((t) => changed.get(t.id) ?? t), ...move.made]
 }
 
+/**
+ * The versions of moved templates made from a view before the move (T1413: from the move's date on, without its mark – a
+ * computer offline, a version before D511, its edit laid without a question), as the move would have written them: the
+ * entries of the layer of their date (`movedLayer` there) with the answers of the template's type and weekdays, anchors to
+ * the sessions following them, the mark. Deterministic – two leaders write the same; the templates to write (none – []).
+ */
+export function staleVersionFixes(changes: readonly SettingsChange[], templates: readonly Template[]): Template[] {
+  if (!sessionsMoved(changes)) return []
+  const out: Template[] = []
+  for (const t of templates) {
+    if (!t.sessionsMoved) continue
+    let changed = false
+    const versions = t.versions.map((v) => {
+      const s = settingsOn(changes, v.from)
+      const moved = s.movedLayer
+      if (!moved || v.sessionsMoved || v.from < moved.from || !moved.templates.includes(t.id)) return v
+      const all = new Set([...s.movedSessions, ...moved.sessions].map((d) => d.id))
+      const fixed = withEntries(v, wantedFrom(moved.sessions, moved.grid[t.dayType], t.weekdays), all, entryIds(t, [...all]), sessionCategoryOf(s.categories), moved.from)
+      changed = true
+      return fixed
+    })
+    if (changed) out.push({ ...t, versions })
+  }
+  return out
+}

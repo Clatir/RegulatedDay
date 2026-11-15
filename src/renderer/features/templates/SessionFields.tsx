@@ -13,13 +13,13 @@ import { DAY_MARK, DAY_WORD, NO_ZONE, dayPatch, zoneOptions, zonePatch } from '.
 
 const LOOK = { yes: 'border-lamp/60 bg-lamp-soft text-lamp', ask: 'border-sea/60 bg-sea-soft text-sea', no: 'border-line text-muted' } as const
 
-export function SessionFields({ block, kind, weekdays, onChange }: { block: PlanBlock; kind: CategoryKind | undefined; weekdays: readonly number[]; onChange: (patch: Partial<PlanBlock>) => void }) {
+export function SessionFields({ block, blocks, kind, weekdays, onChange }: { block: PlanBlock; blocks: readonly PlanBlock[]; kind: CategoryKind | undefined; weekdays: readonly number[]; onChange: (patch: Partial<PlanBlock>) => void }) {
   if (kind !== 'session') return null
   const s = block.session ?? null
   return (
     <>
       <Field label="Według czasu" labelWidth={92} hint={s ? 'Sesja idzie za zegarem tej strefy (w tygodniach zmiany czasu w USA – godzinę wcześniej, pobudka też); święta i skrócone dni jej rynku ją skracają.' : 'Zwykły blok swojej kategorii – bez przesunięć, świąt i pytań sesji.'}>
-        <Choice value={s?.zone ?? NO_ZONE} options={zoneOptions(s?.zone ?? null)} onChange={(zone) => onChange(zonePatch(block, zone))} aria-label="Według czasu" data-testid="block-session-zone" />
+        <Choice value={s?.zone ?? NO_ZONE} options={zoneOptions(s?.zone ?? null)} onChange={(zone) => onChange(zonePatch(block, zone, blocks))} aria-label="Według czasu" data-testid="block-session-zone" />
       </Field>
       {s && (
         <Field label="Dni" labelWidth={92} hint="✓ tak · ? pytaj rano – plan poranny pyta, bez odpowiedzi sesja zostaje · ✗ nie. Kliknięcie zmienia: tak → pytaj → nie.">

@@ -17,7 +17,8 @@ import { applyTypeChange, planTypeChange } from '@shared/engine/typeChange'
 import { derivedId } from '@shared/model/ids'
 import { dayFileFrom, emptyDayFile, planBlock, planBlockFrom, type BlockSession, type DayFile, type PlanBlock, type Template } from '@shared/model/plan'
 import { DAY_TYPES, NY_ZONE, settingsOn, type SessionChoice, type SettingsChange } from '@shared/model/settings'
-import { daySettings, knownSessionDefs, sessionOwnersOf } from '@shared/model/templateSessions'
+import { daySettings, knownSessionDefs, sessionOwnersOf, templateBlockPatch } from '@shared/model/templateSessions'
+import { RULES_VERSION } from '@shared/model/events'
 import { copiedTemplate } from '@shared/engine/planEdit'
 import { logicalMinuteOf, placeLogical } from '@shared/time/day'
 import { lm } from './dsl'
@@ -283,27 +284,122 @@ describe('sesje z szablonu typu dnia (D511) – „Sesje tradingowe”', () => {
     expect(planBlockFrom({ ...raw, session: { zone: 'Mars/Olympus', markets: [] } })!.session).toBeUndefined()
     expect(planBlockFrom({ ...raw, session: 'tak' })!.session).toBeUndefined()
     expect(planBlockFrom(raw)!).not.toHaveProperty('session')
-    // A block with the field but not of a category of sessions is an ordinary block of the template.
+    // One rule (T1416): a block with the field is a session whatever its category – it keeps its category on the day.
     const odd = createDay(inputs('2026-10-21', { templates: [template('zwykly', 'zwykly', [{ ...NY, categoryId: 'analiza' }])] }))
-    expect(odd.blocks.map((b) => [b.origin, b.categoryId])).toEqual([['template', 'analiza']])
+    expect(odd.blocks.map((b) => [b.origin, b.categoryId, b.sourceId])).toEqual([['session', 'analiza', 'ny']])
+    // No category of the kind „sesja” at all: the entries stay sessions.
+    const noKind = { id: 'bez', from: '2026-01-01', at: null, made: 2, patch: { categories: { sesja: { kind: 'work' } } } }
+    const day = createDay(inputs('2026-10-21', { changes: [migrated(), noKind] }))
+    expect(day.blocks.filter((b) => b.origin === 'session').map((b) => b.sourceId)).toEqual(['londyn', 'ny'])
   })
-  it('zmiana typu na szablon, w którym sesja o tym samym id stoi o innej godzinie albo z inną nazwą: sesja z nowego szablonu', () => {
+
+  it('migawka dnia: sesja niesie tylko pola bloku, które bierze blok dnia; bez warstwy przeniesienia i jej nazw (T1419)', () => {
+    const noted = { ...NY, note: 'n'.repeat(500), requests: ['r1'] }
+    const change = { ...migrated('2026-10-19'), patch: { ...migrated().patch, movedSessions: DEFAULT_SETTINGS.sessions, movedLayer: { from: '2026-10-19', sessions: DEFAULT_SETTINGS.sessions, grid: {}, templates: [], made: {} } } }
+    const snap = createDay(inputs('2026-10-21', { changes: [change], templates: [template('zwykly', 'zwykly', [noted])] }))
+    expect([snap.settings.movedLayer, snap.settings.movedSessions]).toEqual([null, []])
+    const block = snap.settings.sessions.find((d) => d.id === 'ny')!.block as Record<string, unknown>
+    expect(Object.keys(block).sort()).toEqual(['background', 'bgCostPct', 'categoryId', 'costs', 'name', 'note', 'routine', 'steps', 'variantId'])
+    // The day's block from it: as before, the entry's note and name – not its requests.
+    expect(snap.blocks.find((b) => b.sourceId === 'ny')).toMatchObject({ note: 'n'.repeat(500), name: 'Sesja NY', requests: [] })
+    // A snapshot read again (new objects) gives the same block.
+    const again = JSON.parse(JSON.stringify(snap))
+    expect(dayPlan(again, null).find((b) => b.sourceId === 'ny')).toEqual(dayPlan(snap, null).find((b) => b.sourceId === 'ny'))
+  })
+
+  it('dwa wpisy o tym samym id sesji w jednej wersji: jeden blok dnia – pierwszy wpis; nowa sesja w szablonie nie bierze zajętego id', () => {
+    const twin = { ...NY, id: 'ny-2', startMin: lm('16:00'), session: { ...NY.session!, id: 'ny' } }
+    const snap = createDay(inputs('2026-10-21', { templates: [template('zwykly', 'zwykly', [NY, twin])] }))
+    expect(snap.blocks.filter((b) => b.id === sessionBlockId('2026-10-21', 'ny')).map((b) => b.startMin)).toEqual([lm('14:00')])
+    expect(snap.blocks.some((b) => b.sourceId === 'ny-2')).toBe(false)
+    // A block given the category of sessions whose id another entry has as its session's: a session's id of its own.
+    const plain = planBlock({ id: 'gpw', categoryId: 'inne', startMin: lm('09:00'), durationMin: 60, origin: 'template' })
+    const taken = { ...NY, id: 'x', session: { ...NY.session!, id: 'gpw' } }
+    expect(templateBlockPatch(plain, { categoryId: 'sesja' }, DEFAULT_SETTINGS.categories, [taken, plain]).session).toMatchObject({ id: 'gpw-2' })
+    expect(templateBlockPatch(plain, { categoryId: 'sesja' }, DEFAULT_SETTINGS.categories, [plain]).session).not.toHaveProperty('id')
+  })
+  /** A change of the day's type as the log has it (its settings with the new type's sessions). */
+  const typeEvent = (date: string, at: number, to: Template['dayType'], templates: Template[]) =>
+    ({ id: `typ-${at}`, c: 'pca', n: 1, t: at, l: at, v: RULES_VERSION, day: date, dom: 'timer', k: 'day.snapshot', at, dayType: to, settings: daySettings(settingsOn([migrated()], date, at), templates, to, date), reason: 'type', max: null, minRegen: null }) as unknown as Parameters<typeof dayContextOf>[1]['events'][number]
+  const approveEvent = (date: string, at: number, boundary: number) => ({ id: `gr-${at}`, c: 'pca', n: 2, t: at, l: at, v: RULES_VERSION, day: date, dom: 'timer', k: 'boundary.approve', at, boundary, auto: false }) as unknown as Parameters<typeof dayContextOf>[1]['events'][number]
+  const typeInput = (date: string, templates: Template[], to: Template['dayType'], at: number, dayFile: DayFile | null, events: Parameters<typeof dayContextOf>[1]['events'] = []) => {
+    const ctx = contextOf(date, templates, dayFile, at, events)
+    return { ctx, state: computeDay(ctx), energyNow: null, to, settings: daySettings(settingsOn([migrated()], date, at), templates, to, date), dayFile }
+  }
+  const none = { park: [], cancel: [], returnRequests: [], add: [] }
+
+  it('zmiana typu: sesja w planie (po id) nie „brakuje”; inne miejsce w szablonie nowego typu – godzina, długość i kategoria z niego, Twoje zmiany zostają', () => {
     const date = '2026-10-21'
     const at = placeLogical(date, 9 * 60)
-    const ny15 = { ...asked(NY), startMin: lm('15:00'), name: 'Sesja NY zdalna' }
-    const remote15 = template('zdalny', 'zjazd-zdalny', [asked(LONDON), ny15])
-    const ctx = contextOf(date, [ordinary, remote15], null, at)
-    const state = computeDay(ctx)
-    const settings = daySettings(settingsOn([migrated()], date, at), [ordinary, remote15], 'zjazd-zdalny', date)
-    const p = planTypeChange({ ctx, state, energyNow: null, to: 'zjazd-zdalny', settings, withAdd: true })
-    // London is the very same block – it stays; NY of the new template is another block (15:00, its name).
-    expect(p.add.map((a) => [a.session, a.block.startMin, a.block.name])).toEqual([['ny', lm('15:00'), 'Sesja NY zdalna']])
-    const r = applyTypeChange({ ctx, state, energyNow: null, to: 'zjazd-zdalny', settings }, p, { park: [], cancel: [sessionBlockId(date, 'ny')], returnRequests: [], add: p.add.map((a) => a.block.id) })
-    // Into the day's file (the old snapshot would bring the old NY back by „tak”), never cancelled by the old one's „Odwołaj”.
-    expect(r.blocks.map((b) => [b.id, b.startMin])).toEqual([[sessionBlockId(date, 'ny'), lm('15:00')]])
-    expect(r.events.some((e) => e.k === 'block.cancel')).toBe(false)
-    const plan = dayPlan(ctx.snapshot, { ...emptyDayFile(date), sessions: { ny: 'yes' }, blocks: r.blocks })
-    expect(plan.find((b) => b.sourceId === 'ny')).toMatchObject({ startMin: lm('15:00'), name: 'Sesja NY zdalna' })
+    const id = sessionBlockId(date, 'ny')
+    // The day's NY renamed with a note of yours today; the „zjazd stacjonarny” has NY at 15:00 under another name.
+    const mine = { ...createDay(inputs(date)).blocks.find((b) => b.id === id)!, name: 'Moja NY', note: 'wykres' }
+    const file: DayFile = { ...emptyDayFile(date), blocks: [mine] }
+    const later = template('stacj', 'zjazd-stacjonarny', [{ ...LONDON }, { ...NY, startMin: lm('15:00'), name: 'Sesja NY stacjonarna' }])
+    const inp = typeInput(date, [ordinary, later], 'zjazd-stacjonarny', at, file)
+    const p = planTypeChange(inp)
+    expect(p.laterMax).toBe(true)
+    expect(p.add.filter((a) => a.session)).toEqual([])
+    const r = applyTypeChange(inp, p, none)
+    expect(r.blocks.map((b) => [b.id, b.startMin, b.durationMin, b.categoryId, b.name, b.note])).toEqual([[id, lm('15:00'), 180, 'sesja', 'Moja NY', 'wykres']])
+    expect(r.drop).toEqual([])
+    // „Odwołaj” of it in the window: it is cancelled, not moved.
+    const c = applyTypeChange(inp, p, { ...none, cancel: [id] })
+    expect([c.blocks, c.events.filter((e) => e.k === 'block.cancel').map((e) => e.block)]).toEqual([[], [id]])
+  })
+
+  it('dzień aktualizacji: sesja z warstwy (bez nazwy) i wpis „Sesja NY” w tym samym miejscu – bez „brakuje” i bez zmiany', () => {
+    const date = '2026-10-21'
+    const at = placeLogical(date, 9 * 60)
+    // The day made by the layer (before the move): its sessions without a block of a template.
+    const layerDay = dayContextOf({ changes: [], templates: [], lectures: [], series: [] }, { date, events: [], dayFile: null, nextFile: null }, holidays, at)
+    expect(layerDay.plan.find((b) => b.sourceId === 'ny')!.name).toBeNull()
+    const inp = { ctx: layerDay, state: computeDay(layerDay), energyNow: null, to: 'zwykly' as const, settings: daySettings(settingsOn([migrated()], date, at), [ordinary], 'zwykly', date), withAdd: true, dayFile: null }
+    const p = planTypeChange(inp)
+    expect(p.add.filter((a) => a.session)).toEqual([])
+    expect(applyTypeChange(inp, p, none).blocks).toEqual([])
+  })
+
+  it('granica przy zmianie typu liczy przeniesioną sesję raz – jak dzień, który miał ją tam od rana', () => {
+    const date = '2026-10-21'
+    const at = placeLogical(date, 9 * 60)
+    const later = template('stacj', 'zjazd-stacjonarny', [{ ...NY, startMin: lm('10:00') }])
+    const id = sessionBlockId(date, 'ny')
+    const ev = [approveEvent(date, at - 3_600_000, placeLogical(date, 17 * 60 + 15))]
+    // NY 14:00 the snapshot's, moved by the change to 10:00 …
+    const moved = typeInput(date, [ordinary, later], 'zjazd-stacjonarny', at, null, ev)
+    const a = applyTypeChange(moved, planTypeChange(moved), none)
+    expect(a.blocks.map((b) => [b.id, b.startMin])).toEqual([[id, lm('10:00')]])
+    // … and NY at 10:00 from the morning (the day's file) – the same day after the change: the same boundary.
+    const at10 = { ...createDay(inputs(date)).blocks.find((b) => b.id === id)!, startMin: lm('10:00') }
+    const ordinary10 = template('zwykly', 'zwykly', ordinary.versions[0]!.blocks.map((x) => (x.id === 'ny' ? { ...x, startMin: lm('10:00') } : x)))
+    const asIf = typeInput(date, [ordinary10, later], 'zjazd-stacjonarny', at, { ...emptyDayFile(date), blocks: [at10] }, ev)
+    const b = applyTypeChange(asIf, planTypeChange(asIf), none)
+    expect(b.blocks).toEqual([])
+    expect(a.boundary).not.toBeNull()
+    expect(a.boundary).toEqual(b.boundary)
+  })
+
+  it('powrót do typu z wcześniejszym maksimum: sesja zamieniona przy pierwszej zmianie wraca do szablonu nowego typu; nowy typ bez niej – wychodzi z pliku dnia', () => {
+    const date = '2026-10-21'
+    const id = sessionBlockId(date, 'ny')
+    const later = template('stacj', 'zjazd-stacjonarny', [{ ...NY, startMin: lm('15:00') }])
+    const templates = [ordinary, later]
+    // 09:00 the change to the „zjazd stacjonarny”: NY moves to 15:00 (into the day's file).
+    const first = typeInput(date, templates, 'zjazd-stacjonarny', placeLogical(date, 9 * 60), null)
+    const r1 = applyTypeChange(first, planTypeChange(first), none)
+    const file: DayFile = { ...emptyDayFile(date), blocks: r1.blocks }
+    const ev = [typeEvent(date, placeLogical(date, 9 * 60), 'zjazd-stacjonarny', templates)]
+    // 10:00 back to the ordinary day (an earlier maximum): NY back at 14:00.
+    const back = typeInput(date, templates, 'zwykly', placeLogical(date, 10 * 60), file, ev)
+    const p = planTypeChange(back)
+    expect(p.laterMax).toBe(false)
+    expect(applyTypeChange(back, p, none).blocks.map((b) => [b.id, b.startMin])).toEqual([[id, lm('14:00')]])
+    // 10:00 to the weekend (no NY): out of the day's file – the day has the morning's NY again (keep or cancel in the window).
+    const weekend = typeInput(date, templates, 'weekend', placeLogical(date, 10 * 60), file, ev)
+    const w = applyTypeChange(weekend, planTypeChange(weekend), none)
+    expect([w.blocks, w.drop]).toEqual([[], [id]])
+    expect(dayPlan(weekend.ctx.snapshot, { ...file, blocks: [] }).find((b) => b.id === id)!.startMin).toBe(lm('14:00'))
   })
 
   it('załączniki wpisu sesji: blok sesji dnia widzi wpis szablonu, który daje mu sesję tego dnia – po zmianie typu nowego typu', () => {

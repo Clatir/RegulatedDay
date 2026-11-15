@@ -1,17 +1,19 @@
 /**
  * Sessions in the templates of day types (D511, D515, replaces the layer of sessions of the settings, keeps its rules): a
- * session is a block of a template of a category of sessions with the field „według czasu” (`PlanBlock.session` – New York,
- * London or Poland) and the answers of the weekdays („tak / pytaj / nie”, `BlockSession.days`). Its hour is written in Polish
- * time as usual – as the axis of „Szablony” shows it – and kept in its zone's time: the hour less the usual difference of the
- * zones (in the middle of January, when both keep standard time), so in the weeks the USA and Europe change their clocks on
- * other Sundays it starts an hour earlier in Poland, as a session of the layer did. A day's sessions are the entries of its
- * template (`templateFor`) whose answer of its weekday is not „nie”, as `SessionDef`s in the settings of its snapshot
+ * session is a block of a template with the field „według czasu” (`PlanBlock.session` – New York, London or Poland, the one
+ * rule `isSessionEntry`) and the answers of the weekdays („tak / pytaj / nie”, `BlockSession.days`). Its hour is written in
+ * Polish time as usual – as the axis of „Szablony” shows it – and kept in its zone's time: the hour less the usual difference
+ * of the zones (in the middle of January, when both keep standard time), so in the weeks the USA and Europe change their
+ * clocks on other Sundays it starts an hour earlier in Poland, as a session of the layer did. A day's sessions are the entries
+ * of its template (`templateFor`) whose answer of its weekday is not „nie”, as `SessionDef`s in the settings of its snapshot
  * (`daySettings`) – the one place the engine reads them, before D511 and after it.
  */
 import { SESSION_CATEGORY, type CategoryRules } from './categories'
-import { ALL_DAYS_YES, sessionIdOf, templateFor, templateVersionOn, type BlockSession, type PlanBlock, type Template, type TemplateVersion } from './plan'
-import { DAY_TYPES, NY_ZONE, isDayTypeId, type DayTypeId, type RulesSettings, type SessionChoice, type SessionDef, type SessionMarket } from './settings'
+import { ALL_DAYS_YES, isSessionEntry, sessionBlockFields, sessionIdOf, templateFor, templateVersionOn, type BlockSession, type PlanBlock, type SessionEntry, type Template, type TemplateVersion } from './plan'
+import { DAY_TYPES, NY_ZONE, isDayTypeId, type DayTypeId, type MovedLayer, type RulesSettings, type SessionChoice, type SessionDef, type SessionMarket } from './settings'
 import { PL_ZONE, offsetMin, weekday } from '../time/zone'
+
+export { isSessionEntry, type SessionEntry } from './plan'
 
 export const LONDON_ZONE = 'Europe/London'
 
@@ -21,6 +23,15 @@ export const SESSION_ZONES: ReadonlyArray<{ value: string; label: string }> = [
   { value: LONDON_ZONE, label: 'Londyn' },
   { value: PL_ZONE, label: 'Polska' }
 ]
+
+/**
+ * The zones a session may be kept in (T1350, T1417): New York, London, Poland, and the zone it has when it is none of them
+ * (a session of the layer of an earlier version, a draft of the wizard) – by its name, kept as it was.
+ */
+export function zoneChoices(current: string | null): Array<{ value: string; label: string }> {
+  const own = current != null && !SESSION_ZONES.some((z) => z.value === current) ? [{ value: current, label: current }] : []
+  return [...SESSION_ZONES, ...own]
+}
 
 /** The markets whose holidays a session of a zone has (New York – NYSE and CME for currencies, London – the LSE, Poland – none). */
 export function marketsOfZone(zone: string): SessionMarket[] {
@@ -32,14 +43,6 @@ export function marketsOfZone(zone: string): SessionMarket[] {
 /** The field of a session new in a template: New York time, „tak” every weekday (T1404). */
 export const newBlockSession = (zone: string = NY_ZONE): BlockSession => ({ zone, markets: marketsOfZone(zone), days: [...ALL_DAYS_YES] })
 
-/** A template's block that is a session (`isSessionEntry`). */
-export type SessionEntry = PlanBlock & { session: BlockSession; startMin: number }
-
-/** A block of a template is a session: the field „według czasu” on a block of a category of sessions, with its own hour. */
-export function isSessionEntry(b: PlanBlock, categories: Readonly<Record<string, CategoryRules>>): b is SessionEntry {
-  return !!b.session && b.startMin != null && categories[b.categoryId]?.kind === 'session'
-}
-
 /** How many minutes Poland is ahead of `zone` as usual: in the middle of January of `year`, both in standard time. */
 export function usualDiffMin(zone: string, year: number): number {
   const ref = Date.UTC(year, 0, 15, 12)
@@ -48,32 +51,43 @@ export function usualDiffMin(zone: string, year: number): number {
 
 const mod = (v: number, m: number) => ((v % m) + m) % m
 const yearOf = (date: string) => Number(date.slice(0, 4))
-const byId = (a: Template, b: Template) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+/** Templates in the order of their ids (`templateFor` picks by it). */
+export const byTemplateId = (a: Template, b: Template): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 
 /** The answer of a template's session on `date`'s weekday (D515). */
 export const dayAnswer = (b: Pick<PlanBlock, 'session'>, date: string): SessionChoice => b.session?.days[weekday(date) - 1] ?? 'yes'
 
+/** A session's start in Polish time as usual (logical minutes of the day) – the hour its entry keeps (the move, T1341). */
+export const entryStartMin = (d: Pick<SessionDef, 'startMin' | 'zone'>, year: number): number => mod(d.startMin + usualDiffMin(d.zone, year) - 240, 1440) + 240
+
 /**
  * A template's session as a session of the day (`SessionDef`, start and end in its zone's minutes of the day), with its id
- * (`sessionIdOf`) and „pytaj rano” of the day (`ask`).
+ * (`sessionIdOf`), „pytaj rano” of the day (`ask`) and only the fields of its block the day's block takes (T1419).
  */
 export function entryDef(b: SessionEntry, year: number, ask = false): SessionDef {
   const startMin = mod(b.startMin - usualDiffMin(b.session.zone, year), 1440)
   // „Sesja NY” – a version before D511 names a session of its settings „Sesja <name>”.
   const name = (b.name ?? '').replace(/^sesja\s+/i, '').slice(0, 40) || 'tradingowa'
-  return { id: sessionIdOf(b), name, zone: b.session.zone, startMin, endMin: startMin + b.durationMin, markets: [...b.session.markets], ask, block: b }
+  return { id: sessionIdOf(b), name, zone: b.session.zone, startMin, endMin: startMin + b.durationMin, markets: [...b.session.markets], ask, block: sessionBlockFields(b) }
 }
 
-/** The sessions of a version of a template (its entries), in its order. */
-export function sessionEntries(version: TemplateVersion, categories: Readonly<Record<string, CategoryRules>>): SessionEntry[] {
-  return version.blocks.filter((b): b is SessionEntry => isSessionEntry(b, categories))
+/** The sessions of a version of a template, in its order – each session's id once, the first of its entries (T1416). */
+export function sessionEntries(version: TemplateVersion): SessionEntry[] {
+  const seen = new Set<string>()
+  const out: SessionEntry[] = []
+  for (const b of version.blocks) {
+    if (!isSessionEntry(b) || seen.has(sessionIdOf(b))) continue
+    seen.add(sessionIdOf(b))
+    out.push(b)
+  }
+  return out
 }
 
 /** The sessions a version of a template gives on `date`: its entries whose answer of that weekday is not „nie” (D515). */
-export function templateSessionDefs(version: TemplateVersion, categories: Readonly<Record<string, CategoryRules>>, date: string): SessionDef[] {
+export function templateSessionDefs(version: TemplateVersion, date: string): SessionDef[] {
   const year = yearOf(date)
   const out: SessionDef[] = []
-  for (const b of sessionEntries(version, categories)) {
+  for (const b of sessionEntries(version)) {
     const a = dayAnswer(b, date)
     if (a !== 'no') out.push(entryDef(b, year, a === 'ask'))
   }
@@ -81,11 +95,25 @@ export function templateSessionDefs(version: TemplateVersion, categories: Readon
 }
 
 /**
- * A template the move of the layer wrote (D511, listed in `movedLayer.templates`) whose file has not come with the move yet
- * – OneDrive brought rd.json first (T1405): it is as before the move, without entries, so its days are made as before it,
- * from the layer of that date the move kept in rd.json.
+ * The version of a template the move of the layer wrote (D511) that is not as the move left it yet (T1405, T1413): the file
+ * has not come (no `sessionsMoved` – OneDrive brought rd.json first), or the version in force from the move's date was made
+ * from a view before the move (no mark of its own – a computer offline, a version before D511). Its day is made as before the
+ * move, from the layer of that date the move kept in rd.json.
  */
-const waitsForMove = (settings: RulesSettings, t: Template): boolean => !!settings.movedLayer?.templates.includes(t.id) && !t.sessionsMoved
+function waitsForMove(moved: MovedLayer, t: Template, v: TemplateVersion): boolean {
+  if (!moved.templates.includes(t.id)) return false
+  return !t.sessionsMoved || (v.from >= moved.from && !v.sessionsMoved)
+}
+
+/**
+ * A type the move made a template for (`sesje-<type>`) that has none of its templates here, the made one not here either –
+ * it has not come yet (T1412): its day is made from the layer. One you removed (`gone`), archived or gave another type (it is
+ * here) – not.
+ */
+function madeMissing(moved: MovedLayer, templates: readonly Template[], dayType: DayTypeId): boolean {
+  if (templates.some((t) => t.dayType === dayType)) return false
+  return Object.entries(moved.made).some(([id, type]) => type === dayType && !moved.gone[id] && !templates.some((t) => t.id === id))
+}
 
 /** The settings with the layer a move took (`movedLayer`): its sessions and grid as they were before it on that date. */
 function withMovedLayer(settings: RulesSettings): RulesSettings {
@@ -101,15 +129,17 @@ function withMovedLayer(settings: RulesSettings): RulesSettings {
  * layer's own choice of the day (never twice: an entry's id wins, also one with „nie”; „nie” – none). With the template's
  * entries the choice of the layer for the type and weekday says what the day has: „tak”, „pytaj” when every one is asked
  * about, „nie” when none is left – the rule of the maximum („domyślnie bez sesji”) and a version before D511 reading the
- * snapshot see the day as it is. A template without entries – the settings as they are; a template the move wrote whose
- * file has not come yet – the layer the move took (`waitsForMove`): one id is one session either way.
+ * snapshot see the day as it is. A template without entries – the settings as they are; a template of the move not as the
+ * move left it yet, or a type whose template made by the move has not come (`waitsForMove`, `madeMissing`) – the layer the
+ * move took: one id is one session either way.
  */
 export function daySettingsOf(settings: RulesSettings, templates: readonly Template[], dayType: DayTypeId, date: string): { settings: RulesSettings; tpl: ReturnType<typeof templateFor> } {
   const tpl = templateFor(templates, dayType, weekday(date), date)
-  if (tpl && waitsForMove(settings, tpl.template)) return { settings: withMovedLayer(settings), tpl }
-  const entries = tpl ? sessionEntries(tpl.version, settings.categories) : []
+  const moved = settings.movedLayer
+  if (moved && (tpl ? waitsForMove(moved, tpl.template, tpl.version) : madeMissing(moved, templates, dayType))) return { settings: withMovedLayer(settings), tpl }
+  const entries = tpl ? sessionEntries(tpl.version) : []
   if (!tpl || !entries.length) return { settings, tpl }
-  const defs = templateSessionDefs(tpl.version, settings.categories, date)
+  const defs = templateSessionDefs(tpl.version, date)
   const wd = weekday(date) - 1
   const params = settings.dayTypes[dayType]
   const layerChoice = params.sessions[wd] ?? 'no'
@@ -124,25 +154,38 @@ export function daySettingsOf(settings: RulesSettings, templates: readonly Templ
 export const daySettings = (settings: RulesSettings, templates: readonly Template[], dayType: DayTypeId, date: string): RulesSettings => daySettingsOf(settings, templates, dayType, date).settings
 
 /**
+ * The settings a day's snapshot keeps (`day.create`, `day.snapshot`, T1419): without the layer the move took and the names of
+ * its sessions – they are rd.json's, read again from it; a day's sessions are in `sessions`.
+ */
+export const snapshotSettings = (s: RulesSettings): RulesSettings => (s.movedLayer == null && !s.movedSessions.length ? s : { ...s, movedLayer: null, movedSessions: [] })
+
+/**
  * Every session known on a date, of any type and answer (the announcement of the week of the shift, the calendar's mark
  * „sesje −1 h”): the entries of every template in force then, the layer of the settings of that date and – while a template
- * the move wrote has not come yet – the layer the move took, each id once.
+ * of the move is not as it left it – the layer the move took, each id once.
  */
 export function knownSessionDefs(settings: RulesSettings, templates: readonly Template[], date: string): SessionDef[] {
-  const out = allTemplateSessions(templates, settings.categories, date)
-  const waiting = templates.some((t) => waitsForMove(settings, t)) ? (settings.movedLayer?.sessions ?? []) : []
-  for (const d of [...settings.sessions, ...waiting]) if (!out.some((x) => x.id === d.id)) out.push(d)
+  const out = allTemplateSessions(templates, date)
+  const moved = settings.movedLayer
+  const waiting =
+    moved != null &&
+    (templates.some((t) => {
+      const v = templateVersionOn(t, date)
+      return v != null && waitsForMove(moved, t, v)
+    }) ||
+      DAY_TYPES.some((type) => madeMissing(moved, templates, type)))
+  for (const d of [...settings.sessions, ...(waiting ? moved.sessions : [])]) if (!out.some((x) => x.id === d.id)) out.push(d)
   return out
 }
 
 /** The sessions of every template in force on a date, of any type and answer (by the templates' ids, each id once). */
-export function allTemplateSessions(templates: readonly Template[], categories: Readonly<Record<string, CategoryRules>>, date: string): SessionDef[] {
+export function allTemplateSessions(templates: readonly Template[], date: string): SessionDef[] {
   const out: SessionDef[] = []
   const year = yearOf(date)
-  for (const t of [...templates].sort(byId)) {
+  for (const t of [...templates].sort(byTemplateId)) {
     if (t.archived) continue
     const v = templateVersionOn(t, date)
-    if (v) for (const b of sessionEntries(v, categories)) if (!out.some((x) => x.id === sessionIdOf(b))) out.push(entryDef(b, year))
+    if (v) for (const b of sessionEntries(v)) if (!out.some((x) => x.id === sessionIdOf(b))) out.push(entryDef(b, year))
   }
   return out
 }
@@ -158,9 +201,9 @@ export function templateMarkets(templates: readonly Template[]): SessionMarket[]
   let out = marketsMemo.get(templates)
   if (out) return out
   out = []
-  for (const t of [...templates].sort(byId)) {
+  for (const t of [...templates].sort(byTemplateId)) {
     if (t.archived) continue
-    for (const v of t.versions) for (const b of v.blocks) for (const m of b.session?.markets ?? []) if (!out.includes(m)) out.push(m)
+    for (const v of t.versions) for (const b of v.blocks) if (isSessionEntry(b)) for (const m of b.session.markets) if (!out.includes(m)) out.push(m)
   }
   marketsMemo.set(templates, out)
   return out
@@ -181,11 +224,7 @@ export function sessionOwnersOf(templates: readonly Template[], dayType: string 
   const out: Record<string, SessionOwner> = {}
   const add = (t: Template | undefined, v: TemplateVersion | null | undefined) => {
     if (!t || !v) return
-    for (const b of v.blocks) {
-      if (!b.session || dayAnswer(b, date) === 'no') continue
-      const sid = sessionIdOf(b)
-      out[sid] ??= { templateId: t.id, blockId: b.id }
-    }
+    for (const b of sessionEntries(v)) if (dayAnswer(b, date) !== 'no') out[sessionIdOf(b)] ??= { templateId: t.id, blockId: b.id }
   }
   const now = isDayTypeId(dayType) ? templateFor(templates, dayType, weekday(date), date) : null
   add(now?.template, now?.version)
@@ -195,14 +234,33 @@ export function sessionOwnersOf(templates: readonly Template[], dayType: string 
 }
 
 /**
- * A change of a template's block in „Szablony” with the rule of sessions (D511): a block given a category of sessions becomes
- * a session – New York time, fixed, „tak” every weekday – unless it has the field already; one given another category stops
- * being one. The same category, or a patch without it – the patch as it is.
+ * A block of a version becoming a session (T1416): its id is the session's, unless another session of the version has that
+ * id already – then the session gets one of its own (`<id>-2`, the next number while taken). Undefined – the block's.
  */
-export function templateBlockPatch(b: PlanBlock, patch: Partial<PlanBlock>, categories: Readonly<Record<string, CategoryRules>>): Partial<PlanBlock> {
+export function freeSessionId(b: Pick<PlanBlock, 'id'>, blocks: readonly PlanBlock[]): string | undefined {
+  const taken = new Set(blocks.filter((x) => x.id !== b.id && isSessionEntry(x)).map(sessionIdOf))
+  if (!taken.has(b.id)) return undefined
+  let n = 2
+  while (taken.has(`${b.id}-${n}`)) n++
+  return `${b.id}-${n}`
+}
+
+/** The field of a block of `blocks` becoming a session of `zone`: „tak” every day, its own id when the block's is taken. */
+export function blockSessionFor(b: Pick<PlanBlock, 'id'>, blocks: readonly PlanBlock[], zone: string = NY_ZONE): BlockSession {
+  const id = freeSessionId(b, blocks)
+  return { ...newBlockSession(zone), ...(id ? { id } : {}) }
+}
+
+/**
+ * A change of a template's block in „Szablony” with the rule of sessions (D511): a block given a category of sessions becomes
+ * a session – New York time, fixed, „tak” every weekday, never with another session's id (`blocks` – its version) – unless it
+ * has the field already; one given another category stops being one. The same category, or a patch without it – the patch
+ * as it is.
+ */
+export function templateBlockPatch(b: PlanBlock, patch: Partial<PlanBlock>, categories: Readonly<Record<string, CategoryRules>>, blocks: readonly PlanBlock[] = []): Partial<PlanBlock> {
   if (patch.categoryId === undefined || patch.categoryId === b.categoryId) return patch
   const session = categories[patch.categoryId]?.kind === 'session'
-  if (session && !b.session) return { ...patch, session: newBlockSession(), fixed: true }
+  if (session && !b.session) return { ...patch, session: blockSessionFor(b, blocks), fixed: true }
   if (!session && b.session) return { ...patch, session: null }
   return patch
 }

@@ -12,7 +12,7 @@ import { classify, paths } from '../data/paths'
 import { isIsoDate, weekday } from '../time/zone'
 import { sessionBlockId, templateBlockId } from '../engine/createDay'
 import { derivedId, isId } from './ids'
-import { sessionIdOf, templateBlockAlive, templateBlockOn, templateVersionOn, type PlanBlock, type Template } from './plan'
+import { isSessionEntry, sessionIdOf, templateBlockAlive, templateBlockOn, templateVersionOn, type PlanBlock, type Template } from './plan'
 
 export const ATTACHMENT_SCHEMA = 1
 
@@ -268,7 +268,7 @@ export function ownAttachmentIds(list: readonly Attachment[], blockId: string): 
  * days a removal of the template's session has to know the type of (`templateRemovalIds` – `makes`).
  */
 export function sessionAttachmentDates(list: readonly Attachment[], before: Template | null, tomorrow: string): string[] {
-  const sids = new Set((before?.versions ?? []).flatMap((v) => v.blocks.filter((b) => b.session).map((b) => sessionIdOf(b))))
+  const sids = new Set((before?.versions ?? []).flatMap((v) => v.blocks.filter(isSessionEntry).map((b) => sessionIdOf(b))))
   const out = new Set<string>()
   for (const a of list) {
     const o = a.owner
@@ -299,8 +299,8 @@ export function templateRemovalIds(list: readonly Attachment[], templateId: stri
   // A session of the template (D511): its days' block has the session's id (`sessionBlockId`, the same in every template with
   // that session) – a day of it is the template's only when the template makes the day (`makes` – its type and `templateFor`,
   // T1407) and gives the session there (the weekday's answer is not „nie”, D515).
-  const sessions = new Map((before?.versions ?? []).flatMap((v) => v.blocks.filter((b) => b.session).map((b) => [b.id, sessionIdOf(b)] as const)))
-  const gives = (t: Template | null, blockId: string, date: string) => !!(t && templateVersionOn(t, date)?.blocks.some((b) => b.id === blockId && b.session && b.session.days[weekday(date) - 1] !== 'no'))
+  const sessions = new Map((before?.versions ?? []).flatMap((v) => v.blocks.filter(isSessionEntry).map((b) => [b.id, sessionIdOf(b)] as const)))
+  const gives = (t: Template | null, blockId: string, date: string) => !!(t && templateVersionOn(t, date)?.blocks.some((b) => b.id === blockId && isSessionEntry(b) && b.session.days[weekday(date) - 1] !== 'no'))
   if (!after) for (const a of list) if (a.owner.scope === 'template' && a.owner.templateId === templateId) blocks.add(a.owner.blockId)
   const goes = (blockId: string, date: string | null): boolean => {
     if (!after) return true

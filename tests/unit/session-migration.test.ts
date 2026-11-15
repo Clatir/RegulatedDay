@@ -17,7 +17,7 @@ import { defaultTemplates, firstComputerRecords, settingsPatch, SETUP_FROM, temp
 import { RULES_VERSION } from '@shared/model/events'
 import { DEFAULT_GENERAL, rdFrom } from '@shared/model/rd'
 import { dayFileFrom, planBlock, templateFrom, type DayFile, type PlanBlock, type Template } from '@shared/model/plan'
-import { moveSessions, movedTemplates, SESSIONS_CHANGE_ID, sessionsMoved } from '@shared/model/sessionMigration'
+import { moveSessions, movedTemplates, SESSIONS_CHANGE_ID, sessionsMoved, staleVersionFixes } from '@shared/model/sessionMigration'
 import { DAY_TYPES, DEFAULT_SESSIONS, DEFAULT_SETTINGS, settingsOn, type SessionChoice, type SettingsChange } from '@shared/model/settings'
 import { daySettings, sessionOwnersOf } from '@shared/model/templateSessions'
 import { addDays } from '@shared/time/zone'
@@ -85,7 +85,7 @@ describe('przeniesienie sesji do szablonów (D511, D515)', () => {
           sessions: [],
           dayTypes: Object.fromEntries(DAY_TYPES.map((t) => [t, { sessions: NO7 }])),
           movedSessions: DEFAULT_SESSIONS,
-          movedLayer: { sessions: DEFAULT_SESSIONS, grid: Object.fromEntries(DAY_TYPES.map((t) => [t, DEFAULT_SETTINGS.dayTypes[t].sessions])), templates: ['sesje-zjazd-zdalny', 'zwykly'] }
+          movedLayer: { from: CUT, sessions: DEFAULT_SESSIONS, grid: Object.fromEntries(DAY_TYPES.map((t) => [t, DEFAULT_SETTINGS.dayTypes[t].sessions])), templates: ['sesje-zjazd-zdalny', 'zwykly'], made: { 'sesje-zjazd-zdalny': 'zjazd-zdalny' } }
         }
       }
     ])
@@ -94,8 +94,12 @@ describe('przeniesienie sesji do szablonów (D511, D515)', () => {
     expect(move.made.map((t) => [t.id, t.name, t.dayType, t.weekdays, t.sessionsMoved])).toEqual([['sesje-zjazd-zdalny', 'Zjazd zdalny', 'zjazd-zdalny', [], CUT]])
     expect(after.templates.map((t) => t.id)).toEqual(['zwykly', 'sobota', 'sesje-zjazd-zdalny'])
     const zwykly = move.changed[0]!
-    // The version before the move stays; the one from the move has the sessions, the anchor follows the entry by its id.
-    expect(zwykly.versions.map((v) => v.from)).toEqual([SETUP_FROM, CUT])
+    // The version before the move stays; the one from the move has the sessions and the move's mark (T1413), the anchor
+    // follows the entry by its id.
+    expect(zwykly.versions.map((v) => [v.from, v.sessionsMoved ?? null])).toEqual([
+      [SETUP_FROM, null],
+      [CUT, CUT]
+    ])
     expect(zwykly.versions[0]!.blocks).toEqual([journaling])
     expect(zwykly.versions[1]!.blocks.map((b) => [b.id, b.name, b.startMin, b.durationMin, b.fixed, b.anchor, b.session ?? null])).toEqual([
       ['jrn', null, null, 30, false, 'ny', null],
@@ -156,7 +160,8 @@ describe('przeniesienie sesji do szablonów (D511, D515)', () => {
     // A day later, its change still on the way: nothing in the templates, the same list of the templates of the move.
     const later = moveSessions(setup(), movedTemplates(templates, a), addDays(CUT, 1))!
     expect([later.changed, later.made]).toEqual([[], []])
-    expect(later.changes[0]!.patch.movedLayer).toEqual(a.changes[0]!.patch.movedLayer)
+    const lists = (m: typeof a) => ((x) => [x.templates, x.made])(m.changes[0]!.patch.movedLayer as { templates: string[]; made: unknown })
+    expect(lists(later)).toEqual(lists(a))
     // You took London out of the ordinary day meanwhile: a late move of the other computer does not bring it back.
     const mine = movedTemplates(templates, a).map((t) => (t.id === 'zwykly' ? { ...t, versions: t.versions.map((v) => ({ ...v, blocks: v.blocks.filter((x) => x.id !== 'londyn') })) } : t))
     expect(moveSessions(setup(), mine, addDays(CUT, 1))!.changed).toEqual([])
@@ -287,9 +292,10 @@ describe('przeniesienie sesji do szablonów (D511, D515)', () => {
     const made = day(wed, stale.changes, stale.templates)
     expect(dayPlan(made, null).filter((b) => b.origin === 'session').map((b) => b.sourceId)).toEqual(['londyn', 'ny'])
     expect(sessionsOn(addDays(wed, 1), after.changes, after.templates, 'zwykly')).toEqual(sessionsOn(addDays(wed, 1), stale.changes, stale.templates, 'zwykly'))
-    // The type's template made by the move has not come yet: its day has no template and no session (T1405 – known limit).
-    expect(sessionsOn(wed, stale.changes, stale.templates, 'zjazd-zdalny')).toEqual([])
+    // The type's template made by the move has not come yet (T1412): its day from the layer – the same sessions as with it.
+    expect(sessionsOn(wed, stale.changes, stale.templates, 'zjazd-zdalny')).toEqual(sessionsOn(wed, after.changes, after.templates, 'zjazd-zdalny'))
     expect(sessionsOn(wed, after.changes, after.templates, 'zjazd-zdalny').map(([, s]) => s)).toEqual(['londyn', 'ny'])
+    expect(shape(day(wed, stale.changes, stale.templates, dayFileFrom({ dayType: 'zjazd-zdalny' }, wed)))).toEqual(shape(day(wed, setup(), templates, dayFileFrom({ dayType: 'zjazd-zdalny' }, wed))))
   })
 
   it('starsza wersja: wpis to stały blok swojej kategorii w każdym dniu szablonu (także „nie” i bez pytania); pole zostaje w pliku', () => {
@@ -349,4 +355,66 @@ describe('przeniesienie sesji do szablonów (D511, D515)', () => {
     const before = { changes: setup(settingsPatch(DEFAULT_SETTINGS, settings)), templates: defaultTemplates() }
     expectSameDays(before, { changes: rd.settings, templates }, '2026-10-19', 14)
   })
+  it('szablon zrobiony przez przeniesienie, a potem usunięty (znacznik w rd.json) albo zarchiwizowany: dzień jego typu bez sesji', () => {
+    const templates = defaults()
+    const { after } = moved(setup(), templates)
+    const wed = '2026-10-21'
+    const remote = (changes: SettingsChange[], ts: Template[]) => sessionsOn(wed, changes, ts, 'zjazd-zdalny')
+    // Removed in the window: the template's file gone, rd.json says so (`templateActions.removeTemplate`).
+    const gone: SettingsChange = { id: 'sesje-usuniety-sesje-zjazd-zdalny', from: CUT, at: null, made: 99, patch: { movedLayer: { gone: { 'sesje-zjazd-zdalny': true } } } }
+    const without = after.templates.filter((t) => t.id !== 'sesje-zjazd-zdalny')
+    expect(remote([...after.changes, gone], without)).toEqual([])
+    // A later change of the layer's date keeps the mark (it merges, never replaces it).
+    expect(settingsOn([...after.changes, gone], addDays(CUT, 30)).movedLayer!.gone).toEqual({ 'sesje-zjazd-zdalny': true })
+    // Archived: it is here – no session, the layer does not come back.
+    const archived = after.templates.map((t) => (t.id === 'sesje-zjazd-zdalny' ? { ...t, archived: true } : t))
+    expect(remote(after.changes, archived)).toEqual([])
+    // Given another type: here too.
+    const other = after.templates.map((t) => (t.id === 'sesje-zjazd-zdalny' ? { ...t, dayType: 'wolne' as const } : t))
+    expect(remote(after.changes, other)).toEqual([])
+  })
+
+  it('zarchiwizowany szablon (np. kopia) też dostaje wpisy: po przywróceniu jego dni mają sesje', () => {
+    const copy: Template = { id: 'kopia', name: 'Kopia: Dzień zwykły', dayType: 'zwykly', weekdays: [3], archived: true, versions: [{ from: SETUP_FROM, blocks: [analysis], budgetMin: null, maxMin: null }] }
+    const templates = [...defaults(), copy]
+    const { move, after } = moved(setup(), templates)
+    const archived = move.changed.find((t) => t.id === 'kopia')!
+    expect([archived.archived, archived.sessionsMoved, entriesOf(archived, CUT)]).toEqual([true, CUT, [['londyn', 'no no yes no no no no'], ['ny', 'no no yes no no no no']]])
+    expect((move.changes[0]!.patch.movedLayer as { templates: string[] }).templates).toContain('kopia')
+    // Brought back: its Wednesday has the sessions, as the layer gave a Wednesday of the ordinary type.
+    const back = after.templates.map((t) => (t.id === 'kopia' ? { ...t, archived: false } : t))
+    expect(sessionsOn('2026-10-21', after.changes, back, 'zwykly').map(([, s]) => s)).toEqual(['londyn', 'ny'])
+  })
+
+  it('wersja zrobiona później z widoku sprzed przeniesienia (bez znacznika): dzień z warstwy, prowadzący daje jej wpisy jak przeniesienie', () => {
+    const templates = defaults([journaling, analysis])
+    const { after } = moved(setup(), templates)
+    // A laptop offline (or a version before D511) changed the ordinary day from 23.10 on its old view: no entries, no mark.
+    const later = '2026-10-23'
+    const stale = after.templates.map((t) => (t.id === 'zwykly' ? { ...t, versions: [...t.versions, { from: later, blocks: [journaling, { ...analysis, durationMin: 90 }], budgetMin: null, maxMin: null }] } : t))
+    const fri = '2026-10-23'
+    expect(sessionsOn(fri, after.changes, stale, 'zwykly').map(([, s]) => s)).toEqual(['londyn', 'ny'])
+    expect(day(fri, after.changes, stale).blocks.find((b) => b.sourceId === 'jrn')!.anchor).toBe(sessionBlockId(fri, 'ny'))
+    // The leader's fix: the version as the move would have written it – entries with the type's answers, the anchor, the mark.
+    const fixes = staleVersionFixes(after.changes, stale)
+    expect(fixes.map((t) => t.id)).toEqual(['zwykly'])
+    const v = fixes[0]!.versions.find((x) => x.from === later)!
+    expect([v.sessionsMoved, v.blocks.map((b) => [b.id, b.anchor, b.durationMin, b.session?.days.join(' ') ?? null])]).toEqual([
+      CUT,
+      [
+        ['jrn', 'ny', 30, null],
+        ['an', null, 90, null],
+        ['londyn', null, 180, MF.join(' ')],
+        ['ny', null, 180, MF.join(' ')]
+      ]
+    ])
+    const fixed = stale.map((t) => fixes.find((x) => x.id === t.id) ?? t)
+    expect(shape(day(fri, after.changes, fixed))).toEqual(shape(day(fri, after.changes, stale)))
+    // Fixed: nothing more to fix; a version you made after the move without sessions (it has the mark) – no session, no fix.
+    expect(staleVersionFixes(after.changes, fixed)).toEqual([])
+    const mine = after.templates.map((t) => (t.id === 'zwykly' ? { ...t, versions: [...t.versions, { ...t.versions.at(-1)!, from: later, blocks: [journaling] }] } : t))
+    expect(sessionsOn(fri, after.changes, mine, 'zwykly')).toEqual([])
+    expect(staleVersionFixes(after.changes, mine)).toEqual([])
+  })
 })
+

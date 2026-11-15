@@ -253,4 +253,68 @@ describe('przeniesienie sesji do szablonów w folderze danych (D511, D515)', () 
     expect(rdFrom(read(paths.settings, second)).settings.filter((c) => c.id === SESSIONS_CHANGE_ID)).toHaveLength(1)
     await b.folder.close()
   })
+  it('wersja szablonu z widoku sprzed przeniesienia (bez znacznika) dochodzi później: dzień ma sesje, prowadzący daje jej wpisy przed dniem', async () => {
+    const clock = { now: placeLogical(DAY, 5 * 60) }
+    const a = await computer('pca', clock)
+    await a.settle()
+    // A laptop offline changed the ordinary day from tomorrow on its view from before the move: a version without entries.
+    const next = addDays(DAY, 1)
+    const rel = paths.record('template', 'zwykly')
+    const raw = read(rel)
+    const versions = raw.versions as Record<string, Record<string, unknown>>
+    write(rel, { ...raw, versions: { ...versions, [next]: { blocks: [planBlock({ id: 'an', categoryId: 'analiza', startMin: 9 * 60, durationMin: 60, origin: 'template' })], budgetMin: null, maxMin: null } } })
+    clock.now = placeLogical(next, 5 * 60)
+    await a.settle()
+    const v = templateFrom(read(rel))!.versions.find((x) => x.from === next)!
+    expect([v.sessionsMoved, v.blocks.map((b) => [b.id, b.session?.days.join(' ') ?? null])]).toEqual([
+      DAY,
+      [
+        ['an', null],
+        ['londyn', 'yes yes yes yes yes no no'],
+        ['ny', 'yes yes yes yes yes no no']
+      ]
+    ])
+    expect((await sessionsMade(a.folder, next))!.map(([, x]) => x)).toEqual(['londyn', 'ny'])
+    // Once fixed: nothing more written.
+    const once = records()
+    await a.settle()
+    expect(records()).toEqual(once)
+    await a.folder.close()
+  })
+
+  it('rd.json przed szablonem zrobionym przez przeniesienie (zjazd zdalny): dzień tego typu od razu z sesjami warstwy', async () => {
+    const first = await computer('pca', { now: placeLogical(DAY, 5 * 60) })
+    await first.settle()
+    await first.folder.close()
+    const second = join(root, 'drugi')
+    before(second)
+    write(paths.settings, read(paths.settings), second)
+    write(paths.day(DAY), { schema: 1, date: DAY, dayType: 'zjazd-zdalny' }, second)
+    const b = await computer('pcb', { now: placeLogical(DAY, 5 * 60) }, second)
+    await b.settle()
+    expect(await sessionsMade(b.folder, DAY)).toEqual([
+      [sessionBlockId(DAY, 'londyn'), 'londyn'],
+      [sessionBlockId(DAY, 'ny'), 'ny']
+    ])
+    await b.folder.close()
+  })
+
+  it('po przeniesieniu prowadzący nie czyta rd.json od nowa przy każdym sprawdzeniu – dopiero po jego zmianie', async () => {
+    const clock = { now: placeLogical(DAY, 5 * 60) }
+    const a = await computer('pca', clock)
+    await a.settle()
+    const memo = () => (a.folder as unknown as { movedRd: unknown }).movedRd
+    const seen = memo()
+    expect(seen).not.toBeNull()
+    await a.settle(2)
+    expect(memo()).toBe(seen)
+    // rd.json changed (another computer): read again once, remembered anew.
+    write(paths.settings, { ...read(paths.settings), people: [{ id: 'p', name: 'Mama', archived: false }] })
+    clock.now = placeLogical(addDays(DAY, 1), 5 * 60)
+    await a.settle(2)
+    expect(memo()).not.toBe(seen)
+    expect(memo()).not.toBeNull()
+    await a.folder.close()
+  })
 })
+
