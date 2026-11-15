@@ -8,12 +8,12 @@
 import { describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { createDay } from '@shared/engine/createDay'
-import { DEFAULT_SETTINGS, DAY_TYPES, NY_ZONE, type SessionChoice } from '@shared/model/settings'
+import { DEFAULT_SETTINGS, DAY_TYPES, NY_ZONE, settingsOn, type SessionChoice } from '@shared/model/settings'
 import { planBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { templateBlockPatch, zoneChoices } from '@shared/model/templateSessions'
 import { SETTING_SECTIONS } from '@renderer/features/search/records'
 import * as shared from '@renderer/features/settings/SharedSettings'
-import { axisSources, axisVersion, DAY_MARK, DAY_WORD, dayPatch, NO_ZONE, zoneOptions, zonePatch } from '@renderer/features/templates/sessionChoices'
+import { axisSources, axisVersion, DAY_MARK, DAY_WORD, dayPatch, NO_ZONE, previewChanges, zoneOptions, zonePatch } from '@renderer/features/templates/sessionChoices'
 
 const cats = DEFAULT_SETTINGS.categories
 const YES7: SessionChoice[] = ['yes', 'yes', 'yes', 'yes', 'yes', 'yes', 'yes']
@@ -81,24 +81,31 @@ describe('sesje w szablonach – okno (D511, D515)', () => {
     ])
   })
 
-  it('oś „Szablonów” pokazuje każdy wpis o jego zapisanej godzinie polskiej, w całości – także z „nie”, w tygodniu zmiany czasu i w dzień skrócony', () => {
+  it('oś „Szablonów” pokazuje każdy wpis w całości – także z „nie” i w dzień skrócony; w tygodniu zmiany czasu z przesunięciem pobudki (D372)', () => {
     const ny = planBlock({ id: 'ny', categoryId: 'sesja', startMin: 14 * 60, durationMin: 6 * 60, fixed: true, origin: 'template', session: { zone: NY_ZONE, markets: ['NYSE'], days: MIXED } })
     const an = planBlock({ id: 'an', categoryId: 'analiza', startMin: 9 * 60, durationMin: 60, origin: 'template' })
     const v: TemplateVersion = { from: '2026-10-19', blocks: [an, ny], budgetMin: null, maxMin: null }
-    expect(axisVersion(v).blocks.map((b) => b.session?.days ?? null)).toEqual([null, ['yes', 'ask', 'yes', 'yes', 'yes', 'yes', 'yes']])
+    expect(axisVersion(v, '2026-10-24').blocks.map((b) => b.session?.days ?? null)).toEqual([null, ['yes', 'ask', 'yes', 'yes', 'yes', 'yes', 'yes']])
     expect(v.blocks[1]!.session!.days).toEqual(MIXED)
-    // The sample day as the axis counts it: a Saturday („nie”), a day of the shift (27.10) and the early close (27.11) –
-    // always 14:00 for 6 h, as written.
+    // The sample day as the axis counts it: a Saturday („nie”), a day of the shift (27.10), the early close (27.11).
     const sample = (date: string) => {
-      const t: Template = { id: 'zwykly', name: 'Dzień zwykły', dayType: 'zwykly', weekdays: [], archived: false, versions: [{ ...axisVersion(v), from: '2000-01-01' }] }
+      const t: Template = { id: 'zwykly', name: 'Dzień zwykły', dayType: 'zwykly', weekdays: [], archived: false, versions: [{ ...axisVersion(v, date), from: '2000-01-01' }] }
       const noLayer = { id: 'm', from: '2000-01-01', at: null, made: 1, patch: { sessions: [], dayTypes: Object.fromEntries(DAY_TYPES.map((x) => [x, { sessions: ['no', 'no', 'no', 'no', 'no', 'no', 'no'] }])) } }
       const s = createDay({ date, changes: [noLayer], templates: [t], lectures: [], series: [], dayFile: { schema: 1, date, dayType: 'zwykly', wakeMin: null, sessions: {}, blocks: [], cancelled: [], movedTo: {}, asked: {}, stepsDone: {} }, holidays: marketDay, at: null })
-      return s.blocks.filter((b) => b.origin === 'session').map((b) => [b.startMin, b.durationMin])
+      return { wake: s.wakeMin, sessions: s.blocks.filter((b) => b.origin === 'session').map((b) => [b.sourceId, b.startMin, b.durationMin]) }
     }
-    for (const d of ['2026-10-24', '2026-10-27', '2026-11-27']) expect(sample(d)).toEqual([[14 * 60, 6 * 60]])
+    for (const d of ['2026-10-24', '2026-11-27']) expect(sample(d)).toEqual({ wake: 6 * 60, sessions: [['ny', 14 * 60, 6 * 60]] })
+    // The week the USA keeps summer time and Europe not: the session an hour earlier, the wake with it (D372).
+    expect(sample('2026-10-27')).toEqual({ wake: 5 * 60, sessions: [['ny', 13 * 60, 6 * 60]] })
     // Nothing of a session – the version as it is.
     const all = { ...v, blocks: [an] }
-    expect(axisVersion(all)).toBe(all)
+    expect(axisVersion(all, '2026-10-24')).toBe(all)
+  })
+
+  it('oś „Szablonów” liczy szablon tak, jak jest zapisany – bez warstwy przeniesienia (T1450)', () => {
+    const changes = [{ id: 'sesje-w-szablonach', from: '2026-10-19', at: null, made: 1, patch: { sessions: [], movedLayer: { from: '2026-10-19', sessions: DEFAULT_SETTINGS.sessions, grid: {}, templates: ['zwykly'], made: { 'sesje-zjazd-zdalny': 'zjazd-zdalny' } } } }]
+    expect(settingsOn(changes, '2026-10-21').movedLayer).not.toBeNull()
+    expect(settingsOn(previewChanges(changes), '2026-10-21').movedLayer).toBeNull()
   })
 
   it('kreator: strefy Nowy Jork, Londyn, Polska i strefa spoza listy (np. Tokio w szkicu) jako dodatkowa opcja z jej nazwą', () => {

@@ -70,7 +70,8 @@ function goneEdit(templateId: string, at: number): EditEntry | null {
   const raw = rawRecord(paths.settings)
   const moved = settingsOn(useData.getState().rd.settings, tomorrowOf()).movedLayer
   if (!raw || !moved?.made[templateId] || moved.gone[templateId]) return null
-  const change: SettingsChange = { id: `sesje-usuniety-${templateId}`, from: moved.from, at: null, made: at, patch: { movedLayer: { gone: { [templateId]: true } } } }
+  // With the move's date: a layer without it is none (T1458) – laid before the move's own change, it still says so.
+  const change: SettingsChange = { id: `sesje-usuniety-${templateId}`, from: moved.from, at: null, made: at, patch: { movedLayer: { from: moved.from, gone: { [templateId]: true } } } }
   const list = Array.isArray(raw.settings) ? raw.settings : []
   return editOf(paths.settings, raw, { ...raw, settings: [...list, change] })
 }

@@ -9,9 +9,9 @@
  * (`daySettings`) – the one place the engine reads them, before D511 and after it.
  */
 import { SESSION_CATEGORY, type CategoryRules } from './categories'
-import { ALL_DAYS_YES, isSessionEntry, sessionBlockFields, sessionIdOf, templateFor, templateVersionOn, type BlockSession, type PlanBlock, type SessionEntry, type Template, type TemplateVersion } from './plan'
+import { ALL_DAYS_YES, PLAN_MIN, isSessionEntry, sessionBlockFields, sessionIdOf, templateFor, templateVersionOn, type BlockSession, type PlanBlock, type SessionEntry, type Template, type TemplateVersion } from './plan'
 import { DAY_TYPES, NY_ZONE, isDayTypeId, type DayTypeId, type MovedLayer, type RulesSettings, type SessionChoice, type SessionDef, type SessionMarket } from './settings'
-import { PL_ZONE, offsetMin, weekday } from '../time/zone'
+import { PL_ZONE, addDays, offsetMin, weekday } from '../time/zone'
 
 export { isSessionEntry, type SessionEntry } from './plan'
 
@@ -58,7 +58,7 @@ export const byTemplateId = (a: Template, b: Template): number => (a.id < b.id ?
 export const dayAnswer = (b: Pick<PlanBlock, 'session'>, date: string): SessionChoice => b.session?.days[weekday(date) - 1] ?? 'yes'
 
 /** A session's start in Polish time as usual (logical minutes of the day) – the hour its entry keeps (the move, T1341). */
-export const entryStartMin = (d: Pick<SessionDef, 'startMin' | 'zone'>, year: number): number => mod(d.startMin + usualDiffMin(d.zone, year) - 240, 1440) + 240
+export const entryStartMin = (d: Pick<SessionDef, 'startMin' | 'zone'>, year: number): number => mod(d.startMin + usualDiffMin(d.zone, year) - PLAN_MIN, 1440) + PLAN_MIN
 
 /**
  * A template's session as a session of the day (`SessionDef`, start and end in its zone's minutes of the day), with its id
@@ -105,13 +105,17 @@ function waitsForMove(moved: MovedLayer, t: Template, v: TemplateVersion): boole
   return !t.sessionsMoved || (v.from >= moved.from && !v.sessionsMoved)
 }
 
+/** How long a template the move made may be „on the way” (OneDrive, T1450): its first days; later a missing one is gone. */
+export const MADE_ON_THE_WAY_DAYS = 3
+
 /**
- * A type the move made a template for (`sesje-<type>`) that has none of its templates here, the made one not here either –
- * it has not come yet (T1412): its day is made from the layer. One you removed (`gone`), archived or gave another type (it is
- * here) – not.
+ * A day no template makes (`templateFor` – none) of a type the move made a template for (`sesje-<type>`) that is not here –
+ * it has not come yet (T1412, T1450): the day is made from the layer, but only in the first `MADE_ON_THE_WAY_DAYS` days of
+ * the move (later it is gone whatever way it went). One you removed in the window (`gone`), archived or gave another type
+ * (it is here) – not.
  */
-function madeMissing(moved: MovedLayer, templates: readonly Template[], dayType: DayTypeId): boolean {
-  if (templates.some((t) => t.dayType === dayType)) return false
+function madeMissing(moved: MovedLayer, templates: readonly Template[], dayType: DayTypeId, date: string): boolean {
+  if (date >= addDays(moved.from, MADE_ON_THE_WAY_DAYS)) return false
   return Object.entries(moved.made).some(([id, type]) => type === dayType && !moved.gone[id] && !templates.some((t) => t.id === id))
 }
 
@@ -136,7 +140,7 @@ function withMovedLayer(settings: RulesSettings): RulesSettings {
 export function daySettingsOf(settings: RulesSettings, templates: readonly Template[], dayType: DayTypeId, date: string): { settings: RulesSettings; tpl: ReturnType<typeof templateFor> } {
   const tpl = templateFor(templates, dayType, weekday(date), date)
   const moved = settings.movedLayer
-  if (moved && (tpl ? waitsForMove(moved, tpl.template, tpl.version) : madeMissing(moved, templates, dayType))) return { settings: withMovedLayer(settings), tpl }
+  if (moved && (tpl ? waitsForMove(moved, tpl.template, tpl.version) : madeMissing(moved, templates, dayType, date))) return { settings: withMovedLayer(settings), tpl }
   const entries = tpl ? sessionEntries(tpl.version) : []
   if (!tpl || !entries.length) return { settings, tpl }
   const defs = templateSessionDefs(tpl.version, date)
@@ -154,10 +158,11 @@ export function daySettingsOf(settings: RulesSettings, templates: readonly Templ
 export const daySettings = (settings: RulesSettings, templates: readonly Template[], dayType: DayTypeId, date: string): RulesSettings => daySettingsOf(settings, templates, dayType, date).settings
 
 /**
- * The settings a day's snapshot keeps (`day.create`, `day.snapshot`, T1419): without the layer the move took and the names of
- * its sessions – they are rd.json's, read again from it; a day's sessions are in `sessions`.
+ * The settings a day's snapshot keeps (`day.create`, `day.snapshot`, T1419, T1454): without the layer the move took – rd.json's,
+ * read again from it; the names of its sessions stay (few, they name a block of the layer in „Dziś”, the bar, the window of a
+ * change of type – `blockName`).
  */
-export const snapshotSettings = (s: RulesSettings): RulesSettings => (s.movedLayer == null && !s.movedSessions.length ? s : { ...s, movedLayer: null, movedSessions: [] })
+export const snapshotSettings = (s: RulesSettings): RulesSettings => (s.movedLayer == null ? s : { ...s, movedLayer: null })
 
 /**
  * Every session known on a date, of any type and answer (the announcement of the week of the shift, the calendar's mark
@@ -173,7 +178,7 @@ export function knownSessionDefs(settings: RulesSettings, templates: readonly Te
       const v = templateVersionOn(t, date)
       return v != null && waitsForMove(moved, t, v)
     }) ||
-      DAY_TYPES.some((type) => madeMissing(moved, templates, type)))
+      DAY_TYPES.some((type) => !templateFor(templates, type, weekday(date), date) && madeMissing(moved, templates, type, date)))
   for (const d of [...settings.sessions, ...(waiting ? moved.sessions : [])]) if (!out.some((x) => x.id === d.id)) out.push(d)
   return out
 }

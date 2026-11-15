@@ -47,7 +47,7 @@ import { stepsAnswer } from '../steps/stepsUi'
 import { changeTemplateSteps } from '../../store/steps'
 import { SettingNumber } from '../settings/SettingNumber'
 import { templateBlockPatch } from '@shared/model/templateSessions'
-import { axisSources, axisVersion } from './sessionChoices'
+import { axisSources, axisVersion, previewChanges } from './sessionChoices'
 import { SessionFields } from './SessionFields'
 import { templateAdd, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
 import { freshAfter, removeTemplate, removeTemplateBlock } from './templateActions'
@@ -257,10 +257,10 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     return from
   }, [from, template.weekdays])
   const model = useMemo(() => {
-    // D515, T1417: every session of the version on the axis at its hour as written, whatever the sample's weekday, clocks and
-    // early closes (`axisVersion`).
-    const t: Template = { ...template, versions: [{ ...axisVersion(version), from: '2000-01-01' }] }
-    return countDay(sample, { date: sample, dayFile: { schema: 1, date: sample, dayType: template.dayType }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rd.settings, templates: [t], lectures, series: [] }, placeLogical(sample, 4 * 60), false)
+    // D515, T1455: every session of the version on the axis, whole, whatever the sample's weekday and early closes; the shift
+    // of the clocks moves it and the wake (D372) – `axisVersion`. The template as written (T1450 – `previewChanges`).
+    const t: Template = { ...template, versions: [{ ...axisVersion(version, sample), from: '2000-01-01' }] }
+    return countDay(sample, { date: sample, dayFile: { schema: 1, date: sample, dayType: template.dayType }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: previewChanges(rd.settings), templates: [t], lectures, series: [] }, placeLogical(sample, 4 * 60), false)
   }, [template, version, sample, rd.settings, lectures])
   const axis = useMemo(() => dayAxis(model, names, null), [model, names])
   // Template blocks have the day's derived ids: the block of the version is found by its source (a session by its entry, D511).

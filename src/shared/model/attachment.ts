@@ -13,6 +13,7 @@ import { isIsoDate, weekday } from '../time/zone'
 import { sessionBlockId, templateBlockId } from '../engine/createDay'
 import { derivedId, isId } from './ids'
 import { isSessionEntry, sessionIdOf, templateBlockAlive, templateBlockOn, templateVersionOn, type PlanBlock, type Template } from './plan'
+import { dayAnswer, sessionEntries } from './templateSessions'
 
 export const ATTACHMENT_SCHEMA = 1
 
@@ -298,9 +299,13 @@ export function templateRemovalIds(list: readonly Attachment[], templateId: stri
   for (const v of before?.versions ?? []) for (const b of v.blocks) if (!after || daysOf(before, b.id) !== daysOf(after, b.id)) blocks.add(b.id)
   // A session of the template (D511): its days' block has the session's id (`sessionBlockId`, the same in every template with
   // that session) – a day of it is the template's only when the template makes the day (`makes` – its type and `templateFor`,
-  // T1407) and gives the session there (the weekday's answer is not „nie”, D515).
+  // T1407) and gives the session there: the version of the day gives that session (any of its entries, the weekday's answer
+  // not „nie” – D515, T1457) before the change and not after it.
   const sessions = new Map((before?.versions ?? []).flatMap((v) => v.blocks.filter(isSessionEntry).map((b) => [b.id, sessionIdOf(b)] as const)))
-  const gives = (t: Template | null, blockId: string, date: string) => !!(t && templateVersionOn(t, date)?.blocks.some((b) => b.id === blockId && isSessionEntry(b) && b.session.days[weekday(date) - 1] !== 'no'))
+  const gives = (t: Template | null, sid: string, date: string) => {
+    const v = t ? templateVersionOn(t, date) : null
+    return !!v && sessionEntries(v).some((b) => sessionIdOf(b) === sid && dayAnswer(b, date) !== 'no')
+  }
   if (!after) for (const a of list) if (a.owner.scope === 'template' && a.owner.templateId === templateId) blocks.add(a.owner.blockId)
   const goes = (blockId: string, date: string | null): boolean => {
     if (!after) return true
@@ -316,7 +321,7 @@ export function templateRemovalIds(list: readonly Attachment[], templateId: stri
       for (const b of blocks) {
         if (templateOfDayBlock({ id: o.blockId, sourceId: b }, o.date, [templateId]) === templateId) return goes(b, o.date)
         const sid = sessions.get(b)
-        if (sid != null && o.blockId === sessionBlockId(o.date, sid)) return makes(o.date) && gives(before, b, o.date) && !(after && gives(after, b, o.date))
+        if (sid != null && o.blockId === sessionBlockId(o.date, sid)) return makes(o.date) && gives(before, sid, o.date) && !(after && gives(after, sid, o.date))
       }
       return false
     })

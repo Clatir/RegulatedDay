@@ -21,7 +21,7 @@
  * (`sessionsMoved`) is never changed again, and with the change in the settings the move is not made again.
  */
 import { planBlock, sessionIdOf, templateVersionOn, type PlanBlock, type Template, type TemplateVersion } from './plan'
-import { DAY_TYPES, DAY_TYPE_NAMES, NO_SESSION_DAYS, isPlain, settingsOn, type DayTypeId, type MovedLayer, type RulesSettings, type SessionChoice, type SessionDef, type SettingsChange } from './settings'
+import { DAY_TYPES, DAY_TYPE_NAMES, NO_SESSION_DAYS, changeOrder, isPlain, settingsFrom, settingsOn, type DayTypeId, type MovedLayer, type RulesSettings, type SessionChoice, type SessionDef, type SettingsChange } from './settings'
 import { byTemplateId, entryStartMin, isSessionEntry, sessionCategoryOf } from './templateSessions'
 
 /** The change of the settings that empties the layer of sessions from the date of the move and marks the move as made. */
@@ -211,26 +211,54 @@ export function movedTemplates(templates: readonly Template[], move: Pick<Sessio
   return [...templates.map((t) => changed.get(t.id) ?? t), ...move.made]
 }
 
+/** A change of the move: the first one or one of a later date of the layer (`sesje-w-szablonach-<date>`). */
+const isMoveChange = (c: SettingsChange): boolean => c.id === SESSIONS_CHANGE_ID || c.id.startsWith(`${SESSIONS_CHANGE_ID}-`)
+
 /**
- * The versions of moved templates made from a view before the move (T1413: from the move's date on, without its mark – a
- * computer offline, a version before D511, its edit laid without a question), as the move would have written them: the
- * entries of the layer of their date (`movedLayer` there) with the answers of the template's type and weekdays, anchors to
- * the sessions following them, the mark. Deterministic – two leaders write the same; the templates to write (none – []).
+ * The layers the move took, from its changes themselves in their order (T1453 – whatever their instant „od dziś”, which
+ * `settingsOn` of a date at its start would skip): each date's layer.
+ */
+function moveLayers(changes: readonly SettingsChange[]): Array<{ from: string; layer: MovedLayer }> {
+  const out: Array<{ from: string; layer: MovedLayer }> = []
+  for (const c of changes.filter(isMoveChange).sort(changeOrder)) {
+    const layer = settingsFrom(c.patch).movedLayer
+    if (layer) out.push({ from: c.from, layer })
+  }
+  return out
+}
+
+/**
+ * The templates of the move not as it wrote them (T1413, T1453), as it would write them – deterministic, two leaders write
+ * the same; none to write – []. A template of its list without its mark (its file from before the move: brought back from
+ * the history or a backup, or not come yet) – the move once more, as it wrote it the first time; one with it – each version
+ * from the move's date without the mark (made from a view before the move – a computer offline, a version before D511, its
+ * edit laid without a question) gets the entries of the layer of its date with the answers of the template's type and
+ * weekdays, anchors to the sessions following them, and the mark.
  */
 export function staleVersionFixes(changes: readonly SettingsChange[], templates: readonly Template[]): Template[] {
-  if (!sessionsMoved(changes)) return []
+  const layers = moveLayers(changes)
+  if (!layers.length) return []
+  const first = layers[0]!.layer.from
+  const dates = layers.map((l) => l.from)
+  const listed = new Set(layers.at(-1)!.layer.templates)
+  // The ids of the sessions of the layer, in the order the move took them (the ids of entries – `entryIds` – follow it).
+  const all = new Set(layers.flatMap((l) => l.layer.sessions.map((d) => d.id)))
+  const category = sessionCategoryOf(settingsOn(changes, first, Number.MAX_SAFE_INTEGER).categories)
+  const intervalOf = (date: string) => dates.reduce((k, d, i) => (d <= date ? i : k), 0)
   const out: Template[] = []
   for (const t of templates) {
-    if (!t.sessionsMoved) continue
+    if (!listed.has(t.id) || !t.versions.length) continue
+    const wanted = layers.map((l) => wantedFrom(l.layer.sessions, l.layer.grid[t.dayType], t.weekdays))
+    if (!t.sessionsMoved) {
+      out.push(withSessions(t, dates, wanted, all, category))
+      continue
+    }
+    const ids = entryIds(t, [...all])
     let changed = false
     const versions = t.versions.map((v) => {
-      const s = settingsOn(changes, v.from)
-      const moved = s.movedLayer
-      if (!moved || v.sessionsMoved || v.from < moved.from || !moved.templates.includes(t.id)) return v
-      const all = new Set([...s.movedSessions, ...moved.sessions].map((d) => d.id))
-      const fixed = withEntries(v, wantedFrom(moved.sessions, moved.grid[t.dayType], t.weekdays), all, entryIds(t, [...all]), sessionCategoryOf(s.categories), moved.from)
+      if (v.sessionsMoved || v.from < first) return v
       changed = true
-      return fixed
+      return withEntries(v, wanted[intervalOf(v.from)]!, all, ids, category, first)
     })
     if (changed) out.push({ ...t, versions })
   }

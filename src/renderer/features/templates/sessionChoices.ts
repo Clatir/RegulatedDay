@@ -5,10 +5,11 @@
  * block a block of the axis of „Szablony” is (a session of the day is its entry) and the version that axis shows (every
  * entry on its day).
  */
+import { sessionWindow } from '@shared/engine/createDay'
 import { isSessionEntry, sessionIdOf, type PlanBlock, type TemplateVersion } from '@shared/model/plan'
-import type { SessionChoice } from '@shared/model/settings'
+import { isPlain, type SessionChoice, type SettingsChange } from '@shared/model/settings'
 import { PL_ZONE } from '@shared/time/zone'
-import { blockSessionFor, marketsOfZone, zoneChoices } from '@shared/model/templateSessions'
+import { blockSessionFor, entryDef, marketsOfZone, zoneChoices } from '@shared/model/templateSessions'
 
 /** „Według czasu” of a block that is no session: an ordinary block of its category. */
 export const NO_ZONE = '-'
@@ -58,12 +59,29 @@ export function axisSources(plan: readonly Pick<PlanBlock, 'id' | 'origin' | 'so
 }
 
 /**
- * The version as the axis of „Szablony” draws it (D515, T1417): every session of the template at its hour as written (Polish
- * time as usual), whole and on its day – whatever the answer of the weekday the axis shows, the shift of the clocks in the USA
- * or an early close of its market that day: a block of the template to open and change. Its field kept in Polish time, no
- * markets, no „nie” (the version's own blocks keep theirs – the panel shows them).
+ * The version as the axis of „Szablony” draws it on `date` (D515, T1417, T1455): every session of the template whole and on its
+ * day – whatever the answer of the weekday the axis shows or an early close of its market that day (no markets, no „nie”): a
+ * block of the template to open and change. Its zone stays, so in the weeks of the shift of the clocks in the USA it stands an
+ * hour earlier and the wake with it (D372 – the axis keeps the shift of the wake); one the shift would take out of the day
+ * stays at its hour as written (Polish time). The version's own blocks keep theirs – the panel shows them.
  */
-export function axisVersion(v: TemplateVersion): TemplateVersion {
+export function axisVersion(v: TemplateVersion, date: string): TemplateVersion {
   if (!v.blocks.some(isSessionEntry)) return v
-  return { ...v, blocks: v.blocks.map((b) => (isSessionEntry(b) ? { ...b, session: { ...b.session, zone: PL_ZONE, markets: [], days: b.session.days.map((c) => (c === 'no' ? 'yes' : c)) } } : b)) }
+  const year = Number(date.slice(0, 4))
+  return {
+    ...v,
+    blocks: v.blocks.map((b) => {
+      if (!isSessionEntry(b)) return b
+      const zone = sessionWindow(entryDef(b, year), date) ? b.session.zone : PL_ZONE
+      return { ...b, session: { ...b.session, zone, markets: [], days: b.session.days.map((c) => (c === 'no' ? 'yes' : c)) } }
+    })
+  }
+}
+
+/**
+ * The changes of the settings as the axis of „Szablony” counts its template (T1450): without the layer the move of sessions
+ * took (`movedLayer`) – the template as it is written, never the layer of a template „not come yet”.
+ */
+export function previewChanges(changes: readonly SettingsChange[]): SettingsChange[] {
+  return changes.map((c) => (isPlain(c.patch) && c.patch.movedLayer !== undefined ? { ...c, patch: { ...c.patch, movedLayer: undefined } } : c))
 }

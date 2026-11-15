@@ -356,16 +356,16 @@ function sessionsFrom(v: unknown, fallback: SessionDef[]): SessionDef[] {
 /** „Nie” every weekday. */
 export const NO_SESSION_DAYS: readonly SessionChoice[] = ['no', 'no', 'no', 'no', 'no', 'no', 'no']
 
-/** The layer a move took, as read: anything else than an object – the one before (none). */
+/** The layer a move took, as read: anything else than an object with the move's date – the one before (none, T1458). */
 function movedLayerFrom(v: unknown, fallback: MovedLayer | null): MovedLayer | null {
-  if (!isPlain(v)) return fallback
+  if (!isPlain(v) || !isIsoDate(v.from)) return fallback
   const grid = isPlain(v.grid) ? v.grid : {}
   const made: Record<string, DayTypeId> = {}
   if (isPlain(v.made)) for (const [id, t] of Object.entries(v.made)) if (isDayTypeId(t)) made[id] = t
   const gone: Record<string, true> = {}
   if (isPlain(v.gone)) for (const [id, x] of Object.entries(v.gone)) if (x === true) gone[id] = true
   return {
-    from: typeof v.from === 'string' ? v.from : '',
+    from: v.from,
     sessions: sessionsFrom(v.sessions, []),
     grid: Object.fromEntries(DAY_TYPES.map((t) => [t, sessionChoices(grid[t], [...NO_SESSION_DAYS])])) as Record<DayTypeId, SessionChoice[]>,
     templates: Array.isArray(v.templates) ? [...new Set(v.templates.filter((x): x is string => typeof x === 'string' && !!x))] : [],

@@ -159,6 +159,12 @@ export interface PlanBlock {
    * its template (T1403).
    */
   session?: BlockSession | null
+  /**
+   * A session of a day whose place a change of the day's type set (T1451): the type whose template gave it – a later change
+   * of type moves it again or takes it out of the day's file (`typeChange.ts` `sessionMoves`); none – the morning's or yours.
+   * Only on such a block (no block else gets a new field in its file).
+   */
+  byType?: DayTypeId
 }
 
 export interface TemplateVersion {
@@ -310,7 +316,8 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     byVariant: v.byVariant === true,
     alongside: typeof v.alongside === 'string' && v.alongside && v.alongside !== v.id ? v.alongside : null,
     // Only a template's session has the field (D511): no block else gets a new field in its file.
-    ...withSession(blockSessionFrom(v.session))
+    ...withSession(blockSessionFrom(v.session)),
+    ...(isDayType(v.byType) ? { byType: v.byType } : {})
   }
 }
 

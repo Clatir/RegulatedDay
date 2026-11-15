@@ -10,6 +10,7 @@
  * added blocks all take effect at its confirmation (T-decision: the instant of the choice is the instant of the change,
  * so no minute of work falls between them to be classified again).
  */
+import { deepEqual } from '../data/merge'
 import { derivedId } from '../model/ids'
 import type { PoolValues } from '../model/categories'
 import { RULES_VERSION, type AnyEvent } from '../model/events'
@@ -131,7 +132,8 @@ function missingBlocks(inp: TypeChangeInput): Array<{ block: PlanBlock; session:
     const b = sessionBlock(def, date, ctx.snapshot.holidays)
     if (!b || ctx.plan.some((x) => x.id === b.id)) continue
     if (idxOfLogical(state.grid, b.startMin! + b.durationMin) <= nowMin) continue
-    out.push({ block: b, session: def.id, ask: def.ask ?? layer === 'ask' })
+    // Into the day's file (when „tak” alone does not bring it) as placed by the type (T1451).
+    out.push({ block: { ...b, byType: to }, session: def.id, ask: def.ask ?? layer === 'ask' })
   }
   // Blocks parked today by an earlier switch: back as copies (the parked one stays parked in the log).
   for (const [id, f] of state.facts.blocks) {
@@ -192,25 +194,42 @@ function regenMinimum(inp: TypeChangeInput, before: number, parked: readonly str
 
 /**
  * The sessions of the plan a change of type moves by itself (T1415): a future one, not begun and not cancelled now, that stands
- * where the type in force gives it (hour, length and category – a session you moved stays yours) follows the type – the new
- * type gives it elsewhere: there, into the day's file, with what you changed on it today (`placedAs`); the new type gives
- * none: one the day's file holds (put there by a change of type) leaves it – the day has the morning's (its snapshot's) or
- * none. A session of the snapshot itself the new type lacks stays (keep / cancel as every fixed block).
+ * where its session is in the settings in force (hour, length and category – a session you moved stays yours; one an answer
+ * „tak” brought too, whatever the layer of the type says – T1459) follows the type:
+ * - the new type gives it elsewhere: there, into the day's file, with what you changed on it today (`placedAs`), marked as
+ *   placed by the type (`byType`, T1451) – unless that place is over already: then it stays (T1452, as `missingBlocks` skips
+ *   a session gone by);
+ * - the new type gives none: one the day's file holds by a change of type (`byType`) goes back – to the morning's place (its
+ *   snapshot's) with your changes of the day, out of the file when it is the morning's as it was, out of it when the morning
+ *   had none; the morning's place over – it stays. Your own block of a session (no mark) and the snapshot's stay (keep /
+ *   cancel as every fixed block).
  */
 function sessionMoves(inp: TypeChangeInput, cancel: readonly string[]): { put: PlanBlock[]; drop: string[] } {
   const { ctx, state, to, settings } = inp
   const now = settingsAtMinute(ctx.snapshot, state.facts, state.now + 1)
+  const over = (b: PlanBlock) => b.startMin == null || idxOfLogical(state.grid, b.startMin + b.durationMin) <= state.now
   const put: PlanBlock[] = []
   const drop: string[] = []
   for (const b of ctx.plan) {
-    if (b.origin !== 'session' || !b.sourceId || b.startMin == null || cancel.includes(b.id) || !notBegun(state, b.id)) continue
-    if (idxOfLogical(state.grid, b.startMin + b.durationMin) <= state.now) continue
-    const was = givenBlock(ctx, now.settings, now.dayType, b.sourceId)
+    if (b.origin !== 'session' || !b.sourceId || b.startMin == null || cancel.includes(b.id) || !notBegun(state, b.id) || over(b)) continue
+    const def = now.settings.sessions.find((d) => d.id === b.sourceId)
+    const was = def ? sessionBlock(def, ctx.date, ctx.snapshot.holidays) : null
     if (!was || !samePlace(b, was)) continue
     const next = givenBlock(ctx, settings, to, b.sourceId)
     if (next) {
-      if (!samePlace(b, next)) put.push(placedAs(b, next))
-    } else if (inp.dayFile?.blocks.some((x) => x.id === b.id)) drop.push(b.id)
+      if (!samePlace(b, next) && !over(next)) put.push({ ...placedAs(b, next), byType: to })
+      continue
+    }
+    if (!inp.dayFile?.blocks.some((x) => x.id === b.id && x.byType)) continue
+    const morning = ctx.snapshot.blocks.find((x) => x.id === b.id)
+    if (!morning) {
+      drop.push(b.id)
+      continue
+    }
+    if (over(morning)) continue
+    const { byType: _t, ...back } = placedAs(b, morning)
+    if (deepEqual(back, morning)) drop.push(b.id)
+    else put.push(back)
   }
   return { put, drop }
 }

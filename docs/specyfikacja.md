@@ -120,8 +120,8 @@ Każda funkcja korzysta z tych samych definicji dnia i czasu; nie ma drugiego sp
   sesje swojego szablonu (szablon dnia tygodnia przed domyślnym typu) z odpowiedzią „tak” albo „pytaj” w swoim dniu
   tygodnia; z „nie” tego dnia sesji nie ma (ani bloku do niej zakotwiczonego); szablon bez sesji – dzień bez sesji. Dzień
   tygodnia, którego szablon nie robi, jest w panelu przygaszony (jego odpowiedź nic nie znaczy); oś „Szablonów” pokazuje
-  każdą sesję szablonu o jej zapisanej godzinie polskiej i w całości – także z „nie” w dniu przykładu, w tygodniu zmiany
-  czasu w USA i w dzień skróconej sesji. Blok szablonu, który dostaje kategorię rodzaju „sesja”, staje się sesją (czas
+  każdą sesję szablonu w całości – także z „nie” w dniu przykładu i w dzień skróconej sesji; w tygodniu zmiany czasu w USA
+  stoi godzinę wcześniej, razem z pobudką (D372). Blok szablonu, który dostaje kategorię rodzaju „sesja”, staje się sesją (czas
   Nowego Jorku, stały, „tak” każdego dnia, nigdy z identyfikatorem innej sesji tej wersji); inna kategoria albo „zwykły
   blok” w polu „według czasu” robi z niego zwykły blok swojej kategorii. Sesją jest blok z polem „według czasu”, także gdy
   jego kategoria zmieni potem rodzaj; dwa wpisy jednej sesji w wersji dają dzień z pierwszym z nich. Sesja z „pytaj” w danym
@@ -151,11 +151,12 @@ Każda funkcja korzysta z tych samych definicji dnia i czasu; nie ma drugiego sp
   z „nie” w tym dniu tygodnia), przesuwa maksimum do końca sesji i bloków do niej zakotwiczonych plus bufor granicy, a
   propozycja granicy liczy się od nowa. Nie zużywa wyjątku granicy. Dzień z „pytaj” i odpowiedzią „tak” jest dniem z sesją.
   Zmiana typu na typ z sesjami proponuje sesje jego szablonu z odpowiedzią tego dnia („pytaj” niezaznaczone), których
-  dzień nie ma; sesja, która już jest w planie, stoi tam, gdzie daje ją typ dnia, i zmiana typu przenosi ją na godzinę,
-  długość i kategorię z szablonu nowego typu (Twoje zmiany nazwy, notatki i kosztu z tego dnia zostają), a sesja, którą
-  wcześniejsza zmiana typu dodała albo przeniosła, przy kolejnej wraca do szablonu nowego typu albo – gdy ten jej nie ma –
-  wychodzi z planu dnia (zostaje sesja z rana, jeśli była); sesja przeniesiona przez Ciebie zostaje, „Odwołaj” w oknie zmiany
-  typu ją odwołuje. Granica i maksimum liczą się z sesją na nowym miejscu, raz. Inny blok kategorii „Sesja tradingowa” dodany ręcznie
+  dzień nie ma; sesja, która już jest w planie i stoi tam, gdzie daje ją typ dnia (także dodana odpowiedzią „tak”), zmiana
+  typu przenosi na godzinę, długość i kategorię z szablonu nowego typu (Twoje zmiany nazwy, notatki i kosztu z tego dnia
+  zostają) – chyba że to miejsce już minęło: wtedy zostaje, gdzie była. Sesja, którą wcześniejsza zmiana typu dodała albo
+  przeniosła, przy kolejnej idzie do szablonu nowego typu albo – gdy ten jej nie ma – wraca na miejsce z rana z Twoimi
+  zmianami (bez sesji z rana – wychodzi z planu dnia); Twoja zmiana sesji z rana i sesja przeniesiona przez Ciebie zostają,
+  „Odwołaj” w oknie zmiany typu odwołuje sesję. Granica i maksimum liczą się z sesją na nowym miejscu, raz. Inny blok kategorii „Sesja tradingowa” dodany ręcznie
   (także blok szablonu bez pola „według czasu”) jest zwykłą pracą i maksimum nie przesuwa. W prognozie energii, budżetu
   pracy, twardego końca i puli (także prognozowanego końca pracy, od którego liczy się pula) sesja liczy się typową długością: medianą
   rzeczywistych długości tej sesji z ostatnich 4 tygodni (suma jej odcinków pracy od „Zacznij”, także po „Zacznij
@@ -177,10 +178,12 @@ Każda funkcja korzysta z tych samych definicji dnia i czasu; nie ma drugiego sp
   się nie przenosi, a szablon raz przeniesiony już się nie zmienia (Twoje późniejsze zmiany zostają). Gdy w kolejce czeka
   zapis rd.json albo szablonu, przeniesienie czeka na niego (linia w dzienniku sprawdzeń), a dni liczą się z warstwy.
   Komputer, który dostał rd.json przed szablonami (OneDrive), tworzy dzień od razu z sesjami dawnej warstwy zapisanej w
-  rd.json – tymi samymi, które przyniosą szablony, więc nigdy podwójnie; tak samo dzień typu, dla którego przeniesienie
-  utworzyło szablon, dopóki ten nie dotrze (usunięty przez Ciebie albo zarchiwizowany szablon sesji nie przywraca).
-  Wersja szablonu zapisana później z widoku sprzed przeniesienia (komputer bez sieci, starsza wersja) dostaje sesje od
-  komputera, który prowadzi, przed utworzeniem dnia; do tej chwili jej dni liczą się z dawnej warstwy. Kreator pierwszego
+  rd.json – tymi samymi, które przyniosą szablony, więc nigdy podwójnie; tak samo dzień bez szablonu typu, dla którego
+  przeniesienie utworzyło szablon, dopóki ten nie dotrze – przez pierwsze 3 dni przeniesienia, potem brakujący szablon jest
+  usunięty (usunięty w oknie albo zarchiwizowany szablon sesji nie przywraca nigdy). Wersja szablonu zapisana później z
+  widoku sprzed przeniesienia (komputer bez sieci, starsza wersja) i szablon przywrócony z historii albo kopii sprzed
+  przeniesienia dostają sesje od komputera, który prowadzi, przed utworzeniem dnia; do tej chwili ich dni liczą się z dawnej
+  warstwy. Kreator pierwszego
   komputera zapisuje sesje do szablonów tak samo (strefy Nowy Jork, Londyn, Polska; inna strefa szkicu zostaje pod swoją
   nazwą). Starsza wersja na drugim komputerze pokazuje sesje jako stałe bloki ich kategorii o godzinie polskiej w każdym
   dniu ich szablonu – także w dniu „nie” i bez pytania w dniu „pytaj” (bez przesunięcia i skrócenia), nigdy podwójnie;

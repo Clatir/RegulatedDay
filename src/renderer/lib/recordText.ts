@@ -42,6 +42,7 @@ const BLOCK_FIELDS: Record<string, string> = {
   steps: 'kroki',
   movedFrom: 'przeniesiony z',
   byVariant: 'zmieniony wariantem',
+  byType: 'miejsce ze zmiany typu',
   // D511: a template's session.
   session: 'sesja (według czasu, dni)'
 }

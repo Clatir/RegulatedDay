@@ -22,14 +22,14 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `model/ids.ts` (losowe i wyliczane identyfikatory).
 - `engine/createDay.ts` – deterministyczna migawka dnia (szablon, ustawienia daty, wykłady, sesje ze strefy NY ze
   skróceniem, przesunięcie pobudki) i `dayPlan` (migawka + plik dnia).
-- Sesje w szablonach (D511, D515, T1340–T1359, T1400–T1419): wpis = blok szablonu z `PlanBlock.session` i własną godziną
+- Sesje w szablonach (D511, D515, T1340–T1359, T1400–T1419, T1450–T1460): wpis = blok szablonu z `PlanBlock.session` i własną godziną
   (`isSessionEntry` w `model/plan.ts` – jedna reguła, bez kategorii; `zone`, `markets`, `days` – 7 odpowiedzi, `id` – sesji,
   `sessionIdOf`); godzina polska „jak zwykle”. `model/templateSessions.ts` – `daySettingsOf` (wpisy bez „nie” w dniu tygodnia
   w `settings.sessions` migawki; szablon przeniesienia bez znacznika albo wersja bez `sessionsMoved`, brakujący `sesje-<typ>`
   – dzień z `movedLayer`), `snapshotSettings`, `entryDef` (blok – `SessionBlockFields`), `knownSessionDefs`, `templateMarkets`,
   `sessionOwnersOf`; `model/sessionMigration.ts` – `moveSessions` (raz, bez kopii i nowych id dni, też zarchiwizowane,
   znacznik wersji), `staleVersionFixes`, zmiany `sesje-w-szablonach[-<data>]` z `movedLayer` i `movedSessions`. Zmiana typu
-  przenosi sesje w planie sama (`typeChange.ts` `sessionMoves`, `planWith`). Dni sprzed – warstwa.
+  przenosi sesje w planie sama (`typeChange.ts` `sessionMoves`, `planWith`; blok ze zmiany typu – `PlanBlock.byType`). Dni sprzed – warstwa.
 - `engine/facts.ts` – log → fakty (przebiegi bloków, prośby, „Odcinam się”, zatwierdzenia, odcinki); `viewAt(f, m)`.
 - `engine/blocks.ts` – `BlockInfo` (klasa, czeka na „Zacznij” – tylko stała sesja, wykład/zjazd, oznaczenie „po pracy”).
   Oznaczeń bloku nie ma (D467): `PlanBlock` nie ma `tag` ani `waitUntilMin` – stare pola zostają w pliku nieczytane

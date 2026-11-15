@@ -18,7 +18,7 @@ import { RULES_VERSION } from '@shared/model/events'
 import { DEFAULT_GENERAL, rdFrom } from '@shared/model/rd'
 import { dayFileFrom, planBlock, templateFrom, type DayFile, type PlanBlock, type Template } from '@shared/model/plan'
 import { moveSessions, movedTemplates, SESSIONS_CHANGE_ID, sessionsMoved, staleVersionFixes } from '@shared/model/sessionMigration'
-import { DAY_TYPES, DEFAULT_SESSIONS, DEFAULT_SETTINGS, settingsOn, type SessionChoice, type SettingsChange } from '@shared/model/settings'
+import { DAY_TYPES, DEFAULT_SESSIONS, DEFAULT_SETTINGS, settingsFrom, settingsOn, type SessionChoice, type SettingsChange } from '@shared/model/settings'
 import { daySettings, sessionOwnersOf } from '@shared/model/templateSessions'
 import { addDays } from '@shared/time/zone'
 
@@ -415,6 +415,47 @@ describe('przeniesienie sesji do szablonów (D511, D515)', () => {
     const mine = after.templates.map((t) => (t.id === 'zwykly' ? { ...t, versions: [...t.versions, { ...t.versions.at(-1)!, from: later, blocks: [journaling] }] } : t))
     expect(sessionsOn(fri, after.changes, mine, 'zwykly')).toEqual([])
     expect(staleVersionFixes(after.changes, mine)).toEqual([])
+  })
+  it('typ tylko z szablonem dnia tygodnia, a domyślny przeniesienia nie dotarł: dzień bez szablonu z warstwy – przez pierwsze 3 dni (T1450)', () => {
+    const saturday: Template = { id: 'zdalny-sb', name: 'Zdalny w sobotę', dayType: 'zjazd-zdalny', weekdays: [6], archived: false, versions: [{ from: SETUP_FROM, blocks: [analysis], budgetMin: null, maxMin: null }] }
+    const templates = [...defaults(), saturday]
+    const { after } = moved(setup(), templates)
+    expect(after.templates.some((t) => t.id === 'sesje-zjazd-zdalny')).toBe(true)
+    const stale = after.templates.filter((t) => t.id !== 'sesje-zjazd-zdalny')
+    const wed = '2026-10-21'
+    expect(sessionsOn(wed, after.changes, stale, 'zjazd-zdalny')).toEqual(sessionsOn(wed, after.changes, after.templates, 'zjazd-zdalny'))
+    expect(sessionsOn(wed, after.changes, stale, 'zjazd-zdalny').length).toBe(2)
+    // From the third day after the move a template still missing is gone (whatever way it went): no session.
+    expect(sessionsOn(addDays(CUT, 3), after.changes, stale, 'zjazd-zdalny')).toEqual([])
+    expect(sessionsOn(addDays(CUT, 2), after.changes, stale, 'zjazd-zdalny').length).toBe(2)
+  })
+
+  it('szablon z listy bez znacznika (przywrócony z historii albo kopii sprzed przeniesienia): poprawka robi przeniesienie jeszcze raz – ten sam szablon', () => {
+    const templates = defaults([journaling, analysis])
+    const { move, after } = moved(setup(), templates)
+    // zwykly as it was before the move, rd.json after it.
+    const restored = after.templates.map((t) => (t.id === 'zwykly' ? templates.find((x) => x.id === 'zwykly')! : t))
+    const fixes = staleVersionFixes(after.changes, restored)
+    expect(fixes.map((t) => t.id)).toEqual(['zwykly'])
+    expect(fixes[0]).toEqual(move.changed.find((t) => t.id === 'zwykly'))
+    expect(staleVersionFixes(after.changes, restored.map((t) => fixes.find((x) => x.id === t.id) ?? t))).toEqual([])
+  })
+
+  it('zmiana przeniesienia z chwilą „od dziś”: poprawka wersji bez znacznika z dnia przeniesienia znajduje warstwę tego dnia (T1453)', () => {
+    // A change of the layer „od dziś” on the move's day: the move's change gets an instant after it.
+    const changes: SettingsChange[] = [...setup(), { id: 'dzis', from: CUT, at: 1_000, made: 2, patch: { dayTypes: { zwykly: { sessions: ['yes', 'yes', 'yes', 'yes', 'ask', 'no', 'no'] } } } }]
+    const templates = defaults()
+    const { move, after } = moved(changes, templates)
+    expect(move.changes[0]!.at).toBe(1_001)
+    // The version of the move's day without its mark and its entries (a view before the move).
+    const stale = after.templates.map((t) => (t.id === 'zwykly' ? { ...t, versions: t.versions.map((v) => (v.from === CUT ? { from: CUT, blocks: [journaling], budgetMin: null, maxMin: null } : v)) } : t))
+    const fixed = staleVersionFixes(after.changes, stale).find((t) => t.id === 'zwykly')!
+    expect(fixed.versions.find((v) => v.from === CUT)).toEqual(move.changed.find((t) => t.id === 'zwykly')!.versions.find((v) => v.from === CUT))
+  })
+
+  it('warstwa przeniesienia bez daty to żadna warstwa (T1458)', () => {
+    expect(settingsFrom({ movedLayer: { sessions: DEFAULT_SESSIONS, templates: ['zwykly'], made: {} } }).movedLayer).toBeNull()
+    expect(settingsFrom({ movedLayer: { from: CUT, sessions: [], templates: [], made: {} } }).movedLayer!.from).toBe(CUT)
   })
 })
 

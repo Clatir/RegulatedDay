@@ -288,16 +288,18 @@ describe('sesje z szablonu typu dnia (D511) – „Sesje tradingowe”', () => {
     const odd = createDay(inputs('2026-10-21', { templates: [template('zwykly', 'zwykly', [{ ...NY, categoryId: 'analiza' }])] }))
     expect(odd.blocks.map((b) => [b.origin, b.categoryId, b.sourceId])).toEqual([['session', 'analiza', 'ny']])
     // No category of the kind „sesja” at all: the entries stay sessions.
-    const noKind = { id: 'bez', from: '2026-01-01', at: null, made: 2, patch: { categories: { sesja: { kind: 'work' } } } }
+    const noKind = { id: 'bez', from: '2026-01-01', at: null, made: 2, patch: { categories: { sesja: { kind: 'other' } } } }
+    expect(settingsOn([migrated(), noKind], '2026-10-21').categories.sesja!.kind).toBe('other')
     const day = createDay(inputs('2026-10-21', { changes: [migrated(), noKind] }))
     expect(day.blocks.filter((b) => b.origin === 'session').map((b) => b.sourceId)).toEqual(['londyn', 'ny'])
   })
 
-  it('migawka dnia: sesja niesie tylko pola bloku, które bierze blok dnia; bez warstwy przeniesienia i jej nazw (T1419)', () => {
+  it('migawka dnia: sesja niesie tylko pola bloku, które bierze blok dnia; bez warstwy przeniesienia, z nazwami jej sesji (T1419, T1454)', () => {
     const noted = { ...NY, note: 'n'.repeat(500), requests: ['r1'] }
     const change = { ...migrated('2026-10-19'), patch: { ...migrated().patch, movedSessions: DEFAULT_SETTINGS.sessions, movedLayer: { from: '2026-10-19', sessions: DEFAULT_SETTINGS.sessions, grid: {}, templates: [], made: {} } } }
     const snap = createDay(inputs('2026-10-21', { changes: [change], templates: [template('zwykly', 'zwykly', [noted])] }))
-    expect([snap.settings.movedLayer, snap.settings.movedSessions]).toEqual([null, []])
+    // The layer the move took – not in the snapshot; the names of its sessions stay (they name a block of the layer, T1454).
+    expect([snap.settings.movedLayer, snap.settings.movedSessions.map((d) => d.id)]).toEqual([null, ['londyn', 'ny']])
     const block = snap.settings.sessions.find((d) => d.id === 'ny')!.block as Record<string, unknown>
     expect(Object.keys(block).sort()).toEqual(['background', 'bgCostPct', 'categoryId', 'costs', 'name', 'note', 'routine', 'steps', 'variantId'])
     // The day's block from it: as before, the entry's note and name – not its requests.
@@ -400,6 +402,63 @@ describe('sesje z szablonu typu dnia (D511) – „Sesje tradingowe”', () => {
     const w = applyTypeChange(weekend, planTypeChange(weekend), none)
     expect([w.blocks, w.drop]).toEqual([[], [id]])
     expect(dayPlan(weekend.ctx.snapshot, { ...file, blocks: [] }).find((b) => b.id === id)!.startMin).toBe(lm('14:00'))
+  })
+
+  it('zmiana typu na typ bez sesji: Twoja zmiana sesji z rana zostaje; blok ze zmiany typu wraca na miejsce z rana (z Twoją notatką), bez zmian – wychodzi z pliku', () => {
+    const date = '2026-10-21'
+    const id = sessionBlockId(date, 'ny')
+    const at = placeLogical(date, 10 * 60)
+    const morningNy = createDay(inputs(date)).blocks.find((b) => b.id === id)!
+    // Your note on the morning's NY (the day's file, no mark): to the weekend – it stays as you left it.
+    const yours = typeInput(date, [ordinary], 'weekend', at, { ...emptyDayFile(date), blocks: [{ ...morningNy, note: 'moje' }] })
+    const r = applyTypeChange(yours, planTypeChange(yours), none)
+    expect([r.blocks, r.drop]).toEqual([[], []])
+    // NY put at 15:00 by a change to the „zjazd stacjonarny” at 09:00, your note added since: back at 14:00 with the note.
+    const later = template('stacj', 'zjazd-stacjonarny', [{ ...NY, startMin: lm('15:00') }])
+    const ev = [typeEvent(date, placeLogical(date, 9 * 60), 'zjazd-stacjonarny', [ordinary, later])]
+    const put = { ...morningNy, startMin: lm('15:00'), byType: 'zjazd-stacjonarny' as const }
+    const noted = typeInput(date, [ordinary, later], 'weekend', at, { ...emptyDayFile(date), blocks: [{ ...put, note: 'moje' }] }, ev)
+    const back = applyTypeChange(noted, planTypeChange(noted), none)
+    expect(back.drop).toEqual([])
+    expect(back.blocks.map((b) => [b.id, b.startMin, b.note, b.byType ?? null])).toEqual([[id, lm('14:00'), 'moje', null]])
+    // Without a change of yours: out of the file – the morning's NY again.
+    const plain = typeInput(date, [ordinary, later], 'weekend', at, { ...emptyDayFile(date), blocks: [put] }, ev)
+    const out = applyTypeChange(plain, planTypeChange(plain), none)
+    expect([out.blocks, out.drop]).toEqual([[], [id]])
+  })
+
+  it('zmiana typu: nowe miejsce sesji już minęło – sesja zostaje, gdzie była (bez niezaczętego stałego bloku po czasie)', () => {
+    const date = '2026-10-21'
+    const early = template('stacj', 'zjazd-stacjonarny', [{ ...NY, startMin: lm('08:00'), durationMin: 60 }])
+    const inp = typeInput(date, [ordinary, early], 'zjazd-stacjonarny', placeLogical(date, 10 * 60), null)
+    const r = applyTypeChange(inp, planTypeChange(inp), none)
+    expect(r.blocks.filter((b) => b.origin === 'session')).toEqual([])
+    expect(inp.ctx.plan.find((b) => b.id === sessionBlockId(date, 'ny'))!.startMin).toBe(lm('14:00'))
+  })
+
+  it('zmiana typu: sesja z odpowiedzi „tak” w dniu bez sesji (warstwa „nie”) przechodzi na miejsce z szablonu nowego typu', () => {
+    const date = '2026-10-24'
+    const at = placeLogical(date, 9 * 60)
+    // A Saturday made by the layer (the weekend „nie”), NY answered „tak”: 14:00.
+    const file: DayFile = { ...emptyDayFile(date), sessions: { ny: 'yes' } }
+    const ctx = dayContextOf({ changes: [], templates: [], lectures: [], series: [] }, { date, events: [], dayFile: file, nextFile: null }, holidays, at)
+    expect(ctx.plan.find((b) => b.sourceId === 'ny')!.startMin).toBe(lm('14:00'))
+    const ordinary15 = template('zwykly', 'zwykly', [LONDON, { ...NY, startMin: lm('15:00') }])
+    const inp = { ctx, state: computeDay(ctx), energyNow: null, to: 'zwykly' as const, settings: daySettings(settingsOn([migrated()], date, at), [ordinary15], 'zwykly', date), dayFile: file }
+    const r = applyTypeChange(inp, planTypeChange(inp), none)
+    expect(r.blocks.filter((b) => b.sourceId === 'ny').map((b) => [b.id, b.startMin, b.byType])).toEqual([[sessionBlockId(date, 'ny'), lm('15:00'), 'zwykly']])
+  })
+
+  it('dwa wpisy jednej sesji: usunięcie jednego nie zabiera załączników dni, póki wersja dalej daje tę sesję (T1457)', () => {
+    const twin = { ...NY, id: 'ny-2', session: { ...NY.session!, id: 'ny' } }
+    const tpl = template('zwykly', 'zwykly', [NY, twin])
+    const without = { ...tpl, versions: [...tpl.versions, { from: '2026-10-22', budgetMin: null, maxMin: null, blocks: [twin] }] }
+    const thu = '2026-10-29'
+    const a = { id: 'a', owner: { scope: 'day', date: thu, blockId: sessionBlockId(thu, 'ny') }, removedAt: null } as unknown as Attachment
+    expect(templateRemovalIds([a], 'zwykly', tpl, without, '2026-10-22', () => true)).toEqual([])
+    // Both out: the session is gone – its attachment goes.
+    const none2 = { ...tpl, versions: [...tpl.versions, { from: '2026-10-22', budgetMin: null, maxMin: null, blocks: [] }] }
+    expect(templateRemovalIds([a], 'zwykly', tpl, none2, '2026-10-22', () => true)).toEqual(['a'])
   })
 
   it('załączniki wpisu sesji: blok sesji dnia widzi wpis szablonu, który daje mu sesję tego dnia – po zmianie typu nowego typu', () => {

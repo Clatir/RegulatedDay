@@ -595,7 +595,7 @@ describe('szablon z sesjami (D511): usunięcie wpisu i szablonu przeniesienia (T
     expect(await (await templateActions()).removeTemplate('sesje-zjazd-zdalny', 'Zjazd zdalny')).toBe(true)
     expect(fileAt(paths.record('template', 'sesje-zjazd-zdalny'))).toBeNull()
     const changes = (fileAt(paths.settings)!.settings as Array<{ id: string; from: string; patch: unknown }>).map((c) => [c.id, c.from, c.patch])
-    expect(changes.at(-1)).toEqual(['sesje-usuniety-sesje-zjazd-zdalny', '2026-01-01', { movedLayer: { gone: { 'sesje-zjazd-zdalny': true } } }])
+    expect(changes.at(-1)).toEqual(['sesje-usuniety-sesje-zjazd-zdalny', '2026-01-01', { movedLayer: { from: '2026-01-01', gone: { 'sesje-zjazd-zdalny': true } } }])
     // A template of yours (not made by the move): rd.json untouched.
     write(paths.record('template', 'zw'), tpl('zw', 'zwykly'))
     await reloadData()

@@ -6,7 +6,7 @@
  */
 import { WEEKDAY_SHORT } from '@shared/format'
 import type { CategoryKind } from '@shared/model/categories'
-import type { PlanBlock } from '@shared/model/plan'
+import { isSessionEntry, type PlanBlock } from '@shared/model/plan'
 import { Choice } from '../../components/fields'
 import { Field, cx } from '../../components/ui'
 import { DAY_MARK, DAY_WORD, NO_ZONE, dayPatch, zoneOptions, zonePatch } from './sessionChoices'
@@ -14,7 +14,8 @@ import { DAY_MARK, DAY_WORD, NO_ZONE, dayPatch, zoneOptions, zonePatch } from '.
 const LOOK = { yes: 'border-lamp/60 bg-lamp-soft text-lamp', ask: 'border-sea/60 bg-sea-soft text-sea', no: 'border-line text-muted' } as const
 
 export function SessionFields({ block, blocks, kind, weekdays, onChange }: { block: PlanBlock; blocks: readonly PlanBlock[]; kind: CategoryKind | undefined; weekdays: readonly number[]; onChange: (patch: Partial<PlanBlock>) => void }) {
-  if (kind !== 'session') return null
+  // A session by the one rule (T1416, T1456) – also a block whose category changed its kind since – or a block of a category of sessions.
+  if (kind !== 'session' && !isSessionEntry(block)) return null
   const s = block.session ?? null
   return (
     <>
