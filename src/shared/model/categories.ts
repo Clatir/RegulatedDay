@@ -27,6 +27,8 @@ export interface Costs {
 /** The four pools (spec „Pule”): „głowa”, „emocje”, „bodźce”, „ciało” (D520). */
 export type Pool = keyof Costs
 export const POOLS: readonly Pool[] = ['head', 'emotions', 'senses', 'body']
+/** The letter of a pool wherever the interface abbreviates it (D500, D520, D524: G · E · B · C); in this order every text and drawing names the four. */
+export const POOL_LETTER: Record<Pool, string> = { head: 'G', emotions: 'E', senses: 'B', body: 'C' }
 /** A state of the four pools, 0–100. */
 export type PoolValues = Record<Pool, number>
 

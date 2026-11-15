@@ -5,13 +5,19 @@
  */
 import { useEffect, useRef } from 'react'
 
-type Layer = { id: number; close: () => void }
+type Layer = { id: number; close: () => void; base: boolean; applies?: (e?: KeyboardEvent) => boolean }
 const layers: Layer[] = []
 let nextId = 1
 let windowEscape: (() => void) | null = null
 
-export function onEscapeLayer(close: () => void): () => void {
-  const layer = { id: nextId++, close }
+/**
+ * `base`: a layer under every ordinary one, whenever it was registered (the selection of many, D527: a panel opened by the very click
+ * that selected is registered in the same commit, maybe before it, and still must close first); among base layers the newest first.
+ * `applies`: whether this Esc is this layer's (the key's event – with several selections on one page the one the focus is in); a layer that
+ * does not apply lets the Esc through to the next one. Without an event (a call of `handleEscape()` by hand) every layer applies.
+ */
+export function onEscapeLayer(close: () => void, base = false, applies?: (e?: KeyboardEvent) => boolean): () => void {
+  const layer = { id: nextId++, close, base, applies }
   layers.push(layer)
   return () => {
     const i = layers.findIndex((l) => l.id === layer.id)
@@ -24,9 +30,12 @@ export function setWindowEscape(fn: (() => void) | null): void {
   windowEscape = fn
 }
 
-/** Handles Esc of the window; true = something closed. */
-export function handleEscape(): boolean {
-  const top = layers.pop()
+/** Handles Esc of the window (`e`: its event, for the layers that ask whose Esc it is); true = something closed. */
+export function handleEscape(e?: KeyboardEvent): boolean {
+  const mine = (l: Layer) => !l.applies || l.applies(e)
+  let i = layers.findLastIndex((l) => !l.base && mine(l))
+  if (i < 0) i = layers.findLastIndex((l) => l.base && mine(l))
+  const top = i >= 0 ? layers.splice(i, 1)[0] : undefined
   if (top) {
     top.close()
     return true
@@ -42,7 +51,7 @@ export function handleEscape(): boolean {
 export function installEscape(): () => void {
   const listener = (e: KeyboardEvent) => {
     if (e.key !== 'Escape' || e.defaultPrevented) return
-    if (handleEscape()) e.preventDefault()
+    if (handleEscape(e)) e.preventDefault()
   }
   window.addEventListener('keydown', listener)
   return () => window.removeEventListener('keydown', listener)
@@ -96,12 +105,18 @@ export function tabTarget(count: number, index: number, shift: boolean): number 
   return null
 }
 
-/** A layer while `open`: Esc closes it. */
-export function useEscapeLayer(open: boolean, close: () => void): void {
+/** A layer while `open`: Esc closes it (`base` – under the ordinary ones, `applies` – whose Esc it is; see `onEscapeLayer`). */
+export function useEscapeLayer(open: boolean, close: () => void, base = false, applies?: (e?: KeyboardEvent) => boolean): void {
   const ref = useRef(close)
   ref.current = close
+  const appliesRef = useRef(applies)
+  appliesRef.current = applies
   useEffect(() => {
     if (!open) return
-    return onEscapeLayer(() => ref.current())
-  }, [open])
+    return onEscapeLayer(
+      () => ref.current(),
+      base,
+      (e) => appliesRef.current?.(e) ?? true
+    )
+  }, [open, base])
 }

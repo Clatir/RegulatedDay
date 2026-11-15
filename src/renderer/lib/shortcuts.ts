@@ -6,5 +6,10 @@ export const SHORTCUTS: Array<[string, string]> = [
   ['Ctrl S', 'zatwierdza pole, które edytujesz'],
   ['Ctrl N', 'nowy rekord w bieżącym widoku: blok w planie, zadanie w Sprawach, szablon, rutyna'],
   ['Win Alt N', 'szybki zapis zadania do Skrzynki z dowolnego programu (skrót globalny, do zmiany i wyłączenia w Ustawieniach)'],
-  ['Esc', 'cofa edycję pola; kolejny Esc zamyka to, co otwarte']
+  ['Esc', 'cofa edycję pola; kolejny Esc zamyka to, co otwarte, a na końcu czyści zaznaczenie'],
+  ['Ctrl klik', 'dokłada albo zdejmuje element zaznaczenia bez otwierania (w „Dziś”, „Szablonach”, „Tygodniu”, „3 dniach”, Sprawach i Kalendarzu)'],
+  ['Shift klik', 'zaznacza zakres od ostatnio klikniętego elementu'],
+  ['Shift ↑ ↓ (← →)', 'rozszerza zaznaczenie o kolejny element (w Kalendarzu: o kolejny dzień)'],
+  ['Ctrl A', 'zaznacza wszystko widoczne: dzień, szablon, widok „Tygodnia” albo „3 dni”, listę Spraw'],
+  ['Shift F10 / prawy przycisk', 'menu „Zmień …” dla zaznaczonych elementów (klawisz menu też)']
 ]
