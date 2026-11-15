@@ -1,5 +1,5 @@
 /**
- * Statystyki (D358): each measure on examples – the energy of a check-in (the mean of its three pools) by the time of
+ * Statystyki (D358): each measure on examples – the energy of a check-in (the mean of the pools it asks about – four, T1522) by the time of
  * day and the day of the week, the felt cost „ciężej” by category, the accuracy of the estimates (the conditions of the
  * reward „Trafne szacowanie”), the requests by person, the boundaries by week; only the events a freeze names; a day
  * that cannot be read counted apart; an empty period.

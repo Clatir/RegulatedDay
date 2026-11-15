@@ -57,8 +57,9 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
   bez ciała (`anchorEffect`, D522); ocena względna – każda pula. Check-in bez `answers.body` (starsza wersja) – ciało 100 (`checkinStates`),
   w statystykach i CSV tylko zadane pule (T1522); `before` kotwicy bez ciała – ciało ze swojego stanu (T1523). Zdarzenia logu mają
   `LoggedPools` (ciało opcjonalne): koszt bez ciała czytają `foldFacts` (`planned.costs`, `planned.routineCosts`), `costChangesOf`
-  (`block.cost`, `routine.cost`) i `daySnapshotOf` (bloki migawki) z `startingBody` (T1520, T1527); walidatory zdarzeń – ciało może
-  nie być, jest – sprawdzane (T1528). `RULES_VERSION` 16 (T1524).
+  (`routine.cost`; `block.cost` – ciało kosztu sprzed zmiany, T1534) i `daySnapshotOf` (bloki migawki) z `startingBody` (T1520, T1527);
+  ustawienia migawki i `day.snapshot` starszej wersji – ciało z Twoich ustawień datowanych (T1532, reguły `koszt.md`); walidatory zdarzeń –
+  ciało może nie być, jest – sprawdzane (T1528). `RULES_VERSION` 16 (T1524).
 - Moduł energii: przełącznik w ustawieniach (E3) zapisuje `rd.general.modules.energy` i `energy.module` w logu dnia.
 - Jeszcze nie: zobaczenie komunikatu i tryby ciszy (E4b), warianty przy rezerwie i przesunięcie granicy po regeneracji
   z komunikatu (E5), wyjątki typów dni w nagrodzie i nuty (E7), okres kalibracji (E6).

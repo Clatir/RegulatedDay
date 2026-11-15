@@ -207,14 +207,15 @@ const STARTING = new Map(DEFAULT_CATEGORIES.map((c) => [c.id, c]))
 
 /**
  * The body's cost (D520) of a cost written before the body (≤ 1.26: three pools – an own cost of a block, a routine's, a start's, a change's;
- * T1520): the starting cost (D523) of its subcategory and variant (a variant not among the starting ones – its subcategory's), a subcategory
- * not among the starting ones (or none known) – 0; a routine's – of the starting subcategory of routines (`ROUTINE_CATEGORY`). By the ids
- * only (`Map` – an id such as „constructor” is none): the reading of a file or an event knows no settings, and a day's snapshot keeps the
- * costs of its blocks as they were when it was made.
+ * T1520, T1536): the starting cost (D523) of its subcategory and variant; a subcategory or a variant not among the starting ones (yours, or
+ * none known) – 0, never its subcategory's (D523, as the settings read it – T1521); a routine's – of the starting subcategory of routines
+ * (`ROUTINE_CATEGORY`). By the ids only (`Map` – an id such as „constructor” is none): the reading of a file or an event knows no settings,
+ * and a day's snapshot keeps the costs of its blocks as they were when it was made.
  */
 export function startingBody(categoryId: string | null | undefined, variantId?: string | null): number {
   const c = categoryId != null ? STARTING.get(categoryId) : undefined
-  return c ? costsOf(c, variantId).body : 0
+  if (!c || (variantId && !c.variants.some((v) => v.id === variantId))) return 0
+  return costsOf(c, variantId).body
 }
 
 /** Whether the variant is one of the starting ones of its subcategory (D523: a variant of yours has no starting cost of the body – 0). */

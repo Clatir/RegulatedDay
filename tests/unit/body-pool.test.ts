@@ -7,9 +7,10 @@ import { describe, expect, it } from 'vitest'
 import { costsText, poolCostsFrom, sameCosts, withBody } from '@shared/model/blockCosts'
 import { DEFAULT_CATEGORIES, POOLS, startingBody } from '@shared/model/categories'
 import { daySnapshotOf, parseEvent, RULES_VERSION, type AnyEvent } from '@shared/model/events'
+import { sameOccurrence } from '@shared/engine/series'
 import { planBlockFrom, sessionBlockFieldsFrom } from '@shared/model/plan'
 import { routineFrom } from '@shared/model/routines'
-import { DEFAULT_SETTINGS, settingsFrom, settingsOn } from '@shared/model/settings'
+import { DEFAULT_SETTINGS, settingsFrom, settingsLackBody, settingsOn, type RulesSettings } from '@shared/model/settings'
 
 const three = (head: number, emotions: number, senses: number) => ({ head, emotions, senses })
 
@@ -45,9 +46,10 @@ describe('ciało – koszty startowe (D523)', () => {
     expect(POOLS).toEqual(['head', 'emotions', 'senses', 'body'])
   })
 
-  it('startingBody: podkategoria i wariant startowy – ich ciało; wariant spoza startowych – podkategorii; podkategoria Twoja – 0', () => {
+  it('startingBody: podkategoria i wariant startowy – ich ciało; wariant i podkategoria Twoje – 0 (D523, T1536)', () => {
     expect(startingBody('regeneracja', 'drzemka')).toBe(-3)
-    expect(startingBody('regeneracja', 'moj-wariant')).toBe(-1)
+    expect(startingBody('regeneracja', null)).toBe(-1)
+    expect(startingBody('regeneracja', 'moj-wariant')).toBe(0)
     expect(startingBody('sprawy', 'przy-komputerze')).toBe(1)
     expect(startingBody('moja-podkategoria', null)).toBe(0)
     expect(startingBody('constructor', null)).toBe(0)
@@ -102,6 +104,8 @@ describe('ciało – odczyt kosztu własnego, rutyny i sesji bez ciała (T1520)'
     expect(costs('regeneracja', 'drzemka')).toEqual({ head: 1, emotions: 1, senses: 1, body: -3 })
     expect(costs('inne', null)).toEqual({ head: 1, emotions: 1, senses: 1, body: 1 })
     expect(costs('moja', null)).toEqual({ head: 1, emotions: 1, senses: 1, body: 0 })
+    // A variant of yours of a starting subcategory: 0, not the subcategory's −1 (T1536).
+    expect(costs('regeneracja', 'moj-wariant')).toEqual({ head: 1, emotions: 1, senses: 1, body: 0 })
     expect(planBlockFrom({ id: 'a', categoryId: 'inne', startMin: 600, durationMin: 60, costs: { ...three(1, 1, 1), body: -2 } })!.costs!.body).toBe(-2)
     // A body that is there and no cost: no cost at all (never a part of one).
     expect(planBlockFrom({ id: 'a', categoryId: 'inne', startMin: 600, durationMin: 60, costs: { ...three(1, 1, 1), body: 9 } })!.costs).toBeNull()
@@ -167,5 +171,67 @@ describe('ciało – zdarzenia starszej wersji i reguły (T1524, T1527, T1528)',
 
   it('RULES_VERSION 16: starsza wersja ustępuje prowadzenia (zejścia ciała, nagroda za rezerwę)', () => {
     expect(RULES_VERSION).toBe(16)
+  })
+})
+
+/** Settings as a version before the body (≤ 1.26) writes them: no `body` in any category's or variant's cost. */
+function withoutBodies(settings: RulesSettings): Record<string, unknown> {
+  const strip = (c: unknown) => {
+    if (!c || typeof c !== 'object') return c
+    const { body: _body, ...rest } = c as Record<string, unknown>
+    return rest
+  }
+  const categories = Object.fromEntries(Object.entries(settings.categories).map(([id, c]) => [id, { ...c, costs: strip(c.costs), variants: c.variants.map((v) => (v.costs ? { ...v, costs: strip(v.costs) } : v)) }]))
+  return { ...settings, categories }
+}
+
+describe('ciało – migawka ustawień starszej wersji (T1532)', () => {
+  const mine = settingsOn([{ id: 'u', from: '2026-01-01', at: null, made: 1, patch: { categories: { analiza: { costs: { body: 2 } }, regeneracja: { variants: [{ id: 'drzemka', name: 'Leżenie, drzemka', costs: { head: -3, emotions: -1, senses: -2, body: -1 } }, { id: 'moje', name: 'Moje', costs: { head: 0, emotions: 0, senses: 0, body: 4 } }] } } } }], '2026-11-15')
+  const legacy = withoutBodies(mine)
+
+  it('settingsLackBody rozpoznaje ustawienia bez ciała', () => {
+    expect(settingsLackBody(legacy)).toBe(true)
+    expect(settingsLackBody(mine)).toBe(false)
+    expect(settingsLackBody({})).toBe(false)
+  })
+
+  it('migawka dnia z 1.26: ciało kategorii i wariantów z Twoich ustawień tej daty, nie startowe', () => {
+    const snapshot = { dayType: 'zwykly', settings: legacy, templateId: null, templateFrom: null, budgetMin: 0, maxMin: 0, wakeMin: 420, templateWakeMin: 420, blocks: [], changes: [], holidays: [] }
+    const e = JSON.parse(JSON.stringify({ id: 'x', c: 'pcb', n: 1, t: 5, l: 5, v: 15, day: '2026-11-15', dom: 'timer', k: 'day.create', snapshot })) as AnyEvent
+    let asked: number | null = null
+    const s = daySnapshotOf([e], (at) => ((asked = at), mine))!
+    expect(asked).toBe(5)
+    expect(s.settings.categories.analiza!.costs.body).toBe(2)
+    expect(s.settings.categories.regeneracja!.variants.map((v) => [v.id, v.costs?.body])).toEqual([
+      ['drzemka', -1],
+      ['moje', 4]
+    ])
+    // Without your settings (a caller that does not know them): the starting body, a variant of yours – 0 (T1521).
+    const alone = daySnapshotOf([e])!
+    expect(alone.settings.categories.analiza!.costs.body).toBe(0)
+    expect(alone.settings.categories.regeneracja!.variants.map((v) => v.costs?.body)).toEqual([-3, 0])
+    // A snapshot with the body: your settings are never asked.
+    const fresh = JSON.parse(JSON.stringify({ ...(e as object), snapshot: { ...snapshot, settings: mine } })) as AnyEvent
+    expect(daySnapshotOf([fresh], () => DEFAULT_SETTINGS)!.settings.categories.analiza!.costs.body).toBe(2)
+  })
+
+  it('bloki migawki bez ciała – reguła pliku bloku (zakres sprawdzony, T1520)', () => {
+    const snapshot = { dayType: 'zwykly', settings: {}, templateId: null, templateFrom: null, budgetMin: 0, maxMin: 0, wakeMin: 420, templateWakeMin: 420, changes: [], holidays: [] }
+    const blocks = [
+      { id: 'a', categoryId: 'regeneracja', variantId: 'moje', costs: three(1, 1, 1) },
+      { id: 'b', categoryId: 'inne', variantId: null, costs: three(9, 1, 1) }
+    ]
+    const e = JSON.parse(JSON.stringify({ id: 'x', c: 'pcb', n: 1, t: 5, l: 5, v: 15, day: '2026-11-15', dom: 'timer', k: 'day.create', snapshot: { ...snapshot, blocks } })) as AnyEvent
+    expect(daySnapshotOf([e])!.blocks.map((b) => b.costs)).toEqual([{ ...three(1, 1, 1), body: 0 }, null])
+  })
+})
+
+describe('ciało – wystąpienie serii w pliku dnia starszej wersji (T1533)', () => {
+  it('blok pliku dnia z kosztem bez ciała jest tym samym wystąpieniem co seria z ciałem startowym', () => {
+    const raw = { id: 'occ', categoryId: 'inne', variantId: null, startMin: 600, durationMin: 60, fixed: false, background: null, costs: three(2, 1, 1), bgCostPct: null, note: '', name: null, routine: null, steps: [] }
+    const occ = planBlockFrom(raw)!
+    expect(occ.costs).toEqual({ ...three(2, 1, 1), body: 1 })
+    expect(sameOccurrence(raw, occ)).toBe(true)
+    expect(sameOccurrence({ ...raw, costs: { ...three(2, 1, 1), body: 3 } }, occ)).toBe(false)
   })
 })

@@ -11,7 +11,7 @@
 import { poolCostsFrom } from '../model/blockCosts'
 import { ROUTINE_CATEGORY, startingBody, type Costs } from '../model/categories'
 import { compareEvents, eventAt, isKnown, ROUTINE_COSTS_FROM, type AnyEvent, type CloseHow, type EventBase, type LogEvent, type MinuteClass, type StartPlanned } from '../model/events'
-import { settingsFrom, type DayTypeId, type RulesSettings } from '../model/settings'
+import { DEFAULT_SETTINGS, settingsFrom, settingsLackBody, type DayTypeId, type RulesSettings } from '../model/settings'
 import { blockNameFrom, requestIdsFrom, type PlanBlock } from '../model/plan'
 import type { RoutineVersion } from '../model/routines'
 import { atOf, idxOf, type Grid } from './grid'
@@ -331,7 +331,11 @@ function startNaming(v: { name?: unknown; task?: unknown; routine?: unknown; req
   return out
 }
 
-export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
+/**
+ * The day's facts from its log. `bodiesAt` – the settings in force at an instant of the day (your dated settings), asked only for a change
+ * of the day's settings an older version wrote without the body (`day.snapshot`, ≤ 1.26, T1532): its costs take the body from them.
+ */
+export function foldFacts(grid: Grid, events: readonly AnyEvent[], bodiesAt?: (at: number) => RulesSettings): DayFacts {
   const f: DayFacts = {
     grid,
     blocks: new Map(),
@@ -556,7 +560,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         f.snapshots.push({
           at: idx(e.at),
           dayType: e.dayType,
-          settings: settingsFrom(e.settings),
+          settings: settingsFrom(e.settings, DEFAULT_SETTINGS, bodiesAt && settingsLackBody(e.settings) ? bodiesAt(e.at) : undefined),
           reason: e.reason,
           max: e.max != null ? idx(e.max) : null,
           minRegen: e.minRegen ?? null

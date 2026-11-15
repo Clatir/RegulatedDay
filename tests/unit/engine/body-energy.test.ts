@@ -13,6 +13,13 @@ import { suggestRegen } from '@shared/engine/reserve'
 import { dayStats } from '@shared/engine/stats'
 import { lastEventsOf } from '@shared/engine/freeze'
 import { engineView, POOL_TEXT } from '@shared/engineView'
+import { marketDay } from '@shared/calendar/holidays'
+import { dayContextOf } from '@shared/engine/context'
+import { computeDay } from '@shared/engine/day'
+import { computeEnergy } from '@shared/engine/energy'
+import type { AnyEvent } from '@shared/model/events'
+import { settingsOn, type RulesSettings, type SettingsChange } from '@shared/model/settings'
+import { placeLogical } from '@shared/time/day'
 import { planBlock } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { dayEnd } from '@shared/time/day'
@@ -165,5 +172,77 @@ describe('ciało – krzywa, statystyki, CSV, kalibracja', () => {
     const s = sc().checkin('08:00', { ...none(), body: [1, 1] }).ran('a', '09:00', '11:00').relative('body', -10, '11:00')
     const e = costEvidence({ ...s.contextAt(at), now: at, asWritten: true }, s.stateAt(at, { asWritten: true }), true)!
     expect(e.residual.inne).toEqual({ head: 0, emotions: 0, senses: 0, body: -10 })
+  })
+})
+
+/** Settings as a version before the body (≤ 1.26) writes them: no `body` in any category's or variant's cost. */
+function withoutBodies(settings: RulesSettings): Record<string, unknown> {
+  const strip = (c: unknown) => {
+    if (!c || typeof c !== 'object') return c
+    const { body: _body, ...rest } = c as Record<string, unknown>
+    return rest
+  }
+  const categories = Object.fromEntries(Object.entries(settings.categories).map(([id, c]) => [id, { ...c, costs: strip(c.costs), variants: c.variants.map((v) => (v.costs ? { ...v, costs: strip(v.costs) } : v)) }]))
+  return { ...settings, categories }
+}
+
+describe('ciało – dzień zrobiony przez starszą wersję (T1532)', () => {
+  // Your settings (1.27): „Analiza” costs the body 2 an hour; the computer of 1.26 makes the day and writes them without it.
+  const DAY = '2026-11-18'
+  const changes: SettingsChange[] = [{ id: 'u', from: '2026-01-01', at: null, made: 1, patch: { categories: { analiza: { costs: { body: 2 } } } } }]
+  const mine = settingsOn(changes, DAY)
+  const at = (hm: number) => placeLogical(DAY, hm)
+  const base = (n: number, t: number, e: Record<string, unknown>) => ({ id: `pcb-${n}`, c: 'pcb', n, t, l: t, v: 15, day: DAY, ...e }) as unknown as AnyEvent
+  const params = mine.dayTypes.zwykly
+  const snapshot = { dayType: 'zwykly', settings: withoutBodies(mine), templateId: null, templateFrom: null, budgetMin: params.budgetMin, maxMin: params.maxMin, wakeMin: params.wakeMin, templateWakeMin: params.wakeMin, blocks: [planBlock({ id: 'a', categoryId: 'analiza', startMin: 9 * 60, durationMin: 60 })], changes: [], holidays: [] }
+  const events = [
+    base(0, at(4 * 60), { dom: 'timer', k: 'day.create', snapshot }),
+    base(1, at(8 * 60), { dom: 'energy', k: 'energy.checkin', at: at(8 * 60), answers: { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [1, 1] } }),
+    base(2, at(9 * 60), { dom: 'timer', k: 'block.start', block: 'a', at: at(9 * 60), bg: false, planned: { categoryId: 'analiza', variantId: null, durationMin: 60, fixed: false, costs: null }, confirmUntil: null, how: 'click' }),
+    base(3, at(10 * 60), { dom: 'timer', k: 'block.end', block: 'a', at: at(10 * 60), done: true, rule: null })
+  ]
+  const ctxAt = (evs: AnyEvent[], t: number, ch = changes) => dayContextOf({ changes: ch, templates: [], lectures: [], series: [], routines: [] }, { date: DAY, events: evs, dayFile: null, nextFile: null }, marketDay, t)
+
+  it('migawka z logu bierze ciało z Twoich ustawień tej daty: „Analiza” 1 h → ciało −6', () => {
+    const ctx = ctxAt(events, at(10 * 60 + 30))
+    expect(ctx.snapshot.settings.categories.analiza!.costs).toEqual({ head: 3, emotions: 1, senses: 1, body: 2 })
+    expect(computeEnergy(ctx, computeDay(ctx)).now!.body).toBe(59)
+  })
+
+  it('zmiana ustawień „od dziś” zapisana przez starszą wersję (`day.snapshot`): ciało z Twoich ustawień w jej chwili', () => {
+    // 1.26 changes the reserve „od dziś” at 08:30; 1.27 had set the body of „Analiza” to 4 from 08:15 today.
+    const today: SettingsChange = { id: 'v', from: DAY, at: at(8 * 60 + 15), made: 2, patch: { categories: { analiza: { costs: { body: 4 } } } } }
+    const legacyToday = { ...withoutBodies(settingsOn([...changes, today], DAY, at(8 * 60 + 30))), reserve: 10 }
+    const evs = [...events, base(4, at(8 * 60 + 30), { dom: 'timer', k: 'day.snapshot', at: at(8 * 60 + 30), dayType: 'zwykly', settings: legacyToday, reason: 'today' })]
+    const ctx = ctxAt(evs, at(10 * 60 + 30), [...changes, today])
+    const day = computeDay(ctx)
+    expect(day.facts.snapshots.map((x) => [x.settings.reserve, x.settings.categories.analiza!.costs.body])).toEqual([[10, 4]])
+    expect(computeEnergy(ctx, day).now!.body).toBe(65 - 12)
+    // A context without your changes (built by hand): the body of the day's snapshot.
+    const { changes: _c, ...bare } = ctx
+    expect(computeDay(bare).facts.snapshots[0]!.settings.categories.analiza!.costs.body).toBe(2)
+  })
+})
+
+describe('ciało – zmiana kosztu na kafelku zapisana przez starszą wersję (T1534)', () => {
+  const legacyCost = (s: Scenario, block: string, at: string, costs: Record<string, number>) => s.raw({ k: 'block.cost', block, at: s.at(at), costs, v: 15 }, at)
+
+  it('ciało z kosztu, który blok miał przed zmianą: własne ciało startu zostaje', () => {
+    const own = [planBlock({ id: 'a', categoryId: 'inne', startMin: 540, durationMin: 60, costs: { head: 1, emotions: 1, senses: 1, body: 4 } })]
+    const s = sc(own).checkin('08:00', { ...none(), body: [1, 1] }).start('a', '09:00')
+    legacyCost(s, 'a', '09:00', { head: 0, emotions: 0, senses: 0 })
+    s.end('a', '10:00')
+    expect(s.energy('10:00').now).toEqual({ head: 100, emotions: 100, senses: 100, body: 65 - 12 })
+  })
+
+  it('bez własnego kosztu – ciało podkategorii z ustawień dnia; po zmianie z ciałem – to ciało', () => {
+    const s = sc(undefined, { categories: { inne: { costs: { body: 3 } } } }).checkin('08:00', { ...none(), body: [1, 1] }).start('a', '09:00')
+    legacyCost(s, 'a', '09:00', { head: 0, emotions: 0, senses: 0 })
+    expect(s.energy('09:30').now!.body).toBe(65 - 4.5)
+    s.raw({ k: 'block.cost', block: 'a', at: s.at('09:30'), costs: { head: 0, emotions: 0, senses: 0, body: -2 } }, '09:30')
+    legacyCost(s, 'a', '10:00', { head: 1, emotions: 0, senses: 0 })
+    s.end('a', '10:30')
+    // 09:00–09:30 body 3, 09:30–10:00 −2, 10:00–10:30 −2 (kept from the change before).
+    expect(s.energy('10:30').now!.body).toBe(65 - 4.5 + 3 + 3)
   })
 })

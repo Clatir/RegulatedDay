@@ -70,10 +70,13 @@ T1360–T1374, T1395–T1399, T1430–T1437, T1440–T1447.
   `routine.cost` – nieznane zdarzenie timera (instalacja bez 24 h), `RULES_VERSION` bez zmian – to samo wydanie (T1396, T1430).
 
 - Ciało (D520, D523, D524): `Costs.body`, tekst zawsze czterema liczbami G · E · B · C (`costsText`, też ciało 0), `sameCosts` z ciałem.
-  Koszt zapisany przed ciałem (≤ 1.26, trzy pola) – ciało z `startingBody(podkategoria, wariant)` (koszt startowy D523; wariant spoza startowych
-  – podkategorii; podkategoria spoza startowych – 0; rutyna – `ROUTINE_CATEGORY`): `planBlockFrom`/`sessionBlockFieldsFrom` (`costsFrom`),
-  `routineFrom`, `foldFacts`, `costChangesOf`, `daySnapshotOf` (T1520, T1527). Ustawienia (`settingsFrom` → `categoryFrom(id, …)`): ciało
-  z ustawień sprzed (na starcie – D523); wariant bez wcześniejszego kosztu: startowy – ciało podkategorii, Twój – 0 (T1521). Zapis zawsze z 4 polami.
+  Koszt zapisany przed ciałem (≤ 1.26, trzy pola) – ciało z `startingBody(podkategoria, wariant)` (koszt startowy D523; podkategoria albo
+  wariant spoza startowych – 0, T1536; rutyna – `ROUTINE_CATEGORY`): `ownCostsFrom` (plik bloku, sesja szablonu, bloki migawki, `sameOccurrence`
+  – T1533), `routineFrom`, `foldFacts` (start), `costChangesOf` (`routine.cost`) (T1520, T1527). `block.cost` bez ciała – ciało kosztu bloku
+  sprzed zmiany (`bodiesBefore`: poprzedni własny, start, rutyna, wariant/podkategoria z ustawień dnia – T1534). Ustawienia (`settingsFrom` →
+  `categoryFrom(id, …)`): ciało z ustawień sprzed (na starcie – D523); wariant bez wcześniejszego kosztu: startowy – ciało podkategorii, Twój – 0
+  (T1521); migawka dnia i `day.snapshot` starszej wersji – ciało z Twoich ustawień datowanych w jej chwili (`settingsFrom(…, bodies)`,
+  `settingsLackBody`, `daySnapshotOf(events, bodiesAt)`, `foldFacts(…, bodiesAt)`, `DayContext.changes` – T1532). Zapis zawsze z 4 polami.
 
 ## Kafelek i zapis
 - `TimelineItem.cost` („Dziś” – `dayAxis` z `today`; „Szablony” – `planCosts`: koszt z planu, okienko tylko na blokach szablonu;

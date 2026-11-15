@@ -10,10 +10,10 @@
  */
 import { isIsoDate } from '../time/zone'
 import { isPoolCost } from './blockCosts'
-import { POOLS, startingBody, type Costs, type LoggedPools, type Pool } from './categories'
-import { MAX_BLOCK_MIN, type PlanBlock } from './plan'
+import { POOLS, type Costs, type LoggedPools, type Pool } from './categories'
+import { MAX_BLOCK_MIN, ownCostsFrom, type PlanBlock } from './plan'
 import { MAX_STEPS, ROUTINE_VERSIONS, type RoutineVersion } from './routines'
-import { settingsFrom, type DayTypeId, type RulesSettings } from './settings'
+import { DEFAULT_SETTINGS, settingsFrom, settingsLackBody, type DayTypeId, type RulesSettings } from './settings'
 
 export type Domain = 'timer' | 'energy' | 'game' | 'meta'
 
@@ -56,9 +56,11 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * template, „nie” too (no shift, no early close, no question, never twice: the layer is empty from the move, T1403); it gives way to
  * this one as the leader and freezes no day. 16 – the fourth pool, the body (D520–D523, T1524): an older version counts three pools – it
  * registers no descent of the body (`energy.reserve`) and freezes the day's reward „Reakcja na rezerwę” without it; it gives way to this
- * one as the leader. It loses nothing: the body's answers of a check-in and the body in `before` and in costs are fields it does not read
- * (kept in the files and the logs as written); a relative assessment or a descent of the body (`pool: 'body'`) is a broken line to it –
- * skipped and listed, the line stays in its writer's log.
+ * one as the leader. What it does not read stays as written: the body's answers of a check-in, the body in `before`, in costs of the files and
+ * the logs; a relative assessment or a descent of the body (`pool: 'body'`) is a broken line to it – skipped and listed, the line stays in
+ * its writer's log. A cost it changes is written with three pools: an own cost of a block (`block.cost`, the day's file) takes the body back
+ * from the cost before it (T1534; a file – the starting body, T1520), a routine's cost loses its body to the starting routines' (T1520); a
+ * day or a change of the day's settings it writes – the body of your dated settings (T1532).
  */
 export const RULES_VERSION = 16
 
@@ -470,23 +472,33 @@ export function compareEvents(a: Pick<EventBase, 'l' | 'c' | 'n'>, b: Pick<Event
   return a.l - b.l || (a.c < b.c ? -1 : a.c > b.c ? 1 : 0) || a.n - b.n
 }
 
-/** The day's snapshot in force: the last issued (a re-issue replaces the creation's), in the full order; null before. */
-export function daySnapshotOf(events: readonly AnyEvent[]): DaySnapshot | null {
+/**
+ * The day's snapshot in force: the last issued (a re-issue replaces the creation's), in the full order; null before. `bodiesAt` – your dated
+ * settings at an instant of the day (`settingsOn`), asked only for a snapshot an older version wrote without the body (≤ 1.26, T1532): its
+ * categories' and variants' costs take the body from them, not from the starting costs; none given – the rules of T1521.
+ */
+export function daySnapshotOf(events: readonly AnyEvent[], bodiesAt?: (at: number) => RulesSettings): DaySnapshot | null {
   let found: { e: EventBase; s: DaySnapshot } | null = null
   for (const e of events) {
     if (!isKnown(e) || (e.k !== 'day.create' && e.k !== 'day.reissue')) continue
     if (!found || compareEvents(e, found.e) > 0) found = { e, s: e.snapshot }
   }
-  // Settings written by an older version lack the fields added since: they take their defaults (tolerant schemas); the own costs of its
-  // blocks lack the body (D520, ≤ 1.26) – their subcategory's starting body (T1520, T1527).
-  return found ? { ...found.s, settings: settingsFrom(found.s.settings), blocks: withBodies(found.s.blocks) } : null
+  if (!found) return null
+  // Settings written by an older version lack the fields added since: they take their defaults (tolerant schemas); the costs without the
+  // body – your settings' body of the day at the instant it was made (T1532), its blocks' own costs – the starting body (T1520, T1527).
+  const raw = found.s.settings
+  const bodies = bodiesAt && settingsLackBody(raw) ? bodiesAt(found.e.t) : undefined
+  return { ...found.s, settings: settingsFrom(raw, DEFAULT_SETTINGS, bodies), blocks: withBodies(found.s.blocks) }
 }
 
-/** The blocks of a snapshot with the body in their own costs: one an older version wrote has three pools (T1527); as written otherwise. */
+/**
+ * The blocks of a snapshot with the body in their own costs: one an older version wrote has three pools (T1527) – read by the rule of a
+ * block's file (`ownCostsFrom`, T1520); as written otherwise.
+ */
 function withBodies(blocks: DaySnapshot['blocks']): DaySnapshot['blocks'] {
   const lacks = (b: DaySnapshot['blocks'][number]) => isPlain(b.costs) && (b.costs as Record<string, unknown>).body === undefined
   if (!Array.isArray(blocks) || !blocks.some(lacks)) return blocks
-  return blocks.map((b) => (lacks(b) ? { ...b, costs: { ...b.costs!, body: startingBody(b.categoryId, b.variantId) } } : b))
+  return blocks.map((b) => (lacks(b) ? { ...b, costs: ownCostsFrom(b.costs, b.categoryId, b.variantId) } : b))
 }
 
 /** The kind's own instant (`at`, `from` …) – what the rules place the event at. */

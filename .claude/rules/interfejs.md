@@ -77,7 +77,7 @@ paths:
   `Charts` (ręczne słupki i słupki ułożone, bez zależności), `statsView` (skale, miejsca słupków, teksty – testy `tests/web/stats-view.test.ts`).
   Liczy je `folder.stats(okres)` (IPC `stats`): dni zamrożone z plików ocen (`gradeIndex`), każdy dzień przez zadanie procesu pomocniczego
   `stats` do zdarzeń z `know` (`engine/stats.ts`: `dayStats`, `statsOf`), pamięć wyniku dnia po jego wejściach; dzień bez czytelnego loga =
-  „nieczytelne”. „Energia” check-inu = średnia trzech pul (25–100). Strona jest jedną pozycją w `PAGES` (`store/ui.ts`); cyfry Ctrl+1…
+  „nieczytelne”. „Energia” check-inu = średnia zadanych pul (25–100, T1522). Strona jest jedną pozycją w `PAGES` (`store/ui.ts`); cyfry Ctrl+1…
   idą w kolejności menu (`DIGIT_PAGES` w `app/pages.ts`, D362).
 - Serie (T709): `useData().series` / `seriesPlans` (do `countDay`), `window.rd.series*` → `SeriesResult` – reguły `dane.md`.
   Ekrany (T711–T714): `features/series/` (`BlockSeries`, `SeriesFields`, `seriesForm`, `scopeAsk`, `seriesActions`, `SeriesEditor`); testy `tests/web/series-*`, `tests/e2e/series.spec.ts`.

@@ -282,7 +282,9 @@ export const requestIdsFrom = (v: unknown): string[] => (Array.isArray(v) ? [...
  * A block's own cost as a file holds it: the schema's range of a pool's cost (`RANGES.cost`, `poolCostsFrom`), as the settings' categories
  * read it; written before the body (D520, ≤ 1.26 – three pools) – the body of its subcategory and variant's starting cost (T1520).
  */
-const costsFrom = (v: unknown, categoryId: string, variantId: string | null): PlanBlock['costs'] => (isPlain(v) ? poolCostsFrom(v, startingBody(categoryId, variantId)) : null)
+export const ownCostsFrom = (v: unknown, categoryId: unknown, variantId: unknown): PlanBlock['costs'] =>
+  isPlain(v) ? poolCostsFrom(v, startingBody(typeof categoryId === 'string' ? categoryId : null, typeof variantId === 'string' ? variantId : null)) : null
+const costsFrom = ownCostsFrom
 
 /** A block from a file, or null when it cannot be one (no id, no category, no start nor anchor, no length). */
 export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'): PlanBlock | null {

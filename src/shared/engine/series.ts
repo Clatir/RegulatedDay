@@ -11,7 +11,7 @@ import type { Raw } from '../data/dayEdits'
 import { dayBlocks, dayRaw, putBlock, setAsked, setCancelled, takeBlock } from '../data/dayEdits'
 import type { DaySnapshot } from '../model/events'
 import { derivedId } from '../model/ids'
-import { dayFileFrom, layerKept, planBlock, type DayFile, type PlanBlock } from '../model/plan'
+import { dayFileFrom, layerKept, ownCostsFrom, planBlock, type DayFile, type PlanBlock } from '../model/plan'
 import {
   SERIES_BLOCK_FIELDS,
   countedBefore,
@@ -267,8 +267,10 @@ export function endedOn(s: Series, last: string, today: string, remove: boolean)
 /** Whether a block of a day's file still is the occurrence as `occ` makes it (not changed on its day – „Tylko to”). */
 export function sameOccurrence(b: Raw | PlanBlock, occ: PlanBlock): boolean {
   const r = b as Record<string, unknown>
-  // Its steps as a list (D440, T786): a tick is its day's, never a change of the occurrence; a file's list read as a file's.
-  return SERIES_BLOCK_FIELDS.every((k) => (k === 'steps' ? sameStepList(stepsFrom(r.steps), stepsFrom(occ.steps)) : JSON.stringify(r[k] ?? null) === JSON.stringify(occ[k] ?? null)))
+  // Its steps as a list (D440, T786): a tick is its day's, never a change of the occurrence; a file's list read as a file's. Its own cost
+  // as a file's (`ownCostsFrom`): one an older version wrote without the body (≤ 1.26) is the occurrence's with the starting body (T1533).
+  const value = (k: (typeof SERIES_BLOCK_FIELDS)[number]) => (k === 'costs' ? ownCostsFrom(r.costs, r.categoryId, r.variantId) : r[k])
+  return SERIES_BLOCK_FIELDS.every((k) => (k === 'steps' ? sameStepList(stepsFrom(r.steps), stepsFrom(occ.steps)) : JSON.stringify(value(k) ?? null) === JSON.stringify(occ[k] ?? null)))
 }
 
 /** Today's day for an edit of today's occurrence: its context and state as this computer counts them now. */

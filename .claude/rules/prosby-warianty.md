@@ -40,7 +40,7 @@ D247, D263, D296, T202, T372. Decyzje T478–T481, T502, T503. Elementy w pasku 
   ułożenie raz (klucz po startach); pierwszy blok przerwy za blokiem przed nią z buforem (T619); szacunek z przełączeniem w
   blok stały za przerwą (T620); `mends: false` – wybór nie zamyka przyczyn (D379, T621): `lowestEnergy` ≥ przed + `ENERGY_ORDER_GAIN` (5),
   bez nowego przedłużenia i bez końca pracy za zatwierdzoną granicą; przed zatwierdzeniem – koniec pracy najwyżej w maksimum
-  dnia (`boundary.max`, D378, T617; tylko ten wariant, `judgeDay` bez zmian). `lowestEnergy` – min trzech pul z `energy.forecast.min` (jednostki).
+  dnia (`boundary.max`, D378, T617; tylko ten wariant, `judgeDay` bez zmian). `lowestEnergy` – min czterech pul (z ciałem, D520) z `energy.forecast.min` (jednostki).
 - `facts.ts`: `resumedWith` (wznowienie zapisane z końcem prośby), cięcie przebiegów przez `request.start.splits`.
 - Kliknięcia próśb idą drogą timera: `folder.timerClick`; „Koniec” – do dnia, w którym prośba trwa (także sprzed 04:00).
 

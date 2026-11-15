@@ -255,7 +255,11 @@ const CLASSES = new Set(['work', 'life', 'free'])
 const KINDS = new Set(['session', 'lecture', 'remoteClass', 'commute', 'meal', 'routine', 'request', 'regen', 'project', 'other'])
 const PLACES = new Set(['computer', 'passive', 'away'])
 
-function categoryFrom(id: string, v: unknown, fallback: CategoryRules | undefined): CategoryRules | null {
+/**
+ * A category of the settings. `bodies` – the category whose body a cost written before the body (≤ 1.26) takes, when the caller knows the
+ * settings in force then (a day's snapshot of an older version – your dated settings of its day, T1532); none – the rules of T1521.
+ */
+function categoryFrom(id: string, v: unknown, fallback: CategoryRules | undefined, bodies?: CategoryRules): CategoryRules | null {
   if (!isPlain(v)) return fallback ?? null
   const f: CategoryRules = fallback ?? {
     cls: 'work',
@@ -274,7 +278,7 @@ function categoryFrom(id: string, v: unknown, fallback: CategoryRules | undefine
     variants: []
   }
   const bool = (k: keyof CategoryRules) => (typeof v[k] === 'boolean' ? (v[k] as boolean) : (f[k] as boolean))
-  const costs = costsFrom(v.costs, f.costs)
+  const costs = costsFrom(v.costs, f.costs, bodies?.costs.body ?? f.costs.body)
   return {
     cls: CLASSES.has(v.cls as string) ? (v.cls as CategoryRules['cls']) : f.cls,
     kind: KINDS.has(v.kind as string) ? (v.kind as CategoryRules['kind']) : f.kind,
@@ -305,7 +309,7 @@ function categoryFrom(id: string, v: unknown, fallback: CategoryRules | undefine
               ...(x.costs === null
                 ? {}
                 : x.costs !== undefined
-                  ? { costs: costsFrom(x.costs, fv?.costs ?? f.costs, fv?.costs ? fv.costs.body : isStartingVariant(id, x.id) ? costs.body : 0) }
+                  ? { costs: costsFrom(x.costs, fv?.costs ?? f.costs, variantBody(bodies, x.id) ?? (fv?.costs ? fv.costs.body : isStartingVariant(id, x.id) ? costs.body : 0)) }
                   : fv?.costs
                     ? { costs: fv.costs }
                     : {}),
@@ -394,14 +398,27 @@ function movedLayerFrom(v: unknown, fallback: MovedLayer | null): MovedLayer | n
   }
 }
 
-/** Settings checked field by field: a wrong value falls back to `fallback`'s (never breaks the day). */
-export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SETTINGS): RulesSettings {
+/** The body of a variant's own cost in `bodies` (T1532); none there (no such variant, or one „jak podkategoria”) – the rules of T1521. */
+const variantBody = (bodies: CategoryRules | undefined, variantId: string): number | undefined => bodies?.variants.find((x) => x.id === variantId)?.costs?.body
+
+/** Whether settings as a file or an event holds them have a cost without the body (D520: written by a version before it, ≤ 1.26). */
+export function settingsLackBody(raw: unknown): boolean {
+  const cats = isPlain(raw) && isPlain(raw.categories) ? raw.categories : {}
+  const lacks = (c: unknown) => isPlain(c) && c.body === undefined
+  return Object.values(cats).some((c) => isPlain(c) && (lacks(c.costs) || (Array.isArray(c.variants) && c.variants.some((x) => isPlain(x) && lacks(x.costs)))))
+}
+
+/**
+ * Settings checked field by field: a wrong value falls back to `fallback`'s (never breaks the day). `bodies` – the settings whose bodies a
+ * cost without the body takes (`categoryFrom`, T1532).
+ */
+export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SETTINGS, bodies?: RulesSettings): RulesSettings {
   const r = isPlain(raw) ? raw : {}
   const dt = isPlain(r.dayTypes) ? r.dayTypes : {}
   const cats = isPlain(r.categories) ? r.categories : {}
   const categories: Record<string, CategoryRules> = {}
   for (const id of new Set([...Object.keys(fallback.categories), ...Object.keys(cats)])) {
-    const c = categoryFrom(id, cats[id], fallback.categories[id])
+    const c = categoryFrom(id, cats[id], fallback.categories[id], bodies && Object.hasOwn(bodies.categories, id) ? bodies.categories[id] : undefined)
     if (c) categories[id] = c
   }
   const rem = isPlain(r.reminders) ? r.reminders : {}
