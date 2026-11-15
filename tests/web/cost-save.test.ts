@@ -35,7 +35,7 @@ vi.mock('@renderer/features/series/scopeAsk', () => ({ askScope: vi.fn() }))
 const TODAY = '2098-12-31'
 const D1 = '2099-01-05'
 const AT = placeLogical(TODAY, 5 * 60)
-const own: PlanBlock['costs'] = { head: 4, emotions: 0, senses: -2 }
+const own: PlanBlock['costs'] = { head: 4, emotions: 0, senses: -2, body: 0 }
 const flex = (id: string, at: string, min: number, o: Partial<PlanBlock> = {}): PlanBlock => ({ ...block({ id, cat: 'inne', at, min, origin: 'user' }), ...o })
 const fileOf = (date: string, plan: PlanBlock[]): RawRecord => ({ schema: 1, date, blocks: plan.map((b) => blockJson(b)) })
 const dateOf = (rel: string) => /(\d{4}-\d{2}-\d{2})\.json$/.exec(rel)![1]!

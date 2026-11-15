@@ -1,5 +1,5 @@
 /**
- * Statystyki (D358): each measure on examples – the energy of a check-in (the mean of its three pools) by the time of
+ * Statystyki (D358): each measure on examples – the energy of a check-in (the mean of the pools it asks about – four, T1522) by the time of
  * day and the day of the week, the felt cost „ciężej” by category, the accuracy of the estimates (the conditions of the
  * reward „Trafne szacowanie”), the requests by person, the boundaries by week; only the events a freeze names; a day
  * that cannot be read counted apart; an empty period.
@@ -7,14 +7,14 @@
 import { describe, expect, it } from 'vitest'
 import { lastEventsOf } from '@shared/engine/freeze'
 import { dayStats, MIN_STATS_DAYS, periodFrom, statsOf, storedBoundary, type DayStats } from '@shared/engine/stats'
-import type { Pool } from '@shared/model/categories'
+import type { LoggedPools, Pool } from '@shared/model/categories'
 import type { Answer } from '@shared/model/events'
 import { dayEnd } from '@shared/time/day'
 import { block, Scenario } from './dsl'
 
 const DATE = '2026-10-28'
 const ON = { energy: true, projects: true, requests: true }
-const MID: Record<Pool, [Answer, Answer]> = { head: [1, 1], emotions: [1, 1], senses: [1, 1] }
+const MID: Record<Pool, [Answer, Answer]> = { head: [1, 1], emotions: [1, 1], senses: [1, 1], body: [1, 1] }
 
 function counted(s: Scenario, modules = ON, grade: Record<string, unknown> | null = null, know?: Record<string, number>): DayStats {
   const end = dayEnd(s.opts.date)
@@ -23,7 +23,7 @@ function counted(s: Scenario, modules = ON, grade: Record<string, unknown> | nul
 
 const felt = (s: Scenario, category: string, feel: 'lighter' | 'usual' | 'heavier', at: string) => s.raw({ k: 'cost.felt', at: s.at(at), category, feel }, at)
 
-function day(date: string, o: { checkin?: [string, Record<Pool, [Answer, Answer]>] } = {}): Scenario {
+function day(date: string, o: { checkin?: [string, LoggedPools<[Answer, Answer]>] } = {}): Scenario {
   const s = new Scenario({ date, plan: [block({ id: 'a', cat: 'analiza', at: '09:00', min: 60 })], settings: { transitionBufferMin: 0 } })
   s.presence('07:30')
   if (o.checkin) s.checkin(...o.checkin)
@@ -31,8 +31,8 @@ function day(date: string, o: { checkin?: [string, Record<Pool, [Answer, Answer]
 }
 
 describe('energia z check-inów', () => {
-  it('energia check-inu to średnia trzech pul (25–100), w przedziale dwóch godzin od 04:00 i w dniu tygodnia', () => {
-    // 08:00 → bucket 2 (08:00–10:00); the pools 100, 85, 25 → 70. 2026-10-28 is a Wednesday.
+  it('energia check-inu to średnia zadanych pul (25–100), w przedziale dwóch godzin od 04:00 i w dniu tygodnia', () => {
+    // 08:00 → bucket 2 (08:00–10:00); a check-in of an older version (no body, T1522): the pools 100, 85, 25 → 70. 2026-10-28 is a Wednesday.
     const a = counted(day(DATE, { checkin: ['08:00', { head: [0, 0], emotions: [0, 1], senses: [2, 2] }] }))
     expect(a.checkins).toEqual([{ minute: 480, energy: 70 }])
     const b = counted(day('2026-10-29', { checkin: ['09:30', MID] }))

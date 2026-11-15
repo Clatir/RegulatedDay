@@ -1,9 +1,9 @@
 /**
- * The variants of a subcategory in „Kategorie” (D510): each its name, its cost – three numbers, or „jak podkategoria” (the subcategory's, also
- * after it changes) –, its place – one of the three, or „jak podkategoria” –, „Usuń” (an archive: out of the choice, kept in the history) and
- * „+ Wariant”. The variants are dated settings: every change is made in the turn of the save from the settings in force from the date of
- * „Od kiedy” (`saveVariants`, T1310, T1314); a change that changes nothing writes nothing. The sections' „Sposoby regeneracji” of before D510
- * are the variants of „Regeneracja” here.
+ * The variants of a subcategory in „Kategorie” (D510): each its name, its cost – four numbers (D524, each named by its pool – D525), or
+ * „jak podkategoria” (the subcategory's, also after it changes) –, its place – one of the three, or „jak podkategoria” –, „Usuń” (an archive:
+ * out of the choice, kept in the history) and „+ Wariant”. The variants are dated settings: every change is made in the turn of the save
+ * from the settings in force from the date of „Od kiedy” (`saveVariants`, T1310, T1314); a change that changes nothing writes nothing. The
+ * sections' „Sposoby regeneracji” of before D510 are the variants of „Regeneracja” here.
  */
 import { useState } from 'react'
 import type { CategoryRules, Place, Variant } from '@shared/model/categories'
@@ -22,7 +22,7 @@ function VariantRow({ categoryId, rules, v }: { categoryId: string; rules: Categ
     <div className={cx('flex flex-wrap items-center gap-2 rounded border border-line px-2 py-1', v.archived && 'border-dashed')} data-testid="variant-row" data-variant={v.id}>
       <TextField value={v.name} onCommit={(name) => edit((now) => changeVariant(now, v.id, { name }))} required max={VARIANT_NAME_MAX} shellClassName="w-[200px]" aria-label="Nazwa wariantu" data-testid="variant-name" />
       <Toggle checked={own == null} onChange={(same) => edit((now) => changeVariant(now, v.id, { costs: same ? null : { ...rules.costs } }))} label="koszt jak podkategoria" data-testid="variant-costs-same" />
-      {own && <CostNumbers costs={own} label={(pool) => `${v.name}: ${pool}`} onCommit={(p, value) => edit((now) => changeVariant(now, v.id, { costs: { ...(now.find((x) => x.id === v.id)?.costs ?? own), [p]: value } }))} />}
+      {own && <CostNumbers costs={own} named label={(pool) => `${v.name}: ${pool}`} onCommit={(p, value) => edit((now) => changeVariant(now, v.id, { costs: { ...(now.find((x) => x.id === v.id)?.costs ?? own), [p]: value } }))} />}
       <Choice
         value={v.place ?? VARIANT_PLACE_SAME}
         options={[...VARIANT_PLACE_OPTIONS]}

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * D501: the cost per hour on the tiles of „Tydzień” („3·1·1”, no spaces) and „3 dni” („3 · 1 · 1”) – and its small window: a click on the label
+ * D501: the cost per hour on the tiles of „Tydzień” („3·1·1·0”, no spaces) and „3 dni” („3 · 1 · 1 · 0”) – and its small window: a click on the label
  * opens the window for that block alone (it neither opens the day nor starts a drag), [+] / [−] and „Jak kategoria” save the block's own cost
  * of that day (`saveTileCosts` – the path of „Dziś”); a tile that may not be changed only tells.
  */
@@ -24,7 +24,7 @@ vi.mock('@renderer/features/plan/costSave', () => ({ saveTileCosts: vi.fn() }))
 const TODAY = '2026-11-18'
 const DATES = [TODAY, '2026-11-19']
 const named = { categoryId: 'analiza', variantId: null, routine: null, requests: [], note: '', origin: 'user' as const, sourceId: null }
-const cost = (head: number, emotions: number, senses: number, o: Partial<TileCost> = {}): TileCost => ({ costs: { head, emotions, senses }, base: { head: 3, emotions: 1, senses: 1 }, own: false, edit: true, ...o })
+const cost = (head: number, emotions: number, senses: number, body: number, o: Partial<TileCost> = {}): TileCost => ({ costs: { head, emotions, senses, body }, base: { head: 3, emotions: 1, senses: 1, body: 0 }, own: false, edit: true, ...o })
 const block = (id: string, startMin: number, endMin: number, o: Partial<HorizonBlock> = {}): HorizonBlock => ({ id, named, categoryId: 'analiza', startMin, endMin, state: 'planned', outsidePlan: false, background: false, ...o })
 const day = (date: string, blocks: HorizonBlock[]): HorizonDay => ({
   date,
@@ -85,38 +85,45 @@ function pointer(target: EventTarget, type: string, x: number, y: number, button
 const click = (el: Element) => act(() => void el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })))
 
 describe('koszt na kafelku „Tygodnia” i „3 dni” (D501)', () => {
-  it('„Tydzień”: skrót bez spacji „3·1·1”, regeneracja „−1·−2·−3”', async () => {
-    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(3, 1, 1) }), block('r', 720, 780, { cost: cost(-1, -2, -3) })]), day(DATES[1]!, [])])
-    expect(labelOf(TODAY, 'a')!.textContent).toBe('3·1·1')
-    expect(labelOf(TODAY, 'r')!.textContent).toBe('−1·−2·−3')
+  it('„Tydzień”: skrót bez spacji „3·1·1·0”, regeneracja „−1·−2·−3·−1” – zawsze cztery liczby G·E·B·C (D524)', async () => {
+    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(3, 1, 1, 0) }), block('r', 720, 780, { cost: cost(-1, -2, -3, -1) })]), day(DATES[1]!, [])])
+    expect(labelOf(TODAY, 'a')!.textContent).toBe('3·1·1·0')
+    expect(labelOf(TODAY, 'r')!.textContent).toBe('−1·−2·−3·−1')
   })
 
-  it('„3 dni”: pełny napis ze spacjami „3 · 1 · 1”', async () => {
-    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(3, 1, 1) })]), day(DATES[1]!, [])], THREE_DAYS_PPM)
-    expect(labelOf(TODAY, 'a')!.textContent).toBe('3 · 1 · 1')
+  it('„3 dni”: pełny napis ze spacjami „3 · 1 · 1 · 0”', async () => {
+    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(3, 1, 1, 0) })]), day(DATES[1]!, [])], THREE_DAYS_PPM)
+    expect(labelOf(TODAY, 'a')!.textContent).toBe('3 · 1 · 1 · 0')
+  })
+
+  it('„3 dni”, kafelek obok innego (napis po najechaniu): skrót bez spacji „1·1·1·1” – więcej miejsca do chwytania (D526)', async () => {
+    await mount([day(TODAY, [block('x', 800, 860, { cost: cost(1, 1, 1, 1) }), block('y', 800, 860, { cost: cost(3, 1, 1, 0) }), block('solo', 600, 660, { cost: cost(3, 1, 1, 0) })]), day(DATES[1]!, [])], THREE_DAYS_PPM)
+    expect(labelOf(TODAY, 'x')!.getAttribute('data-place')).toBe('hover')
+    expect(labelOf(TODAY, 'x')!.textContent).toBe('1·1·1·1')
+    expect(labelOf(TODAY, 'solo')!.textContent).toBe('3 · 1 · 1 · 0')
   })
 
   it('własny koszt bloku jest tym, co mówi napis; blok bez kosztu w danych (np. dawny widok) – bez napisu', async () => {
-    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(5, 0, -1, { own: true }) }), block('n', 720, 780)]), day(DATES[1]!, [])])
-    expect(labelOf(TODAY, 'a')!.textContent).toBe('5·0·−1')
+    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(5, 0, -1, 0, { own: true }) }), block('n', 720, 780)]), day(DATES[1]!, [])])
+    expect(labelOf(TODAY, 'a')!.textContent).toBe('5·0·−1·0')
     expect(labelOf(TODAY, 'n')).toBeNull()
   })
 
   it('miejsce: w rogu na wysokim kafelku, na końcu wiersza nazwy na niskim, po najechaniu obok innego', async () => {
-    await mount([day(TODAY, [block('tall', 600, 660, { cost: cost(3, 1, 1) }), block('low', 700, 720, { cost: cost(3, 1, 1) }), block('x', 800, 860, { cost: cost(3, 1, 1) }), block('y', 800, 860, { cost: cost(1, 1, 1) })]), day(DATES[1]!, [])])
+    await mount([day(TODAY, [block('tall', 600, 660, { cost: cost(3, 1, 1, 0) }), block('low', 700, 720, { cost: cost(3, 1, 1, 0) }), block('x', 800, 860, { cost: cost(3, 1, 1, 0) }), block('y', 800, 860, { cost: cost(1, 1, 1, 0) })]), day(DATES[1]!, [])])
     expect(labelOf(TODAY, 'tall')!.getAttribute('data-place')).toBe('corner')
     expect(labelOf(TODAY, 'low')!.getAttribute('data-place')).toBe('row')
     expect(labelOf(TODAY, 'x')!.getAttribute('data-place')).toBe('hover')
   })
 
   it('klik w napis otwiera okienko – nie otwiera dnia; [+] zapisuje własny koszt bloku tego dnia, „Jak kategoria” – null', async () => {
-    await mount([day(TODAY, []), day(DATES[1]!, [block('f', 600, 660, { cost: cost(3, 1, 1, { own: true }) })])])
+    await mount([day(TODAY, []), day(DATES[1]!, [block('f', 600, 660, { cost: cost(3, 1, 1, 0, { own: true }) })])])
     click(labelOf(DATES[1]!, 'f')!)
     expect(q('cost-pop')).not.toBeNull()
     expect(useUi.getState().page).toBe('week')
     expect(useUi.getState().day).toBeNull()
     click(q('cost-pop-emotions-plus')!)
-    expect(saveTileCosts).toHaveBeenLastCalledWith(expect.objectContaining({ date: DATES[1], blockId: 'f', ofSeries: false }), { head: 3, emotions: 2, senses: 1 }, { ask: { scope: null } })
+    expect(saveTileCosts).toHaveBeenLastCalledWith(expect.objectContaining({ date: DATES[1], blockId: 'f', ofSeries: false }), { head: 3, emotions: 2, senses: 1, body: 0 }, { ask: { scope: null } })
     await act(async () => undefined)
     click(q('cost-pop-reset')!)
     await act(async () => undefined)
@@ -125,22 +132,30 @@ describe('koszt na kafelku „Tygodnia” i „3 dni” (D501)', () => {
 
   it('wiersz godzin zostawia miejsce na napis w rogu według trybu: „3 dni” – na napis ze spacjami, „Tydzień” – na skrót', async () => {
     const hours = (date: string, id: string) => q(`week-hours-${date}-${id}`)!.className
-    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(-5, -5, -5) })]), day(DATES[1]!, [])], THREE_DAYS_PPM)
-    expect(hours(TODAY, 'a')).toContain('pr-[84px]')
+    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(-5, -5, -5, -5) })]), day(DATES[1]!, [])], THREE_DAYS_PPM)
+    expect(hours(TODAY, 'a')).toContain('pr-[108px]')
     act(() => root?.unmount())
-    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(-5, -5, -5) })]), day(DATES[1]!, [])])
-    expect(hours(TODAY, 'a')).toContain('pr-[58px]')
+    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(-5, -5, -5, -5) })]), day(DATES[1]!, [])])
+    expect(hours(TODAY, 'a')).toContain('pr-[74px]')
+  })
+
+  it('okienko ma czwarte pole – ciało (D524): [+] zapisuje cztery liczby z ciałem', async () => {
+    await mount([day(TODAY, []), day(DATES[1]!, [block('f', 600, 660, { cost: cost(3, 1, 1, 0, { own: true }) })])])
+    click(labelOf(DATES[1]!, 'f')!)
+    expect(q('cost-pop-body-value')!.textContent).toBe('0')
+    click(q('cost-pop-body-plus')!)
+    expect(saveTileCosts).toHaveBeenLastCalledWith(expect.objectContaining({ date: DATES[1], blockId: 'f' }), { head: 3, emotions: 1, senses: 1, body: 1 }, { ask: { scope: null } })
   })
 
   it('[+] przy 5 nic nie zmienia', async () => {
-    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(5, 1, 1, { own: true }) })]), day(DATES[1]!, [])])
+    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(5, 1, 1, 0, { own: true }) })]), day(DATES[1]!, [])])
     click(labelOf(TODAY, 'a')!)
     click(q('cost-pop-head-plus')!)
     expect(saveTileCosts).not.toHaveBeenCalled()
   })
 
   it('wciśnięcie na napisie bloku do przeniesienia nie zaczyna przeciągania', async () => {
-    await mount([day(TODAY, [block('a', 600, 660, { movable: true, cost: cost(3, 1, 1) })]), day(DATES[1]!, [])])
+    await mount([day(TODAY, [block('a', 600, 660, { movable: true, cost: cost(3, 1, 1, 0) })]), day(DATES[1]!, [])])
     const label = labelOf(TODAY, 'a')!
     pointer(label, 'pointerdown', 100, 200)
     pointer(window, 'pointermove', 300, 300)
@@ -150,15 +165,15 @@ describe('koszt na kafelku „Tygodnia” i „3 dni” (D501)', () => {
   })
 
   it('Esc zamyka okienko', async () => {
-    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(3, 1, 1) })]), day(DATES[1]!, [])])
+    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(3, 1, 1, 0) })]), day(DATES[1]!, [])])
     click(labelOf(TODAY, 'a')!)
     act(() => void window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })))
     expect(q('cost-pop')).toBeNull()
   })
 
   it('blok, którego nie wolno zmieniać (zaczęty, dzień miniony), pokazuje napis bez okienka', async () => {
-    await mount([day(TODAY, [block('a', 600, 660, { state: 'ran', cost: cost(3, 1, 1, { edit: false }) })]), day(DATES[1]!, [])])
-    expect(labelOf(TODAY, 'a')!.textContent).toBe('3·1·1')
+    await mount([day(TODAY, [block('a', 600, 660, { state: 'ran', cost: cost(3, 1, 1, 0, { edit: false }) })]), day(DATES[1]!, [])])
+    expect(labelOf(TODAY, 'a')!.textContent).toBe('3·1·1·0')
     click(labelOf(TODAY, 'a')!)
     expect(q('cost-pop')).toBeNull()
   })

@@ -205,12 +205,12 @@ describe('folder danych dla okna głównego', () => {
 
   it('zmiana kosztu zaczętego bloku z okna (D501): block.cost w dziedzinie timera, chwila z zegara procesu głównego; zły koszt – odmowa', async () => {
     const { folder } = await make()
-    await folder.userEvents([{ k: 'block.cost', day: DAY, block: 'x', costs: { head: 4, emotions: 0, senses: -2 } }])
-    await expect(folder.userEvents([{ k: 'block.cost', day: DAY, block: 'x', costs: { head: 9, emotions: 0, senses: 0 } }])).rejects.toThrow(/costs/)
+    await folder.userEvents([{ k: 'block.cost', day: DAY, block: 'x', costs: { head: 4, emotions: 0, senses: -2, body: 1 } }])
+    await expect(folder.userEvents([{ k: 'block.cost', day: DAY, block: 'x', costs: { head: 9, emotions: 0, senses: 0, body: 0 } }])).rejects.toThrow(/costs/)
     // The first builds' kind is read, never written by the window any more.
     await expect(folder.userEvents([{ k: 'energy.cost', day: DAY, block: 'x', costs: null }])).rejects.toThrow(/nie pochodzi z okna/)
     const events = readLogText(readFileSync(join(dataDir, paths.log(DAY, 'pca')), 'utf8')).events
-    expect(events.filter((e) => e.k === 'block.cost')).toEqual([expect.objectContaining({ dom: 'timer', block: 'x', costs: { head: 4, emotions: 0, senses: -2 }, at: expect.any(Number) })])
+    expect(events.filter((e) => e.k === 'block.cost')).toEqual([expect.objectContaining({ dom: 'timer', block: 'x', costs: { head: 4, emotions: 0, senses: -2, body: 1 }, at: expect.any(Number) })])
     // This version knows it: no „unknown events of the timer” here. A version that does not know a kind of the timer's domain (as one
     // before 1.24 reads `block.cost`) sees one – the night installation without the 24 h.
     expect(await folder.unknownTimerEvents(placeLogical(DAY, 12 * 60))).toBe(false)
@@ -223,9 +223,9 @@ describe('folder danych dla okna głównego', () => {
 
   describe('zmiana kosztu rutyny (D514, T1430): routine.cost pisze proces główny przy każdym zapisie rekordu rutyny z innym kosztem', () => {
     const rut = paths.record('routine', 'r1')
-    const C0 = { head: 4, emotions: 0, senses: 1 }
-    const C1 = { head: 5, emotions: 0, senses: 1 }
-    const C2 = { head: -1, emotions: 2, senses: 3 }
+    const C0 = { head: 4, emotions: 0, senses: 1, body: 1 }
+    const C1 = { head: 5, emotions: 0, senses: 1, body: 2 }
+    const C2 = { head: -1, emotions: 2, senses: 3, body: -1 }
     const routine = (costs: unknown, extra: Record<string, unknown> = {}) => ({ schema: 1, id: 'r1', name: 'Poranna', normal: [{ id: 's1', name: 'Woda', min: 5 }], worse: [], archived: false, costs, ...extra })
     /** Today's changes of a routine's cost as this computer sees them (its journal with the folder's logs). */
     const changes = async (folder: DataFolder) => (await folder.readDay(DAY)).events.filter((e) => e.k === 'routine.cost').map((e) => ({ ...e }) as Record<string, unknown>)

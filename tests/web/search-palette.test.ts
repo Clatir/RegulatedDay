@@ -205,7 +205,7 @@ describe('Enter na wyniku (T653)', () => {
     expect(by('sluchanie', 'nauka')).toMatchObject({ title: 'Nauka — słuchanie', hint: 'wariant · Nauka (NotebookLM)' })
     expect(searchRecords(input()).some((r) => r.id === 'settings-regen-ways')).toBe(false)
     // A variant of a subcategory without its name in rd.json: never its id (T1393) – the subcategory is what is missing (D510, T1426).
-    const rules = { cls: 'work', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1 }, variants: [{ id: 'v9', name: 'Wariant bez nazwy' }] }
+    const rules = { cls: 'work', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1, body: 0 }, variants: [{ id: 'v9', name: 'Wariant bez nazwy' }] }
     const orphan = { ...rd, settings: [{ id: 's9', from: '2026-01-01', at: null, made: 1, patch: { categories: { c9: rules } } }] }
     const v9 = searchRecords({ ...input(), rd: orphan }).find((r) => r.id === 'v9' && r.parent === 'c9')!
     expect(v9.hint).toBe('wariant · podkategoria usunięta')

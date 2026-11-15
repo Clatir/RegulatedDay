@@ -184,7 +184,7 @@ export function CostFields({ costs, onChange }: { costs: Costs; onChange: (c: Pa
       <div className="flex flex-wrap items-center gap-3">
         <CostNumbers costs={costs} named label={(pool) => `Koszt: ${pool}`} onCommit={(p, v) => onChange({ [p]: v })} testId={(p) => `new-cost-${p}`} />
       </div>
-      <span className="text-[11.5px] text-muted">Koszty: głowa, emocje, bodźce na godzinę (ujemne oddają energię).</span>
+      <span className="text-[11.5px] text-muted">Koszty: głowa, emocje, bodźce, ciało na godzinę (ujemne oddają energię).</span>
     </div>
   )
 }

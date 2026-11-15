@@ -284,11 +284,11 @@ describe('warianty dowolnej podkategorii (ustawienia z datą)', () => {
   const on = (patch: Record<string, unknown>, before: SettingsChange[] = []) => settingsOn([...before, { id: 'v', from: '2026-11-15', at: null, made: 2, patch }], '2026-11-15')
 
   it('dodanie wariantu do „Analizy” (nie tylko regeneracji): własny koszt i miejsce albo jak podkategoria', () => {
-    const list = addVariant(RULES.analiza!.variants, { id: 'v1', name: '  Przegląd tygodnia ', costs: { head: 2, emotions: 0, senses: 0 } })!
+    const list = addVariant(RULES.analiza!.variants, { id: 'v1', name: '  Przegląd tygodnia ', costs: { head: 2, emotions: 0, senses: 0, body: 1 } })!
     const list2 = addVariant(list, { id: 'v2', name: 'Szybka', place: 'passive' })!
     const s = on(variantsPatch('analiza', list2))
     expect(s.categories.analiza!.variants.map((v) => v.name)).toEqual(['Przegląd tygodnia', 'Szybka'])
-    expect(costsOf(s.categories.analiza!, 'v1')).toEqual({ head: 2, emotions: 0, senses: 0 })
+    expect(costsOf(s.categories.analiza!, 'v1')).toEqual({ head: 2, emotions: 0, senses: 0, body: 1 })
     expect(costsOf(s.categories.analiza!, 'v2')).toEqual(RULES.analiza!.costs)
     expect(placeOf(s.categories.analiza!, 'v2')).toBe('passive')
     // No name, an id taken: nothing.
@@ -298,7 +298,7 @@ describe('warianty dowolnej podkategorii (ustawienia z datą)', () => {
 
   it('koszt null – „jak podkategoria” (wariant z kosztem traci go), miejsce null – jak podkategoria; zmiana nazwy', () => {
     const nauka = RULES.nauka!
-    expect(costsOf(nauka, 'sluchanie')).toEqual({ head: 2, emotions: 0, senses: 0 })
+    expect(costsOf(nauka, 'sluchanie')).toEqual({ head: 2, emotions: 0, senses: 0, body: 0 })
     const list = changeVariant(nauka.variants, 'sluchanie', { costs: null, place: null, name: 'Słuchanie' })!
     expect(list).toEqual([{ id: 'sluchanie', name: 'Słuchanie', place: null, costs: null }])
     const s = on(variantsPatch('nauka', list))
@@ -314,14 +314,14 @@ describe('warianty dowolnej podkategorii (ustawienia z datą)', () => {
 
   it('stara lista bez pola kosztu (zapis sprzed D510) – koszt sprzed zmiany zostaje, jak dotąd', () => {
     const s = on({ categories: { nauka: { variants: [{ id: 'sluchanie', name: 'Słuchanie' }] } } })
-    expect(costsOf(s.categories.nauka!, 'sluchanie')).toEqual({ head: 2, emotions: 0, senses: 0 })
+    expect(costsOf(s.categories.nauka!, 'sluchanie')).toEqual({ head: 2, emotions: 0, senses: 0, body: 0 })
   })
 
   it('zmiana bez skutku, nieznany wariant, zły koszt – nic; archiwizacja i przywrócenie', () => {
     const regen = RULES.regeneracja!
     expect(changeVariant(regen.variants, 'nie-ma', { name: 'X' })).toBeNull()
     expect(changeVariant(regen.variants, 'gra', { name: 'Gra, film' })).toBeNull()
-    expect(changeVariant(regen.variants, 'gra', { costs: { head: 9, emotions: 0, senses: 0 } })).toBeNull()
+    expect(changeVariant(regen.variants, 'gra', { costs: { head: 9, emotions: 0, senses: 0, body: 0 } })).toBeNull()
     expect(changeVariant(RULES.sprawy!.variants, 'przy-komputerze', { costs: null })).toBeNull()
     const archived = archiveVariant(regen.variants, 'gra')!
     expect(archived.find((v) => v.id === 'gra')).toMatchObject({ archived: true })

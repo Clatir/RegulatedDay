@@ -80,7 +80,7 @@ export interface TimelineItem {
    */
   attach?: number
   /**
-   * The cost per hour on the tile's bottom right (D501: three numbers in the colours of the pools); absent – none (a template's, the wizard's axis).
+   * The cost per hour on the tile's bottom right (D501, D524: four numbers in the colours of the pools); absent – none (a template's, the wizard's axis).
    * `edit` – a click on it opens the window that changes it (`Timeline.onCosts`).
    */
   cost?: TileCostInfo
@@ -131,7 +131,7 @@ export interface TimelineMarker {
   label: string
   tone: 'lamp' | 'rose' | 'sea' | 'muted' | 'fg'
   dashed?: boolean
-  /** The line „teraz” (D500: the three numbers of the energy stand at it). */
+  /** The line „teraz” (D500: the four numbers of the energy stand at it). */
   now?: true
 }
 
@@ -812,7 +812,7 @@ export function Timeline({
           </div>
         ))}
       </div>
-      {/* D500: the energy beside the axis – three lanes G · E · B (`EnergyLanes`). */}
+      {/* D500: the energy beside the axis – four lanes G · E · B · C (`EnergyLanes`). */}
       {hasEnergy(energy) && <EnergyLanes track={energy} lo={lo} ppm={PPM} height={height} nowAt={nowMarker?.at ?? null} nowColor={TONE[nowMarker?.tone ?? 'fg']} />}
     </div>
   )

@@ -12,7 +12,7 @@ const DATE = '2026-10-28'
 
 function day() {
   const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'b', cat: 'posilek', at: '13:00', min: 30 }), block({ id: 'c', cat: 'inne', at: '15:00', min: 60 })] })
-  s.checkin('07:30', { head: [1, 0], emotions: [0, 0], senses: [2, 1] })
+  s.checkin('07:30', { head: [1, 0], emotions: [0, 0], senses: [2, 1], body: [0, 1] })
   s.approve('09:15', '07:30')
   s.ran('a', '08:00', '09:30')
   s.write([{ k: 'block.park', block: 'c', at: s.at('14:00'), rule: 'ritual' }], s.at('14:00'))
@@ -56,6 +56,6 @@ describe('eksport CSV', () => {
     const s = day()
     const files = csvOf([{ ctx: s.contextAt(s.at('20:00')), names: names(s) }])
     expect(files['prosby.csv'].trim().split('\r\n')[1]).toBe('28.10.2026;"Mama; z „cudzysłowem”";zakupy;zrobione teraz;16:00;16:20;20;nie')
-    expect(files['checkiny.csv'].trim().split('\r\n')[1]).toBe('28.10.2026;07:30;85;100;45;trochę/nie, nie/nie, tak/trochę')
+    expect(files['checkiny.csv'].trim().split('\r\n')[1]).toBe('28.10.2026;07:30;85;100;45;trochę/nie, nie/nie, tak/trochę, nie/trochę;85')
   })
 })

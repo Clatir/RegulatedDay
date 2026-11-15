@@ -104,10 +104,10 @@ describe('saveVariants (ustawienia z datą, lista liczona w kolejce zapisu)', ()
   it('wariant „Analizy” dodany od jutra: lista z rd.json z chwili zapisu (wariant z innego komputera zostaje)', async () => {
     // Another computer added a variant meanwhile; the window's view still has the old settings.
     fake.file = { schema: 1, settings: [{ id: 'other', from: '2026-11-15', at: null, made: 1, patch: { categories: { analiza: { variants: [{ id: 'x', name: 'Z innego' }] } } } }] }
-    expect(await saveVariants('analiza', (now) => addVariant(now, { id: 'y', name: 'Przegląd', costs: { head: 2, emotions: 0, senses: 0 } }), tomorrow)).toBe(true)
+    expect(await saveVariants('analiza', (now) => addVariant(now, { id: 'y', name: 'Przegląd', costs: { head: 2, emotions: 0, senses: 0, body: 0 } }), tomorrow)).toBe(true)
     const s = settingsOn(rdFrom(fake.file).settings, '2026-11-15')
     expect(s.categories.analiza!.variants.map((v) => v.id)).toEqual(['x', 'y'])
-    expect(costsOf(s.categories.analiza!, 'y')).toEqual({ head: 2, emotions: 0, senses: 0 })
+    expect(costsOf(s.categories.analiza!, 'y')).toEqual({ head: 2, emotions: 0, senses: 0, body: 0 })
   })
 
   it('koszt „jak podkategoria” (null); zmiana bez skutku – nic nie idzie, false', async () => {

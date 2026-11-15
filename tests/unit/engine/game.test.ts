@@ -18,7 +18,7 @@ const DATE = '2026-10-28'
 const H = 3_600_000
 const AT = dayEnd(DATE) + 30 * H
 const GAME: GameDayInput = { from: '2026-10-01', wizardDay: null, gameOn: true, energyOn: true }
-const MID: Record<Pool, [Answer, Answer]> = { head: [1, 1], emotions: [1, 1], senses: [1, 1] }
+const MID: Record<Pool, [Answer, Answer]> = { head: [1, 1], emotions: [1, 1], senses: [1, 1], body: [1, 1] }
 
 const work = (id: string, at: string, min: number, o: Partial<PlanBlock> = {}): PlanBlock => ({ ...block({ id, cat: 'inne', at, min }), ...o })
 
@@ -95,7 +95,7 @@ describe('wykorzystana regeneracja (3 nuty)', () => {
 
 describe('reakcja na rezerwę (2 nuty)', () => {
   /** Head only, 15 an hour: from 65 at 09:00 to the reserve (15) at 12:20. */
-  const heavy = (min: number): PlanBlock => ({ ...work('h', '09:00', min), costs: { head: 5, emotions: 0, senses: 0 } })
+  const heavy = (min: number): PlanBlock => ({ ...work('h', '09:00', min), costs: { head: 5, emotions: 0, senses: 0, body: 0 } })
   const LATER = block({ id: 'later', cat: 'analiza', at: '20:00', min: 30, fixed: true })
 
   /** The head at the reserve at 12:20, then work to `restAt`, a rest of 15 min, work again to 15:00. */

@@ -98,17 +98,17 @@ describe('przegląd kalibracji w oknie', () => {
   })
 
   it('propozycja wariantu, którego już nie ma, nie zapisuje się na całą kategorię (z przeglądu)', () => {
-    const p = { category: 'regeneracja', variant: 'nie-ma', days: 6, hours: 9, from: { head: 0, emotions: 0, senses: 0 }, to: { head: 1, emotions: 0, senses: 0 } }
+    const p = { category: 'regeneracja', variant: 'nie-ma', days: 6, hours: 9, from: { head: 0, emotions: 0, senses: 0, body: 0 }, to: { head: 1, emotions: 0, senses: 0, body: 0 } }
     expect(costPatch(DEFAULT_SETTINGS, p)).toBeNull()
     expect(costPatch(DEFAULT_SETTINGS, { ...p, category: 'nie-ma', variant: null })).toBeNull()
     expect(feltLine({ regeneracja: { lighter: 1, usual: 0, heavier: 0 } }, 'regeneracja', true)).toBe('odczuwany w rytuale (cała kategoria): lżej 1 · jak zwykle 0 · ciężej 0')
   })
 
   it('propozycja kosztu: zmiana kategorii albo jej wariantu (lista w całości), odczuwany koszt obok', () => {
-    const p = { category: 'analiza', variant: null, days: 6, hours: 9, from: { head: 2, emotions: 1, senses: 0 }, to: { head: 3, emotions: 1, senses: 1 } }
+    const p = { category: 'analiza', variant: null, days: 6, hours: 9, from: { head: 2, emotions: 1, senses: 0, body: 0 }, to: { head: 3, emotions: 1, senses: 1, body: 0 } }
     expect(costTitle(p, rd, DEFAULT_SETTINGS)).toBe('Analiza: koszt na godzinę (6 dni, 9 h)')
-    expect(costLine(p)).toBe('głowa 2 → 3 · emocje 1 · bodźce 0 → 1')
-    expect(costPatch(DEFAULT_SETTINGS, p)).toEqual({ categories: { analiza: { costs: { head: 3, emotions: 1, senses: 1 } } } })
+    expect(costLine(p)).toBe('głowa 2 → 3 · emocje 1 · bodźce 0 → 1 · ciało 0')
+    expect(costPatch(DEFAULT_SETTINGS, p)).toEqual({ categories: { analiza: { costs: { head: 3, emotions: 1, senses: 1, body: 0 } } } })
     const regen = DEFAULT_SETTINGS.categories.regeneracja!
     const variant = regen.variants[0]!
     const vp = { ...p, category: 'regeneracja', variant: variant.id }

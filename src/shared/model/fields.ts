@@ -76,7 +76,7 @@ export const NUMBER_FIELDS: readonly NumberField[] = [
   { key: 'reserve', scope: 'dated', path: ['reserve'], label: 'Rezerwa energii', kind: 'integer', range: RANGES.reserve, group: 'energy' },
   { key: 'backgroundCostPct', scope: 'dated', path: ['backgroundCostPct'], label: 'Koszt bloku w tle', kind: 'integer', range: RANGES.backgroundCostPct, unit: '%', group: 'energy' },
   { key: 'signalEffects.glassesSenses', scope: 'dated', path: ['signalEffects', 'glassesSenses'], label: 'Okulary i zatyczki: bodźce −', kind: 'integer', range: RANGES.signalEffect, group: 'energy' },
-  { key: 'signalEffects.rockingAll', scope: 'dated', path: ['signalEffects', 'rockingAll'], label: 'Więcej bujania: każda pula −', kind: 'integer', range: RANGES.signalEffect, group: 'energy' },
+  { key: 'signalEffects.rockingAll', scope: 'dated', path: ['signalEffects', 'rockingAll'], label: 'Więcej bujania: głowa, emocje, bodźce −', kind: 'integer', range: RANGES.signalEffect, group: 'energy' },
   { key: 'signalEffects.questionsEmotions', scope: 'dated', path: ['signalEffects', 'questionsEmotions'], label: 'Drażnią pytania: emocje −', kind: 'integer', range: RANGES.signalEffect, group: 'energy' },
   { key: 'reminders.morningAfterWakeMin', scope: 'dated', path: ['reminders', 'morningAfterWakeMin'], label: 'Plan poranny po pobudce', kind: 'duration', range: RANGES.reminder, group: 'reminders', hint: '0 wyłącza przypomnienie.' },
   { key: 'reminders.morningBeforeFixedMin', scope: 'dated', path: ['reminders', 'morningBeforeFixedMin'], label: 'Plan poranny najpóźniej przed blokiem stałym', kind: 'duration', range: RANGES.reminder, group: 'reminders' },

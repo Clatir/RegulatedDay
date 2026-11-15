@@ -208,7 +208,7 @@ describe('okno podkategorii', () => {
   })
 
   it('koszt: zapis od dziś mimo „od jutra” w Ustawieniach, tylko zmieniona pula; okno liczy bloki (bez tych z własnym kosztem)', async () => {
-    files[TODAY] = { schema: 1, date: TODAY, blocks: [fileBlock('a'), fileBlock('c', { costs: { head: 2, emotions: 2, senses: 2 } }), fileBlock('d', { categoryId: 'analiza' })] }
+    files[TODAY] = { schema: 1, date: TODAY, blocks: [fileBlock('a'), fileBlock('c', { costs: { head: 2, emotions: 2, senses: 2, body: 0 } }), fileBlock('d', { categoryId: 'analiza' })] }
     files['2026-11-21'] = { schema: 1, date: '2026-11-21', blocks: [fileBlock('e')] }
     files['2026-11-17'] = { schema: 1, date: '2026-11-17', blocks: [fileBlock('past')] }
     useData.setState({
@@ -234,7 +234,7 @@ describe('okno podkategorii', () => {
   })
 
   it('nazwa, kolor, kategoria i kalendarz: od razu (rd.json), bez ustawień z datą; okno mówi, że działa też wstecz; Enter w nazwie zapisuje', async () => {
-    files[TODAY] = { schema: 1, date: TODAY, blocks: [fileBlock('a'), fileBlock('c', { costs: { head: 2, emotions: 2, senses: 2 } })] }
+    files[TODAY] = { schema: 1, date: TODAY, blocks: [fileBlock('a'), fileBlock('c', { costs: { head: 2, emotions: 2, senses: 2, body: 0 } })] }
     await mount(projekty)
     await click('edit-category')
     await flush()
@@ -349,7 +349,7 @@ describe('okno podkategorii', () => {
 
 describe('okno wariantu', () => {
   it('„Wariant <nazwa>”: nazwa, koszt albo „jak podkategoria”, miejsce; zapis od dziś listą całą z wariantem zmienionym', async () => {
-    files['2026-11-19'] = { schema: 1, date: '2026-11-19', blocks: [fileBlock('a', { categoryId: 'regeneracja', variantId: 'spacer' }), fileBlock('b', { categoryId: 'regeneracja', variantId: 'spacer', costs: { head: 1, emotions: 1, senses: 1 } }), fileBlock('c', { categoryId: 'regeneracja', variantId: 'cisza' })] }
+    files['2026-11-19'] = { schema: 1, date: '2026-11-19', blocks: [fileBlock('a', { categoryId: 'regeneracja', variantId: 'spacer' }), fileBlock('b', { categoryId: 'regeneracja', variantId: 'spacer', costs: { head: 1, emotions: 1, senses: 1, body: 0 } }), fileBlock('c', { categoryId: 'regeneracja', variantId: 'cisza' })] }
     await mount(spacer)
     await click('edit-variant')
     await flush()
@@ -462,7 +462,7 @@ describe('okno rutyny', () => {
   })
 
   it('„Koszt na godzinę” jak w „Rutynach” (D512): okienko kosztu zmienia pole; „Zapisz” – sam rekord rutyny, zaczęty blok liczy go z `routine.cost` procesu głównego (T1397, T1430)', async () => {
-    const plan = [withRoutine, fileBlock('own', { categoryId: 'rutyny', routine: 'r1', costs: { head: 3, emotions: 3, senses: 3 } }), fileBlock('n', { categoryId: 'rutyny', routine: 'r1', startMin: 12 * 60 })]
+    const plan = [withRoutine, fileBlock('own', { categoryId: 'rutyny', routine: 'r1', costs: { head: 3, emotions: 3, senses: 3, body: 0 } }), fileBlock('n', { categoryId: 'rutyny', routine: 'r1', startMin: 12 * 60 })]
     files[TODAY] = { schema: 1, date: TODAY, blocks: plan }
     const s = new Scenario({ date: TODAY, plan })
     todayEvents = s.start('b3', '08:00').start('own', '08:00').events
@@ -471,13 +471,13 @@ describe('okno rutyny', () => {
     vi.setSystemTime(new Date(s.at('08:30')))
     await mount(withRoutine)
     await click('edit-routine')
-    expect(q('routine-cost')!.textContent).toBe('1 · 0 · 1')
+    expect(q('routine-cost')!.textContent).toBe('1 · 0 · 1 · 1')
     expect(q('routine-cost-from')!.textContent).toBe('jak podkategoria')
     await click('routine-cost')
     await click('cost-pop-head-plus')
     await flush()
     // In the window only, until „Zapisz”.
-    expect(q('routine-cost')!.textContent).toBe('2 · 0 · 1')
+    expect(q('routine-cost')!.textContent).toBe('2 · 0 · 1 · 1')
     expect(q('routine-cost-from')!.textContent).toBe('własny koszt rutyny')
     expect(tryUpdateRecord).not.toHaveBeenCalled()
     // The cost only: the blocks of „Rutyny” with the routine and no cost of their own – the begun one too (it changes from now on).
@@ -488,7 +488,7 @@ describe('okno rutyny', () => {
     const [rel, fn] = vi.mocked(tryUpdateRecord).mock.calls[0]!
     expect(rel).toBe('routines/r1.json')
     const raw = { schema: 1, id: 'r1', name: 'Poranna', normal: [{ id: 's1', name: 'Woda', min: 5 }], worse: [], archived: false, future: 'kept' }
-    expect(fn(raw)).toEqual({ ...raw, costs: { head: 2, emotions: 0, senses: 1 } })
+    expect(fn(raw)).toEqual({ ...raw, costs: { head: 2, emotions: 0, senses: 1, body: 1 } })
     // The window writes no event: the main process does, writing the record with another cost (T1430).
     expect(window.rd.logEvents).not.toHaveBeenCalled()
     expect(q('edit-routine-window')).toBeNull()

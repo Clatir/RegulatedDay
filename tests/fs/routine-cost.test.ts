@@ -34,7 +34,7 @@ const write = (rel: string, v: unknown) => {
 }
 const ROUTINE = paths.record('routine', 'poranek')
 const routine = (costs: unknown, steps = [{ id: 'a', name: 'Prysznic', min: 30 }]) => ({ schema: 1, id: 'poranek', name: 'Poranek', archived: false, normal: steps, worse: [], costs })
-const curve = (e: EnergyState) => (['head', 'emotions', 'senses'] as const).map((p) => Array.from(e.series[p]))
+const curve = (e: EnergyState) => (['head', 'emotions', 'senses', 'body'] as const).map((p) => Array.from(e.series[p]))
 
 async function make() {
   const now = placeLogical(DAY, 9 * 60)
@@ -51,7 +51,7 @@ async function make() {
     oneDriveRunning: () => true,
     worker: { run: (t) => (runs.push(t.kind === 'horizon' ? `${t.kind}:${t.ctx.date}` : t.kind), inProcess.run(t)) as never }
   })
-  folder.append({ day: DAY, dom: 'energy', k: 'energy.checkin', at: placeLogical(DAY, 7 * 60), answers: { head: [0, 0], emotions: [0, 0], senses: [0, 0] } })
+  folder.append({ day: DAY, dom: 'energy', k: 'energy.checkin', at: placeLogical(DAY, 7 * 60), answers: { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [1, 1] } })
   folder.append({ day: DAY, dom: 'meta', k: 'presence.first', at: placeLogical(DAY, 7 * 60) })
   await folder.log.flush()
   return { folder, runs }
@@ -64,12 +64,12 @@ function day(o: { routine?: string | null; costs?: unknown; cat?: string } = {})
 
 describe('koszt rutyny u prowadzącego (D512)', () => {
   it('wejścia dnia mają rutyny; energia bloku rutyny z kosztem – jak ten sam koszt własny; zmiana pliku rutyny liczy się od razu', async () => {
-    write(ROUTINE, routine({ head: 5, emotions: 5, senses: 5 }))
+    write(ROUTINE, routine({ head: 5, emotions: 5, senses: 5, body: 3 }))
     day({ routine: 'poranek' })
     const { folder } = await make()
-    expect((await folder.inputs()).routines.map((r) => [r.id, r.costs])).toEqual([['poranek', { head: 5, emotions: 5, senses: 5 }]])
+    expect((await folder.inputs()).routines.map((r) => [r.id, r.costs])).toEqual([['poranek', { head: 5, emotions: 5, senses: 5, body: 3 }]])
     const viaRoutine = curve((await folder.energyState(DAY)).energy)
-    day({ costs: { head: 5, emotions: 5, senses: 5 } })
+    day({ costs: { head: 5, emotions: 5, senses: 5, body: 3 } })
     expect(curve((await folder.energyState(DAY)).energy)).toEqual(viaRoutine)
     // The routine without a cost now (its file rewritten, no minute waited): the block costs its category's.
     day({ routine: 'poranek' })
@@ -81,7 +81,7 @@ describe('koszt rutyny u prowadzącego (D512)', () => {
   })
 
   it('rutyna na bloku innej kategorii (ukryta w panelu) nie daje kosztu także u prowadzącego', async () => {
-    write(ROUTINE, routine({ head: 5, emotions: 5, senses: 5 }))
+    write(ROUTINE, routine({ head: 5, emotions: 5, senses: 5, body: 3 }))
     day({ routine: 'poranek', cat: 'inne' })
     const { folder } = await make()
     const hidden = curve((await folder.energyState(DAY)).energy)
@@ -90,12 +90,12 @@ describe('koszt rutyny u prowadzącego (D512)', () => {
   })
 
   it('plik rutyny nieczytelny po dobrym odczycie – zostaje znana wersja (koszt się nie gubi)', async () => {
-    write(ROUTINE, routine({ head: 5, emotions: 5, senses: 5 }))
+    write(ROUTINE, routine({ head: 5, emotions: 5, senses: 5, body: 3 }))
     day({ routine: 'poranek' })
     const { folder } = await make()
     const before = curve((await folder.energyState(DAY)).energy)
     write(ROUTINE, '{ "id": "poranek", "costs": { "head"')
-    expect((await folder.inputs()).routines.map((r) => r.costs)).toEqual([{ head: 5, emotions: 5, senses: 5 }])
+    expect((await folder.inputs()).routines.map((r) => r.costs)).toEqual([{ head: 5, emotions: 5, senses: 5, body: 3 }])
     expect(curve((await folder.energyState(DAY)).energy)).toEqual(before)
   })
 
@@ -115,23 +115,23 @@ describe('koszt rutyny u prowadzącego (D512)', () => {
     const start = (await folder.log.readDay(DAY)).events.find((e) => (e as { k?: string }).k === 'block.start') as unknown as { planned: Record<string, unknown> }
     expect(start.planned).not.toHaveProperty('routineCosts')
     // The file reads again: the begun block costs the routine's (as one begun with it would).
-    write(ROUTINE, routine({ head: 5, emotions: 5, senses: 5 }))
+    write(ROUTINE, routine({ head: 5, emotions: 5, senses: 5, body: 3 }))
     const repaired = (await folder.dayState(DAY)).blocks.find((b) => b.id === 'm')!
-    expect(repaired.routineCosts).toEqual({ head: 5, emotions: 5, senses: 5 })
+    expect(repaired.routineCosts).toEqual({ head: 5, emotions: 5, senses: 5, body: 3 })
     expect(curve((await folder.energyState(DAY)).energy)).not.toEqual(unknown)
   })
 
   it('dni zapamiętane dla widoków liczą się od nowa po zmianie kosztu rutyny, nie po zmianie jej kroków', async () => {
-    write(ROUTINE, routine({ head: 5, emotions: 5, senses: 5 }))
+    write(ROUTINE, routine({ head: 5, emotions: 5, senses: 5, body: 3 }))
     day({ routine: 'poranek' })
     const { folder, runs } = await make()
     await folder.weekView(DAY)
     expect(runs.filter((r) => r.startsWith('horizon')).length).toBeGreaterThan(0)
     runs.length = 0
-    write(ROUTINE, routine({ head: 5, emotions: 5, senses: 5 }, [{ id: 'a', name: 'Prysznic i kawa', min: 35 }]))
+    write(ROUTINE, routine({ head: 5, emotions: 5, senses: 5, body: 3 }, [{ id: 'a', name: 'Prysznic i kawa', min: 35 }]))
     await folder.weekView(DAY)
     expect(runs.filter((r) => r.startsWith('horizon'))).toEqual([])
-    write(ROUTINE, routine({ head: 4, emotions: 5, senses: 5 }, [{ id: 'a', name: 'Prysznic i kawa', min: 35 }]))
+    write(ROUTINE, routine({ head: 4, emotions: 5, senses: 5, body: 3 }, [{ id: 'a', name: 'Prysznic i kawa', min: 35 }]))
     await folder.weekView(DAY)
     expect(runs).toContain(`horizon:${DAY}`)
   })

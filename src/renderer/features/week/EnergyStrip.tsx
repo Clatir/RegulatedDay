@@ -2,8 +2,8 @@
  * The energy of a column of „Tydzień” and „3 dni” (D500): a narrow strip at the column's left edge, coloured by the weakest
  * pool at each minute in one of three shades – dobrze · uwaga (the weakest less than 15 above the reserve) · poniżej rezerwy
  * (`stripRuns`, T1281); the blocks stand right of it, nothing lies under them. A day to come is counted from the check-in
- * assumed for it (100 / 100 / 100 at 04:00, D422) – its strip is fainter, with the caption „przyjęte”. The pointer over the strip
- * shows the hour and the three values („10:30 · głowa 71 · emocje 66 · bodźce 41”).
+ * assumed for it (all pools 100 at 04:00, D422) – its strip is fainter, with the caption „przyjęte”. The pointer over the strip
+ * shows the hour and the four values („10:30 · głowa 71 · emocje 66 · bodźce 41 · ciało 58”).
  */
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'

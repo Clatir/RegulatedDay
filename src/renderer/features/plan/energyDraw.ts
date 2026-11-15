@@ -1,5 +1,5 @@
 /**
- * What every drawing of the energy shares (D500): the three lanes beside the axis of „Dziś” and the strip at the left edge of a
+ * What every drawing of the energy shares (D500): the four lanes beside the axis of „Dziś” and the strip at the left edge of a
  * column of „Tydzień” and „3 dni”. The colour, the name and the letter of a pool; the smoothed shape through the samples of the
  * track – monotone between two samples, so it never goes above nor below the forecast's values (T1280); the spans below the
  * reserve; the state of the strip (the weakest pool: dobrze · uwaga · poniżej rezerwy, T1281); the words of the hover.
@@ -8,11 +8,11 @@ import type { EnergyTrack } from '@shared/engine/energyTrack'
 import { logicalClock } from '@shared/format'
 import type { Pool } from '@shared/model/categories'
 
-export const POOLS: readonly Pool[] = ['head', 'emotions', 'senses']
-export const POOL_COLOR: Record<Pool, string> = { head: '#F2B66D', emotions: '#D49A97', senses: '#79AFAB' }
-export const POOL_NAME: Record<Pool, string> = { head: 'głowa', emotions: 'emocje', senses: 'bodźce' }
-/** The letter over a pool's lane and in the legend (D500: G · E · B). */
-export const POOL_LETTER: Record<Pool, string> = { head: 'G', emotions: 'E', senses: 'B' }
+export const POOLS: readonly Pool[] = ['head', 'emotions', 'senses', 'body']
+export const POOL_COLOR: Record<Pool, string> = { head: '#F2B66D', emotions: '#D49A97', senses: '#79AFAB', body: '#B49FCC' }
+export const POOL_NAME: Record<Pool, string> = { head: 'głowa', emotions: 'emocje', senses: 'bodźce', body: 'ciało' }
+/** The letter over a pool's lane and in the legend (D500, D520: G · E · B · C). */
+export const POOL_LETTER: Record<Pool, string> = { head: 'G', emotions: 'E', senses: 'B', body: 'C' }
 /** The colour of the reserve's tick. */
 export const RESERVE_COLOR = '#D49A97'
 /** The scale every drawing of the energy names (D500). */
@@ -142,10 +142,10 @@ export type OnScreen = number & { readonly __onScreen: true }
 /** Rounds a value of a pool to the number the screen shows. */
 export const onScreen = (v: number): OnScreen => Math.round(v) as OnScreen
 
-/** The three pools at a minute, as numbers on the screen (rounded); null outside the samples. */
+/** The four pools at a minute, as numbers on the screen (rounded); null outside the samples. */
 export type PoolValues = Record<Pool, OnScreen>
 
-/** The three smoothed pools at the minute `at`, rounded – the numbers beside „teraz” (D500). */
+/** The four smoothed pools at the minute `at`, rounded – the numbers beside „teraz” (D500). */
 export function valuesAt(curves: Record<Pool, Curve>, at: number): PoolValues | null {
   const out = {} as PoolValues
   for (const p of POOLS) {
@@ -166,7 +166,7 @@ export function nearestSample(track: Pick<EnergyTrack, 'samples'> | null | undef
   return best
 }
 
-/** The words of the hover (D500): „10:30 · głowa 71 · emocje 66 · bodźce 41”. */
+/** The words of the hover (D500): „10:30 · głowa 71 · emocje 66 · bodźce 41 · ciało 58”. */
 export function hoverText(at: number, v: Record<Pool, number>): string {
   return [logicalClock(at), ...POOLS.map((p) => `${POOL_NAME[p]} ${Math.round(v[p])}`)].join(' · ')
 }
@@ -180,7 +180,7 @@ export const WATCH_ABOVE_RESERVE = 15
 /**
  * The weakest pool at a minute and its shade (D500): below the reserve – „poniżej rezerwy”, less than 15 above it – „uwaga”,
  * else „dobrze”. The values are the numbers on the screen – rounded once, by `valuesAt` (T1281); the type `OnScreen`
- * lets nothing else in (T1290). A tie – the first pool (głowa, emocje, bodźce).
+ * lets nothing else in (T1290). A tie – the first pool (głowa, emocje, bodźce, ciało).
  */
 export function stripState(v: PoolValues, reserve: number): { pool: Pool; state: StripState } {
   let pool: Pool = POOLS[0]!
@@ -248,7 +248,7 @@ export function energySpan(track: Pick<EnergyTrack, 'samples'> | null | undefine
  */
 export const hasEnergy = <T extends Pick<EnergyTrack, 'samples'>>(track: T | null | undefined): track is T => energySpan(track) != null
 
-/** The three curves of a track. */
+/** The four curves of a track. */
 export function poolCurves(track: Pick<EnergyTrack, 'samples'> | null | undefined): Record<Pool, Curve> {
-  return { head: poolCurve(track, 'head'), emotions: poolCurve(track, 'emotions'), senses: poolCurve(track, 'senses') }
+  return { head: poolCurve(track, 'head'), emotions: poolCurve(track, 'emotions'), senses: poolCurve(track, 'senses'), body: poolCurve(track, 'body') }
 }

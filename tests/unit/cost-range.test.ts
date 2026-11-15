@@ -15,13 +15,16 @@ vi.mock('@shared/model/settings', async (orig) => {
 describe('zakres kosztu z RANGES.cost', () => {
   it('krok okienka, pole bloku z pliku i zdarzenie block.cost czytają ten sam zakres', () => {
     expect([COST_MIN, COST_MAX]).toEqual([-3, 3])
-    expect(costStep({ head: 3, emotions: -3, senses: 0 }, 'head', 1).head).toBe(3)
-    expect(costStep({ head: 3, emotions: -3, senses: 0 }, 'emotions', -1).emotions).toBe(-3)
+    expect(costStep({ head: 3, emotions: -3, senses: 0, body: 0 }, 'head', 1).head).toBe(3)
+    expect(costStep({ head: 3, emotions: -3, senses: 0, body: 0 }, 'emotions', -1).emotions).toBe(-3)
+    expect(costStep({ head: 3, emotions: -3, senses: 0, body: -3 }, 'body', -1).body).toBe(-3)
     const raw = (costs: unknown) => planBlockFrom({ id: 'a', categoryId: 'analiza', startMin: 600, durationMin: 60, costs })!.costs
-    expect(raw({ head: 3, emotions: -3, senses: 0 })).toEqual({ head: 3, emotions: -3, senses: 0 })
+    expect(raw({ head: 3, emotions: -3, senses: 0, body: 3 })).toEqual({ head: 3, emotions: -3, senses: 0, body: 3 })
+    expect(raw({ head: 3, emotions: -3, senses: 0, body: 4 })).toBeNull()
     expect(raw({ head: 4, emotions: 0, senses: 0 })).toBeNull()
     const line = (costs: unknown) => JSON.stringify({ id: 'x', c: 'pca', n: 1, t: 1, l: 1, v: 13, day: '2026-10-21', dom: 'timer', k: 'block.cost', block: 'a', at: 1, costs })
     expect(parseEvent(line({ head: 3, emotions: 0, senses: 0 }))).toMatchObject({ ok: true })
     expect(parseEvent(line({ head: 4, emotions: 0, senses: 0 }))).toEqual({ ok: false, why: 'pole costs' })
+    expect(parseEvent(line({ head: 3, emotions: 0, senses: 0, body: -4 }))).toEqual({ ok: false, why: 'pole costs' })
   })
 })

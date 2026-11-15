@@ -1,5 +1,5 @@
 /**
- * The energy's curve beside a day's axis (E2; „Dziś” – D293, the columns of „Tydzień” and „3 dni” – D417): the three pools
+ * The energy's curve beside a day's axis (E2; „Dziś” – D293, the columns of „Tydzień” and „3 dni” – D417): the four pools
  * sampled every `ENERGY_SAMPLE_MIN` minutes of the day's series (the past from the log, from now on the forecast), and the
  * reserve. One sampling for every place that draws it.
  *
@@ -19,8 +19,8 @@ import { logicalMinuteOf } from '../time/day'
 export const ENERGY_SAMPLE_MIN = 10
 
 export interface EnergyTrack {
-  /** Samples of the three pools (0–100) at logical minutes. */
-  samples: Array<{ at: number; head: number; emotions: number; senses: number }>
+  /** Samples of the four pools (0–100) at logical minutes (`body` – D520). */
+  samples: Array<{ at: number; head: number; emotions: number; senses: number; body: number }>
   reserve: number
   /** Counted from the assumed check-in of a day to come (T903), not from one you gave. */
   assumed?: true
@@ -31,14 +31,14 @@ export function energyTrack(date: string, grid: Grid, e: EnergyState): EnergyTra
   if (!e.known || !e.enabled) return null
   const samples: EnergyTrack['samples'] = []
   for (let k = 0; k < Math.min(grid.length, e.series.head.length); k += ENERGY_SAMPLE_MIN) {
-    const v = { head: e.series.head[k]!, emotions: e.series.emotions[k]!, senses: e.series.senses[k]! }
+    const v = { head: e.series.head[k]!, emotions: e.series.emotions[k]!, senses: e.series.senses[k]!, body: e.series.body[k]! }
     if (Number.isFinite(v.head)) samples.push({ at: logicalMinuteOf(date, atOf(grid, k)), ...v })
   }
   return { samples, reserve: e.reserve }
 }
 
 /** The answers of the assumed check-in of a day to come (T903): „nie” to every question – each pool at 100. */
-export const ASSUMED_CHECKIN: Record<Pool, [Answer, Answer]> = { head: [0, 0], emotions: [0, 0], senses: [0, 0] }
+export const ASSUMED_CHECKIN: Record<Pool, [Answer, Answer]> = { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] }
 
 /** The assumed check-in as an event of the day, at its first minute (energy only – the day's engine never reads it). */
 function assumedCheckin(ctx: DayContext, grid: Grid): AnyEvent {

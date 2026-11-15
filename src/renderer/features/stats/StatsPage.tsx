@@ -122,7 +122,7 @@ export function StatsPage() {
           ) : (
             <>
               <Section title="Wzorce energii" data-testid="stats-energy">
-                <Note>Energia check-inu to średnia z trzech pul, jakie ustawiają jego odpowiedzi (od 25 do 100). Tu: średnia ze wszystkich check-inów okresu.</Note>
+                <Note>Energia check-inu to średnia ze wszystkich pul, jakie ustawiają jego odpowiedzi (od 25 do 100). Tu: średnia ze wszystkich check-inów okresu.</Note>
                 {result.energy.missing > 0 && <Note testId="stats-energy-missing">{missingNote(result.energy.missing, 'energii')}</Note>}
                 {result.energy.checkins === 0 ? (
                   <Note testId="stats-energy-empty">W tym okresie nie ma check-inów.</Note>

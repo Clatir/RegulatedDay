@@ -14,7 +14,7 @@ import { Field } from '../../components/ui'
 import { storedAnswer, tryUpdateRecord, type SaveAnswer, type SendState } from '../../store/data'
 import { TileCost } from '../plan/TileCost'
 
-const NO_COSTS: Costs = { head: 0, emotions: 0, senses: 0 }
+const NO_COSTS: Costs = { head: 0, emotions: 0, senses: 0, body: 0 }
 
 /**
  * The cost of a routine as the field shows it (D512): its own, else – „jak podkategoria” – the cost of the category of routines (the first of

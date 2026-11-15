@@ -5,11 +5,11 @@
  * build it with this one function.
  */
 import type { NamingDay } from '../blockName'
-import { daySnapshotOf, type AnyEvent, type DaySnapshot } from '../model/events'
+import { daySnapshotOf, isKnown, type AnyEvent, type DaySnapshot } from '../model/events'
 import type { DayFile, LectureSeries, Template } from '../model/plan'
 import { routineCostsOf, type Routine } from '../model/routines'
 import { seriesOfBlock, seriesVersionOn, type SeriesPlan } from '../model/series'
-import type { SettingsChange } from '../model/settings'
+import { settingsLackBody, settingsOn, type SettingsChange } from '../model/settings'
 import { freshSteps } from '../model/steps'
 import { addDays } from '../time/zone'
 import { createDay, dayPlan, dayWakeMin, nextWakeForBedtime, snapshotEntries, type HolidayLookup } from './createDay'
@@ -42,7 +42,8 @@ export interface DaySource {
  * gets the day's occurrences laid over it (`withSeriesOccurrences`).
  */
 export function snapshotOf(inp: PlanInputs, src: DaySource, holidays: HolidayLookup, at: number | null): { snapshot: DaySnapshot; fromLog: boolean } {
-  const logged = daySnapshotOf(src.events)
+  // A snapshot of an older version without the body (T1532): the body from your dated settings of the day at the instant it was made.
+  const logged = daySnapshotOf(src.events, (t) => settingsOn(inp.changes, src.date, t))
   if (logged) return { snapshot: withSourceSteps(withSeriesOccurrences(logged, inp.series, src.date, holidays), inp, src.date), fromLog: true }
   return { snapshot: createDay({ date: src.date, ...inp, dayFile: src.dayFile, holidays, at }), fromLog: false }
 }
@@ -67,6 +68,9 @@ function withSourceSteps(snapshot: DaySnapshot, inp: PlanInputs, date: string): 
   return { ...snapshot, blocks }
 }
 
+/** A change of the day's settings (`day.snapshot`) an older version wrote without the body (≤ 1.26, T1532). */
+const lacksBody = (e: AnyEvent): boolean => isKnown(e) && e.k === 'day.snapshot' && settingsLackBody(e.settings)
+
 export function dayContextOf(inp: PlanInputs, src: DaySource, holidays: HolidayLookup, at: number): DayContext {
   const { snapshot } = snapshotOf(inp, src, holidays, at)
   const nextDate = addDays(src.date, 1)
@@ -78,7 +82,10 @@ export function dayContextOf(inp: PlanInputs, src: DaySource, holidays: HolidayL
     nextWakeMin: nextWakeForBedtime(null, src.nextFile, inp.changes, nextDate),
     events: src.events,
     now: at,
-    routineCosts: routineCostsOf(inp.routines, inp.routinesUnknown)
+    routineCosts: routineCostsOf(inp.routines, inp.routinesUnknown),
+    // Only for a change of the day's settings an older version wrote without the body (T1532): the context goes to the helper process
+    // as a copy, and the list of changes is no part of a day otherwise.
+    ...(src.events.some(lacksBody) ? { changes: inp.changes } : {})
   }
 }
 

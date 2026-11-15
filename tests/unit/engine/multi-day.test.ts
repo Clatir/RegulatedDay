@@ -278,7 +278,7 @@ describe('D417 – krzywa energii kolumny tym samym silnikiem co „Dziś”', (
 
   it('dziś po check-inie: te same próbki co oś „Dziś” (przeszłość z logu, od teraz prognoza)', () => {
     const s = new Scenario({ date: TODAY, plan: [block({ id: 'a', cat: 'inne', at: '09:00', min: 120, origin: 'user' }), block({ id: 'b', cat: 'analiza', at: '14:00', min: 60, origin: 'user' })], settings: { transitionBufferMin: 0 } })
-    s.presence('07:30').using('07:30', '12:00').checkin('07:40', { head: [1, 1], emotions: [1, 0], senses: [0, 0] }).ran('a', '09:00', '11:00')
+    s.presence('07:30').using('07:30', '12:00').checkin('07:40', { head: [1, 1], emotions: [1, 0], senses: [0, 0], body: [2, 0] }).ran('a', '09:00', '11:00')
     const ctx = s.contextAt(NOW)
     const d = horizonDay(ctx, 'today')
     const state = computeDay(ctx)
@@ -286,7 +286,7 @@ describe('D417 – krzywa energii kolumny tym samym silnikiem co „Dziś”', (
     expect(d.energy).toEqual(energyTrack(TODAY, state.grid, e))
     expect(d.energy!.assumed).toBeUndefined()
     // Every 10 minutes from the check-in's sample on: 07:40 – 65 / 85 / 100.
-    expect(sampleAt(d, lm('07:40'))).toEqual({ at: lm('07:40'), head: 65, emotions: 85, senses: 100 })
+    expect(sampleAt(d, lm('07:40'))).toEqual({ at: lm('07:40'), head: 65, emotions: 85, senses: 100, body: 65 })
     expect(d.energy!.samples[1]!.at - d.energy!.samples[0]!.at).toBe(ENERGY_SAMPLE_MIN)
     // The forecast after now: the analysis at 14:00 costs.
     expect(sampleAt(d, lm('15:00')).head).toBeLessThan(sampleAt(d, lm('14:00')).head)
@@ -296,7 +296,7 @@ describe('D417 – krzywa energii kolumny tym samym silnikiem co „Dziś”', (
     const s = new Scenario({ date: TODAY, plan: [block({ id: 'a', cat: 'inne', at: '13:00', min: 60, origin: 'user' })] })
     s.presence('07:30').using('07:30', '12:00')
     expect(horizonDay(s.contextAt(NOW), 'today').energy).toBeNull()
-    s.checkin('07:40', { head: [0, 0], emotions: [0, 0], senses: [0, 0] })
+    s.checkin('07:40', { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] })
     expect(horizonDay(s.contextAt(NOW), 'today').energy).not.toBeNull()
     expect(horizonDay(s.contextAt(NOW), 'today', null, { moduleOn: false }).energy).toBeNull()
   })
@@ -306,7 +306,7 @@ describe('D417 – krzywa energii kolumny tym samym silnikiem co „Dziś”', (
     s.presence('07:30').using('07:30', '21:00').ran('a', '09:00', '10:00')
     const at = dayEnd(PAST) + 3_600_000
     expect(horizonDay(s.contextAt(at), 'past').energy).toBeNull()
-    s.checkin('07:40', { head: [0, 0], emotions: [0, 0], senses: [0, 0] })
+    s.checkin('07:40', { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] })
     const d = horizonDay(s.contextAt(at), 'past')
     const counted = { ...s.contextAt(at), now: Math.max(at, dayEnd(PAST)), asWritten: true }
     const state = computeDay(counted)
@@ -316,7 +316,7 @@ describe('D417 – krzywa energii kolumny tym samym silnikiem co „Dziś”', (
 
   it('dzień miniony z modułem tamtego dnia (T950): nie z dzisiejszego ustawienia; zamrożony – z oceny', () => {
     const s = new Scenario({ date: PAST, plan: [block({ id: 'a', cat: 'inne', at: '09:00', min: 60, origin: 'user' })], settings: { transitionBufferMin: 0 } })
-    s.presence('07:30').using('07:30', '21:00').checkin('07:40', { head: [0, 0], emotions: [0, 0], senses: [0, 0] }).ran('a', '09:00', '10:00')
+    s.presence('07:30').using('07:30', '21:00').checkin('07:40', { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] }).ran('a', '09:00', '10:00')
     const ctx = s.contextAt(dayEnd(PAST) + 3_600_000)
     // The module off today: the day gone by had it on (its check-in) – its curve stays.
     expect(horizonDay(ctx, 'past', null, { moduleOn: false }).energy).not.toBeNull()
@@ -327,10 +327,10 @@ describe('D417 – krzywa energii kolumny tym samym silnikiem co „Dziś”', (
   })
 
   it('dzień przyszły: z planu od przyjętego check-inu (100 / 100 / 100 od 04:00, T903) – plan obniża krzywą, przeniesienie ją zmienia', () => {
-    expect(ASSUMED_CHECKIN).toEqual({ head: [0, 0], emotions: [0, 0], senses: [0, 0] })
+    expect(ASSUMED_CHECKIN).toEqual({ head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] })
     const light = horizonDay(futureDay([block({ id: 'a', cat: 'inne', at: '09:00', min: 60, origin: 'user' })]).contextAt(NOW), 'future')
     expect(light.energy).toMatchObject({ assumed: true, reserve: DEFAULT_SETTINGS.reserve })
-    expect(light.energy!.samples[0]).toEqual({ at: 240, head: 100, emotions: 100, senses: 100 })
+    expect(light.energy!.samples[0]).toEqual({ at: 240, head: 100, emotions: 100, senses: 100, body: 100 })
     const heavy = horizonDay(futureDay([block({ id: 'a', cat: 'inne', at: '09:00', min: 60, origin: 'user' }), block({ id: 'x', cat: 'analiza', at: '10:00', min: 180, origin: 'user' })]).contextAt(NOW), 'future')
     expect(sampleAt(heavy, lm('13:00')).head).toBeLessThan(sampleAt(light, lm('13:00')).head)
     // The analysis moved to the afternoon: before it the curve stays up, after it comes down.

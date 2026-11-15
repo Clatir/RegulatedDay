@@ -12,6 +12,7 @@ paths:
   - "tests/web/tile-cost*.test.ts"
   - "tests/web/cost-save.test.ts"
   - "tests/unit/block-costs.test.ts"
+  - "tests/unit/body-pool.test.ts"
   - "tests/unit/cost-range.test.ts"
   - "tests/unit/engine/cost-*.test.ts"
   - "tests/unit/engine/week-cost.test.ts"
@@ -67,6 +68,17 @@ T1360–T1374, T1395–T1399, T1430–T1437, T1440–T1447.
   nocy bez 24 h; `RULES_VERSION` 13 – ustępuje prowadzenia (zejścia, zamrożenie). Nic innego nie czyta nieznanych zdarzeń (T1300).
   Koszt rutyny (≤ 1.24): pole `costs` rutyny i `planned.routineCosts` pomija (liczy bez nich); `RULES_VERSION` 14 – ustępuje prowadzenia;
   `routine.cost` – nieznane zdarzenie timera (instalacja bez 24 h), `RULES_VERSION` bez zmian – to samo wydanie (T1396, T1430).
+
+- Ciało (D520, D523, D524): `Costs.body`, tekst zawsze czterema liczbami G · E · B · C (`costsText`, też ciało 0), `sameCosts` z ciałem.
+  Koszt zapisany przed ciałem (≤ 1.26, trzy pola) – ciało z `startingBody(podkategoria, wariant)` (koszt startowy D523; podkategoria albo
+  wariant spoza startowych – 0, T1536; rutyna – `ROUTINE_CATEGORY`): `ownCostsFrom` (plik bloku, sesja szablonu, bloki migawki, `sameOccurrence`
+  – T1533), `routineFrom`, `foldFacts` (start), `costChangesOf` (`routine.cost`) (T1520, T1527). `block.cost` bez ciała – ciało kosztu bloku
+  sprzed zmiany (`bodiesBefore`: poprzedni własny, start, rutyna, wariant/podkategoria z ustawień dnia – T1534). Ustawienia (`settingsFrom` →
+  `categoryFrom(id, …)`): ciało z ustawień sprzed (na starcie – D523); wariant bez wcześniejszego kosztu: startowy – ciało podkategorii, Twój – 0
+  (T1521); migawka dnia i `day.snapshot` starszej wersji – ciało z Twoich ustawień datowanych w jej chwili (`settingsFrom(…, bodies)`,
+  `settingsLackBody`, `daySnapshotOf(events, bodiesAt)`, `foldFacts(…, bodiesAt)`, `DayContext.changes` – T1532). Migawka (`day.create`,
+  `day.reissue`, `day.snapshot`) to pełne ustawienia (`settingsFrom(…, { whole: true })`): wariant bez kosztu albo miejsca – „jak podkategoria”,
+  nigdy wartość startowa (T1538); warstwy `settingsOn` – jak dotąd. Bloki migawki – zawsze `ownCostsFrom` (zakres, T1539). Zapis zawsze z 4 polami.
 
 ## Kafelek i zapis
 - `TimelineItem.cost` („Dziś” – `dayAxis` z `today`; „Szablony” – `planCosts`: koszt z planu, okienko tylko na blokach szablonu;

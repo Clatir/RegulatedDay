@@ -1,16 +1,16 @@
 /**
- * The energy beside the axis of „Dziś” (D500): three narrow lanes G · E · B (głowa, emocje, bodźce), each 0–100, a filled bar
+ * The energy beside the axis of „Dziś” (D500): four narrow lanes G · E · B · C (głowa, emocje, bodźce, ciało), each 0–100, a filled bar
  * of the smoothed forecast (`energyDraw.ts`, T1280), lighter where it stands below the reserve; the reserve is a tick in each
- * lane, the letters stay over the lanes while the axis scrolls, the three numbers of now stand at the line „teraz”, and the
- * pointer over the lanes shows the hour and the three values („10:30 · głowa 71 · emocje 66 · bodźce 41”).
+ * lane, the letters stay over the lanes while the axis scrolls, the four numbers of now stand at the line „teraz”, and the
+ * pointer over the lanes shows the hour and the four values („10:30 · głowa 71 · emocje 66 · bodźce 41 · ciało 58”).
  */
 import { useId, useMemo, useState, type MouseEvent } from 'react'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
 import { ENERGY_SCALE, hoverText, laneAreaPath, nearestSample, poolCurves, POOL_COLOR, POOL_LETTER, POOL_NAME, POOLS, RESERVE_COLOR, spansAtLeast, valuesAt } from './energyDraw'
 
 /** The width of the column of lanes (the strip of all-day events leaves the same place free over it). */
-export const LANES_WIDTH = 48
-/** A lane's width and the gaps around the lanes (pixels): 3 + 12 + 3 + 12 + 3 + 12 + 3 = 48. */
+export const LANES_WIDTH = 63
+/** A lane's width and the gaps around the lanes (pixels): 3 + 12 + 3 + 12 + 3 + 12 + 3 + 12 + 3 = 63 (D520: four lanes). */
 export const LANE_WIDTH = 12
 const LANE_GAP = 3
 /** The left edge of a pool's lane. */
@@ -103,7 +103,7 @@ export function EnergyLanes({ track, lo, ppm, height, nowAt, nowColor }: { track
   )
 }
 
-/** The legend of the lanes (D500): the scale, the three letters with their pools, the reserve, the lighter bar below it. */
+/** The legend of the lanes (D500): the scale, the four letters with their pools, the reserve, the lighter bar below it. */
 export function EnergyLegend({ reserve }: { reserve: number }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted" data-testid="energy-legend">

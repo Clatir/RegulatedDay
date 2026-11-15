@@ -14,7 +14,7 @@ import { compareEvents, eventAt, isKnown, type AnyEvent, type DaySnapshot, type 
 import type { PlanBlock } from '../model/plan'
 import { NO_ROUTINE_COSTS, type RoutineCosts } from '../model/routines'
 import { placeOf } from '../model/categories'
-import type { DayTypeParams, RulesSettings } from '../model/settings'
+import { settingsOn, type DayTypeParams, type RulesSettings, type SettingsChange } from '../model/settings'
 import { placeLogical } from '../time/day'
 import { addDays, weekday } from '../time/zone'
 import { activityOf, type Activity } from './activity'
@@ -81,6 +81,12 @@ export interface DayContext {
    * of a routine not begun costs its routine's before its variant's and category's; a begun one – what its start wrote. None – none.
    */
   routineCosts?: RoutineCosts
+  /**
+   * Your dated settings' changes (rd.json; `dayContextOf` gives them from `PlanInputs.changes` only to a day that needs them): a change of the
+   * day's settings an older version wrote without the body (`day.snapshot`, ≤ 1.26) takes the body from your settings at its instant (T1532).
+   * None – from the day's snapshot.
+   */
+  changes?: readonly SettingsChange[]
 }
 
 /** The routines' costs of a day's context (none given – none). */
@@ -549,7 +555,8 @@ export function computeDay(ctx: DayContext): DayState {
   const g = gridOf(ctx.date)
   const cap = g.length + SPILL_MIN
   const events = [...ctx.events].sort(compareEvents)
-  const facts = foldFacts(g, events)
+  // A change of the day's settings written without the body (≤ 1.26, T1532): the body of your settings at its instant, else of the day's.
+  const facts = foldFacts(g, events, (at) => (ctx.changes ? settingsOn(ctx.changes, ctx.date, at) : ctx.snapshot.settings))
   const now = Math.max(0, Math.min(cap, idxOf(g, ctx.now)))
   const snapshot = ctx.snapshot
   const settingsAt = (k: number) => settingsAtMinute(snapshot, facts, k)

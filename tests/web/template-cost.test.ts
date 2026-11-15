@@ -75,7 +75,7 @@ describe('koszt na kafelku „Szablonów” (D512)', () => {
   it('kafelek bloku szablonu ma koszt kategorii; okienko zapisuje własny koszt bloku w wersji od daty zmian, bez pytania o serię', async () => {
     await open(template(null))
     const label = q('block-b1-cost')!
-    expect(label.textContent).toBe('3 · 1 · 1')
+    expect(label.textContent).toBe('3 · 1 · 1 · 0')
     expect(label.getAttribute('data-editable')).toBe('true')
     await click(label)
     expect(q('cost-pop')).not.toBeNull()
@@ -84,19 +84,19 @@ describe('koszt na kafelku „Szablonów” (D512)', () => {
     expect(vi.mocked(tryUpdateRecord).mock.calls[0]![0]).toBe(REL)
     const saved = templateFrom(records.get(REL))!
     // Changes from tomorrow (the date of „Zmiany od”): a new version, the old one as it was.
-    expect(saved.versions.find((v) => v.from === '2026-11-19')!.blocks[0]!.costs).toEqual({ head: 4, emotions: 1, senses: 1 })
+    expect(saved.versions.find((v) => v.from === '2026-11-19')!.blocks[0]!.costs).toEqual({ head: 4, emotions: 1, senses: 1, body: 0 })
     expect(saved.versions.find((v) => v.from === '2026-01-01')!.blocks[0]!.costs).toBeNull()
     expect(q('series-scope')).toBeNull()
   })
 
   it('blok szablonu z rutyną z kosztem mówi koszt rutyny; przycisk okienka wraca do niego (własny koszt bloku – null)', async () => {
-    const r: Routine = { id: 'r1', name: 'Poranna', normal: [], worse: [], archived: false, costs: { head: -1, emotions: 2, senses: 0 } }
+    const r: Routine = { id: 'r1', name: 'Poranna', normal: [], worse: [], archived: false, costs: { head: -1, emotions: 2, senses: 0, body: 0 } }
     const t = template('r1')
-    t.versions[0]!.blocks[0]!.costs = { head: 5, emotions: 5, senses: 5 }
+    t.versions[0]!.blocks[0]!.costs = { head: 5, emotions: 5, senses: 5, body: 0 }
     await open(t, [r])
-    expect(q('block-b1-cost')!.textContent).toBe('5 · 5 · 5')
+    expect(q('block-b1-cost')!.textContent).toBe('5 · 5 · 5 · 0')
     await click(q('block-b1-cost'))
-    expect(q('cost-pop-reset')!.textContent).toContain('−1·2·0')
+    expect(q('cost-pop-reset')!.textContent).toContain('−1·2·0·0')
     await click(q('cost-pop-reset'))
     expect(templateFrom(records.get(REL))!.versions.find((v) => v.from === '2026-11-19')!.blocks[0]!.costs).toBeNull()
   })

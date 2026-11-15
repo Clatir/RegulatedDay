@@ -16,7 +16,7 @@ import { addDays } from '@shared/time/zone'
 import { block, Scenario } from './dsl'
 
 const DATE = '2026-10-28'
-const MID: Record<Pool, [Answer, Answer]> = { head: [1, 1], emotions: [1, 1], senses: [1, 1] }
+const MID: Record<Pool, [Answer, Answer]> = { head: [1, 1], emotions: [1, 1], senses: [1, 1], body: [1, 1] }
 
 const days = (from: string, n: number, o: Partial<CalibrationDay> = {}): CalibrationDay[] => Array.from({ length: n }, (_, i) => ({ date: addDays(from, i), closed: 'ritual', dayType: 'zwykly', ...o }))
 
@@ -83,8 +83,8 @@ describe('dowody kosztów', () => {
     const s = day().signal('glasses', '11:00')
     const e = evidence(s)!
     expect(e.minutes).toEqual({ analiza: 60, inne: 60 })
-    expect(e.residual.analiza).toEqual({ head: 0, emotions: 0, senses: -5 })
-    expect(e.residual.inne).toEqual({ head: 0, emotions: 0, senses: -5 })
+    expect(e.residual.analiza).toEqual({ head: 0, emotions: 0, senses: -5, body: 0 })
+    expect(e.residual.inne).toEqual({ head: 0, emotions: 0, senses: -5, body: 0 })
     // A later anchor counts only the time since the one before (11:00–11:30: no block).
     s.relative('head', -10, '11:30')
     expect(evidence(s)!.residual.analiza!.head).toBe(0)
@@ -122,17 +122,17 @@ describe('propozycje przeglądu', () => {
   })
 
   it('koszty: z co najmniej 5 dni z kategorią – zmiana kosztu na godzinę, która przewidziałaby sygnały, w zakresie −5…5', () => {
-    const day = (residualSenses: number, key = 'analiza'): CostEvidence => ({ minutes: { [key]: 120 }, residual: { [key]: { head: 0, emotions: 0, senses: residualSenses } } })
+    const day = (residualSenses: number, key = 'analiza'): CostEvidence => ({ minutes: { [key]: 120 }, residual: { [key]: { head: 0, emotions: 0, senses: residualSenses, body: 0 } } })
     // 10 h of analysis (3 / 1 / 1), −30 units of senses the model did not foresee: +1 an hour.
     const [p] = costProposals([day(-6), day(-6), day(-6), day(-6), day(-6)], DEFAULT_SETTINGS)
-    expect(p).toEqual({ category: 'analiza', variant: null, days: 5, hours: 10, from: { head: 3, emotions: 1, senses: 1 }, to: { head: 3, emotions: 1, senses: 2 } })
+    expect(p).toEqual({ category: 'analiza', variant: null, days: 5, hours: 10, from: { head: 3, emotions: 1, senses: 1, body: 0 }, to: { head: 3, emotions: 1, senses: 2, body: 0 } })
     expect(costProposals([day(-6), day(-6), day(-6), day(-6)], DEFAULT_SETTINGS)).toEqual([])
     // Nothing to change: no proposal; never beyond 5.
     expect(costProposals([day(0), day(0), day(0), day(0), day(0)], DEFAULT_SETTINGS)).toEqual([])
     expect(costProposals([day(-600), day(-600), day(-600), day(-600), day(-600)], DEFAULT_SETTINGS)[0]!.to.senses).toBe(5)
     // A variant with its own costs: its costs change, not the category's (drzemka −3 / −1 / −2).
     const [v] = costProposals([0, 1, 2, 3, 4].map(() => day(-6, 'regeneracja:drzemka')), DEFAULT_SETTINGS)
-    expect(v).toMatchObject({ category: 'regeneracja', variant: 'drzemka', from: { head: -3, emotions: -1, senses: -2 }, to: { senses: -1 } })
+    expect(v).toMatchObject({ category: 'regeneracja', variant: 'drzemka', from: { head: -3, emotions: -1, senses: -2, body: -3 }, to: { senses: -1, body: -3 } })
   })
 })
 
@@ -143,14 +143,14 @@ describe('dowody kosztów – szczegóły', () => {
 
   it('dwie kotwice w tej samej minucie dzielą jedno okno – liczą się obie', () => {
     const s = base().checkin('08:00', MID).ran('a', '09:00', '10:00').signal('glasses', '10:00').signal('earplugs', '10:00')
-    expect(evidence(s)!.residual.analiza).toEqual({ head: 0, emotions: 0, senses: -20 })
+    expect(evidence(s)!.residual.analiza).toEqual({ head: 0, emotions: 0, senses: -20, body: 0 })
   })
 
   it('kolejny check-in zaczyna okno od nowa: czas przed nim nie dostaje skutku następnego sygnału', () => {
     const s = base().checkin('08:00', MID).ran('a', '09:00', '10:00').checkin('12:00', MID).ran('b', '13:00', '14:00').signal('rocking', '14:00')
     const e = evidence(s)!
     expect(e.residual.analiza).toBeUndefined()
-    expect(e.residual.inne).toEqual({ head: -5, emotions: -5, senses: -5 })
+    expect(e.residual.inne).toEqual({ head: -5, emotions: -5, senses: -5, body: 0 })
     // Within 3 h of the signal too: analysis 09:00–10:00, the check-in at 10:30, the signal at 11:00.
     const near = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'analiza', at: '09:00', min: 60 }), block({ id: 'b', cat: 'inne', at: '10:30', min: 30 })], settings: { transitionBufferMin: 0 } })
     near.checkin('08:00', MID).ran('a', '09:00', '10:00').checkin('10:30', MID).ran('b', '10:30', '11:00').signal('rocking', '11:00')
@@ -173,7 +173,7 @@ describe('dowody kosztów – szczegóły', () => {
   })
 
   it('wspólna minuta należy do bloku zaczętego później; blok z własnymi kosztami i wariant z własnymi kosztami osobno', () => {
-    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'analiza', at: '09:00', min: 60 }), block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '09:30', min: 30 }), { ...block({ id: 'o', cat: 'inne', at: '11:00', min: 30 }), costs: { head: 1, emotions: 1, senses: 1 } }], settings: { transitionBufferMin: 0 } })
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'analiza', at: '09:00', min: 60 }), block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '09:30', min: 30 }), { ...block({ id: 'o', cat: 'inne', at: '11:00', min: 30 }), costs: { head: 1, emotions: 1, senses: 1, body: 1 } }], settings: { transitionBufferMin: 0 } })
     s.checkin('08:00', MID).start('a', '09:00').start('r', '09:30').end('r', '10:00').end('a', '10:00')
     s.ran('o', '11:00', '11:30')
     expect(evidence(s)!.minutes).toEqual({ analiza: 30, 'regeneracja:drzemka': 30 })

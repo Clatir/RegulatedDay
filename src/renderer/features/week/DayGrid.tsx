@@ -484,7 +484,7 @@ function DayColumn({
   waiting: NewPick | null
   grab: (b: HorizonBlock) => BlockGrab
   drop: (BlockDrop & { durationMin: number }) | null
-  /** The cost on a tile without spaces („3·1·1” – the week, D501). */
+  /** The cost on a tile without spaces („3·1·1·0” – the week, D501, D524). */
   tight: boolean
 }) {
   const lanes = useMemo(() => laneLayout(day.blocks), [day.blocks])
@@ -566,7 +566,8 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
   const counter = stepsCounter(b.steps)
   // D501: the cost in the tile's bottom right; a low tile has it at the end of the name's row, one beside another shows it only while the pointer is over it.
   const costAt = !b.cost ? null : lanes > 1 ? 'hover' : height >= 30 ? 'corner' : 'row'
-  const costLabel = (className: string) => b.cost && <TileCost cost={b.cost} id={`week:${date}:${b.id}`} testId={`week-block-${date}-${b.id}-cost`} tight={tight} className={className} place={costAt ?? undefined} onChange={onCosts} />
+  // D526: a tile beside another has its label without spaces („1·1·1·1”) also in „3 dni”, so most of its top row still drags the block.
+  const costLabel = (className: string) => b.cost && <TileCost cost={b.cost} id={`week:${date}:${b.id}`} testId={`week-block-${date}-${b.id}-cost`} tight={tight || costAt === 'hover'} className={className} place={costAt ?? undefined} onChange={onCosts} />
   const title = `${name} · ${logicalClock(b.startMin)}–${logicalClock(b.endMin)} · ${blockStateText(b.state, b.outsidePlan)}${b.background ? ' · w tle' : ''}${attach ? ` · ${attachBadgeTitle(attach)}` : ''}`
   const nameContent = (
     <>

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.27.0
+- Nowa pula energii „ciało” – zmęczenie fizyczne. Działa jak głowa, emocje i bodźce: ma stan od 0 do 100, swój koszt na godzinę w podkategoriach, wariantach, rutynach i blokach, czwarty pas „C” w „Dziś” i udział w pasku energii w „Tygodniu” i „3 dniach”. Gdy ciało zejdzie do rezerwy, pasek zmienia kolor, a komunikat proponuje regenerację, która najbardziej odciąża ciało (np. leżenie, drzemkę).
+- Poranny check-in ma dwa nowe pytania: „Ciało jest ciężkie, bolą mięśnie?” i „Spałem niespokojnie?”. Ocena względna w pasku (gorzej / tak samo / lepiej) obejmuje też ciało. Ciało nie ma własnego sygnału, a „Więcej bujania” dalej dotyczy tylko głowy, emocji i bodźców.
+- Koszt pokazuje się teraz czterema liczbami G · E · B · C („3 · 1 · 1 · 0”) – na kafelku, w okienku kosztu i w oknach edycji. Na wąskim kafelku obok innego bloku w „3 dniach” bez spacji („1·1·1·1”), żeby blok łatwo było chwycić. Wbudowane podkategorie dostały startowy koszt ciała (np. rutyny i dojazd 1, samotny spacer 1, gorący prysznic −2, leżenie i drzemka −3); Twoje własne podkategorie i warianty mają ciało 0 – ustawisz je w Ustawieniach.
+- Ustawienia → Kategorie: przy podkategorii i wariancie przed każdym polem kosztu stoi nazwa puli („głowa”, „emocje”, „bodźce”, „ciało”), więc od razu widać, czego dotyczy liczba.
+- Eksport `checkiny.csv` ma na końcu kolumnę „Ciało”.
+- Poprawka: wbudowany wariant ustawiony na „jak podkategoria” (np. „Leżenie, drzemka”) liczył się w energii dnia swoim dawnym, wbudowanym kosztem – teraz kosztem podkategorii.
+- Starsza wersja na drugim komputerze nie zna ciała – zaktualizuj ją; do tego czasu prowadzenie dnia przejmuje komputer z nową wersją.
+
 ## 1.26.1
 - Pasek pulpitu znów da się przeciągnąć za uchwyt ⠿. Windows czasem nie przekazywał paskowi samego wciśnięcia przycisku myszy i pasek stał w miejscu – teraz chwyta go już pierwszy ruch z wciśniętym przyciskiem. Pasek idzie za kursorem także wtedy, gdy kursor go wyprzedzi, a puszczenie przycisku nad przyciskiem paska nic nie klika.
 

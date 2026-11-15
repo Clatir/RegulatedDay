@@ -68,6 +68,8 @@ test('drzewo kategorii: nowa kategoria, przeniesienie podkategorii, usunięcie z
 
       // A variant of „Regeneracja” – a way of regeneration, „jak podkategoria”.
       const regen = page.locator('[data-testid="category-row"][data-category="regeneracja"]')
+      // D525, D520: the subcategory's row names the four pools before their fields.
+      await expect(regen.locator('label').filter({ has: page.locator('input') })).toHaveText([/^głowa/, /^emocje/, /^bodźce/, /^ciało/])
       await regen.getByTestId('category-more').click()
       await regen.getByTestId('variant-new').fill('Kąpiel')
       await regen.getByTestId('variant-add').click()

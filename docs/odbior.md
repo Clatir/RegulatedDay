@@ -244,6 +244,11 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] SE11 Usunięcie „Zjazd zdalny”: dni zjazdu bez sesji, także na drugim komputerze (1.26.0)
    - [ ] SE13 Kreator na nowym folderze: strefy Nowy Jork / Londyn / Polska, sesje w szablonach i w dzisiejszym dniu (1.26.0)
    - [ ] SE4 Dwa komputery: drugi od razu ma sesje bez podwójnych; 1.25 pokazuje je jako stałe bloki (1.26.0) (Tylko Ty – dwa komputery)
+   - [ ] CI1 Ustawienia → Kategorie: nazwy pul przed polami kosztu podkategorii i wariantu (1.27.0)
+   - [ ] CI2 Kafelek i okienko kosztu: cztery liczby G · E · B · C, wiersz „ciało” z [−] i [+] (1.27.0)
+   - [ ] CI3 Check-in: dwa pytania o ciało, ciało w wyniku (1.27.0)
+   - [ ] CI4 „Dziś”: czwarty pas „C”; ocena względna w pasku z „ciało”, bez sygnału ciała (1.27.0)
+   - [ ] CI5 Drzemka po aktualizacji ma ciało −3, Twoja podkategoria ciało 0 (1.27.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -2774,6 +2779,43 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** na tym komputerze (1.25) zmień koszt rutyny przy zaczętym bloku; drugi komputer ma jeszcze 1.24.
 - **Oczekiwany efekt:** drugi komputer proponuje instalację nowej wersji; jego dane się nie psują.
 - **Nie przechodzi, gdy:** błąd na drugim komputerze albo utrata kosztu rutyny.
+
+### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
+
+#### CI1 Nazwy pul przy polach kosztu (D525)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/category-tree-screen.test.ts`, `tests/e2e/category-tree.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** Ustawienia → Kategorie, dowolna podkategoria; „więcej” → wariant z wyłączonym „koszt jak podkategoria”; dodaj nowy wariant i ustaw mu koszt.
+- **Oczekiwany efekt:** przed każdym polem stoi „głowa”, „emocje”, „bodźce”, „ciało”; wiersz zawija się na wąskim oknie.
+- **Nie przechodzi, gdy:** gdzieś są same liczby albo wiersz wychodzi poza okno.
+
+#### CI2 Cztery liczby kosztu (D524)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/tile-cost.test.ts`, `tests/web/tile-cost-week.test.ts`, `tests/unit/body-pool.test.ts`.
+- **Jak sprawdzić:** w „Dziś” i „Tygodniu” spójrz na koszt w rogu kafelka, kliknij go.
+- **Oczekiwany efekt:** „3 · 1 · 1 · 0” („3·1·1·0” w „Tygodniu”); okienko ma wiersze głowa, emocje, bodźce, ciało; [+] na ciele zmienia prognozę.
+- **Nie przechodzi, gdy:** trzy liczby, ucięty napis albo okienko bez wiersza ciała.
+
+#### CI3 Check-in o ciało (D521)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/morning-checkin.test.ts`, `tests/unit/engine/body-energy.test.ts`.
+- **Jak sprawdzić:** rano w planie porannym odpowiedz „tak” na „Ciało jest ciężkie, bolą mięśnie?” i „trochę” na „Spałem niespokojnie?”.
+- **Oczekiwany efekt:** 8 pytań; ciało zaczyna dzień od 45 (wynik 3), widać to w pasie „C”.
+- **Nie przechodzi, gdy:** brak pytań o ciało albo pas ciała 100 mimo odpowiedzi.
+
+#### CI4 Pas ciała i ocena względna (D520, D522)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/energy-draw.test.ts`, `tests/web/day-grid.test.ts`, `tests/web/bar-signals-body.test.ts`.
+- **Jak sprawdzić:** w „Dziś” spójrz na pasy przy osi; w pasku otwórz ocenę względną i wybierz „ciało” → „gorzej”.
+- **Oczekiwany efekt:** pasy G · E · B · C, najechanie pokazuje też „ciało”; ciało spada o 10; sygnałów jest tyle co dawniej, „Więcej bujania” nie rusza ciała.
+- **Nie przechodzi, gdy:** brak pasa C, ocena bez ciała albo nowy przycisk sygnału.
+
+#### CI5 Koszty startowe ciała po aktualizacji (D523)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/body-pool.test.ts`.
+- **Jak sprawdzić:** po aktualizacji Ustawienia → Kategorie: „Regeneracja” → warianty, „Rutyny…”, Twoja własna podkategoria.
+- **Oczekiwany efekt:** drzemka −3, prysznic −2, spacer 1, rutyny 1; Twoja podkategoria i Twoje warianty – 0; głowa, emocje, bodźce bez zmian.
+- **Nie przechodzi, gdy:** zmieniły się dawne koszty albo Twoja podkategoria ma ciało ≠ 0.
 
 ### SE – sesje w szablonach (1.26.0, D511, D515)
 

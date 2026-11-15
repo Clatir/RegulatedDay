@@ -26,7 +26,7 @@ import { toast } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { saveDay } from './dayActions'
 
-const POOL_NAMES = { head: 'głowa', emotions: 'emocje', senses: 'bodźce' } as const
+const POOL_NAMES = { head: 'głowa', emotions: 'emocje', senses: 'bodźce', body: 'ciało' } as const
 
 export function TypeChangeDialog({ model, names, isToday, onlyAdd, initialTo, onClose }: { model: DayModel; names: Names; isToday: boolean; onlyAdd?: boolean; /** The new type already chosen: the step after it (the proposals) opens at once (D406: „Wolne” after an all-day event). */ initialTo?: DayTypeId; onClose: () => void }) {
   const rd = useData((s) => s.rd)

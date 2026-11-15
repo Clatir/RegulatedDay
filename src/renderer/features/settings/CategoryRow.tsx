@@ -54,7 +54,7 @@ export function CategoryRow({
         <span className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ background: blockFill(color, brightness), border: `1px solid ${color}` }} />
         <TextField value={meta?.name ?? ''} onCommit={(n) => void setMeta(id, { name: n })} required max={60} shellClassName="w-[200px]" aria-label="Nazwa podkategorii" />
         <Choice value={c.cls} options={(['work', 'life', 'free'] as const).map((v) => ({ value: v, label: CLASS_NAMES[v] }))} onChange={(cls) => save({ categories: { [id]: { cls } } })} className="w-[130px]" aria-label="Klasa" />
-        <CostNumbers costs={c.costs} label={(pool) => `${meta?.name}: ${pool}`} onCommit={(p, v) => void save({ categories: { [id]: { costs: { [p]: v } } } })} />
+        <CostNumbers costs={c.costs} named label={(pool) => `${meta?.name}: ${pool}`} onCommit={(p, v) => void save({ categories: { [id]: { costs: { [p]: v } } } })} />
         <span className="flex-1" />
         <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={onToggle} data-testid="category-more">
           {open ? 'mniej' : 'więcej'}

@@ -205,6 +205,7 @@ describe('„+ Nowa…” → wariant i kategoria', () => {
     type('new-variant-name', 'Kąpiel')
     await act(async () => void q('new-variant-same')!.click())
     expect(q('new-cost-head')).not.toBeNull()
+    expect(q('new-cost-body')).not.toBeNull()
     await save()
     const make = vi.mocked(saveSettingsFrom).mock.calls[0]![0] as (raw: Record<string, unknown>) => unknown
     const variants = (make({ schema: 1 }) as { categories: { regeneracja: { variants: Array<{ name: string; costs?: unknown }> } } }).categories.regeneracja.variants
@@ -234,13 +235,16 @@ describe('„+ Nowa…” → wariant i kategoria', () => {
     expect(q('new-category-class')).not.toBeNull()
     expect(q('new-category-place')).not.toBeNull()
     expect(q('new-cost-head')).not.toBeNull()
+    // D520, D523: the body is a field of its own, 0 for a subcategory of yours.
+    expect(q('new-cost-body')).not.toBeNull()
+    expect(q<HTMLInputElement>('new-cost-body')!.value).toBe('0')
     type('new-category-name', 'Ogród')
     choose('new-category-class', 'life')
     await save()
     expect(saveSettingsFrom).toHaveBeenCalledTimes(1)
     const [patch] = vi.mocked(saveSettingsFrom).mock.calls[0]!
     const [id, rules] = Object.entries((patch as { categories: Record<string, Record<string, unknown>> }).categories)[0]!
-    expect(rules).toMatchObject({ cls: 'life', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1 }, background: false })
+    expect(rules).toMatchObject({ cls: 'life', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1, body: 0 }, background: false })
     // The name and colour after the rules (as „Kategorie”).
     expect(saveRd).toHaveBeenCalledTimes(1)
     // Przegląd 2: not the code of the render of the click (its data have no rules of the new category – no exchange in „Dziś”),

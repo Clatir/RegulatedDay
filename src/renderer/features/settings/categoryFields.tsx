@@ -28,7 +28,8 @@ export const FLAGS: Array<[keyof CategoryRules, string]> = [
 export const POOLS = [
   ['head', 'głowa'],
   ['emotions', 'emocje'],
-  ['senses', 'bodźce']
+  ['senses', 'bodźce'],
+  ['body', 'ciało']
 ] as const
 
 export const PLACE_OPTIONS = [
@@ -42,8 +43,8 @@ export const VARIANT_PLACE_SAME = '-'
 /** The list of a variant's place: „miejsce jak podkategoria”, then the three places. */
 export const VARIANT_PLACE_OPTIONS = [{ value: VARIANT_PLACE_SAME, label: 'miejsce jak podkategoria' }, ...PLACE_OPTIONS] as const
 
-/** The costs of a category made new (each pool 1 an hour). */
-export const NEW_CATEGORY_COSTS: Costs = { head: 1, emotions: 1, senses: 1 }
+/** The costs of a category made new (the head, emotions and senses 1 an hour, the body 0 – D523: your own subcategories start with no body cost). */
+export const NEW_CATEGORY_COSTS: Costs = { head: 1, emotions: 1, senses: 1, body: 0 }
 
 /** The name, colour and archive of a category (rd.json – at once, not dated). */
 export const setMeta = (id: string, patch: Record<string, unknown>) =>

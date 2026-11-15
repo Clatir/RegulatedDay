@@ -308,7 +308,7 @@ export function BlockEditor({
       {making === 'variant' && (
         <NewVariantDialog
           categoryId={block.categoryId}
-          costs={rules?.costs ?? { head: 1, emotions: 1, senses: 1 }}
+          costs={rules?.costs ?? { head: 1, emotions: 1, senses: 1, body: 0 }}
           has={(variantId) => (names.settings.categories[block.categoryId]?.variants ?? []).some((v) => v.id === variantId)}
           onClose={() => setMaking(null)}
           onCreated={(variantId) => {

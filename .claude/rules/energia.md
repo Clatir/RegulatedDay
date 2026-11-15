@@ -5,6 +5,7 @@ paths:
   - "tests/unit/engine/energy-rules.test.ts"
   - "tests/unit/engine/model-energii.test.ts"
   - "tests/unit/engine/reserve.test.ts"
+  - "tests/unit/engine/body-energy.test.ts"
 ---
 
 # Energia (E2)
@@ -50,7 +51,15 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
 - Zdarzenia energii są bierne dla silnika dnia (`isPassive`: `dom === 'energy'`) – nie unieważniają odcinków minut.
 - Przerwa ≥ 30 min przed końcem pracy liczy się od początku według prognozy: stan w trakcie przerwy już rośnie, gdy
   plan stawia następny blok dalej niż 30 min od jej początku.
-- Koszt: ~1,7 ms na dzień (dzień ~4,5 ms); nie wracaj do filtrowania odcinków w każdej minucie (malowanie tablic).
+- Koszt: ~1,7 ms na dzień (dzień ~4,5 ms); nie wracaj do filtrowania odcinków w każdej minucie (malowanie tablic). Pętla stanu
+  minut nic nie alokuje w minucie bez kotwicy i kosztu jednorazowego (`anchorsAt.get(k)` bez `?? []`; z tym 4. pula była o ~20% droższa).
+- Ciało (D520–D523, T1520–T1528): czwarta pula `body` – pętle po pulach biorą `POOLS` / `pools()`, nigdy listy trzech. „Więcej bujania”
+  bez ciała (`anchorEffect`, D522); ocena względna – każda pula. Check-in bez `answers.body` (starsza wersja) – ciało 100 (`checkinStates`),
+  w statystykach i CSV tylko zadane pule (T1522); `before` kotwicy bez ciała – ciało ze swojego stanu (T1523). Zdarzenia logu mają
+  `LoggedPools` (ciało opcjonalne): koszt bez ciała czytają `foldFacts` (`planned.costs`, `planned.routineCosts`), `costChangesOf`
+  (`routine.cost`; `block.cost` – ciało kosztu sprzed zmiany, T1534) i `daySnapshotOf` (bloki migawki) z `startingBody` (T1520, T1527);
+  ustawienia migawki i `day.snapshot` starszej wersji – ciało z Twoich ustawień datowanych (T1532, reguły `koszt.md`); walidatory zdarzeń –
+  ciało może nie być, jest – sprawdzane (T1528). `RULES_VERSION` 16 (T1524).
 - Moduł energii: przełącznik w ustawieniach (E3) zapisuje `rd.general.modules.energy` i `energy.module` w logu dnia.
 - Jeszcze nie: zobaczenie komunikatu i tryby ciszy (E4b), warianty przy rezerwie i przesunięcie granicy po regeneracji
   z komunikatu (E5), wyjątki typów dni w nagrodzie i nuty (E7), okres kalibracji (E6).

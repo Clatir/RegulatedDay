@@ -13,7 +13,8 @@ import type { RulesSettings } from '@shared/model/settings'
 const POOLS: Array<[keyof Costs, string]> = [
   ['head', 'głowa'],
   ['emotions', 'emocje'],
-  ['senses', 'bodźce']
+  ['senses', 'bodźce'],
+  ['body', 'ciało']
 ]
 
 export function timeTitle(p: TimeProposal, rd: Pick<RdFile, 'categories'>): string {
@@ -30,7 +31,7 @@ export function costTitle(p: CostProposal, rd: Pick<RdFile, 'categories'>, setti
   return `${categoryName(rd, p.category)}${variant ? ` – ${variant}` : ''}: koszt na godzinę (${countLabel(p.days, 'dzień', 'dni', 'dni')}, ${durationLabel(p.hours * 60)})`
 }
 
-/** „głowa 2 → 3 · emocje 1 · bodźce 0 → 1” */
+/** „głowa 2 → 3 · emocje 1 · bodźce 0 → 1 · ciało 0” */
 export function costLine(p: CostProposal): string {
   return POOLS.map(([k, name]) => (p.from[k] === p.to[k] ? `${name} ${p.from[k]}` : `${name} ${p.from[k]} → ${p.to[k]}`)).join(' · ')
 }

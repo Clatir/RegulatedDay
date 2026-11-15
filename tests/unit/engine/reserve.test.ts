@@ -12,10 +12,10 @@ import type { PlanBlock } from '@shared/model/plan'
 import { DEFAULT_SETTINGS, deepMerge, settingsFrom } from '@shared/model/settings'
 import { Scenario, block, hhmm } from './dsl'
 
-const MID: Record<Pool, [Answer, Answer]> = { head: [1, 1], emotions: [1, 1], senses: [1, 1] }
+const MID: Record<Pool, [Answer, Answer]> = { head: [1, 1], emotions: [1, 1], senses: [1, 1], body: [1, 1] }
 const LATER = block({ id: 'later', cat: 'analiza', at: '20:00', min: 30, fixed: true })
 /** Head only, 15 an hour: from 65 at 09:00 to the reserve (15) at 12:20. */
-const heavy = (min: number): PlanBlock => ({ ...block({ id: 'h', cat: 'inne', at: '09:00', min }), costs: { head: 5, emotions: 0, senses: 0 } })
+const heavy = (min: number): PlanBlock => ({ ...block({ id: 'h', cat: 'inne', at: '09:00', min }), costs: { head: 5, emotions: 0, senses: 0, body: 0 } })
 const sc = (plan: PlanBlock[], settings: Record<string, unknown> = {}) => new Scenario({ date: '2026-10-21', plan, settings: { transitionBufferMin: 0, ...settings } })
 
 function react(s: Scenario, now: string, seen: string | null, o: { iconOnly?: boolean; over?: boolean } = {}) {
@@ -48,6 +48,8 @@ describe('propozycja regeneracji', () => {
     expect(suggestRegen(DEFAULT_SETTINGS, 'emotions')).toBe('spacer')
     // Cisza i prysznic mają po −3 dla bodźców: pierwsza z listy.
     expect(suggestRegen(DEFAULT_SETTINGS, 'senses')).toBe('cisza')
+    // Ciało (D520): leżenie, drzemka −3.
+    expect(suggestRegen(DEFAULT_SETTINGS, 'body')).toBe('drzemka')
   })
 
   it('wariant bez własnych kosztów ma koszt kategorii', () => {
