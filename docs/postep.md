@@ -65,9 +65,9 @@ Autowznowienie po limicie: zadanie cron w sesji (co ok. 35 min) czyta ten wpis. 
 | Z1 | scalone 35b7148 (15.11 23:10) | przegląd high 9 uwag poprawionych, T1541–T1555; `installer-close.test.ts` pada lokalnie w obu drzewach (środowisko, PowerShell) – sprawdzi CI |
 | Z2 | scalone 15b2e2c (16.11 00:00) | A + B, dwa przeglądy high (10 + 11 uwag), T1560–T1577; E2E Spraw i Del lokalnie zielone |
 | Z3 | scalone a0a8042 (15.11 23:40) | przegląd high 10 uwag poprawionych, T1580–T1589; klik w dzień dalej go otwiera (zakres od Ctrl+klik) |
-| Z4 | A – runda 2 xhigh: 12 uwag (3 potwierdzone: kolejność D216, rozsuwanie grupy, freed), poprawki w toku; B część 1 (zaznaczanie na osi i w „Tygodniu”, menu z zaślepką `runGroupAction`) – `wykonawca-sonnet` w katalogu głównym | drzewo `C:/CC-Projekty/RD-z4`, gałąź `claude/z4-bloki` |
-| Z5 | zaznaczanie w „Tygodniu” i „3 dniach” razem z Z4-B część 1; działania wielodniowe po scaleniu Z4-A | |
-| Z6 | czeka na Z4, Z5 | przeciąganie grupy |
+| Z4 | A – runda 3 xhigh (9 uwag, ostatnia) w toku w `C:/CC-Projekty/RD-z4`; B cz. 1 (zaznaczanie osi i „Tygodnia”, menu z zaślepką `groupRunner`) scalone e9b9f74; B cz. 2 – podpięcie `runGroupAction` do logiki A | |
+| Z5 | zaznaczanie w „Tygodniu” i „3 dniach” w e9b9f74; działania wielodniowe przy podpięciu Z4-B cz. 2 | |
+| Z6 | czeka na Z4-A | przeciąganie grupy – logika `wykonawca-opus`, interfejs `wykonawca-sonnet`; E2E ciągu Z (group-select.spec.ts) w toku |
 | Z7 | czeka | wersja, CHANGELOG, odbiór, Setup, PR, wydanie |
 
 **Przyjęte bez użytkownika (pokazać po powrocie):** (lista rośnie w trakcie)
