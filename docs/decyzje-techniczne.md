@@ -416,3 +416,17 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1539 | Koszt własny bloków migawki zawsze przez `ownCostsFrom` (zakres `RANGES.cost`), także z ciałem: koszt spoza zakresu to brak kosztu |
 | T1540 | E2E przeciągania w „3 dniach” chwyta kafelek w lewej części: etykieta kosztu kafelka obok innego bloku pokazuje się po najechaniu w prawym górnym rogu (D501), a po D524 sięga dalej niż środek półszerokiego kafelka; naciśnięcie na nią otwiera okienko kosztu, nie przeciągnięcie |
 | T1541 | Linia zmian grupowych (D529) stoi w oknie – nad osią „Dziś”, na stronie szablonu, nad kolumnami „Tygodnia” i „3 dni”, w Sprawach i w Kalendarzu – a nie w pasku pulpitu: zmianę robisz w oknie, więc tam jest „Cofnij”; pasek pulpitu i `main/widget.ts` bez zmian (D229, T354), rozsunięcie z tej samej zmiany nie dostaje drugiej linii w pasku |
+| T1542 | `Selection.ids` zawsze w kolejności `order` ekranu; id spoza tej kolejności (sprawa z innej listy) stoją po nich |
+| T1543 | Warstwa Esc `base` (`useEscapeLayer(open, close, true)`) leży pod zwykłymi warstwami bez względu na chwilę rejestracji – panel otwarty tym samym kliknięciem zamyka się pierwszy, drugi Esc czyści zaznaczenie |
+| T1544 | Prawy przycisk – jedna reguła `contextSelect` / `onItemContext` w `useSelection` (element spoza zaznaczenia zostaje jedynym zaznaczonym) dla wszystkich ekranów ciągu Z |
+| T1545 | Menu pod prawym przyciskiem rejestruje się przez `onModal` (skróty strony, Del i Ctrl+A czekają), zamyka się przy przewinięciu i zmianie rozmiaru okna; fokus wraca do elementu otwarcia, o ile wybór nie otworzył okna |
+| T1546 | `POOL_LETTER` w `shared/model/categories.ts`, `energyDraw` go reeksportuje |
+| T1547 | W linii zmian grupowych rzeczownik zawsze stoi („Zmieniono 3 bloki · pominięto 1: zaczęty”, „Przeniesiono 3 bloki · 1 został – już trwa”); część „najniższa energia” tylko, gdy wartości po zaokrągleniu się różnią |
+| T1548 | Cofanie, które rzuci wyjątek, zostawia linię (do ponowienia) i pokazuje komunikat „Nie udało się cofnąć zmiany” |
+| T1549 | Komunikat po „Cofnij” o elementach zmienionych w międzyczasie: „2 bloki zmienione od tego czasu – zostały” (sprawy w rodzaju żeńskim) |
+| T1550 | Suma kosztu w napisie „Zaznaczone: …” zaokrąglana raz, po zsumowaniu (koszt/h × minuty / 60), połówki od zera, „−0” jako „0”; element bez kosztu dokłada tylko czas |
+| T1551 | `useSelection` ma `scope` (zmiana – puste zaznaczenie, liczone w renderze) i `when` (który z kilku widoków na stronie bierze Ctrl+A, Shift+strzałki i Esc) |
+| T1552 | Warstwa Esc ma `applies(e)`; warstwa, która nie pasuje (np. zaznaczenie bez fokusu), przepuszcza Esc dalej |
+| T1553 | Menu zatrzymuje zdarzenia (klawisze, mysz, dwuklik, prawy przycisk) przed drzewem Reacta elementu otwarcia (portal) i samo obsługuje Esc przez `handleEscape` |
+| T1554 | Linia zmian grupowych nie znika w trakcie cofania; po nieudanym – zostaje do końca terminu albo dostaje nowe 15 min; koniec liczony `until − Date.now()` |
+| T1555 | Rola `status` tylko na tekście linii, więc „Cofnij” liczy się jako klik poza otwartym menu i okienkiem |
