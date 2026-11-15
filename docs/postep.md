@@ -143,10 +143,12 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    pasek przykryty oknem po nieusłyszanym puszczeniu jedzie za kursorem, aż ten na niego wróci (najdłużej 2 min);
    E2E D303 raz padł lokalnie (miejsce paska po samym kliknięciu uchwytu ≠ start; ścieżka bez zmian, 6 kolejnych przebiegów
    zielonych).
-15. **1.27.0 – pula „ciało” i nazwy pul przy kosztach (uwaga 15.11, D520–D525, T1520–T1539, T1550–T1555):** gałąź
+15. **1.27.0 – pula „ciało” i nazwy pul przy kosztach (uwaga 15.11, D520–D526, T1520–T1540, T1550–T1555):** gałąź
    `claude/1.27-cialo` (drzewo `w127`), wykonawcy Opus (silnik, dane) i Sonnet (interfejs); przegląd xhigh dwie rundy (12 + 15
    uwag; poprawione medium i błąd sprzed 1.27 – wariant „jak podkategoria” w migawce dnia, T1538). Testy: unit/fs/sim/scale 2607,
-   web 1364, zmienione E2E lokalnie. Setup 1.27.0 zbudowany lokalnie. PR do `main` po scaleniu #94 i bez biegnącego runu na `main`.
+   web 1365, zmienione E2E lokalnie. E2E w CI złapało etykietę kosztu po najechaniu na wąskim kafelku w „3 dni” – test chwyta
+   kafelek z boku (T1540), etykieta wąska (D526). PR #95 scalony 15.11 (CI 7/7, run PR 43707572972) jako b9ff054, run na `main`
+   43715585960 (7/7) – wydanie v1.27.0 opublikowane 15.11 15:35. Setup 1.27.0 w Pobranych. Do odbioru: CI1–CI5 w `docs/odbior.md`.
    Uwagi na później: komputer z 1.26 obok 1.27 – `energy.relative`/`energy.reserve` z ciałem są dla 1.26 nieczytelne (`minuteGate`,
    zamrożenie czekają), `block.start` z 1.26 bierze ciało startowe zamiast ciała planu, `bodiesBefore` z porannej migawki i inny niż
    `startCostOf`, `sameOccurrence` przy ciele ustawionym w serii, klucz horyzontu bez ustawień dla dnia z 1.26, `DayContext.changes`
