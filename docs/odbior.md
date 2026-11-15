@@ -26,7 +26,7 @@ Logi: Ustawienia → „Otwórz logi” (`main.log`). Zrzut ekranu pomaga przy p
 **Co naprawdę musisz sprawdzić.** Przy każdym punkcie linia „Automatycznie” albo „Tylko Ty” mówi, co już sprawdzają
 testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego pulpitu, powiadomień, OneDrive i sprzętu.
 - **Tylko Ty** (testy tego nie widzą): E0.15, E3.9, E3.10, E4a.5, E4a.11, E4b.10, E4b.12 (po poprawce), E6a.3,
-  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge), E11.1 (Twój PDF z uczelni), L2.4 (Win+Alt+N i okienko na wierzchu), L2.5 („+” na pasku pulpitu), L2.6 (dwa komputery i stare prośby po aktualizacji), SNT5.4 (pasek pulpitu z krokiem i ptaszkiem), SNT5.5 (dwa komputery – odhaczenia z obu), SNT5.6 (plik albo link przeciągnięty na okno), SNT4b.3, SNT1.7, SNT2.6 (dwa komputery), EN3 (czy odcienie paska są dla Ciebie czytelne).
+  E6b.2, E7a.2 (kliknięcie „Wymień”), E8c.3 (noc przy zablokowanym ekranie), E8g.4 (pulsowanie paska pulpitu), E8h.1 (dwa komputery), E8h.3 (OneDrive, bateria), E8i.2 (niedostępny folder), E8m.1 (pasek pulpitu nad Eksploratorem i Edge), E11.1 (Twój PDF z uczelni), L2.4 (Win+Alt+N i okienko na wierzchu), L2.5 („+” na pasku pulpitu), L2.6 (dwa komputery i stare prośby po aktualizacji), SNT5.4 (pasek pulpitu z krokiem i ptaszkiem), SNT5.5 (dwa komputery – odhaczenia z obu), SNT5.6 (plik albo link przeciągnięty na okno), SNT4b.3, SNT1.7, SNT2.6 (dwa komputery), EN3 (czy odcienie paska są dla Ciebie czytelne), SE4 (dwa komputery).
 - **Szybki rzut oka** (logikę sprawdzają testy): wszystkie pozostałe – wystarczy, że zobaczysz efekt raz przy zwykłej
   pracy. Gdy coś wygląda inaczej niż „Oczekiwany efekt”, zgłoś to tak samo.
 - **W maszynie wirtualnej** (opcjonalnie): 68 z tych punktów może sprawdzić Cowork na świeżej instalacji, bez Twoich
@@ -231,6 +231,19 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] RE3 Własny koszt zaczętego bloku zostaje, „Jak rutyna” wraca do nowego kosztu (1.25.0)
    - [ ] RE4 „Zmieni N bloków” liczy tylko bloki, których to koszt (1.25.0)
    - [ ] RE5 Drugi komputer z 1.24 po zmianie kosztu rutyny proponuje instalację (1.25.0) (Tylko Ty – dwa komputery)
+   - [ ] SE1 Po aktualizacji sesje są w szablonach: „Dzień zwykły” z Londynem i NY, „Zjazd zdalny” z „?”, bez kopii szablonu (1.26.0)
+   - [ ] SE12 Ustawienia bez sekcji „Sesje”; Ctrl K „sesje” nie wskazuje ustawień (1.26.0)
+   - [ ] SE2 Dzień tygodnia „?” i „✗” w panelu sesji: pytanie we wtorek, bez NY w piątek (1.26.0)
+   - [ ] SE3 Przyszły dzień po aktualizacji: odwołany blok szablonu zostaje odwołany, załącznik widać (1.26.0)
+   - [ ] SE5 Załączniki wpisu sesji w „Dziś”, po zmianie typu i przy „Usuń z szablonu” (1.26.0)
+   - [ ] SE6 „Skopiuj szablon” z sesjami – kopia ma te same sesje (1.26.0)
+   - [ ] SE7 Zmiana typu przenosi NY na godzinę z nowego szablonu, z Twoją nazwą; powrót przywraca godzinę (1.26.0)
+   - [ ] SE8 Notatka na NY z rana zostaje po zmianie typu na weekend (1.26.0)
+   - [ ] SE9 Zmiana typu po godzinie nowej sesji: sesja na swoim miejscu, koniec pracy bez zepsucia (1.26.0)
+   - [ ] SE10 „Szablony” w tygodniu zmiany czasu w USA: sesje i pobudka godzinę wcześniej, kafelki całe (1.26.0)
+   - [ ] SE11 Usunięcie „Zjazd zdalny”: dni zjazdu bez sesji, także na drugim komputerze (1.26.0)
+   - [ ] SE13 Kreator na nowym folderze: strefy Nowy Jork / Londyn / Polska, sesje w szablonach i w dzisiejszym dniu (1.26.0)
+   - [ ] SE4 Dwa komputery: drugi od razu ma sesje bez podwójnych; 1.25 pokazuje je jako stałe bloki (1.26.0) (Tylko Ty – dwa komputery)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -267,7 +280,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] E3.13 Przeciąganie bloków na osi
    - [ ] E3.14 Ustawienia i Próba w menu bocznym
    - [ ] I4 Pokój przy wyłączonej grze – „Otwórz Ustawienia”; statystyki – „zamrożone” (1.21.0)
-   - [ ] E4b.12 Pasek przeciągnięty za uchwyt – w 1.25.1 (T1500; 27.10 i 15.11 nie przeszedł)
+   - [ ] E4b.12 Pasek przeciągnięty za uchwyt – w 1.26.1 (T1500; 27.10 i 15.11 nie przeszedł)
 6. Laptop i noc (gdy masz laptopa pod ręką):
    - [ ] E6d.3 Kopia – cały folder do nowego
    - [ ] E6d.4 Baner przeniesienia na drugim komputerze
@@ -611,7 +624,7 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - dźwięk gra na dwóch komputerach naraz.
 
 #### E4b.12 Pasek przeciągnięty za uchwyt (0.10.0)
-- [ ] Odebrane — **do sprawdzenia w 1.25.1** – nie przechodził 15.11.2026 w 1.24.0: wciśnięcie nie dochodziło do strony paska (okno bez aktywacji),
+- [ ] Odebrane — **do sprawdzenia w 1.26.1** – nie przechodził 15.11.2026 w 1.24.0: wciśnięcie nie dochodziło do strony paska (okno bez aktywacji),
   poprawka T1500 – przeciąganie zaczyna się też od ruchu z wciśniętym przyciskiem. **Wcześniej nie przechodzi (27.10.2026):** uchwyt ⠿ widać, ale po chwyceniu i ciągnięciu pasek nawet nie
   drgnie. E2E przeciąga z podstawionym kursorem (bez prawdziwej myszy Windows) i tego nie widzi – poprawka z testem
   prawdziwej myszy w CI na Windows, w jednym wydaniu z elementami E5 w pasku (D315).
@@ -2761,6 +2774,99 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** na tym komputerze (1.25) zmień koszt rutyny przy zaczętym bloku; drugi komputer ma jeszcze 1.24.
 - **Oczekiwany efekt:** drugi komputer proponuje instalację nowej wersji; jego dane się nie psują.
 - **Nie przechodzi, gdy:** błąd na drugim komputerze albo utrata kosztu rutyny.
+
+### SE – sesje w szablonach (1.26.0, D511, D515)
+
+#### SE1 Po aktualizacji sesje są w szablonach (D515)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/session-migration.test.ts`, `tests/unit/engine/template-sessions.test.ts`, `tests/fs/session-migration.test.ts`, `tests/web/template-sessions-ui.test.ts`, `tests/web/session-fields.test.ts`, `tests/e2e/screens.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** po aktualizacji do 1.26.0 otwórz „Szablony” → „Dzień zwykły”, kliknij blok „Sesja NY”, potem „Zjazd zdalny”.
+- **Oczekiwany efekt:** „Dzień zwykły” ma „Sesja Londyn” i „Sesja NY”; w panelu NY: „Według czasu: Nowy Jork” i „Dni: pn–pt ✓, sb ✗, nd ✗”. Nie ma kopii szablonu „Dzień zwykły”. „Zjazd zdalny” ma sesje z „?” każdego dnia.
+- **Nie przechodzi, gdy:** pojawia się kopia szablonu albo „Dzień zwykły” nie ma sesji.
+
+#### SE2 Odpowiedź dnia tygodnia: „?” i „✗” (D515)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/session-migration.test.ts`, `tests/unit/engine/template-sessions.test.ts`, `tests/fs/session-migration.test.ts`, `tests/web/template-sessions-ui.test.ts`, `tests/web/session-fields.test.ts`, `tests/e2e/screens.spec.ts`.
+- **Jak sprawdzić:** w panelu sesji NY w „Szablonach” ustaw „wt” na „?” i „pt” na „✗” (od daty „Zmiany od”). We wtorek otwórz plan poranny, w piątek „Dziś”.
+- **Oczekiwany efekt:** we wtorek plan poranny pyta o NY; w piątek nie ma NY ani bloku „po sesji NY”.
+- **Nie przechodzi, gdy:** pytanie pada w dniu ✓ albo sesja stoi w dniu ✗.
+
+#### SE3 Przyszły dzień i załączniki po aktualizacji (D515)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/session-migration.test.ts`, `tests/unit/engine/template-sessions.test.ts`, `tests/fs/session-migration.test.ts`, `tests/web/template-sessions-ui.test.ts`, `tests/web/session-fields.test.ts`, `tests/e2e/screens.spec.ts`.
+- **Jak sprawdzić:** przed aktualizacją odwołaj blok szablonu w jednym z przyszłych dni i dodaj do niego załącznik. Po aktualizacji otwórz ten dzień.
+- **Oczekiwany efekt:** blok zostaje odwołany, a załącznik bloku nadal jest widoczny.
+- **Nie przechodzi, gdy:** blok wraca albo załącznik znika.
+
+#### SE4 Dwa komputery (D515, T1403, T1405)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/session-migration.test.ts`, `tests/fs/session-migration.test.ts` (kolejność plików i szablon „w drodze”). Ty: dwa komputery.
+- **Jak sprawdzić:** zaktualizuj ten komputer do 1.26.0, a drugi włącz zaraz po aktualizacji (przed synchronizacją szablonów). Potem otwórz na drugim „Dziś”. Na komputerze z 1.25 lub starszym otwórz sobotę typu „zwykły”.
+- **Oczekiwany efekt:** drugi komputer od razu ma sesje, bez podwójnych. Wersja 1.25 lub starsza pokazuje sesje jako stałe bloki, także w sobotę typu „zwykły” (T1403).
+- **Nie przechodzi, gdy:** sesje są podwójne, dzień jest bez sesji albo giną Twoje zmiany.
+
+#### SE5 Załączniki wpisu sesji (D515, T1407, T1457)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/session-migration.test.ts`, `tests/unit/engine/template-sessions.test.ts`, `tests/fs/session-migration.test.ts`, `tests/web/template-sessions-ui.test.ts`, `tests/web/session-fields.test.ts`, `tests/e2e/screens.spec.ts`.
+- **Jak sprawdzić:** dodaj załącznik do wpisu NY w szablonie „Dzień zwykły”. Otwórz „Dziś”, potem zmień typ dnia na „Zjazd zdalny” (z załącznikiem w jego szablonie). Na koniec w szablonie kliknij „Usuń z szablonu” przy wpisie NY.
+- **Oczekiwany efekt:** załącznik widać na sesji NY w „Dziś”; po zmianie typu na „Zjazd zdalny” – załącznik z szablonu zjazdu. „Usuń z szablonu” zdejmuje załączniki sesji tylko z dni tego szablonu.
+- **Nie przechodzi, gdy:** załącznik nie wraca do dnia albo „Usuń z szablonu” zdejmuje załączniki z dni innych typów.
+
+#### SE6 „Skopiuj szablon” z sesjami (D515)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-sessions.test.ts`, `tests/web/template-sessions-ui.test.ts`, `tests/e2e/screens.spec.ts`.
+- **Jak sprawdzić:** w „Szablonach” kliknij „Skopiuj szablon” na „Dzień zwykły”.
+- **Oczekiwany efekt:** kopia ma te same sesje (te same godziny, „według czasu” i dni).
+- **Nie przechodzi, gdy:** kopia nie ma sesji albo ma inne.
+
+#### SE7 Zmiana typu przenosi sesję (D515, T1415, T1451)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-sessions.test.ts`, `tests/web/session-fields.test.ts`, `tests/e2e/screens.spec.ts`.
+- **Jak sprawdzić:** w dniu zwykłym z NY (np. ze zmienioną nazwą) zmień typ na taki, którego szablon ma NY o 15:00. Potem wróć do dnia zwykłego.
+- **Oczekiwany efekt:** NY przechodzi na 15:00 z Twoją nazwą i nie ma jej na liście „brakuje”. Powrót do dnia zwykłego przywraca 14:00.
+- **Nie przechodzi, gdy:** pojawia się podwójna NY albo nazwa zostaje nadpisana.
+
+#### SE8 Notatka na sesji po zmianie typu (D515, T1415)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-sessions.test.ts`, `tests/web/session-fields.test.ts`.
+- **Jak sprawdzić:** rano dopisz notatkę do NY, potem zmień typ dnia na weekend.
+- **Oczekiwany efekt:** NY zostaje z notatką.
+- **Nie przechodzi, gdy:** notatka znika albo NY znika z dnia.
+
+#### SE9 Zmiana typu po godzinie nowej sesji (D515, T1459)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-sessions.test.ts`, `tests/web/session-fields.test.ts`.
+- **Jak sprawdzić:** zmień typ dnia o 10:00 na taki, którego szablon ma NY o 08:00.
+- **Oczekiwany efekt:** sesja zostaje na swoim miejscu; koniec pracy się nie psuje.
+- **Nie przechodzi, gdy:** sesja przeskakuje na minioną godzinę albo koniec pracy zmienia się bez powodu.
+
+#### SE10 „Szablony” w tygodniu zmiany czasu w USA (D515)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-sessions.test.ts`, `tests/web/template-sessions-ui.test.ts`, `tests/e2e/screens.spec.ts`.
+- **Jak sprawdzić:** w „Szablonach” przejdź do tygodnia zmiany czasu w USA (np. 25.10–1.11). Kliknij kafelek sesji.
+- **Oczekiwany efekt:** sesje i pobudka na osi stoją godzinę wcześniej; kafelki są całe i klikalne.
+- **Nie przechodzi, gdy:** kafelek jest ucięty, nie da się go kliknąć albo sesje stoją o złej godzinie.
+
+#### SE11 Usunięcie „Zjazd zdalny” (D515, T1402)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/session-migration.test.ts`, `tests/fs/session-migration.test.ts`.
+- **Jak sprawdzić:** usuń szablon „Zjazd zdalny”. Otwórz dzień zjazdu zdalnego; potem to samo na drugim komputerze.
+- **Oczekiwany efekt:** dni zjazdu zdalnego są bez sesji, także na drugim komputerze (najpóźniej po 3 dniach).
+- **Nie przechodzi, gdy:** sesje zostają w dniach po usuniętym szablonie.
+
+#### SE12 Ustawienia bez „Sesji” (D515)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/session-fields.test.ts`, `tests/e2e/screens.spec.ts`.
+- **Jak sprawdzić:** otwórz Ustawienia, potem Ctrl K i wpisz „sesje”.
+- **Oczekiwany efekt:** nie ma sekcji „Sesje”, a Ctrl K „sesje” nie wskazuje ustawień.
+- **Nie przechodzi, gdy:** sekcja „Sesje” wciąż jest albo Ctrl K prowadzi do Ustawień.
+
+#### SE13 Kreator na nowym folderze (D515, T1350, T1417)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-sessions.test.ts`, `tests/web/session-fields.test.ts`, `tests/e2e/screens.spec.ts`.
+- **Jak sprawdzić:** uruchom kreator na nowym folderze danych (na folderze testowym), w kroku „Sesje” wybierz strefę, kliknij „Zakończ”.
+- **Oczekiwany efekt:** krok „Sesje” ma strefy Nowy Jork / Londyn / Polska; po „Zakończ” sesje są w szablonach i w dzisiejszym dniu.
+- **Nie przechodzi, gdy:** dzień roboczy jest bez sesji.
 
 ### R – bloki równoległe, plan i widoki (1.23.0, część A; D476, D492–D498)
 

@@ -114,15 +114,32 @@ Każda funkcja korzysta z tych samych definicji dnia i czasu; nie ma drugiego sp
 
 **Sesje tradingowe**
 
-- Sesje dodaje warstwa sesji, ustawiana dla każdego typu dnia i dnia tygodnia: tak, nie albo pytaj. Domyślnie tak w dzień zwykły od poniedziałku do piątku, pytaj w zjazd zdalny, nie w zjazd stacjonarny, dzień regeneracyjny, weekend i wolne. Pytanie pojawia się w planie porannym; bez odpowiedzi sesja zostaje.
-- Każda sesja ma własną strefę odniesienia, domyślnie czas Nowego Jorku, jak killzones ICT: Londyn 02:00–05:00 i NY 08:00–11:00 czasu NY, czyli zwykle 08:00–11:00 i 14:00–17:00 czasu polskiego.
+- Sesja jest wpisem w szablonie typu dnia (D511, D515): blokiem kategorii rodzaju „sesja” z polem „według czasu: Nowy
+  Jork / Londyn / Polska” i odpowiedzią każdego dnia tygodnia – „dni: pn ✓ tak, wt ? pytaj, sb ✗ nie” (kliknięcie dnia
+  zmienia: tak → pytaj → nie); oba pola są w panelu bloku w „Szablonach”, sekcji „Sesje” w Ustawieniach nie ma. Dzień ma
+  sesje swojego szablonu (szablon dnia tygodnia przed domyślnym typu) z odpowiedzią „tak” albo „pytaj” w swoim dniu
+  tygodnia; z „nie” tego dnia sesji nie ma (ani bloku do niej zakotwiczonego); szablon bez sesji – dzień bez sesji. Dzień
+  tygodnia, którego szablon nie robi, jest w panelu przygaszony (jego odpowiedź nic nie znaczy); oś „Szablonów” pokazuje
+  każdą sesję szablonu w całości – także z „nie” w dniu przykładu i w dzień skróconej sesji; w tygodniu zmiany czasu w USA
+  stoi godzinę wcześniej, razem z pobudką (D372). Blok szablonu, który dostaje kategorię rodzaju „sesja”, staje się sesją (czas
+  Nowego Jorku, stały, „tak” każdego dnia, nigdy z identyfikatorem innej sesji tej wersji); inna kategoria albo „zwykły
+  blok” w polu „według czasu” robi z niego zwykły blok swojej kategorii. Sesją jest blok z polem „według czasu”, także gdy
+  jego kategoria zmieni potem rodzaj; dwa wpisy jednej sesji w wersji dają dzień z pierwszym z nich. Sesja z „pytaj” w danym
+  dniu jest pytaniem w planie porannym; bez odpowiedzi sesja
+  zostaje. Domyślnie sesje ma dzień zwykły od poniedziałku do piątku, zjazd zdalny – z „pytaj” każdego dnia; zjazd
+  stacjonarny, dzień regeneracyjny, weekend i wolne są bez sesji. Kopia szablonu ma te same sesje (odpowiedzi, typowa długość).
+- Godzina sesji w szablonie to godzina polska jak zwykle (ta, którą pokazuje oś „Szablonów”), trzymana w czasie wybranej
+  strefy, jak killzones ICT: Londyn 02:00–05:00 i NY 08:00–11:00 czasu NY, czyli zwykle 08:00–11:00 i 14:00–17:00 czasu
+  polskiego. Sesja „według czasu: Polska” zostaje o swojej godzinie. Strefa nowej sesji wyznacza rynki jej świąt: Nowy
+  Jork – NYSE i CME (kontrakty walutowe), Londyn – giełda londyńska, Polska – żadne; sesja przeniesiona z dawnej warstwy
+  sesji zachowuje swoje rynki (Londyn według czasu NY – giełdę londyńską), dopóki nie zmienisz jej strefy.
 - USA zmienia czas w inne niedziele niż Europa, więc przez około 3 tygodnie w roku (tydzień jesienią, dwa wiosną) obie
   sesje zaczynają się godzinę wcześniej: Londyn o 07:00, NY o 13:00. Najbliżej między 25.10 a 1.11.2026, potem między
   14.03 a 28.03.2027. W dniach z sesjami pobudka jest wtedy tymczasowo o 1 h wcześniej, a pora snu się nie
   zmienia. Pobudka sama wraca po tym okresie, a zmiana jest widoczna w liście „zrobione automatycznie”. Tydzień
   wcześniej plan zapowiada zmianę i pokazuje kolizje z blokami stałymi.
-- Wbudowany kalendarz świąt działa bez sieci: USA według NYSE i kalendarza CME dla kontraktów walutowych, razem z dniami skróconej sesji (sesja z warstwy sesji kończy się o wcześniejszej z dwóch godzin: swoim końcu albo zamknięciu rynku; inne bloki się nie skracają), Wielka Brytania oraz Polska razem z 24.12. Reguły i listę wyjątków aktualizuje każde wydanie. Nieplanowane zamknięcie rynku obsługujesz, odwołując sesję.
-- Tydzień przed świętem w USA aplikacja raz pyta o sesje z warstwy sesji tego dnia (np. „26.11 święto w USA — sesja NY?”); bez odpowiedzi zostają. Dzień skróconej sesji nie ma pytania – sesja kończy się o zamknięciu rynku sama (pytanie o drugą zmianę usunięte, D467). Przed polskim świętem raz pyta o wykłady tego dnia (D215); bez odpowiedzi zostają.
+- Wbudowany kalendarz świąt działa bez sieci: USA według NYSE i kalendarza CME dla kontraktów walutowych, razem z dniami skróconej sesji (sesja kończy się o wcześniejszej z dwóch godzin: swoim końcu albo zamknięciu rynku; inne bloki się nie skracają), Wielka Brytania oraz Polska razem z 24.12. Reguły i listę wyjątków aktualizuje każde wydanie. Nieplanowane zamknięcie rynku obsługujesz, odwołując sesję.
+- Tydzień przed świętem w USA aplikacja raz pyta o sesje tego dnia (np. „26.11 święto w USA — sesja NY?”); bez odpowiedzi zostają. Dzień skróconej sesji nie ma pytania – sesja kończy się o zamknięciu rynku sama (pytanie o drugą zmianę usunięte, D467). Przed polskim świętem raz pyta o wykłady tego dnia (D215); bez odpowiedzi zostają.
 - Blok zakotwiczony do innego bloku (np. journaling „po sesji NY”) nigdy nie zaczyna się sam (D194): od rzeczywistego
   końca tamtego bloku czeka w pasku jako „Zacznij · Zaparkuj”, a „Zacznij” uruchamia go od kliknięcia (gdy start tworzy
   niepotwierdzone minuty po granicy, od drugiego kliknięcia, Przedłużenie); do tej chwili trwa czas bez bloku. Gdy sesja
@@ -130,17 +147,47 @@ Każda funkcja korzysta z tych samych definicji dnia i czasu; nie ma drugiego sp
   koniec pracy) liczy się od jej pojawienia się; po „Zaparkuj” albo 15 min po pojawieniu się linii, gdy w planie nie
   zostaje inny blok pracy, który może się jeszcze zacząć, pasek raz cicho pyta „Koniec pracy?”
   (rozdział Timer). Blok, który czeka do efektywnej pory snu, jest parkowany.
-- Sesja z warstwy sesji (Londyn, NY) zostawiona albo dodana w dniu, który domyślnie jest bez sesji, przesuwa maksimum do
-  końca sesji i bloków do niej zakotwiczonych plus bufor granicy, a propozycja granicy liczy się od nowa. Nie zużywa
-  wyjątku granicy. Dzień z „pytaj” i odpowiedzią „tak” jest dniem z sesją. Inny blok kategorii „Sesja tradingowa” dodany
-  ręcznie jest zwykłą pracą i maksimum nie przesuwa. W prognozie energii, budżetu pracy, twardego końca i puli (także
-  prognozowanego końca pracy, od którego liczy się pula) sesja z warstwy sesji liczy się typową długością: medianą
+- Sesja (Londyn, NY) zostawiona albo dodana w dniu, który domyślnie jest bez sesji (jego szablon nie ma sesji albo ma je
+  z „nie” w tym dniu tygodnia), przesuwa maksimum do końca sesji i bloków do niej zakotwiczonych plus bufor granicy, a
+  propozycja granicy liczy się od nowa. Nie zużywa wyjątku granicy. Dzień z „pytaj” i odpowiedzią „tak” jest dniem z sesją.
+  Zmiana typu na typ z sesjami proponuje sesje jego szablonu z odpowiedzią tego dnia („pytaj” niezaznaczone), których
+  dzień nie ma; sesja, która już jest w planie i stoi tam, gdzie daje ją typ dnia (także dodana odpowiedzią „tak”), zmiana
+  typu przenosi na godzinę, długość i kategorię z szablonu nowego typu (Twoje zmiany nazwy, notatki i kosztu z tego dnia
+  zostają) – chyba że to miejsce już minęło: wtedy zostaje, gdzie była. Sesja, którą wcześniejsza zmiana typu dodała albo
+  przeniosła, przy kolejnej idzie do szablonu nowego typu albo – gdy ten jej nie ma – wraca na miejsce z rana z Twoimi
+  zmianami (bez sesji z rana – wychodzi z planu dnia); Twoja zmiana sesji z rana i sesja przeniesiona przez Ciebie zostają,
+  „Odwołaj” w oknie zmiany typu odwołuje sesję. Granica i maksimum liczą się z sesją na nowym miejscu, raz. Inny blok kategorii „Sesja tradingowa” dodany ręcznie
+  (także blok szablonu bez pola „według czasu”) jest zwykłą pracą i maksimum nie przesuwa. W prognozie energii, budżetu
+  pracy, twardego końca i puli (także prognozowanego końca pracy, od którego liczy się pula) sesja liczy się typową długością: medianą
   rzeczywistych długości tej sesji z ostatnich 4 tygodni (suma jej odcinków pracy od „Zacznij”, także po „Zacznij
   jeszcze raz”, bez czasu w tle za odpoczynkiem; sesje odwołane i niezaczęte się nie liczą), a gdy takich sesji jest
   mniej niż 5, całym oknem. Sesja przed „Zacznij” stoi w prognozie od planowanego startu, a od niego, dopóki czeka,
   najwcześniej od teraz, najpóźniej do końca okna; biegnąca sesja liczy się do późniejszej z chwil: teraz albo jej
   typowy koniec. Okno z planu zostaje czasem, w którym możesz zacząć, a propozycja granicy i jej przesunięcia, maksimum
   i ostrzeżenie o nim, znacznik wariantów oraz koszt dodania i przedłużenia liczą się dalej z okna (D219).
+- Przeniesienie warstwy sesji do szablonów (D511, D515): pierwsza wersja z sesjami w szablonach raz – na komputerze, który
+  prowadzi – przenosi dawną warstwę sesji (tak / nie / pytaj dla typu dnia i dnia tygodnia oraz sesje z Ustawień) do
+  szablonów od dziś: każdy szablon typu z sesjami (także zarchiwizowany, np. kopia) dostaje te sesje, a odpowiedzi jego typu dla dni tygodnia przechodzą do
+  dni każdego wpisu (szablon dni tygodnia ma „nie” w dniach, których nie robi). Szablony nie dzielą się na kopie i
+  zachowują swoje identyfikatory, dni tygodnia i bloki, więc pliki dni, ich zmiany i załączniki zostają, jak były. Zmiana
+  warstwy zapisana wcześniej na późniejszą datę („od jutra”) przechodzi do szablonów od swojej daty. Typ z sesjami w dniu
+  tygodnia, którego nie robi żaden jego szablon dni tygodnia, bez własnego szablonu domyślnego dostaje domyślny z samymi
+  sesjami („Zjazd zdalny”). Zwykły blok szablonu z identyfikatorem sesji zostaje sobą (swoje dni i załączniki); wpis
+  sesji dostaje inny identyfikator bloku, a sesja zachowuje swój (odpowiedzi, typowa długość). Dni minione i ich migawki
+  się nie zmieniają; „po sesji NY” idzie za sesją z szablonu. Dwa komputery naraz zapisują te same rekordy; drugi raz nic
+  się nie przenosi, a szablon raz przeniesiony już się nie zmienia (Twoje późniejsze zmiany zostają). Gdy w kolejce czeka
+  zapis rd.json albo szablonu, przeniesienie czeka na niego (linia w dzienniku sprawdzeń), a dni liczą się z warstwy.
+  Komputer, który dostał rd.json przed szablonami (OneDrive), tworzy dzień od razu z sesjami dawnej warstwy zapisanej w
+  rd.json – tymi samymi, które przyniosą szablony, więc nigdy podwójnie; tak samo dzień bez szablonu typu, dla którego
+  przeniesienie utworzyło szablon, dopóki ten nie dotrze – przez pierwsze 3 dni przeniesienia, potem brakujący szablon jest
+  usunięty (usunięty w oknie albo zarchiwizowany szablon sesji nie przywraca nigdy). Wersja szablonu zapisana później z
+  widoku sprzed przeniesienia (komputer bez sieci, starsza wersja) i szablon przywrócony z historii albo kopii sprzed
+  przeniesienia dostają sesje od komputera, który prowadzi, przed utworzeniem dnia; do tej chwili ich dni liczą się z dawnej
+  warstwy. Kreator pierwszego
+  komputera zapisuje sesje do szablonów tak samo (strefy Nowy Jork, Londyn, Polska; inna strefa szkicu zostaje pod swoją
+  nazwą). Starsza wersja na drugim komputerze pokazuje sesje jako stałe bloki ich kategorii o godzinie polskiej w każdym
+  dniu ich szablonu – także w dniu „nie” i bez pytania w dniu „pytaj” (bez przesunięcia i skrócenia), nigdy podwójnie;
+  ustępuje nowej prowadzenia i nie zamraża dni, więc tak wygląda tylko dzień, który utworzyła, gdy nowsza nie była włączona.
 
 **Zmiana typu w trakcie dnia**
 

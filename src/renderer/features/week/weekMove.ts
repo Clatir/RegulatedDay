@@ -273,7 +273,7 @@ export async function copyDayBlock(m: Pick<WeekMove, 'blockId' | 'name' | 'from'
       const was = source.ctx.plan.find((b) => b.id === m.blockId)
       if (!was) throw new Error(MOVE_GONE_TEXT)
       const fromFile = files[m.from] ?? null
-      return { block: blockNow(dayRaw(fromFile, m.from), m.from, was), place: dayPlace(m.from, source.snapshot.templateId, useData.getState().templates), day: target, file: files[m.to] ?? null }
+      return { block: blockNow(dayRaw(fromFile, m.from), m.from, was), place: dayPlace(m.from, source.snapshot.templateId, useData.getState().templates, source.state.dayType), day: target, file: files[m.to] ?? null }
     }
   })
   return r.saved ? 'saved' : statusOf(r.outcomes, r.sent ?? { afterSend: false })

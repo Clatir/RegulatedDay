@@ -35,7 +35,15 @@ export interface DayTypeParams {
   sessions: SessionChoice[]
 }
 
-/** A session of the session layer, in its own reference zone (ICT killzones in New York time). */
+/** A market whose holidays and early closes concern a session (spec „kalendarz świąt”). */
+export type SessionMarket = 'NYSE' | 'CME_FX' | 'UK'
+
+/**
+ * A session of the day, in its own reference zone (ICT killzones in New York time): of the layer of sessions of the settings
+ * (before D511), or an entry of the day's template (D511, `model/templateSessions.ts`) – then with its own „pytaj rano” (`ask`)
+ * and the template's block it makes the day's block of (`block`, read again by `planBlockFrom`). A day's snapshot keeps the
+ * sessions of its day in `settings.sessions` (a version before D511 reads them there too).
+ */
 export interface SessionDef {
   id: string
   name: string
@@ -44,7 +52,26 @@ export interface SessionDef {
   startMin: number
   endMin: number
   /** The markets whose holidays and early closes concern it (spec „kalendarz świąt”). */
-  markets: Array<'NYSE' | 'CME_FX' | 'UK'>
+  markets: SessionMarket[]
+  /** A template's session (D511, D515): its weekday's answer is „pytaj” – asked about in the morning; none – the layer's choice of the day decides. */
+  ask?: boolean
+  /** A template's session (D511): the template's block it is (its category, name, note, steps, costs …). */
+  block?: unknown
+}
+
+/** The layer of sessions a move took (`RulesSettings.movedLayer`, T1405, T1412). */
+export interface MovedLayer {
+  /** The first date of the move. */
+  from: string
+  sessions: SessionDef[]
+  /** The answers „tak / nie / pytaj” of every type (Monday first). */
+  grid: Record<DayTypeId, SessionChoice[]>
+  /** The templates the move gave entries (ids, also archived ones): a day of one whose file has not come yet – this layer. */
+  templates: string[]
+  /** The templates the move made (`sesje-<type>`, id → type): a day of a type with none of its templates here yet – this layer. */
+  made: Record<string, DayTypeId>
+  /** Made templates you removed since (id → true, `templateActions.removeTemplate`): gone, never „not come yet”. */
+  gone: Record<string, true>
 }
 
 export interface Reminders {
@@ -62,6 +89,17 @@ export interface RulesSettings {
   weekTypes: DayTypeId[]
   targetSleepMin: number
   sessions: SessionDef[]
+  /**
+   * The sessions the move into templates (D511) took from the layer up to that date, every date of the move together (T1408)
+   * – they name a day's block of the layer made before it (`blockName`); never a session of a day.
+   */
+  movedSessions: SessionDef[]
+  /**
+   * The layer of sessions as the move into templates (D511) found it on that date (T1405): a day of a template it wrote whose
+   * file has not come yet (OneDrive brought rd.json first) is made with it, as before the move (`daySettingsOf`); null – no
+   * move in force on that date.
+   */
+  movedLayer: MovedLayer | null
   categories: Record<string, CategoryRules>
   reserve: number
   backgroundCostPct: number
@@ -106,6 +144,8 @@ export const DEFAULT_SETTINGS: RulesSettings = {
   weekTypes: DEFAULT_WEEK_TYPES,
   targetSleepMin: 8 * H,
   sessions: DEFAULT_SESSIONS,
+  movedSessions: [],
+  movedLayer: null,
   categories: Object.fromEntries(DEFAULT_CATEGORIES.map((c) => [c.id, rulesOf(c)])),
   reserve: 15,
   backgroundCostPct: 50,
@@ -157,7 +197,8 @@ export interface SettingsChange {
   patch: Record<string, unknown>
 }
 
-const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
+/** An object of a file (not a list). */
+export const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 
 /** `patch` laid over `base`, object by object; a list or a value replaces the one before. */
 export function deepMerge<T>(base: T, patch: unknown): T {
@@ -273,21 +314,66 @@ export function sessionWithEnd(s: SessionDef, clockMin: number): SessionDef {
   return { ...s, endMin: clockMin > s.startMin ? clockMin : clockMin + 1440 }
 }
 
+export const isSessionMarket = (m: unknown): m is SessionMarket => m === 'NYSE' || m === 'CME_FX' || m === 'UK'
+
+const zones = new Map<string, boolean>()
+
+/** A time zone the calendar knows (`Intl`), remembered per name – every block and session read asks. */
+export function isZone(zone: unknown): zone is string {
+  if (typeof zone !== 'string' || !zone) return false
+  let known = zones.get(zone)
+  if (known === undefined) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: zone })
+      known = true
+    } catch {
+      known = false
+    }
+    zones.set(zone, known)
+  }
+  return known
+}
+
 function sessionsFrom(v: unknown, fallback: SessionDef[]): SessionDef[] {
   if (!Array.isArray(v)) return fallback
   const out: SessionDef[] = []
   for (const s of v) {
-    if (!isPlain(s) || typeof s.id !== 'string' || typeof s.name !== 'string' || typeof s.zone !== 'string') continue
+    if (!isPlain(s) || typeof s.id !== 'string' || typeof s.name !== 'string' || !isZone(s.zone)) continue
     if (!inRange(s.startMin, [0, 1439]) || !inRange(s.endMin, [1, 1440 * 2]) || s.endMin <= s.startMin) continue
-    try {
-      new Intl.DateTimeFormat('en-US', { timeZone: s.zone })
-    } catch {
-      continue
-    }
-    const markets = Array.isArray(s.markets) ? s.markets.filter((m): m is SessionDef['markets'][number] => m === 'NYSE' || m === 'CME_FX' || m === 'UK') : []
-    out.push({ id: s.id, name: s.name.slice(0, 40), zone: s.zone, startMin: s.startMin, endMin: s.endMin, markets })
+    const markets = Array.isArray(s.markets) ? s.markets.filter(isSessionMarket) : []
+    out.push({
+      id: s.id,
+      name: s.name.slice(0, 40),
+      zone: s.zone,
+      startMin: s.startMin,
+      endMin: s.endMin,
+      markets,
+      ...(typeof s.ask === 'boolean' ? { ask: s.ask } : {}),
+      ...(isPlain(s.block) ? { block: s.block } : {})
+    })
   }
   return out
+}
+
+/** „Nie” every weekday. */
+export const NO_SESSION_DAYS: readonly SessionChoice[] = ['no', 'no', 'no', 'no', 'no', 'no', 'no']
+
+/** The layer a move took, as read: anything else than an object with the move's date – the one before (none, T1458). */
+function movedLayerFrom(v: unknown, fallback: MovedLayer | null): MovedLayer | null {
+  if (!isPlain(v) || !isIsoDate(v.from)) return fallback
+  const grid = isPlain(v.grid) ? v.grid : {}
+  const made: Record<string, DayTypeId> = {}
+  if (isPlain(v.made)) for (const [id, t] of Object.entries(v.made)) if (isDayTypeId(t)) made[id] = t
+  const gone: Record<string, true> = {}
+  if (isPlain(v.gone)) for (const [id, x] of Object.entries(v.gone)) if (x === true) gone[id] = true
+  return {
+    from: v.from,
+    sessions: sessionsFrom(v.sessions, []),
+    grid: Object.fromEntries(DAY_TYPES.map((t) => [t, sessionChoices(grid[t], [...NO_SESSION_DAYS])])) as Record<DayTypeId, SessionChoice[]>,
+    templates: Array.isArray(v.templates) ? [...new Set(v.templates.filter((x): x is string => typeof x === 'string' && !!x))] : [],
+    made,
+    gone
+  }
 }
 
 /** Settings checked field by field: a wrong value falls back to `fallback`'s (never breaks the day). */
@@ -307,6 +393,8 @@ export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SET
     weekTypes: weekTypesFrom(r.weekTypes, fallback.weekTypes),
     targetSleepMin: int(r.targetSleepMin, RANGES.targetSleepMin, fallback.targetSleepMin),
     sessions: sessionsFrom(r.sessions, fallback.sessions),
+    movedSessions: sessionsFrom(r.movedSessions, fallback.movedSessions),
+    movedLayer: movedLayerFrom(r.movedLayer, fallback.movedLayer),
     categories,
     reserve: int(r.reserve, RANGES.reserve, fallback.reserve),
     backgroundCostPct: int(r.backgroundCostPct, RANGES.backgroundCostPct, fallback.backgroundCostPct),

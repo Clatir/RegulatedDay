@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { attachBadge, attachBadgeTitle, dayPlace, fileKind, isOwnHere, originTag, sizeText, withAttachCounts } from '@renderer/features/attachments/attachView'
 import type { Attachment, BlockPlace } from '@shared/model/attachment'
 import { templateBlockId } from '@shared/engine/createDay'
+import type { Template } from '@shared/model/plan'
 
 const a = (id: string, owner: Attachment['owner'], removedAt: number | null = null): Attachment => ({
   id,
@@ -114,7 +115,8 @@ describe('miejsce bloku dnia ze wszystkimi szablonami (T831)', () => {
     const date = '2026-11-18'
     const list = [a('t-sob', { scope: 'template', templateId: 'sobota', blockId: 'analiza' })]
     const fromSobota = { id: templateBlockId(date, 'sobota', 'analiza'), origin: 'template' as const, sourceId: 'analiza' }
-    const place = dayPlace(date, 'zwykly', [{ id: 'zwykly' }, { id: 'sobota' }])
+    const tpl = (id: string, dayType: Template['dayType']): Template => ({ id, name: id, dayType, weekdays: [], versions: [], archived: false })
+    const place = dayPlace(date, 'zwykly', [tpl('zwykly', 'zwykly'), tpl('sobota', 'weekend')], 'weekend')
     expect(withAttachCounts([{ id: 'x' }], () => fromSobota, place, list)).toEqual([{ id: 'x', attach: 1 }])
   })
 })

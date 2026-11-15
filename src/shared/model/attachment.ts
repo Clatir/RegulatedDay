@@ -9,10 +9,11 @@
 import type { EditEntry, RawRecord } from '../api'
 import { recordEdit } from '../data/merge'
 import { classify, paths } from '../data/paths'
-import { isIsoDate } from '../time/zone'
-import { templateBlockId } from '../engine/createDay'
+import { isIsoDate, weekday } from '../time/zone'
+import { sessionBlockId, templateBlockId } from '../engine/createDay'
 import { derivedId, isId } from './ids'
-import { templateBlockAlive, templateBlockOn, type PlanBlock, type Template } from './plan'
+import { isSessionEntry, sessionIdOf, templateBlockAlive, templateBlockOn, templateVersionOn, type PlanBlock, type Template } from './plan'
+import { dayAnswer, sessionEntries } from './templateSessions'
 
 export const ATTACHMENT_SCHEMA = 1
 
@@ -154,9 +155,11 @@ export function sameOwner(a: AttachmentOwner, b: AttachmentOwner): boolean {
 export type BlockPlace =
   /**
    * `templateId` – the template of the day's snapshot; `templateIds` – the templates there are (a block of another one,
-   * left in the day's file by a change of the day's type, is found by its id – T831).
+   * left in the day's file by a change of the day's type, is found by its id – T831); `sessions` – the entry of a template
+   * each session of the day comes from (D511, T1407: `sessionOwnersOf` – the template of the day's type now, else the
+   * snapshot's).
    */
-  | { scope: 'day'; date: string; templateId: string | null; templateIds?: readonly string[] }
+  | { scope: 'day'; date: string; templateId: string | null; templateIds?: readonly string[]; sessions?: Readonly<Record<string, { templateId: string; blockId: string }>> }
   | { scope: 'template'; templateId: string }
   | { scope: 'series'; root: string }
 
@@ -191,6 +194,9 @@ export function ownersOf(block: Pick<PlanBlock, 'id' | 'origin' | 'sourceId'> | 
   const out: AttachmentOwner[] = [{ scope: 'day', date: place.date, blockId: block.id }]
   const tpl = block.origin === 'template' ? templateOfDayBlock(block, place.date, [place.templateId, ...(place.templateIds ?? [])]) : null
   if (tpl && block.sourceId) out.push({ scope: 'template', templateId: tpl, blockId: block.sourceId })
+  // A session of a template (D511): its entry's in the template it comes from that day (T1407) – none for a session of the layer.
+  const entry = block.origin === 'session' && block.sourceId ? place.sessions?.[block.sourceId] : undefined
+  if (entry) out.push({ scope: 'template', templateId: entry.templateId, blockId: entry.blockId })
   if (block.origin === 'series' && block.sourceId) out.push({ scope: 'series', root: block.sourceId })
   return out
 }
@@ -259,21 +265,47 @@ export function ownAttachmentIds(list: readonly Attachment[], blockId: string): 
 }
 
 /**
+ * The dates from `tomorrow` on whose session blocks of `before`'s entries have attachments of their own (D511, T1407): the
+ * days a removal of the template's session has to know the type of (`templateRemovalIds` – `makes`).
+ */
+export function sessionAttachmentDates(list: readonly Attachment[], before: Template | null, tomorrow: string): string[] {
+  const sids = new Set((before?.versions ?? []).flatMap((v) => v.blocks.filter(isSessionEntry).map((b) => sessionIdOf(b))))
+  const out = new Set<string>()
+  for (const a of list) {
+    const o = a.owner
+    if (a.removedAt != null || o.scope !== 'day' || o.date < tomorrow) continue
+    for (const sid of sids) if (o.blockId === sessionBlockId(o.date, sid)) out.add(o.date)
+  }
+  return [...out].sort()
+}
+
+/**
  * The attachments a change of a template takes with it (D415, D420, T841, T847): `before` – the template as it was,
  * `after` – as the change leaves it (null – removed), `tomorrow` – the first day it still makes (today is made already).
  * The template's own of a block that was alive (`templateBlockAlive`) and is not any more – from every day, the days gone by
  * too; the days' own from tomorrow of an occurrence on a day whose version had the block and has it no more (between
  * the version a block left and a later one that keeps it, too). A removed template takes all of its own and the days' own
  * of its blocks from tomorrow. An occurrence is known by its id, derived from its day, the template and the block (also a
- * copy brought back by a change of the day's type – `templateOfDayBlock`), on the day the attachment was added on.
+ * copy brought back by a change of the day's type – `templateOfDayBlock`), on the day the attachment was added on. A
+ * session's entry (D511): the days' own of its session's block only on a day the template makes (`makes` – the day's type
+ * and `templateFor`, from the days' files; unknown – false) and gave the session before the change and not after it (T1407).
  */
-export function templateRemovalIds(list: readonly Attachment[], templateId: string, before: Template | null, after: Template | null, tomorrow: string): string[] {
+export function templateRemovalIds(list: readonly Attachment[], templateId: string, before: Template | null, after: Template | null, tomorrow: string, makes: (date: string) => boolean = () => false): string[] {
   // The blocks whose days the change moves (a removed template – all of them): only their days can lose them. The version in
   // force changes only where a version starts – compared there, before and after.
   const starts = [...new Set([...(before?.versions ?? []), ...(after?.versions ?? [])].map((v) => v.from))]
   const daysOf = (t: Template | null, id: string) => starts.map((d) => (t && templateBlockOn(t, id, d) ? 1 : 0)).join('')
   const blocks = new Set<string>()
   for (const v of before?.versions ?? []) for (const b of v.blocks) if (!after || daysOf(before, b.id) !== daysOf(after, b.id)) blocks.add(b.id)
+  // A session of the template (D511): its days' block has the session's id (`sessionBlockId`, the same in every template with
+  // that session) – a day of it is the template's only when the template makes the day (`makes` – its type and `templateFor`,
+  // T1407) and gives the session there: the version of the day gives that session (any of its entries, the weekday's answer
+  // not „nie” – D515, T1457) before the change and not after it.
+  const sessions = new Map((before?.versions ?? []).flatMap((v) => v.blocks.filter(isSessionEntry).map((b) => [b.id, sessionIdOf(b)] as const)))
+  const gives = (t: Template | null, sid: string, date: string) => {
+    const v = t ? templateVersionOn(t, date) : null
+    return !!v && sessionEntries(v).some((b) => sessionIdOf(b) === sid && dayAnswer(b, date) !== 'no')
+  }
   if (!after) for (const a of list) if (a.owner.scope === 'template' && a.owner.templateId === templateId) blocks.add(a.owner.blockId)
   const goes = (blockId: string, date: string | null): boolean => {
     if (!after) return true
@@ -286,7 +318,11 @@ export function templateRemovalIds(list: readonly Attachment[], templateId: stri
       const o = a.owner
       if (o.scope === 'template') return o.templateId === templateId && goes(o.blockId, null)
       if (o.scope !== 'day' || o.date < tomorrow) return false
-      for (const b of blocks) if (templateOfDayBlock({ id: o.blockId, sourceId: b }, o.date, [templateId]) === templateId) return goes(b, o.date)
+      for (const b of blocks) {
+        if (templateOfDayBlock({ id: o.blockId, sourceId: b }, o.date, [templateId]) === templateId) return goes(b, o.date)
+        const sid = sessions.get(b)
+        if (sid != null && o.blockId === sessionBlockId(o.date, sid)) return makes(o.date) && gives(before, sid, o.date) && !(after && gives(after, sid, o.date))
+      }
       return false
     })
     .map((a) => a.id)

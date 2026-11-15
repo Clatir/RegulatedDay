@@ -94,7 +94,8 @@ export function blockName(b: NamedBlock, n: Names): string {
   // A block of the session layer is „Sesja <name>” („Sesja NY”, D338); a category block of the template or added by hand
   // stays the category's „Sesja tradingowa”.
   if (b.origin === 'session' && b.sourceId) {
-    const s = n.settings.sessions.find((x) => x.id === b.sourceId)
+    // A session of the layer of a day made before the move into templates (D511): the settings of that day keep its name.
+    const s = n.settings.sessions.find((x) => x.id === b.sourceId) ?? n.settings.movedSessions.find((x) => x.id === b.sourceId)
     if (s) return `Sesja ${s.name}`
   }
   // A task's block (D384): the task's title – as „Sprawy” have it now (a task gone: the category).

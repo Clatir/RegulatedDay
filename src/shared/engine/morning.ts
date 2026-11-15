@@ -11,6 +11,7 @@ import type { DayFile, LectureSeries, PlanBlock, Template } from '../model/plan'
 import type { SeriesPlan } from '../model/series'
 import type { DayTypeId, SessionDef, SettingsChange } from '../model/settings'
 import { settingsOn } from '../model/settings'
+import { knownSessionDefs } from '../model/templateSessions'
 import { addDays, weekday } from '../time/zone'
 import type { DayState } from './day'
 import { atOf } from './grid'
@@ -43,11 +44,13 @@ export function fromYesterday(plan: readonly PlanBlock[], date: string): PlanBlo
   return plan.filter((b) => b.movedFrom === y)
 }
 
-/** Sessions of the layer the morning asks about (the layer says „pytaj” and the day has no answer yet). */
+/**
+ * Sessions the morning asks about, the day without an answer yet: a template's with „pytaj rano” (D511), a session of the
+ * layer when the layer says „pytaj”.
+ */
 export function sessionQuestions(snapshot: DaySnapshot, dayFile: DayFile | null, date: string): SessionDef[] {
   const choice = snapshot.settings.dayTypes[snapshot.dayType].sessions[weekday(date) - 1]
-  if (choice !== 'ask') return []
-  return snapshot.settings.sessions.filter((s) => !dayFile?.sessions[s.id] && sessionWindow(s, date))
+  return snapshot.settings.sessions.filter((s) => (s.ask ?? choice === 'ask') && !dayFile?.sessions[s.id] && sessionWindow(s, date))
 }
 
 function snapshotFor(inp: MorningInputs, date: string): DaySnapshot {
@@ -119,7 +122,8 @@ export interface ShiftNotice {
  * kolizje z blokami stałymi”): today without the shift, a day of the next seven with it.
  */
 export function shiftNotice(inp: MorningInputs): ShiftNotice | null {
-  const sessions = settingsOn(inp.changes, inp.date).sessions
+  // Every session known today – of the templates (D511) and of the layer – whatever type a day has.
+  const sessions = knownSessionDefs(settingsOn(inp.changes, inp.date), inp.templates, inp.date)
   const shifted = (date: string) => sessions.some((s) => {
     const w = sessionWindow(s, date)
     return w != null && sessionShiftMin(s, w.start) !== 0

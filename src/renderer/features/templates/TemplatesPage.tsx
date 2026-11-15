@@ -46,6 +46,9 @@ import { StepsEditor } from '../steps/StepsEditor'
 import { stepsAnswer } from '../steps/stepsUi'
 import { changeTemplateSteps } from '../../store/steps'
 import { SettingNumber } from '../settings/SettingNumber'
+import { templateBlockPatch } from '@shared/model/templateSessions'
+import { axisSources, axisVersion, previewChanges } from './sessionChoices'
+import { SessionFields } from './SessionFields'
 import { templateAdd, templateCopy, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
 import { copyTemplateBlock } from '../plan/blockCopy'
 import { COPY_SPAN_ID } from '../today/dayPush'
@@ -256,13 +259,15 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     return from
   }, [from, template.weekdays])
   const model = useMemo(() => {
-    const t: Template = { ...template, versions: [{ ...version, from: '2000-01-01' }] }
-    return countDay(sample, { date: sample, dayFile: { schema: 1, date: sample, dayType: template.dayType }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rd.settings, templates: [t], lectures, series: [], routines }, placeLogical(sample, 4 * 60), false)
+    // D515, T1455: every session of the version on the axis, whole, whatever the sample's weekday and early closes; the shift
+    // of the clocks moves it and the wake (D372) – `axisVersion`. The template as written (T1450 – `previewChanges`).
+    const t: Template = { ...template, versions: [{ ...axisVersion(version, sample), from: '2000-01-01' }] }
+    return countDay(sample, { date: sample, dayFile: { schema: 1, date: sample, dayType: template.dayType }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: previewChanges(rd.settings), templates: [t], lectures, series: [], routines }, placeLogical(sample, 4 * 60), false)
   }, [template, version, sample, rd.settings, lectures, routines])
   // D512: the cost on every tile (`planCosts`), its window only on the template's own blocks.
   const axis = useMemo(() => dayAxis(model, names, null, null, true), [model, names])
-  // Template blocks have the day's derived ids: the block of the version is found by its source.
-  const byPlanId = useMemo(() => new Map(model.ctx.plan.filter((b) => b.origin === 'template' && b.sourceId).map((b) => [b.id, b.sourceId!])), [model])
+  // Template blocks have the day's derived ids: the block of the version is found by its source (a session by its entry, D511).
+  const byPlanId = useMemo(() => axisSources(model.ctx.plan, version.blocks), [model, version.blocks])
   // D410: the attachments of the version's blocks (those of the template, by the block's id in it) – 📎N on the tile, a drop of files on it.
   const attachments = useData((s) => s.attachments)
   const attachPlace = useMemo<BlockPlace>(() => ({ scope: 'template', templateId: template.id }), [template.id])
@@ -443,7 +448,9 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           sessions={settings.sessions}
           place={attachPlace}
           focusName={fresh === block.id}
-          onChange={(patch) => patchBlock(block.id, patch)}
+          // D511: a block given a category of sessions becomes a session (and stops being one with another category).
+          onChange={(patch) => patchBlock(block.id, templateBlockPatch(block, patch, settings.categories, version.blocks))}
+          session={<SessionFields block={block} blocks={version.blocks} kind={settings.categories[block.categoryId]?.kind} weekdays={template.weekdays} onChange={(patch) => void patchBlock(block.id, patch)} />}
           // D440: the list without boxes – every day made from the template starts with none ticked.
           steps={<StepsEditor steps={block.steps} lengthMin={block.durationMin} ticks={false} onOp={async (op) => stepsAnswer(op, await changeTemplateSteps(template.id, from, block.id, op))} />}
           onClose={() => setSelected(null)}

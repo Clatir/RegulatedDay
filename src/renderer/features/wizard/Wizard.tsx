@@ -11,7 +11,8 @@ import { durationLabel, logicalClock, plDate, WEEKDAY_SHORT } from '@shared/form
 import { POOLS, type Pool } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
 import { MODULES, MODULE_NAMES, rdFrom } from '@shared/model/rd'
-import { DAY_TYPES, DAY_TYPE_NAMES, NY_ZONE, RANGES, sessionWithEnd, sessionWithStart, type DayTypeId, type SessionChoice } from '@shared/model/settings'
+import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, sessionWithEnd, sessionWithStart, type DayTypeId, type SessionChoice } from '@shared/model/settings'
+import { zoneChoices } from '@shared/model/templateSessions'
 import { placeLogical } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
 import { Choice, ClockField, DateField, DurationField, EndField, TextField, TimeField } from '../../components/fields'
@@ -323,7 +324,7 @@ function StepSessions() {
   const s = useWizard((x) => x.settings)
   return (
     <div className="flex flex-col gap-4">
-      <Lead>Sesje mają własną strefę (jak killzones ICT w czasie Nowego Jorku), więc w Polsce przesuwają się same, także w tygodniach, gdy USA i Europa zmieniają czas w inne niedziele.</Lead>
+      <Lead>Sesje mają własną strefę (jak killzones ICT w czasie Nowego Jorku), więc w Polsce przesuwają się same, także w tygodniach, gdy USA i Europa zmieniają czas w inne niedziele. Po „Zakończ” są wpisami w szablonach typów dni – zmienisz je potem w „Szablonach”.</Lead>
       <div className="flex flex-col gap-2">
         {s.sessions.map((x, i) => (
           <div key={x.id} className="flex flex-wrap items-center gap-2">
@@ -331,7 +332,7 @@ function StepSessions() {
             <ClockField value={x.startMin} onCommit={(v) => patchSettings({ sessions: s.sessions.map((y, j) => (j === i ? sessionWithStart(y, v) : y)) })} shellClassName="w-[80px]" aria-label={`${x.name}: początek`} />
             <span className="text-muted">–</span>
             <ClockField value={x.endMin % 1440} onCommit={(v) => patchSettings({ sessions: s.sessions.map((y, j) => (j === i ? sessionWithEnd(y, v) : y)) })} shellClassName="w-[80px]" aria-label={`${x.name}: koniec`} />
-            <Choice value={x.zone} options={ZONES} onChange={(zone) => patchSettings({ sessions: s.sessions.map((y, j) => (j === i ? { ...y, zone } : y)) })} className="w-[190px]" aria-label={`${x.name}: strefa`} />
+            <Choice value={x.zone} options={zoneChoices(x.zone)} onChange={(zone) => patchSettings({ sessions: s.sessions.map((y, j) => (j === i ? { ...y, zone } : y)) })} className="w-[190px]" aria-label={`${x.name}: strefa`} />
           </div>
         ))}
       </div>
@@ -366,13 +367,6 @@ function StepSessions() {
   )
 }
 
-const ZONES = [
-  { value: NY_ZONE, label: 'Nowy Jork' },
-  { value: 'Europe/London', label: 'Londyn' },
-  { value: 'Europe/Warsaw', label: 'Warszawa' },
-  { value: 'Asia/Tokyo', label: 'Tokio' },
-  { value: 'Australia/Sydney', label: 'Sydney' }
-]
 
 function StepLectures({ today }: { today: string }) {
   const lectures = useWizard((x) => x.lectures)

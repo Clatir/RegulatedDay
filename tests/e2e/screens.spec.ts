@@ -303,6 +303,15 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.getByTestId('template-item').first().click()
       await expect(page.getByTestId('template-editor')).toBeVisible()
       await expect(page.getByTestId('template-timeline')).not.toContainText('druga zmiana')
+      // D511, D515: the ordinary day's sessions are its entries – „Według czasu” (New York) and the answers of the weekdays
+      // in the block's panel (the wizard's grid: Monday to Friday „tak”, the weekend „nie”); a click moves one on.
+      await page.getByTestId('template-timeline').getByTestId('block-ny').click()
+      await expect(page.getByTestId('block-session-zone')).toHaveValue('America/New_York')
+      await expect(page.getByTestId('block-session-day-0')).toHaveAttribute('aria-label', 'pn: tak')
+      await expect(page.getByTestId('block-session-day-5')).toHaveAttribute('aria-label', 'sb: nie')
+      await page.getByTestId('block-session-day-1').click()
+      await expect(page.getByTestId('block-session-day-1')).toHaveAttribute('aria-label', 'wt: pytaj rano')
+      await page.getByTestId('block-editor-close').click()
       // D365: a block of the template with its own start (one added on a free place) – the bottom edge lengthens it by
       // the field's way (30 min, 33 px).
       const tAxis = page.getByTestId('template-timeline').getByTestId('timeline-axis')
@@ -346,13 +355,9 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await shot(page, 'e3-09-settings')
       const rd = JSON.parse(readFileSync(join(dataDir, 'rd.json'), 'utf8')) as { settings: Array<{ patch: { dayTypes?: { zwykly?: { budgetMin?: number } } } }> }
       expect(rd.settings.at(-1)!.patch.dayTypes?.zwykly?.budgetMin).toBe(420)
-      // A session removed and given back by „Cofnij” – with its id (A7-07).
-      const sessions = page.getByTestId('settings-sessions')
-      const firstName = await sessions.getByLabel('Nazwa sesji').first().inputValue()
-      await page.getByTestId('session-remove-0').click()
-      await expect(sessions.getByLabel('Nazwa sesji').first()).not.toHaveValue(firstName)
-      await page.getByRole('button', { name: 'Cofnij' }).last().click()
-      await expect(sessions.getByLabel('Nazwa sesji').first()).toHaveValue(firstName)
+      // D511: no section „Sesje” – the sessions are entries of the templates (their panel in „Szablony”).
+      await expect(page.getByTestId('settings-daytypes')).toBeVisible()
+      await expect(page.getByTestId('settings-sessions')).toHaveCount(0)
       // D304: the bar's place on the monitors' mock-up – by default the left bottom corner of the primary one.
       await expect(page.getByTestId('bar-place-map')).toBeVisible()
       await expect(page.getByTestId('bar-place-1-bottom-left')).toHaveAttribute('aria-pressed', 'true')

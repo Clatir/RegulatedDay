@@ -60,6 +60,8 @@ import { routineCostsOf, routineFrom, type Routine } from '@shared/model/routine
 import { countDatesToRead, ruleDates, seriesFrom, seriesLast, seriesPlans, typeOfDays, type Series, type SeriesPlan } from '@shared/model/series'
 import type { CsvDay } from '@shared/engine/csv'
 import { changeOrder, isDayTypeId, settingsOn, type DayTypeId, type SettingsChange } from '@shared/model/settings'
+import { sessionsMoved } from '@shared/model/sessionMigration'
+import { daySettings, snapshotSettings } from '@shared/model/templateSessions'
 import { decideLeader, minuteGate, SILENT_MS, soundComputer, type LeaderDecision, type Peer } from '@shared/sync/leader'
 import type { SyncState } from '@shared/sync/syncLines'
 import type { Presence } from '@shared/sync/presence'
@@ -67,6 +69,7 @@ import { Settle, type SettleReason } from '@shared/sync/settle'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { EditQueue, type Outcome, type QueuedEdit } from './editQueue'
+import { sessionFixEdits, sessionMoveEdits } from './sessionMove'
 import { EventLog, type DayRead, type EventDraft } from './eventLog'
 import { isRootGone, rootGuarded, type DataFs } from './fsio'
 import { RecordHistory } from './history'
@@ -359,6 +362,8 @@ export class DataFolder {
   private readonly listed = new Map<string, string[]>()
   private readonly rulesVersion: number
   private editSeq = 0
+  /** D511: rd.json as read when it said the move of sessions is made (T1419) – the same record is not parsed again. */
+  private movedRd: unknown = null
   /**
    * Routines' records written with another cost whose `routine.cost` the journal did not take (T1446): the answer of the window's save of
    * that record says so (`routineCostKept`), once.
@@ -1120,6 +1125,9 @@ export class DataFolder {
     if (read?.ahead) problems.push('zegar: zdarzenie innego komputera ponad 24 h przed zegarem tego komputera – działania automatyczne czekają')
     if (this.leader.iLead && settled && read?.complete && !read.ahead) {
       try {
+        // D511: the layer of sessions into the templates, once – before the day is made, so it is made with them. Apart, so
+        // a move that cannot be written now stops nothing else.
+        await this.sessionsStart(now, problems, !!daySnapshotOf(read.events)).catch((e) => problems.push(`sesje w szablonach: ${String(e)}`))
         // The day is made once, by the leader (a derived id: two leaders after a pause of sync write the same event).
         if (!daySnapshotOf(read.events)) {
           const inp = await this.inputs()
@@ -1237,6 +1245,32 @@ export class DataFolder {
     const bytes = await this.o.fs.read(abs)
     const cut = !!bytes && bytes.length > 0 && bytes[bytes.length - 1] !== 0x0a
     await this.o.fs.append(abs, `${cut ? '\n' : ''}${JSON.stringify(line)}\n`)
+  }
+
+  /**
+   * D511: the leader moves the layer of sessions into the templates once, from today (`moveSessions` – deterministic: two
+   * leaders after a pause of sync write the same records), from the records as this computer sees them with its queued
+   * edits, each read once (`sessionMoveEdits` – a change made meanwhile is a question, never written over). An edit of
+   * rd.json or of a template still in the queue (waiting for the folder, a question) – it waits, with a line of the check
+   * (T1409); till the move is laid the days are made from the layer. Made (rd.json says so – remembered for that very
+   * record, T1419): before the day is made, the versions of moved templates made from a view before the move get their
+   * entries (`sessionFixEdits`, T1413) – behind a queued edit of a template they wait for the next day (the day comes from
+   * the layer meanwhile, `daySettingsOf`).
+   */
+  private async sessionsStart(now: number, problems: string[], dayMade: boolean): Promise<void> {
+    const rd = await this.recordView(paths.settings)
+    if (!rd) return
+    if (this.movedRd !== rd && sessionsMoved(rdFrom(rd).settings)) this.movedRd = rd
+    const moved = this.movedRd === rd
+    if (moved && dayMade) return
+    const busy = (rel: string) => rel === paths.settings || rel.startsWith(`${ID_COLLECTIONS.template}/`)
+    if (this.queue.pending.some((e) => busy(e.rel))) {
+      if (!moved) problems.push('sesje w szablonach: przeniesienie czeka na zapis rd.json albo szablonu z kolejki')
+      return
+    }
+    const templates = (await this.cachedDir(ID_COLLECTIONS.template, (v) => v, false, true)) as Array<Record<string, unknown>>
+    const entries = moved ? sessionFixEdits({ rd, templates }) : sessionMoveEdits({ rd, templates, today: logicalDayOf(now) })
+    if (entries?.length) await this.edit(entries)
   }
 
   /**
@@ -2711,8 +2745,10 @@ export class DataFolder {
       delete draft.id
       if (k === 'day.snapshot') {
         if (!isDayTypeId(d.dayType)) throw new Error('zdarzenie day.snapshot: typ dnia')
-        // Your own action: the settings with your own queued change (a change „od dziś” just made, also offline).
-        draft.settings = settingsOn((await this.inputs(true)).changes, d.day, at)
+        // Your own action: the settings with your own queued change (a change „od dziś” just made, also offline), with the
+        // sessions of the type's template (D511 – the rule of the maximum of a day without sessions reads them).
+        const inp = await this.inputs(true)
+        draft.settings = snapshotSettings(daySettings(settingsOn(inp.changes, d.day, at), inp.templates, d.dayType, d.day))
       }
       const check = parseEvent(JSON.stringify({ ...draft, id: 'x', c: this.o.computer, n: 0, t: now, l: now, v: this.rulesVersion }))
       if (!check.ok || !isKnown(check.event)) throw new Error(`zdarzenie ${k}: ${check.ok ? 'nieznane' : check.why}`)

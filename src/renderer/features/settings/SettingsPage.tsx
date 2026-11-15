@@ -21,7 +21,7 @@ import { QUICK_KEY_HELP } from './quickKey'
 import { CalendarsSection } from './CalendarsSection'
 import { CategoriesSection } from './CategoriesSection'
 import { LecturesSection } from './LecturesSection'
-import { DayTypesSection, FieldsSection, FromBar, ModulesSection, SessionsSection } from './SharedSettings'
+import { DayTypesSection, FieldsSection, FromBar, ModulesSection } from './SharedSettings'
 import { CalibrationSection } from '../calibration/CalibrationEntry'
 import { ComputersSection } from './ComputersSection'
 import { DataSection } from './DataSection'
@@ -81,7 +81,6 @@ export function SettingsPage() {
           <ModulesSection />
           <DayTypesSection />
           <FieldsSection group="sleep" />
-          <SessionsSection />
           <FieldsSection group="boundary" />
           <FieldsSection group="plan" />
           <FieldsSection group="energy" />

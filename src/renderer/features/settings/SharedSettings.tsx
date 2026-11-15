@@ -1,25 +1,26 @@
 /**
  * The shared settings (spec „Macierz ustawień”, „Moduły”): the date changes apply from (by default tomorrow; „od dziś”
- * with a snapshot of today), the modules (at once), the day types and the week, sleep, sessions and their layer, the
- * boundary, energy, reminders, the questions of the day, the breaks, water and solitude (the ways of regeneration are variants in „Kategorie”, D510). The
+ * with a snapshot of today), the modules (at once), the day types and the week, sleep (sessions are entries of the
+ * templates since D511 – „Szablony”), the boundary, energy, reminders, the questions of the day, the breaks, water and solitude
+ * (the ways of regeneration are variants in „Kategorie”, D510). The
  * fields show the values in force from the chosen date; a minimum of regeneration that would not fit before the bedtime
  * (the same function as the hard end) is a warning – saving is still possible.
  */
 import { useMemo } from 'react'
 import { DAY_TYPE_FIELDS, FIELD_GROUP_NAMES, NUMBER_FIELDS, type FieldGroup } from '@shared/model/fields'
-import { plDate, WEEKDAY_SHORT } from '@shared/format'
+import { plDate } from '@shared/format'
 import { newId } from '@shared/model/ids'
 import { MODULES, MODULE_NAMES } from '@shared/model/rd'
-import { DAY_TYPES, DAY_TYPE_NAMES, NY_ZONE, RANGES, sessionWithEnd, sessionWithStart, settingsOn, type DayTypeId, type RulesSettings, type SessionChoice, type SessionDef } from '@shared/model/settings'
+import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn, type DayTypeId, type RulesSettings } from '@shared/model/settings'
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
-import { Choice, ClockField, DateField, TextField } from '../../components/fields'
-import { Field, Section, Segmented, Toggle, cx } from '../../components/ui'
+import { Choice, DateField, TextField } from '../../components/fields'
+import { Field, Section, Segmented, Toggle } from '../../components/ui'
 import { useData } from '../../store/data'
 import { countDay } from '../../store/day'
-import { toast, undoToast } from '../../store/ui'
+import { toast } from '../../store/ui'
 import { SettingNumber } from './SettingNumber'
-import { changeFrom, saveGeneral, saveSettings, saveSettingsFrom, setFromDate, setModule, useSettingsFrom, type FromMode } from './settingsStore'
+import { saveGeneral, saveSettings, setFromDate, setModule, useSettingsFrom, type FromMode } from './settingsStore'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
 
@@ -142,81 +143,6 @@ export function DayTypesSection() {
           ))}
         </div>
       </Field>
-    </Section>
-  )
-}
-
-const SESSION_CHOICES: Array<{ value: SessionChoice; label: string }> = [
-  { value: 'yes', label: 'tak' },
-  { value: 'no', label: 'nie' },
-  { value: 'ask', label: 'pytaj' }
-]
-const ZONES = [
-  { value: NY_ZONE, label: 'Nowy Jork' },
-  { value: 'Europe/London', label: 'Londyn' },
-  { value: 'Europe/Warsaw', label: 'Warszawa' },
-  { value: 'Asia/Tokyo', label: 'Tokio' },
-  { value: 'Australia/Sydney', label: 'Sydney' }
-]
-
-export function SessionsSection() {
-  const { s, today, save } = useShared()
-  const setSession = (i: number, next: (x: SessionDef) => SessionDef) => void save({ sessions: s.sessions.map((x, j) => (j === i ? next(x) : x)) })
-  // „Cofnij” for 10 s gives the session back with its id – the blocks of templates anchored to it stay (A7-07): into the
-  // list as it is then (other changes made meanwhile stay), from the same date as the removal.
-  const remove = async (i: number) => {
-    const x = s.sessions[i]!
-    const f = changeFrom(today)
-    if (!(await saveSettingsFrom({ sessions: s.sessions.filter((_, j) => j !== i) }, f))) return
-    undoToast(`Usunięta sesja: ${x.name}`, () => {
-      const g = f.at != null ? { from: f.from, at: Date.now() } : f
-      const now = settingsOn(useData.getState().rd.settings, g.from, g.at).sessions
-      if (now.some((y) => y.id === x.id)) return
-      void saveSettingsFrom({ sessions: [...now.slice(0, i), x, ...now.slice(i)] }, g)
-    })
-  }
-  return (
-    <Section title="Sesje" data-testid="settings-sessions">
-      {s.sessions.map((x, i) => (
-        <div key={x.id} className="flex flex-wrap items-center gap-2">
-          <TextField value={x.name} onCommit={(name) => setSession(i, (y) => ({ ...y, name }))} required max={40} shellClassName="w-[110px]" aria-label="Nazwa sesji" />
-          <ClockField value={x.startMin} onCommit={(v) => setSession(i, (y) => sessionWithStart(y, v))} shellClassName="w-[76px]" aria-label={`${x.name}: początek`} />
-          <span className="text-muted">–</span>
-          <ClockField value={x.endMin % 1440} onCommit={(v) => setSession(i, (y) => sessionWithEnd(y, v))} shellClassName="w-[76px]" aria-label={`${x.name}: koniec`} />
-          <Choice value={x.zone} options={ZONES} onChange={(zone) => setSession(i, (y) => ({ ...y, zone }))} className="w-[150px]" aria-label={`${x.name}: strefa`} />
-          <button type="button" className="text-[12px] text-muted hover:text-rose" onClick={() => void remove(i)} data-testid={`session-remove-${i}`}>
-            Usuń
-          </button>
-        </div>
-      ))}
-      <button type="button" className="btn self-start" onClick={() => save({ sessions: [...s.sessions, { id: newId(10), name: 'Sesja', zone: NY_ZONE, startMin: 9 * 60 + 30, endMin: 11 * 60, markets: ['NYSE'] }] })}>
-        + Sesja
-      </button>
-      <span className="text-[12px] text-muted">Warstwa sesji: czy dzień danego typu ma sesje (kliknięcie zmienia: tak → nie → pytaj).</span>
-      <div className="grid items-center gap-1" style={{ gridTemplateColumns: '150px repeat(7, minmax(0, 1fr))' }}>
-        <span />
-        {WEEKDAY_SHORT.map((d) => (
-          <span key={d} className="text-center text-[11px] text-muted">
-            {d}
-          </span>
-        ))}
-        {DAY_TYPES.map((t) => (
-          <div key={t} className="contents">
-            <span className="text-[12.5px]">{DAY_TYPE_NAMES[t]}</span>
-            {s.dayTypes[t].sessions.map((c, i) => (
-              <button
-                key={i}
-                type="button"
-                className={cx('h-[24px] rounded border text-[11px]', c === 'yes' ? 'border-lamp/60 bg-lamp-soft text-lamp' : c === 'ask' ? 'border-sea/60 bg-sea-soft text-sea' : 'border-line text-muted')}
-                onClick={() => save({ dayTypes: { [t]: { sessions: s.dayTypes[t].sessions.map((x, j) => (j === i ? SESSION_CHOICES[(SESSION_CHOICES.findIndex((y) => y.value === x) + 1) % 3]!.value : x)) } } })}
-                data-testid={`setting-layer-${t}-${i}`}
-              >
-                {SESSION_CHOICES.find((y) => y.value === c)!.label}
-              </button>
-            ))}
-          </div>
-        ))}
-      </div>
     </Section>
   )
 }
