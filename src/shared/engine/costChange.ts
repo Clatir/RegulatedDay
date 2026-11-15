@@ -79,13 +79,11 @@ export function costChangesOf(ctx: Pick<DayContext, 'events' | 'plan' | 'snapsho
   // The plan by id once (a start without its routine or category names the plan's).
   let planById: Map<string, PlanBlock> | null = null
   const planOf = (id: string) => (planById ??= new Map(ctx.plan.map((b) => [b.id, b]))).get(id)
-  let lacking = false
   for (const e of ctx.events) {
     if (isCostChange(e)) {
       const start = facts.blocks.get(e.block)?.startOrder
       if (start == null || compareEvents(e, start) <= 0) continue
       const lacks = e.costs != null && e.costs.body === undefined
-      lacking ||= lacks
       add(e.block, { e, change: { at: idxOf(facts.grid, e.at), costs: withBody(e.costs, 0) }, ...(lacks ? { lacks: true as const } : {}) })
     } else if (isRoutineCostChange(e)) {
       let list = ofRoutine.get(e.routine)
@@ -108,7 +106,7 @@ export function costChangesOf(ctx: Pick<DayContext, 'events' | 'plan' | 'snapsho
   const out = new Map<string, CostChange[]>()
   for (const [block, list] of found) {
     list.sort((a, b) => a.change.at - b.change.at || compareEvents(a.e, b.e))
-    if (lacking && list.some((x) => x.lacks)) bodiesBefore(ctx, facts.blocks.get(block), planOf(block), list)
+    if (list.some((x) => x.lacks)) bodiesBefore(ctx, facts.blocks.get(block), planOf(block), list)
     out.set(block, list.map((x) => x.change))
   }
   return out

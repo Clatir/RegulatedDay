@@ -86,7 +86,7 @@ export function sessionBlockFieldsFrom(v: unknown): SessionBlockFields | null {
     categoryId: v.categoryId,
     variantId,
     background: typeof v.background === 'boolean' ? v.background : null,
-    costs: costsFrom(v.costs, v.categoryId, variantId),
+    costs: ownCostsFrom(v.costs, v.categoryId, variantId),
     bgCostPct: intIn(v.bgCostPct, 0, 100),
     note: str(v.note).slice(0, NOTE_MAX),
     name: blockNameFrom(v.name),
@@ -284,7 +284,6 @@ export const requestIdsFrom = (v: unknown): string[] => (Array.isArray(v) ? [...
  */
 export const ownCostsFrom = (v: unknown, categoryId: unknown, variantId: unknown): PlanBlock['costs'] =>
   isPlain(v) ? poolCostsFrom(v, startingBody(typeof categoryId === 'string' ? categoryId : null, typeof variantId === 'string' ? variantId : null)) : null
-const costsFrom = ownCostsFrom
 
 /** A block from a file, or null when it cannot be one (no id, no category, no start nor anchor, no length). */
 export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'): PlanBlock | null {
@@ -304,7 +303,7 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     durationMin,
     fixed: v.fixed === true,
     background: typeof v.background === 'boolean' ? v.background : null,
-    costs: costsFrom(v.costs, v.categoryId, variantId),
+    costs: ownCostsFrom(v.costs, v.categoryId, variantId),
     bgCostPct: intIn(v.bgCostPct, 0, 100),
     note: str(v.note).slice(0, NOTE_MAX),
     name: blockNameFrom(v.name),

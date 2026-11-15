@@ -6,6 +6,7 @@
 - Koszt pokazuje się teraz czterema liczbami G · E · B · C („3 · 1 · 1 · 0”) – na kafelku, w okienku kosztu i w oknach edycji. Wbudowane podkategorie dostały startowy koszt ciała (np. rutyny i dojazd 1, samotny spacer 1, gorący prysznic −2, leżenie i drzemka −3); Twoje własne podkategorie i warianty mają ciało 0 – ustawisz je w Ustawieniach.
 - Ustawienia → Kategorie: przy podkategorii i wariancie przed każdym polem kosztu stoi nazwa puli („głowa”, „emocje”, „bodźce”, „ciało”), więc od razu widać, czego dotyczy liczba.
 - Eksport `checkiny.csv` ma na końcu kolumnę „Ciało”.
+- Poprawka: wbudowany wariant ustawiony na „jak podkategoria” (np. „Leżenie, drzemka”) liczył się w energii dnia swoim dawnym, wbudowanym kosztem – teraz kosztem podkategorii.
 - Starsza wersja na drugim komputerze nie zna ciała – zaktualizuj ją; do tego czasu prowadzenie dnia przejmuje komputer z nową wersją.
 
 ## 1.26.1

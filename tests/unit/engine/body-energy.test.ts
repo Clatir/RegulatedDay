@@ -18,7 +18,8 @@ import { dayContextOf } from '@shared/engine/context'
 import { computeDay } from '@shared/engine/day'
 import { computeEnergy } from '@shared/engine/energy'
 import type { AnyEvent } from '@shared/model/events'
-import { settingsOn, type RulesSettings, type SettingsChange } from '@shared/model/settings'
+import { DEFAULT_SETTINGS, settingsOn, type SettingsChange } from '@shared/model/settings'
+import { withoutBodies } from './bodies'
 import { placeLogical } from '@shared/time/day'
 import { planBlock } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
@@ -175,17 +176,6 @@ describe('ciało – krzywa, statystyki, CSV, kalibracja', () => {
   })
 })
 
-/** Settings as a version before the body (≤ 1.26) writes them: no `body` in any category's or variant's cost. */
-function withoutBodies(settings: RulesSettings): Record<string, unknown> {
-  const strip = (c: unknown) => {
-    if (!c || typeof c !== 'object') return c
-    const { body: _body, ...rest } = c as Record<string, unknown>
-    return rest
-  }
-  const categories = Object.fromEntries(Object.entries(settings.categories).map(([id, c]) => [id, { ...c, costs: strip(c.costs), variants: c.variants.map((v) => (v.costs ? { ...v, costs: strip(v.costs) } : v)) }]))
-  return { ...settings, categories }
-}
-
 describe('ciało – dzień zrobiony przez starszą wersję (T1532)', () => {
   // Your settings (1.27): „Analiza” costs the body 2 an hour; the computer of 1.26 makes the day and writes them without it.
   const DAY = '2026-11-18'
@@ -244,5 +234,30 @@ describe('ciało – zmiana kosztu na kafelku zapisana przez starszą wersję (T
     s.end('a', '10:30')
     // 09:00–09:30 body 3, 09:30–10:00 −2, 10:00–10:30 −2 (kept from the change before).
     expect(s.energy('10:30').now!.body).toBe(65 - 4.5 + 3 + 3)
+  })
+})
+
+describe('migawka dnia – wariant „jak podkategoria” w energii (T1538)', () => {
+  const DAY = '2026-11-18'
+  const regen = DEFAULT_SETTINGS.categories.regeneracja!.variants.map((v) => (v.id === 'drzemka' ? { ...v, costs: null } : v))
+  const changes: SettingsChange[] = [{ id: 'u', from: '2026-01-01', at: null, made: 1, patch: { categories: { regeneracja: { variants: regen } } } }]
+  const mine = settingsOn(changes, DAY)
+  const at = (hm: number) => placeLogical(DAY, hm)
+  const base = (n: number, t: number, e: Record<string, unknown>) => ({ id: `pca-${n}`, c: 'pca', n, t, l: t, v: 16, day: DAY, ...e }) as unknown as AnyEvent
+  const params = mine.dayTypes.zwykly
+  const nap = planBlock({ id: 'n', categoryId: 'regeneracja', variantId: 'drzemka', startMin: 9 * 60, durationMin: 60 })
+  const snapshot = JSON.parse(JSON.stringify({ dayType: 'zwykly', settings: mine, templateId: null, templateFrom: null, budgetMin: params.budgetMin, maxMin: params.maxMin, wakeMin: params.wakeMin, templateWakeMin: params.wakeMin, blocks: [nap], changes: [], holidays: [] }))
+  const events = [
+    base(0, at(4 * 60), { dom: 'timer', k: 'day.create', snapshot }),
+    base(1, at(8 * 60), { dom: 'energy', k: 'energy.checkin', at: at(8 * 60), answers: { head: [2, 2], emotions: [2, 2], senses: [2, 2], body: [2, 2] } }),
+    base(2, at(9 * 60), { dom: 'timer', k: 'block.start', block: 'n', at: at(9 * 60), bg: false, planned: { categoryId: 'regeneracja', variantId: 'drzemka', durationMin: 60, fixed: false, costs: null }, confirmUntil: null, how: 'click' }),
+    base(3, at(10 * 60), { dom: 'timer', k: 'block.end', block: 'n', at: at(10 * 60), done: true, rule: null })
+  ]
+
+  it('drzemka „jak podkategoria” liczy koszt regeneracji (−1 · −2 · −3 · −1), nie swój startowy', () => {
+    const ctx = dayContextOf({ changes, templates: [], lectures: [], series: [], routines: [] }, { date: DAY, events, dayFile: null, nextFile: null }, marketDay, at(10 * 60 + 30))
+    // 25 at the check-in, an hour of −1 · −2 · −3 · −1 – senses +9, body +3 (time without a block around it, „gra, film”, adds nothing to
+    // them); its own starting cost (−3 · −1 · −2 · −3) would give +6 and +9.
+    expect(computeEnergy(ctx, computeDay(ctx)).now).toMatchObject({ senses: 34, body: 28 })
   })
 })

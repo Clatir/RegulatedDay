@@ -10,7 +10,8 @@ import { daySnapshotOf, parseEvent, RULES_VERSION, type AnyEvent } from '@shared
 import { sameOccurrence } from '@shared/engine/series'
 import { planBlockFrom, sessionBlockFieldsFrom } from '@shared/model/plan'
 import { routineFrom } from '@shared/model/routines'
-import { DEFAULT_SETTINGS, settingsFrom, settingsLackBody, settingsOn, type RulesSettings } from '@shared/model/settings'
+import { DEFAULT_SETTINGS, settingsFrom, settingsLackBody, settingsOn } from '@shared/model/settings'
+import { withoutBodies } from './engine/bodies'
 
 const three = (head: number, emotions: number, senses: number) => ({ head, emotions, senses })
 
@@ -174,17 +175,6 @@ describe('ciało – zdarzenia starszej wersji i reguły (T1524, T1527, T1528)',
   })
 })
 
-/** Settings as a version before the body (≤ 1.26) writes them: no `body` in any category's or variant's cost. */
-function withoutBodies(settings: RulesSettings): Record<string, unknown> {
-  const strip = (c: unknown) => {
-    if (!c || typeof c !== 'object') return c
-    const { body: _body, ...rest } = c as Record<string, unknown>
-    return rest
-  }
-  const categories = Object.fromEntries(Object.entries(settings.categories).map(([id, c]) => [id, { ...c, costs: strip(c.costs), variants: c.variants.map((v) => (v.costs ? { ...v, costs: strip(v.costs) } : v)) }]))
-  return { ...settings, categories }
-}
-
 describe('ciało – migawka ustawień starszej wersji (T1532)', () => {
   const mine = settingsOn([{ id: 'u', from: '2026-01-01', at: null, made: 1, patch: { categories: { analiza: { costs: { body: 2 } }, regeneracja: { variants: [{ id: 'drzemka', name: 'Leżenie, drzemka', costs: { head: -3, emotions: -1, senses: -2, body: -1 } }, { id: 'moje', name: 'Moje', costs: { head: 0, emotions: 0, senses: 0, body: 4 } }] } } } }], '2026-11-15')
   const legacy = withoutBodies(mine)
@@ -233,5 +223,32 @@ describe('ciało – wystąpienie serii w pliku dnia starszej wersji (T1533)', (
     expect(occ.costs).toEqual({ ...three(2, 1, 1), body: 1 })
     expect(sameOccurrence(raw, occ)).toBe(true)
     expect(sameOccurrence({ ...raw, costs: { ...three(2, 1, 1), body: 3 } }, occ)).toBe(false)
+  })
+})
+
+describe('migawka dnia – pełne ustawienia (T1538, T1539)', () => {
+  // „Leżenie, drzemka” and „Nauka — słuchanie” set to „jak podkategoria” (cost and place given up, D510).
+  const regen = DEFAULT_SETTINGS.categories.regeneracja!.variants.map((v) => (v.id === 'drzemka' ? { ...v, costs: null } : v))
+  const nauka = DEFAULT_SETTINGS.categories.nauka!.variants.map((v) => (v.id === 'sluchanie' ? { ...v, place: null } : v))
+  const mine = settingsOn([{ id: 'u', from: '2026-01-01', at: null, made: 1, patch: { categories: { regeneracja: { variants: regen }, nauka: { variants: nauka } } } }], '2026-11-15')
+  const head = { dayType: 'zwykly', templateId: null, templateFrom: null, budgetMin: 0, maxMin: 0, wakeMin: 420, templateWakeMin: 420, changes: [], holidays: [] }
+  const created = (settings: unknown, blocks: unknown[] = []) => JSON.parse(JSON.stringify({ id: 'x', c: 'pca', n: 1, t: 5, l: 5, v: 16, day: '2026-11-15', dom: 'timer', k: 'day.create', snapshot: { ...head, settings, blocks } })) as AnyEvent
+
+  it('wariant startowy „jak podkategoria” zostaje taki w migawce – bez kosztu i miejsca z ustawień startowych', () => {
+    expect(mine.categories.regeneracja!.variants.find((v) => v.id === 'drzemka')!.costs).toBeUndefined()
+    const s = daySnapshotOf([created(mine)])!
+    expect(s.settings.categories.regeneracja!.variants.find((v) => v.id === 'drzemka')!.costs).toBeUndefined()
+    expect(s.settings.categories.nauka!.variants.find((v) => v.id === 'sluchanie')!.place).toBeUndefined()
+    // Also one of 1.26 (no body anywhere), read with your settings.
+    const old = daySnapshotOf([created(withoutBodies(mine))], () => mine)!
+    expect(old.settings.categories.regeneracja!.variants.find((v) => v.id === 'drzemka')!.costs).toBeUndefined()
+    // A layer of the dated settings that leaves a variant's cost out still keeps the one before (a list written before D510).
+    const layer = settingsOn([{ id: 'w', from: '2026-01-01', at: null, made: 1, patch: { categories: { regeneracja: { variants: [{ id: 'drzemka', name: 'Leżenie' }] } } } }], '2026-11-15')
+    expect(layer.categories.regeneracja!.variants[0]!.costs).toEqual(DEFAULT_SETTINGS.categories.regeneracja!.variants.find((v) => v.id === 'drzemka')!.costs)
+  })
+
+  it('koszt bloku migawki spoza zakresu – brak kosztu, także z ciałem', () => {
+    const s = daySnapshotOf([created(mine, [{ id: 'a', categoryId: 'inne', variantId: null, costs: { head: 9, emotions: 0, senses: 0, body: 0 } }, { id: 'b', categoryId: 'inne', variantId: null, costs: { head: 1, emotions: 0, senses: 0, body: 2 } }])])!
+    expect(s.blocks.map((b) => b.costs)).toEqual([null, { head: 1, emotions: 0, senses: 0, body: 2 }])
   })
 })

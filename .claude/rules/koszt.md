@@ -76,7 +76,9 @@ T1360–T1374, T1395–T1399, T1430–T1437, T1440–T1447.
   sprzed zmiany (`bodiesBefore`: poprzedni własny, start, rutyna, wariant/podkategoria z ustawień dnia – T1534). Ustawienia (`settingsFrom` →
   `categoryFrom(id, …)`): ciało z ustawień sprzed (na starcie – D523); wariant bez wcześniejszego kosztu: startowy – ciało podkategorii, Twój – 0
   (T1521); migawka dnia i `day.snapshot` starszej wersji – ciało z Twoich ustawień datowanych w jej chwili (`settingsFrom(…, bodies)`,
-  `settingsLackBody`, `daySnapshotOf(events, bodiesAt)`, `foldFacts(…, bodiesAt)`, `DayContext.changes` – T1532). Zapis zawsze z 4 polami.
+  `settingsLackBody`, `daySnapshotOf(events, bodiesAt)`, `foldFacts(…, bodiesAt)`, `DayContext.changes` – T1532). Migawka (`day.create`,
+  `day.reissue`, `day.snapshot`) to pełne ustawienia (`settingsFrom(…, { whole: true })`): wariant bez kosztu albo miejsca – „jak podkategoria”,
+  nigdy wartość startowa (T1538); warstwy `settingsOn` – jak dotąd. Bloki migawki – zawsze `ownCostsFrom` (zakres, T1539). Zapis zawsze z 4 polami.
 
 ## Kafelek i zapis
 - `TimelineItem.cost` („Dziś” – `dayAxis` z `today`; „Szablony” – `planCosts`: koszt z planu, okienko tylko na blokach szablonu;

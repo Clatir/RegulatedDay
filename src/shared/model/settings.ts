@@ -258,8 +258,10 @@ const PLACES = new Set(['computer', 'passive', 'away'])
 /**
  * A category of the settings. `bodies` – the category whose body a cost written before the body (≤ 1.26) takes, when the caller knows the
  * settings in force then (a day's snapshot of an older version – your dated settings of its day, T1532); none – the rules of T1521.
+ * `whole` – `v` is the whole category as settings in force hold it (a day's snapshot, T1538): a variant without a place or a cost is „jak
+ * podkategoria”, never the one of `fallback`.
  */
-function categoryFrom(id: string, v: unknown, fallback: CategoryRules | undefined, bodies?: CategoryRules): CategoryRules | null {
+function categoryFrom(id: string, v: unknown, fallback: CategoryRules | undefined, bodies?: CategoryRules, whole = false): CategoryRules | null {
   if (!isPlain(v)) return fallback ?? null
   const f: CategoryRules = fallback ?? {
     cls: 'work',
@@ -302,15 +304,15 @@ function categoryFrom(id: string, v: unknown, fallback: CategoryRules | undefine
               id: x.id,
               name: x.name.slice(0, 80),
               // null – „jak podkategoria” (D510, T1314): a place or a cost given up; left out – the one before stays (a list written
-              // before D510 never left one out on purpose).
-              ...(x.place === null ? {} : PLACES.has(x.place as string) ? { place: x.place as CategoryRules['place'] } : fv?.place ? { place: fv.place } : {}),
+              // before D510 never left one out on purpose); in whole settings (a day's snapshot) – „jak podkategoria” too (T1538).
+              ...(x.place === null ? {} : PLACES.has(x.place as string) ? { place: x.place as CategoryRules['place'] } : !whole && fv?.place ? { place: fv.place } : {}),
               // The body of a variant's cost written before it (D520, T1521): the one before (its cost of the settings before); a starting
               // variant without its own – its subcategory's (D523, as `costsOf`); a variant of yours – 0, never its subcategory's.
               ...(x.costs === null
                 ? {}
                 : x.costs !== undefined
                   ? { costs: costsFrom(x.costs, fv?.costs ?? f.costs, variantBody(bodies, x.id) ?? (fv?.costs ? fv.costs.body : isStartingVariant(id, x.id) ? costs.body : 0)) }
-                  : fv?.costs
+                  : !whole && fv?.costs
                     ? { costs: fv.costs }
                     : {}),
               ...(x.archived === true ? { archived: true } : {})
@@ -410,15 +412,17 @@ export function settingsLackBody(raw: unknown): boolean {
 
 /**
  * Settings checked field by field: a wrong value falls back to `fallback`'s (never breaks the day). `bodies` – the settings whose bodies a
- * cost without the body takes (`categoryFrom`, T1532).
+ * cost without the body takes (`categoryFrom`, T1532); `whole` – `raw` are the whole settings in force (a day's snapshot – `day.create`,
+ * `day.reissue`, `day.snapshot`), not a layer laid over `fallback` (T1538).
  */
-export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SETTINGS, bodies?: RulesSettings): RulesSettings {
+export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SETTINGS, o: { bodies?: RulesSettings; whole?: boolean } = {}): RulesSettings {
+  const { bodies, whole = false } = o
   const r = isPlain(raw) ? raw : {}
   const dt = isPlain(r.dayTypes) ? r.dayTypes : {}
   const cats = isPlain(r.categories) ? r.categories : {}
   const categories: Record<string, CategoryRules> = {}
   for (const id of new Set([...Object.keys(fallback.categories), ...Object.keys(cats)])) {
-    const c = categoryFrom(id, cats[id], fallback.categories[id], bodies && Object.hasOwn(bodies.categories, id) ? bodies.categories[id] : undefined)
+    const c = categoryFrom(id, cats[id], fallback.categories[id], bodies && Object.hasOwn(bodies.categories, id) ? bodies.categories[id] : undefined, whole)
     if (c) categories[id] = c
   }
   const rem = isPlain(r.reminders) ? r.reminders : {}

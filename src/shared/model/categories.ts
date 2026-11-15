@@ -205,6 +205,9 @@ export function variantHasCosts(rules: CategoryRules, variantId?: string | null)
 
 const STARTING = new Map(DEFAULT_CATEGORIES.map((c) => [c.id, c]))
 
+/** Whether the variant is one of the starting ones of its subcategory (D523: a variant of yours has no starting cost of the body – 0). */
+export const isStartingVariant = (categoryId: string, variantId: string): boolean => !!STARTING.get(categoryId)?.variants.some((v) => v.id === variantId)
+
 /**
  * The body's cost (D520) of a cost written before the body (≤ 1.26: three pools – an own cost of a block, a routine's, a start's, a change's;
  * T1520, T1536): the starting cost (D523) of its subcategory and variant; a subcategory or a variant not among the starting ones (yours, or
@@ -214,9 +217,6 @@ const STARTING = new Map(DEFAULT_CATEGORIES.map((c) => [c.id, c]))
  */
 export function startingBody(categoryId: string | null | undefined, variantId?: string | null): number {
   const c = categoryId != null ? STARTING.get(categoryId) : undefined
-  if (!c || (variantId && !c.variants.some((v) => v.id === variantId))) return 0
+  if (!c || (variantId && !isStartingVariant(c.id, variantId))) return 0
   return costsOf(c, variantId).body
 }
-
-/** Whether the variant is one of the starting ones of its subcategory (D523: a variant of yours has no starting cost of the body – 0). */
-export const isStartingVariant = (categoryId: string, variantId: string): boolean => !!STARTING.get(categoryId)?.variants.some((v) => v.id === variantId)

@@ -560,7 +560,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[], bodiesAt?: (a
         f.snapshots.push({
           at: idx(e.at),
           dayType: e.dayType,
-          settings: settingsFrom(e.settings, DEFAULT_SETTINGS, bodiesAt && settingsLackBody(e.settings) ? bodiesAt(e.at) : undefined),
+          settings: settingsFrom(e.settings, DEFAULT_SETTINGS, { bodies: bodiesAt && settingsLackBody(e.settings) ? bodiesAt(e.at) : undefined, whole: true }),
           reason: e.reason,
           max: e.max != null ? idx(e.max) : null,
           minRegen: e.minRegen ?? null

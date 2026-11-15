@@ -488,17 +488,17 @@ export function daySnapshotOf(events: readonly AnyEvent[], bodiesAt?: (at: numbe
   // body – your settings' body of the day at the instant it was made (T1532), its blocks' own costs – the starting body (T1520, T1527).
   const raw = found.s.settings
   const bodies = bodiesAt && settingsLackBody(raw) ? bodiesAt(found.e.t) : undefined
-  return { ...found.s, settings: settingsFrom(raw, DEFAULT_SETTINGS, bodies), blocks: withBodies(found.s.blocks) }
+  return { ...found.s, settings: settingsFrom(raw, DEFAULT_SETTINGS, { bodies, whole: true }), blocks: withBodies(found.s.blocks) }
 }
 
 /**
- * The blocks of a snapshot with the body in their own costs: one an older version wrote has three pools (T1527) – read by the rule of a
- * block's file (`ownCostsFrom`, T1520); as written otherwise.
+ * The blocks of a snapshot with their own costs read by the rule of a block's file (`ownCostsFrom`): the schema's range always (a cost out of
+ * it – none, T1539), one an older version wrote without the body (three pools, T1527) – the starting body (T1520); the rest as written.
  */
 function withBodies(blocks: DaySnapshot['blocks']): DaySnapshot['blocks'] {
-  const lacks = (b: DaySnapshot['blocks'][number]) => isPlain(b.costs) && (b.costs as Record<string, unknown>).body === undefined
-  if (!Array.isArray(blocks) || !blocks.some(lacks)) return blocks
-  return blocks.map((b) => (lacks(b) ? { ...b, costs: ownCostsFrom(b.costs, b.categoryId, b.variantId) } : b))
+  const owns = (b: DaySnapshot['blocks'][number]) => isPlain(b.costs)
+  if (!Array.isArray(blocks) || !blocks.some(owns)) return blocks
+  return blocks.map((b) => (owns(b) ? { ...b, costs: ownCostsFrom(b.costs, b.categoryId, b.variantId) } : b))
 }
 
 /** The kind's own instant (`at`, `from` …) – what the rules place the event at. */
