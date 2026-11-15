@@ -473,3 +473,29 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1722 | Klik oddalony od naciśnięcia o 4 px i więcej to koniec przeciągnięcia także na nieprzeciągalnym kafelku; klik z klawiatury działa zawsze |
 | T1723 | E2E zaznaczania używają dni z przyszłości (jutro, następny tydzień, następny miesiąc) od `logicalToday()` – wynik nie zależy od godziny ani dnia tygodnia testu |
 | T1724 | E2E klikają działania menu bloków dopiero po podpięciu logiki Z4-A do `groupRunner` |
+| T1590 | Logika zmian grupowych bloków w `engine/groupEdit.ts`, zapis w `today/groupActions.ts` i `templates/templateGroup.ts`; `judgeGroup` ocenia każdy blok jak zmianę pojedynczego |
+| T1591 | Pomijanie przy polach: podkategoria, wariant i rutyna pomijają zaczęty (jak przykład D529); sesje, wykłady i zjazdy są zmieniane, bo panel je zmienia; rutyna tylko w podkategorii rodzaju „rutyna”, wariant tylko swojej podkategorii |
+| T1592 | „Przesuń o” liczy dziś od miejsca kafelka na osi (prognoza, jak przeciąganie), inne dni i szablon – od planu; minuta po minucie; poza dobą logiczną – pominięty |
+| T1593 | „Cofnij” pól – PRZED/PO tylko dla zmienionych kluczy; blok wraca w całości albo zostaje (kept), gdy któreś pole ma już inną wartość niż PO |
+| T1594 | Odwołanie i parkowanie grupy przez IPC `groupLog` / `undoGroupLog` (na wzór `closeDay` / `undoClose`), tylko dziś; blok zaczęty od tego czasu zostaje przy „Cofnij” |
+| T1595 | Koszt zaczętego bloku z grupy – `block.cost` od teraz (jak kafelek); „Cofnij” przywraca koszt sprzed, póki blok trwa i ma koszt grupy |
+| T1596 | Przeniesienie grupy na dzień – kolejne `moveBetweenDays` jedną edycją (dzień docelowy najpierw); „Cofnij” jak dla jednego bloku – oba dni albo żaden |
+| T1597 | Usunięcie grupy: zaczęte przez `removeBegun` (D336), potem jedna edycja z załącznikami; „Cofnij” – plik, potem przywrócenie zaczętych |
+| T1598 | `blockNow` i `patchedBlock` w `shared/data/dayEdits.ts` (`dayActions` reeksportuje) |
+| T1599 | Energia linii z `groupEnergy`: brak, gdy dzień nie ma prognozy albo energia się nie zmienia; przy przeniesieniu – dla dziś, jeśli dotknięte, inaczej dla dnia źródłowego |
+| T1600 | „Cofnij” odwołania i parkowania grupy cofa też zdarzenia D216 zapisane razem z nimi (ten sam komputer i chwila, reguła workEnd), koniec zapauzowanej pracy zawsze; cudze zdarzenia odrzucane |
+| T1601 | Przesunięcie części grupy równoległej tworzy nową grupę z zaznaczonych; niezaznaczone zostają razem (nowy pierwszy jak `leaveGroup`) |
+| T1602 | „Cofnij” bloku migawki (szablon, seria) dopisanego do pliku dnia zdejmuje jego wpis, póki stoi tak, jak go zapisała zmiana |
+| T1603 | Zmiana grupowa w szablonie liczy dzień wersji w turze zapisu (`templates/templateDay.ts`, ta sama reguła co strona) |
+| T1604 | Zmiana grupowa, która niczego nie zapisuje, daje „bez zmian” bez „Cofnij”; dzień bez pliku nie dostaje pliku |
+| T1605 | Szkic odwołania/parkowania dokłada zdarzenia wcześniejszych bloków do faktów dnia przyrostowo (bez pełnego `computeDay`) |
+| T1606 | `pushApart` z opcją `placed` – inne bloki postawione tą samą zmianą trzymają starty; blok pchnięty, który stanąłby tuż przed takim i go opóźnił, idzie za nim; bez `placed` wynik jak dotąd |
+| T1607 | Odwołanie i parkowanie grupy – każdy blok raz, zdarzenia wcześniejszych widoczne dla późniejszych ocen (D216) |
+| T1608 | Zwolniony czas grupy (`groupFreed`) – zakotwiczony liczy się w czasie kotwicy tylko, gdy kotwica coś zwalnia |
+| T1609 | Powody pominięcia z odmowy timera: „skończony”, „odmowa” |
+| T1710 | `placed` podnosi tylko bloki pchnięte przez zmianę (podniesione, zapisane albo pokazane później niż przed); nietknięty zostaje |
+| T1711 | Odwołanie i parkowanie grupy w kolejności godzin z prognozy, remis – kolejność planu; wynik nie zależy od kolejności zaznaczenia ani zapisu |
+| T1712 | Łańcuch zakotwiczonych w zwolnionym czasie grupy tylko przez bloki niezaczęte (jak `freedByEdit`) |
+| T1713 | „Przesuń o” bloku pokazanego za końcem doby liczy od jego minuty; „później” – „poza dniem” |
+| T1714 | „Cofnij” odwołania/parkowania grupy liczy jako przywrócone tylko bloki, które wracają do planu; zdjęte innym zdarzeniem – kept |
+| T1715 | Powtórzone id odrzuca silnik (jedna granica), IPC tylko filtruje typy |
