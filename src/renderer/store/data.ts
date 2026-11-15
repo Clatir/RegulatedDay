@@ -196,23 +196,39 @@ export function withOwner(owner: EditEntry | null, deps: readonly EditEntry[]): 
   return owner ? [owner, ...deps.map((e) => ({ ...e, after: [0] }))] : [...deps]
 }
 
-/** The day `tree.change` went to the log from this window (T1391): one a day is all an older version needs. */
+/**
+ * The data folder and the day `tree.change` went (or is going) to the log from this window (T1391, T1421): one a day in a folder is all an
+ * older version needs – another folder chosen in the same session of the window is another log.
+ */
 let treeNoted: string | null = null
 
+/** For the tests: a window that has written no `tree.change` yet. */
+export function resetTreeNoted(): void {
+  treeNoted = null
+}
+
 /**
- * `tree.change` in today's log (T1313, T1391), at most once a day: an older version on another computer, which shows no tree, takes it for an
- * unknown event of the timer (`unknownTimerEvents` reads today's log of every computer) and installs the new version without the 24 h. Only
- * that hint: a failure is never said (the change itself is saved) and the next change of the tree tries again.
+ * `tree.change` in today's log (T1313, T1391), at most once a day in a folder: an older version on another computer, which shows no tree,
+ * takes it for an unknown event of the timer (`unknownTimerEvents` reads today's log of every computer) and installs the new version without
+ * the 24 h. Only that hint, never waited for (T1422): the edits after it go on while the log answers; a failure is never said (the change
+ * itself is saved) and the next change of the tree tries again.
  */
-async function noteTreeChange(): Promise<void> {
-  const today = useData.getState().view?.today
-  if (!today || treeNoted === today) return
-  try {
-    await window.rd.logEvents([{ k: 'tree.change', day: today }])
-    treeNoted = today
-  } catch {
-    /* only a hint for an older version */
-  }
+function noteTreeChange(): void {
+  const view = useData.getState().view
+  if (!view?.today) return
+  const key = JSON.stringify([view.folder, view.today])
+  if (treeNoted === key) return
+  // Taken at once: a change of the tree while the log still answers writes no second event.
+  treeNoted = key
+  const day = view.today
+  void (async () => {
+    try {
+      await window.rd.logEvents([{ k: 'tree.change', day }])
+    } catch {
+      // Only a hint for an older version: the next change tries again.
+      if (treeNoted === key) treeNoted = null
+    }
+  })()
 }
 
 /**
@@ -229,8 +245,8 @@ async function send(make: () => Promise<ReadonlyArray<EditEntry | null>> | Reado
     await reloadData()
     const notice = editNotice(out)
     if (notice) toast(notice.text, notice.kind, 8000)
-    // After the view is read again: the hint for an older version never holds the change back on the screen.
-    if (list.some((e, i) => treeEdit(e) && isSaved(out[i] ? [out[i]] : null))) await noteTreeChange()
+    // After the view is read again: the hint for an older version never holds the change back on the screen, nor the next edit.
+    if (list.some((e, i) => treeEdit(e) && outcomeSaved(out[i]))) noteTreeChange()
     return out
   } catch (e) {
     toast(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
@@ -268,8 +284,11 @@ export async function dayFilesNow(dates: readonly string[], seen: (date: string)
   return Object.fromEntries(dates.map((d) => [d, d in files ? (files[d] ?? null) : seen(d)]))
 }
 
+/** One edit saved – written, or waiting for the folder; no answer for it is no save. */
+const outcomeSaved = (o: EditOutcome | undefined): boolean => o?.status === 'applied' || o?.status === 'waiting'
+
 /** Saved – written, or waiting for the folder – never a question, a broken file or an error. */
-export const isSaved = (out: readonly EditOutcome[] | null): boolean => out != null && out.every((o) => o.status === 'applied' || o.status === 'waiting')
+export const isSaved = (out: readonly EditOutcome[] | null): boolean => out != null && out.every(outcomeSaved)
 
 /**
  * What became of a save that a field has to know (the note's editor puts the shown text back only when it was refused for good):

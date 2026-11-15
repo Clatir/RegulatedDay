@@ -16,6 +16,8 @@
  * The variants stay in the dated settings (`CategoryRules.variants`, a list written whole in a change): `addVariant`, `changeVariant`,
  * `archiveVariant` give the list a change writes – a cost or a place given up („jak podkategoria”) is written as null (T1314).
  */
+import { deepEqual } from '../data/merge'
+import { SETTINGS_FILE } from '../data/paths'
 import { POOLS, type CategoryRules, type Costs, type Place, type Variant } from './categories'
 import { newId } from './ids'
 import { RANGES } from './settings'
@@ -381,6 +383,20 @@ export function variantsPatch(categoryId: string, list: readonly VariantEntry[])
 const groupIn = (v: unknown): boolean => isPlain(v) && v.group !== undefined
 /** A change of the dated settings that writes variants (`variantsPatch`). */
 const variantsIn = (v: unknown): boolean => isPlain(v) && isPlain(v.patch) && isPlain(v.patch.categories) && Object.values(v.patch.categories).some((c) => isPlain(c) && c.variants !== undefined)
+/**
+ * The items of `list` that `other` has not as they are (an array written whole: only what it changed). An item is looked for first under its
+ * id (the changes of the settings have one), then anywhere in `other`.
+ */
+const changedIn = (list: unknown, other: unknown): unknown[] => {
+  const theirs = Array.isArray(other) ? other : []
+  const byId = new Map<string, unknown>()
+  for (const y of theirs) if (isPlain(y) && typeof y.id === 'string' && !byId.has(y.id)) byId.set(y.id, y)
+  const kept = (x: unknown): boolean => {
+    const same = isPlain(x) && typeof x.id === 'string' ? byId.get(x.id) : undefined
+    return (same !== undefined && deepEqual(x, same)) || theirs.some((y) => deepEqual(x, y))
+  }
+  return Array.isArray(list) ? list.filter((x) => !kept(x)) : []
+}
 
 /**
  * Whether an edit changes the tree as a version without it cannot show it (T1391): rd.json's categories of the tree (`categoryGroups`), the
@@ -389,7 +405,7 @@ const variantsIn = (v: unknown): boolean => isPlain(v) && isPlain(v.patch) && is
  * shows them as they are. Each edit as the window sends it (`recordEdit`: a new entry by its fields, a first list whole).
  */
 export function treeEdit(e: { rel: string; edits: ReadonlyArray<{ path: readonly string[]; base: unknown; value: unknown }> }): boolean {
-  if (e.rel !== 'rd.json') return false
+  if (e.rel !== SETTINGS_FILE) return false
   return e.edits.some(({ path, base, value }) => {
     const [a, b, c] = path
     if (a === 'categoryGroups') return true
@@ -400,8 +416,10 @@ export function treeEdit(e: { rel: string; edits: ReadonlyArray<{ path: readonly
     }
     if (a === 'settings') {
       if (path.includes('variants')) return true
-      const changes = (v: unknown) => (b !== undefined ? [v] : Array.isArray(v) ? v : [])
-      return [...changes(base), ...changes(value)].some(variantsIn)
+      // The whole list of changes in one field (the first one, or its order changed): only the changes that differ – an older change of the
+      // variants on both sides is none (T1424).
+      if (b === undefined) return [...changedIn(base, value), ...changedIn(value, base)].some(variantsIn)
+      return variantsIn(base) || variantsIn(value)
     }
     return false
   })

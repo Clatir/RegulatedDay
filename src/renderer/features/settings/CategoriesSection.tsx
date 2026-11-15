@@ -25,7 +25,10 @@ import { saveTree, undoTree } from './categoryTreeEdits'
 import { GroupRemoveDialog } from './GroupRemoveDialog'
 import { useShared } from './SharedSettings'
 
-/** „Cofnij” of a removal of a category (`undoTree`): what it cannot do it says – the file is never overwritten. */
+/**
+ * „Cofnij” of a removal of a category (`undoTree`): what it cannot do it says – the file is never overwritten. A question (`asked`, T1420)
+ * says nothing more: the save said it, the banner asks, and a second „Cofnij” would only ask again.
+ */
 async function undoRemoval(entry: EditEntry): Promise<void> {
   const r = await undoTree(entry)
   const again = { label: 'Cofnij', run: () => void undoRemoval(entry) }
@@ -35,6 +38,9 @@ async function undoRemoval(entry: EditEntry): Promise<void> {
 }
 
 const subcategories = (n: number) => countLabel(n, 'podkategorię', 'podkategorie', 'podkategorii')
+
+/** Another save of the section still runs (one at a time): a removal clicked meanwhile is never lost without a word (T1392, T1425). */
+const BUSY_TEXT = 'Trwa zapis poprzedniej zmiany – spróbuj za chwilę.'
 
 /** The subcategories a removal of `groupId` takes with it now (not archived) – the set `removeGroupRaw` moves (T1392); rd.json unreadable – none. */
 const takenWith = (groupId: string, ids: readonly string[]): number => {
@@ -51,7 +57,9 @@ export function CategoriesSection() {
   const [open, setOpen] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [name, setName] = useState('')
-  const [removing, setRemoving] = useState<CategoryGroup | null>(null)
+  // The category asked about, with the number of its subcategories when the window opened (T1425): a change from another computer meanwhile
+  // never makes it say „Ma 0 podkategorii”.
+  const [removing, setRemoving] = useState<{ group: CategoryGroup; count: number } | null>(null)
   // Something picked in the search (Ctrl K): a subcategory (its row open), a category, a variant (its subcategory open) – an archived one
   // shows with the archive – brought into view once.
   const pick = useUi((x) => x.pick)
@@ -106,15 +114,21 @@ export function CategoriesSection() {
 
   // A category with subcategories asks first; one without – gone at once (its archived subcategories, if any, go to „Inne”). Both count the
   // subcategories the removal takes (`takenWith`); the toast says how many it took in the turn of the save.
-  const askRemove = (g: CategoryGroup) => (takenWith(g.id, ids) > 0 ? setRemoving(g) : void remove(g, { to: OTHER_GROUP }))
+  const askRemove = (g: CategoryGroup) => {
+    const count = takenWith(g.id, ids)
+    if (count > 0) setRemoving({ group: g, count })
+    else void remove(g, { to: OTHER_GROUP }).then((ran) => ran || toast(BUSY_TEXT, 'info', 4000))
+  }
   // `accepted` – the removal runs (no other save of the section is running): the window closes only then (T1392). False – another one runs.
+  // One that takes no subcategory in the turn of the save (another computer moved them out after the window asked) goes as one of a category
+  // without them – the choice of the window has nothing to act on (T1425).
   const remove = async (g: CategoryGroup, how: GroupRemoval, accepted?: () => void): Promise<boolean> =>
     (await run(async () => {
       accepted?.()
       let taken = 0
       const { out, entry } = await saveTree((raw) => {
         taken = activeOfGroupRaw(raw, g.id, ids).length
-        return removeGroupRaw(raw, g.id, how, ids)
+        return removeGroupRaw(raw, g.id, taken === 0 ? { to: OTHER_GROUP } : how, ids)
       })
       if (!entry || saveAnswer(out) !== true) return true
       const to = 'to' in how ? (rd.categoryGroups.find((x) => x.id === how.to)?.name ?? 'Inne') : null
@@ -158,13 +172,13 @@ export function CategoriesSection() {
       </div>
       {removing && (
         <GroupRemoveDialog
-          group={removing}
-          count={takenWith(removing.id, ids)}
-          targets={live.filter((g) => g.id !== removing.id)}
+          group={removing.group}
+          count={removing.count}
+          targets={live.filter((g) => g.id !== removing.group.id)}
           onClose={() => setRemoving(null)}
           onConfirm={async (how) => {
             // Another save of the section still runs: the window stays, nothing is lost without a word.
-            if (!(await remove(removing, how, () => setRemoving(null)))) toast('Trwa zapis poprzedniej zmiany – spróbuj za chwilę.', 'info', 4000)
+            if (!(await remove(removing.group, how, () => setRemoving(null)))) toast(BUSY_TEXT, 'info', 4000)
           }}
         />
       )}

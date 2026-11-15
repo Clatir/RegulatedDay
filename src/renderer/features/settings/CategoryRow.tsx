@@ -43,9 +43,9 @@ export function CategoryRow({
   const brightness = useMachine((x) => x.prefs.brightness)
   const meta = rd.categories[id]
   const color = blockColor(id, { rd, settings })
-  // Its category as the tree places the row: without the archive a group in the archive is „Inne” (the row stands there).
-  const groupId = groupOfCategory(rd, id, { archived: showArchived })
-  // Its own category stays in the list also when it is in the archive (the archive view).
+  // Its category as rd.json has it, also one in the archive (T1423): without the archive the row stands in „Inne”, but the list says where the
+  // file puts it – „Inne” chosen writes the move, so bringing the category back does not take the subcategory with it.
+  const groupId = groupOfCategory(rd, id, { archived: true })
   const own = rd.categoryGroups.find((g) => g.id === groupId)
   const choices = own && !groups.some((g) => g.id === groupId) ? [...groups, own] : groups
   return (
@@ -66,7 +66,7 @@ export function CategoryRow({
             <span className="text-[12px] text-muted">Kategoria</span>
             <Choice
               value={groupId}
-              options={choices.map((g) => ({ value: g.id, label: g.name }))}
+              options={choices.map((g) => ({ value: g.id, label: g.archived ? `${g.name} (w archiwum)` : g.name }))}
               onChange={(group) => void saveTree((raw) => setCategoryGroupRaw(raw, id, group))}
               className="w-[200px]"
               aria-label="Kategoria podkategorii"
