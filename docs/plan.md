@@ -156,6 +156,22 @@ T1030–T1069. Wykonawcy równolegle w drzewach `w120a` (U1 + U6), `w120b` (U2 +
 | U3 | Del z potwierdzeniem (D462) | ekrany | `wykonawca-sonnet` · high | 2–3 h | zaznaczenie i Del na każdym usuwalnym elemencie |
 | U4 | „+ Nowa…” w listach wyboru (D463) | ekrany | `wykonawca-sonnet` · high | 2–3 h | okno na środku dla rutyny, wariantu, kategorii |
 
+## Uwagi po 1.24 – paczka 1.25.0 (D510–D514)
+
+Gałąź paczki `claude/1.25.0` (drzewo `.claude/worktrees/w125`, od `claude/1.24.0` cfdbab8; po scaleniu PR #91 –
+`git merge origin/main`), jeden PR z pełnym CI (D413) po wydaniu 1.24.0. Koordynator: sesja `regulatedday-d7`
+(scalanie do paczki, przegląd, dokumenty, wersja, PR). Bez pauz do wydania (użytkownik niedostępny ok. 10 h od 14.11
+ok. 23:30; pytania odpowiedziane, kolejne – odpowiedź rekomendowana i lista po powrocie). Numery: D510–D529;
+T1310–T1339 (A, E), T1340–T1359 (B – sesja `regulatedday-a8`), T1360–T1389 (C, D – sesja `regulatedday-ab`).
+
+| # | Zadanie | Gałąź · drzewo | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
+| --- | --- | --- | --- | --- | --- |
+| A | Drzewo kategorii (D510) | `claude/1.25-kategorie` · `w125a` | `wykonawca-opus` (model, migracja) + `wykonawca-sonnet` (Ustawienia, lista) · xhigh | 6–9 h | trzy poziomy w Ustawieniach z dodawaniem i usuwaniem; migracja bez zmiany id bloków; „Sposoby regeneracji” w drzewie; lista z nagłówkami; starsza wersja proponuje aktualizację |
+| B | Sesje w szablonach (D511, D515 – siatka w samym wpisie; poza 1.25.0, wyjdzie jako 1.26.0) | `claude/1.25-sesje` · `w125b` | sesja `regulatedday-a8` (`wykonawca-opus`) · xhigh | 5–8 h | brak sekcji „Sesje”; przykłady „Sesje tradingowe” ze specyfikacji przechodzą z sesją z szablonu; migracja siatki tak/nie/pytaj z podziałem szablonu |
+| C | Koszt w szablonach i rutynach (D512) | `claude/1.25-koszt` · `w125c` | sesja `regulatedday-ab` · high | 3–4 h | okienko kosztu w „Szablonach”; koszt rutyny w „Rutynach” i w silniku (kolejność blok → rutyna → wariant → podkategoria) |
+| D | Ctrl + przeciągnięcie kopiuje (D513) | `claude/1.25-kopia` · `w125d` | sesja `regulatedday-ab` · high | 4–6 h | kopia we wszystkich miejscach z D513, oryginał bez zmian, jedno „Cofnij”; kopia sprawy – nowa sprawa |
+| E | ✎ szybka edycja z panelu (D514) | na paczce po A · `w125e` | `wykonawca-sonnet` · high | 2–3 h | ✎ przy Podkategorii, Wariancie, Rutynie; zapis od dziś z liczbą bloków |
+
 ## Gotowe, gdy
 
 - **F–H:** każda pozycja z `docs/archiwum/vm/przyczyny.md` ma poprawkę w wydaniu albo poprawiony opis odbioru, każda poprawka

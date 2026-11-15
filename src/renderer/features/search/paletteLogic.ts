@@ -55,7 +55,8 @@ export function choose(r: SearchRecord, today: string): void {
       openPick({ page: 'settings' }, { kind: 'setting', id: r.id })
       return
     case 'category':
-      openPick({ page: 'settings' }, { kind: 'category', id: r.id })
+      // The tree of „Kategorie” (D510): a category (`group:` id), a subcategory, or a variant (its subcategory is the `parent`).
+      openPick({ page: 'settings' }, { kind: 'category', id: r.id, ...(r.parent ? { parent: r.parent } : {}) })
       return
     case 'block':
       openPick({ page: 'today', day: r.date === today ? null : r.date! }, { kind: 'block', id: r.id, date: r.date! })

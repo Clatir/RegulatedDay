@@ -48,7 +48,7 @@ async function planOn(date: string): Promise<PlanBlock[]> {
   const plans = seriesPlans(list, typeOfDays([], (d) => (view.seriesDays[d] as never) ?? null), marketDay)
   const data = await hub.day(date)
   const file = data.dayFile ? dayFileFrom(data.dayFile, date) : null
-  const { snapshot } = snapshotOf({ changes: [], templates: [], lectures: [], series: plans }, { date, events: data.events as AnyEvent[], dayFile: file, nextFile: null }, marketDay, Date.now())
+  const { snapshot } = snapshotOf({ changes: [], templates: [], lectures: [], series: plans, routines: [] }, { date, events: data.events as AnyEvent[], dayFile: file, nextFile: null }, marketDay, Date.now())
   return dayPlan(snapshot, file)
 }
 

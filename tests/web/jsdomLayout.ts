@@ -20,3 +20,28 @@ export function installRangeLayout(): void {
     }
   }
 }
+
+/**
+ * jsdom has no `CSS.escape` (Chromium has): a selector made of an id (Ctrl K brings an element into view by its `data-*`) escapes it so,
+ * as CSSOM says, in every jsdom test (T1393).
+ */
+if (typeof window !== 'undefined' && typeof (globalThis as { CSS?: { escape?: unknown } }).CSS?.escape !== 'function') {
+  Object.assign(globalThis, { CSS: { ...((globalThis as { CSS?: object }).CSS ?? {}), escape: cssEscape } })
+}
+
+/** `CSS.escape` of CSSOM („serialize an identifier”). */
+export function cssEscape(value: string): string {
+  const s = String(value)
+  const first = s.charCodeAt(0)
+  const slash = '\\'
+  if (s.length === 1 && first === 0x2d) return slash + s
+  let out = ''
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i)
+    if (c === 0) out += '�'
+    else if ((c >= 0x1 && c <= 0x1f) || c === 0x7f || (i === 0 && c >= 0x30 && c <= 0x39) || (i === 1 && c >= 0x30 && c <= 0x39 && first === 0x2d)) out += `${slash}${c.toString(16)} `
+    else if (c >= 0x80 || c === 0x2d || c === 0x5f || (c >= 0x30 && c <= 0x39) || (c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a)) out += s.charAt(i)
+    else out += slash + s.charAt(i)
+  }
+  return out
+}

@@ -372,7 +372,7 @@ describe('„Przenieś na…” – blok, którego nie ma, i dzień, którego ni
     const s = stub({ [D1]: fileOf(D1, [x, y]), [D2]: null }, { incomplete: [D1] })
     const names: Names = { rd: useData.getState().rd, settings: DEFAULT_SETTINGS, routines: [], requests: [] }
     const data: DayData = { date: D1, dayFile: s.files[D1]!, nextFile: null, prevFile: null, events: started, complete: true, unknown: false, away: false }
-    const seen = countDay(D1, data, { changes: [], templates: [], lectures: [], series: [] }, AT, false)
+    const seen = countDay(D1, data, { changes: [], templates: [], lectures: [], series: [], routines: [] }, AT, false)
     const r = await moveDayBlock(D1, s.files[D1]!, seen.ctx.plan, x, D2, null, true, { name: 'Raport', names, seen })
     expect(isSaved(r.out)).toBe(true)
     expect(r.push?.move?.stayed).toEqual([{ name: 'Analiza', how: 'running' }])

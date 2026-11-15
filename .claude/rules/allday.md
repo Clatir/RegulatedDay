@@ -23,6 +23,7 @@ regeneracji ani typu dnia (silnik go nie czyta – T725).
   belka – klik = edycja; belki nigdy nie zasłaniają całego dnia – bez wolnego rzędu drugiego wydarzenia nie dodasz myszą.
 - Gest przeciągnięcia (tylko „Tydzień”): nasłuch okna, prostokąty komórek raz przy wciśnięciu, `columnAt`, `dragDates`; ta sama kolumna = klik.
   To nie `useGridCreate`: pas jest osobnym elementem, więc gesty osi z niego nie startują (`data-no-grid` zbędne).
+- Belka z Ctrl przy puszczeniu (D513, reguły `kopia.md`): kopia wydarzenia przesunięta o przeciągnięte kolumny (`copiedAllDay`), bez Ctrl – nic.
 - Teksty bez cyklu importów: `allDayText` (belka, komórka miesiąca – importuje je `MonthGrid`), `allDayView` (układ, dni pytania „Wolne”).
 
 ## Karta (`AllDayCard`)

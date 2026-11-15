@@ -984,6 +984,7 @@ function registerIpc(): void {
   // Attachments of blocks (D410): the window names an attachment by its id – a path or an address to open never comes from it.
   handle(CH.attachFiles, (_e, owner: unknown, paths: unknown) => needHub().prepareFiles(owner, paths))
   handle(CH.attachCommit, (_e, ids: unknown) => needHub().commitFiles(ids))
+  handle(CH.attachCopy, (_e, owner: unknown, ids: unknown) => needHub().prepareCopies(owner, ids))
   handle(CH.attachPick, async (e, owner: unknown) => {
     const win = BrowserWindow.fromWebContents(e.sender)
     const opts = { title: 'Dołącz plik', properties: ['openFile', 'multiSelections'] as Array<'openFile' | 'multiSelections'> }

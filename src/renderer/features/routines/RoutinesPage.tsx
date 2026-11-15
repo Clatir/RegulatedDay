@@ -1,15 +1,19 @@
 /**
  * Rutyny (spec „Rutyna”): a sequence of steps with the time of each, in two versions – the usual one and one for worse
  * days. You set the order here; the app never changes it, at most it moves the whole routine in time. A block of the
- * plan points at its routine (the panel of a block of the „Rutyny” category). Ctrl+N makes a new routine.
+ * plan points at its routine (the panel of a block of the „Rutyny” category). Ctrl+N makes a new routine. D512: the routine's own cost
+ * per hour – the label and window of a tile's cost (`TileCost`), or none („jak podkategoria”); the field and its save are those of ✎
+ * (`routineCost.tsx`): a begun block of the routine counts the new cost from now on (D514, T1430).
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { paths } from '@shared/data/paths'
 import { durationLabel } from '@shared/format'
 import { newId } from '@shared/model/ids'
 import { ROUTINE_SCHEMA, routineFrom, routineMinutes, type Routine, type RoutineVersion } from '@shared/model/routines'
+import { settingsOn } from '@shared/model/settings'
 import { TextField } from '../../components/fields'
 import { EmptyState, cx } from '../../components/ui'
+import { RoutineCostField, saveRoutineRecord } from './routineCost'
 import { RoutineSteps } from './RoutineSteps'
 import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
 import { useNewShortcut } from '../../lib/escape'
@@ -90,6 +94,9 @@ export function RoutinesPage() {
 
 function Editor({ routine, onRemoved }: { routine: Routine; onRemoved: () => void }) {
   const rel = paths.record('routine', routine.id)
+  const rd = useData((s) => s.rd)
+  const today = useData((s) => s.view?.today ?? '')
+  const categories = useMemo(() => settingsOn(rd.settings, today).categories, [rd.settings, today])
   /** The routine changed by `fn` from what it is when the change's turn comes (A6-01). */
   const change = (fn: (r: Routine) => Partial<Routine>) =>
     void updateRecord(rel, (raw) => {
@@ -112,6 +119,8 @@ function Editor({ routine, onRemoved }: { routine: Routine; onRemoved: () => voi
           Usuń
         </button>
       </div>
+      {/* D512: the routine's own cost (null – „jak podkategoria”) over the record as it is when the change's turn comes; what became of it. */}
+      <RoutineCostField id={`routine:${routine.id}`} costs={routine.costs ?? null} categories={categories} onChange={async (costs) => (await saveRoutineRecord(routine.id, { costs })).answer} />
       <div className="grid grid-cols-2 gap-4">
         {(['normal', 'worse'] as RoutineVersion[]).map((v) => (
           <RoutineSteps key={v} version={v} steps={routine[v]} onChange={(fn) => change((r) => ({ [v]: fn(r[v]) }))} />

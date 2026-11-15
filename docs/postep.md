@@ -76,7 +76,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    **Uwagi na później (d7):** TextField po Enter miga starą wartością; TipTap getMarkdown nieliniowy przy tysiącach znaczników;
    proces po will-quit żyje pod obciążeniem do 170 s (czy nowa kopia startuje); QUIT_MS wydłuża też zawieszenie w teście;
    `screens.spec:67` raz 9/10 (Szablony, długość 1 h).
-11. **1.24.0 – czytelna energia i koszt na kafelku (w toku, 14.11; D500, D501, T1270–T1289):** gałąź paczki `claude/1.24.0`
+11. **1.24.0 – czytelna energia i koszt na kafelku (wydane 15.11 02:25, PR #91, run 43655274347; D500, D501, T1270–T1289):** gałąź paczki `claude/1.24.0`
    (od `main` po #90, drzewo `w124`; koordynator regulatedday-a8 – D, specyfikacja, CHANGELOG, wersja, scalanie, Setup.exe).
    1.24-A energia (D500: pasy G · E · B w „Dziś”, pasek najsłabszej puli w „Tygodniu” i „3 dniach”) – d7, gałąź
    `claude/1.24-energia` (drzewo `w124e`, T1280–T1289), przegląd high a8: 9 uwag poprawionych (c6d3f3a), scalone (ff6eba4).
@@ -86,10 +86,37 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    pełne testy, wersja 1.24.0, lokalny Setup.exe w Pobranych; PR do `main` dopiero po zakończonym runie wydania 1.23.0.
    Środowisko: wspólny `node_modules` w katalogu głównym jest ze starego `main` (bez `jsdom`, `@tiptap`) – drzewa paczki
    potrzebują własnego `npm ci`.
-11. **Uchwyt paska (E4b.12 znów nie przechodzi, 15.11, T1500):** wciśnięcie lewego przycisku nie dochodzi do strony
-   paska (okno bez aktywacji) – przeciąganie zaczyna się też od ruchu z przyciskiem, pasek prowadzi proces główny,
+12. **1.25.0 – uwagi po 1.24 (14.11 ok. 23:30, D510–D514, w toku):** gałąź paczki `claude/1.25.0` (drzewo `w125`, od
+   `claude/1.24.0` cfdbab8; po scaleniu PR #91 – `git merge origin/main`), koordynator regulatedday-d7, jeden PR po wydaniu
+   1.24.0. Zadania (plan: „Uwagi po 1.24 – paczka 1.25.0”): A drzewo kategorii (D510) – d7, `claude/1.25-kategorie`
+   (`w125a`, T1310–T1324; A1 model i migracja `wykonawca-opus`, A2 ekran `wykonawca-sonnet`); B sesje w szablonach (D511) –
+   a8, `claude/1.25-sesje` (`w125b`, T1340–T1359); C koszt w szablonach i rutynach (D512) i D Ctrl-kopia (D513) – ab,
+   `w125c`, `w125d` (T1360–T1389); E ✎ szybka edycja (D514) – d7 po A (T1325–T1339). Sesje raportują do d7 (hash,
+   T, „Przyjęte”, odbiór, CHANGELOG); bez PR. Użytkownik niedostępny ok. 10 h – pytania w trakcie: odpowiedź rekomendowana,
+   lista „Przyjęte” po powrocie (także założenia z wiadomości planu 14.11). Środowisko: każde drzewo ma własny
+   `npm ci` i `node node_modules/electron/install.js` – bez dowiązania do katalogu głównego.
+   **Stan 15.11 ok. 02:45:** w paczce scalone A (drzewo: A1, A2, dwie rundy xhigh – 14 + 14 uwag, T1310–T1324, T1390–T1394,
+   T1420–T1426), C (ab, T1360–T1374), D (ab, T1375–T1389), E (✎, przegląd high 10 uwag, T1325–T1338), F (koszt rutyny w ✎
+   i na zaczętym bloku – zdarzenie `routine.cost` z procesu głównego, T1395–T1399, T1430–T1447; dwie rundy xhigh – 11 + 9); wersja 1.25.0, CHANGELOG, odbiór KT, ED,
+   KS, KP, RE. B (sesje) poza 1.25.0 – D515 (użytkownik w sesji a8), a8 przerabia na `claude/1.25-sesje`, wyjdzie jako 1.26.0.
+   Pełne testy 3843, build, lint zielone (20e9a24). Dalej: E2E, `npm run dist:win` → Setup w Pobranych, PR (D285), wydanie.
+   **Przyjęte bez użytkownika (pokazać):** właściwości na podkategorii, kategoria bez kosztu i koloru, te same id; „Jak
+   podkategoria / wariant / rutyna (…)”; nowy wariant „jak podkategoria”; „Usuń” podkategorii = archiwum; kategoria bez
+   podkategorii znika bez pytania (z „Cofnij”); „Inne” zawsze jest, nie da się usunąć; kreator zostawia krok „Sposoby
+   regeneracji”; ✎ tylko dla rzeczy obowiązujących dziś, liczba bloków do 62 dni (bez sesji i wykładów), nazwa i kroki
+   rutyny zmieniają się od razu, także wstecz; kopia tylko tego, co da się przeciągać (nie zaczęte, minione, sesje, wykłady),
+   kopia bierze notatkę, kroki, linki i kopie plików, belka całodniowa bez Ctrl nic nie robi; koszt rutyny tylko dla
+   kategorii rodzaju „rutyna”, w ✎ zapis kosztu dopiero po „Zapisz”; lista „Kategoria” pokazuje „<nazwa> (w archiwum)”; usunięcie rutyny nie zmienia kosztu jej zaczętego bloku;
+   zmiana kosztu rutyny sprzed startu bloku liczy się tylko, gdy start nie zapisał kosztu rutyny (T1440, T1445).
+   **Uwagi na później:** wykrywanie `tree.change` w procesie głównym; wspólny pomocnik kolejności `calendarsFrom` /
+   `categoryGroupsFrom`; jeden pomocnik `{costs, baseFrom}` w `blockCosts.ts`; zmiana kolejności kategorii; Statystyki –
+   kolumna „Kategoria” to podkategorie; „+ Nowa rutyna” bez pola kosztu (pytanie); okienko kosztu w ✎ nie zamyka się
+   klikiem obok; `variants.ts`/`energyOrder.ts` nie widzą zmian kosztu zaczętego bloku; kopia: pytanie o tekst „(z Ctrl –
+   kopię)” w podpowiedzi „Spraw”, `copiedDay` zostawia `task`; ✎ – liczba przy częściowym nadpisaniu przybliżona.
+13. **1.25.1 – uchwyt paska (E4b.12 znów nie przechodzi, 15.11, T1500):** wciśnięcie lewego przycisku nie dochodzi
+   do strony paska (okno bez aktywacji) – przeciąganie zaczyna się też od ruchu z przyciskiem, pasek prowadzi proces główny,
    puszczenie mówi pomocnik (`mouse.watch`). Gałąź `claude/pasek-uchwyt` (drzewo `wdrag`), przegląd xhigh dwie rundy
-   (15 + 14 uwag, poprawione). Wydanie: do decyzji – w paczce 1.25 albo osobno po niej. Uwagi na później: bez pomocnika
+   (15 + 14 uwag, poprawione). Wydanie 1.25.1 po 1.25.0 (decyzja użytkownika 15.11), PR do `main` po zakończonym runie wydania 1.25.0. Uwagi na później: bez pomocnika
    pasek przykryty oknem po nieusłyszanym puszczeniu jedzie za kursorem, aż ten na niego wróci (najdłużej 2 min);
    E2E D303 raz padł lokalnie (miejsce paska po samym kliknięciu uchwytu ≠ start; ścieżka bez zmian, 6 kolejnych przebiegów
    zielonych).

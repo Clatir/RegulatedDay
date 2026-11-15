@@ -187,3 +187,8 @@ export function placeOf(rules: CategoryRules, variantId?: string | null): Place 
 export function costsOf(rules: CategoryRules, variantId?: string | null): Costs {
   return (variantId && rules.variants.find((v) => v.id === variantId)?.costs) || rules.costs
 }
+
+/** Whether the variant has a cost of its own – `costsOf` gives it, not the category's (D510: „Jak wariant” on the tile's window). */
+export function variantHasCosts(rules: CategoryRules, variantId?: string | null): boolean {
+  return !!(variantId && rules.variants.find((v) => v.id === variantId)?.costs)
+}

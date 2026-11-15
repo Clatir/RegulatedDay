@@ -7,6 +7,7 @@
 import type { NamingDay } from '../blockName'
 import { daySnapshotOf, type AnyEvent, type DaySnapshot } from '../model/events'
 import type { DayFile, LectureSeries, Template } from '../model/plan'
+import { routineCostsOf, type Routine } from '../model/routines'
 import { seriesOfBlock, seriesVersionOn, type SeriesPlan } from '../model/series'
 import type { SettingsChange } from '../model/settings'
 import { freshSteps } from '../model/steps'
@@ -22,6 +23,10 @@ export interface PlanInputs {
   lectures: readonly LectureSeries[]
   /** The series with their last days (D381, `seriesPlans`). */
   series: readonly SeriesPlan[]
+  /** The routines (D512: the cost of a routine counts for its blocks – `DayContext.routineCosts`); the snapshot does not read them. */
+  routines: readonly Routine[]
+  /** The ids of routines whose file cannot be read now and was not read before (T1372: not known – their blocks' starts write no cost). */
+  routinesUnknown?: readonly string[]
 }
 
 export interface DaySource {
@@ -72,7 +77,8 @@ export function dayContextOf(inp: PlanInputs, src: DaySource, holidays: HolidayL
     wakeMin: dayWakeMin(snapshot, src.dayFile),
     nextWakeMin: nextWakeForBedtime(null, src.nextFile, inp.changes, nextDate),
     events: src.events,
-    now: at
+    now: at,
+    routineCosts: routineCostsOf(inp.routines, inp.routinesUnknown)
   }
 }
 

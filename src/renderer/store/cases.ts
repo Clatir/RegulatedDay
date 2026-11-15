@@ -10,6 +10,7 @@ import type { CaseDays, EditOutcome, QuickShortcut, RawRecord } from '@shared/ap
 import { marketDay } from '@shared/calendar/holidays'
 import { isRaw, putBlock } from '@shared/data/dayEdits'
 import { nextTaskRaw } from '@shared/engine/caseRepeat'
+import { copiedCase } from '@shared/engine/copy'
 import { sameContentAs } from '@shared/data/merge'
 import { classify, paths } from '@shared/data/paths'
 import {
@@ -336,12 +337,16 @@ export interface CasePushed {
  * (`push.planOf`, T770); `seen` – the day's file as the window knows it, for one not readable now. Its „Cofnij” –
  * `undoCase(result.undo)`; `moved` – the starts that changed.
  */
-export async function planCase(id: string, date: string, startMin: number, o: { push?: CasePush; seen?: (date: string) => RawRecord | null | undefined; durationMin?: number } = {}): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
+export async function planCase(id: string, date: string, startMin: number, o: { push?: CasePush; seen?: (date: string) => RawRecord | null | undefined; durationMin?: number; copy?: boolean } = {}): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
   let block: PlanBlock | null = null
   let moved = 0
+  // D513: dropped with Ctrl held – a new sprawa of the same content is planned (`copiedCase`), the original stays as it is.
+  const copyId = o.copy ? newId() : null
   const r = await change(async (put) => {
-    const rel = relOf(id)
-    const before = rawRecord(rel)
+    const original = rawRecord(relOf(id))
+    if (!original) return 'Tej sprawy już nie ma.'
+    const rel = relOf(copyId ?? id)
+    const before = copyId ? copiedCase(original, copyId, Date.now()) : original
     if (!before) return 'Tej sprawy już nie ma.'
     const r0 = requestFrom(before)
     if (!r0) return 'Tej sprawy już nie ma.'
@@ -379,11 +384,13 @@ export async function planCase(id: string, date: string, startMin: number, o: { 
       }
       put(paths.day(d), days[d] ?? null, next)
     }
-    put(rel, before, p.record)
+    // A copy is a new file that goes with the day holding its block (T923); the sprawa planned again – its own file.
+    if (copyId) put(rel, null, p.record, paths.day(date))
+    else put(rel, before, p.record)
     block = p.block
     return null
   })
-  return { ...r, block: r.saved ? block : null, moved: r.saved ? moved : 0 }
+  return { ...r, block: r.saved ? block : null, moved: r.saved ? moved : 0, ...(copyId ? { id: r.saved ? copyId : null } : {}) }
 }
 
 /** What the morning's step did: `made` – the blocks it put into the plan, `skipped` – the chosen sprawy it left out. */

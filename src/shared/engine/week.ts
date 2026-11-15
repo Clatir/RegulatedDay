@@ -21,7 +21,7 @@ import { blockInfos, movableBlock, plannedSpan, type BlockInfo } from './blocks'
 import { columnEnergy, type EnergyTrack } from './energyTrack'
 import { namingOf } from './context'
 import { snapshotEntries } from './createDay'
-import { computeDay, type DayContext, type DayState } from './day'
+import { computeDay, routineCostsIn, type DayContext, type DayState } from './day'
 import { foldFacts, isPassive, lastRunEnd, OPEN, pausedPlaceOf, ranMinutes, type BlockFact } from './facts'
 import { countedEvents, isFreeDay } from './freeze'
 import { atOf, gridOf } from './grid'
@@ -218,7 +218,7 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen, withCos
   const naming = namingOf(ctx, state.facts)
   // D501: the cost on the tile – a begun block's as the engine counts it now (its start, its changes), another's as planned; changed there
   // on a day not gone by: a block still to come (into the plan), a begun one until it ends (from now on) – `costEditable`.
-  const changes = withCosts ? costChangesOf(ctx.events, state.facts) : new Map()
+  const changes = withCosts ? costChangesOf(ctx, state.facts) : new Map()
   const tileCost = (info: BlockInfo, st: HorizonBlockState): TileCost => {
     const f = state.facts.blocks.get(info.id)
     const costs = f?.startedAt != null ? begunCosts(ctx, state, info, changes) : blockCosts(info, state.settings.categories, info.rules)
@@ -395,7 +395,7 @@ export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay
  */
 function quietDay(ctx: DayContext): HorizonDay {
   const g = gridOf(ctx.date)
-  const infos = blockInfos(g, ctx.plan, foldFacts(g, []), ctx.snapshot.settings)
+  const infos = blockInfos(g, ctx.plan, foldFacts(g, []), ctx.snapshot.settings, routineCostsIn(ctx))
   const byId = new Map(infos.map((b) => [b.id, b]))
   const lm = (idx: number) => logicalMinuteOf(ctx.date, atOf(g, idx))
   const blocks: HorizonBlock[] = []

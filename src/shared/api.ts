@@ -111,6 +111,7 @@ export const CH = {
   attachFiles: 'rd:attachFiles',
   attachPick: 'rd:attachPick',
   attachCommit: 'rd:attachCommit',
+  attachCopy: 'rd:attachCopy',
   addLink: 'rd:addLink',
   openAttachment: 'rd:openAttachment',
   openAttachments: 'rd:openAttachments',
@@ -465,7 +466,11 @@ export interface EditEntry {
   after?: number[]
 }
 
-export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting'; why?: string }
+/**
+ * What became of one entry of an edit; `routineCostKept` – a routine's record written with another cost whose `routine.cost` the journal
+ * did not take (T1446): today's begun blocks of it count the cost they had (the window says so).
+ */
+export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting'; why?: string; routineCostKept?: true }
 
 /**
  * A record chosen from a backup: what the queue did with it, `behindQuestion` – it waits for your answer to an earlier
@@ -912,8 +917,13 @@ export interface RdApi {
   attachFiles(owner: AttachmentOwner, paths: string[]): Promise<AttachPrepared>
   /** „Dołącz plik…”: the main process asks for the files (its own dialog) and copies them; none chosen – none. */
   attachPick(owner: AttachmentOwner): Promise<AttachPrepared>
-  /** The records of copies made (`attachFiles`, `attachPick`) – one edit (`AttachResult`). */
+  /** The records of copies made (`attachFiles`, `attachPick`, `attachCopy`) – one edit (`AttachResult`). */
   attachCommit(ids: string[]): Promise<AttachResult>
+  /**
+   * Copies of the attachments `ids` for the block `owner` (D513: a block copied by Ctrl + drag): new files of their own in the data
+   * folder, no records yet – `attachCommit` writes them in the window's turn.
+   */
+  attachCopy(owner: AttachmentOwner, ids: string[]): Promise<AttachPrepared>
   /** A link added (D410): written at once; the page's title and icon follow on their own (the view changes). */
   addLink(owner: AttachmentOwner, url: string): Promise<AddLinkResult>
   /** An attachment opened by its id – the main process takes its path or address from the record (`AttachmentOpen`). */

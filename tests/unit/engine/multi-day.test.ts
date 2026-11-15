@@ -577,7 +577,7 @@ describe('blockInfos – strażnik reguły (ta sama dla osi „Dziś” i kolumn
   it('movableBlock = niezaczęty, niezdjęty, z własną godziną, nieminiony', () => {
     const plan = [block({ id: 'a', cat: 'inne', at: '09:00', min: 60, origin: 'user' }), block({ id: 'b', cat: 'inne', after: 'a', min: 60, origin: 'user' })]
     const g = gridOf(FUT)
-    const infos = blockInfos(g, dayPlan({ ...new Scenario({ date: FUT, plan }).snapshot }, null), foldFacts(g, []), DEFAULT_SETTINGS)
+    const infos = blockInfos(g, dayPlan({ ...new Scenario({ date: FUT, plan }).snapshot }, null), foldFacts(g, []), DEFAULT_SETTINGS, {})
     const [a, b] = [infos.find((x) => x.id === 'a')!, infos.find((x) => x.id === 'b')!]
     expect([movableBlock(a, undefined, idxOfLogical(g, lm('10:00')), null), movableBlock(b, undefined, idxOfLogical(g, lm('11:00')), null)]).toEqual([true, false])
   })

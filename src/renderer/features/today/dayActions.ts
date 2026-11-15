@@ -427,14 +427,14 @@ export interface WakeDay {
  * blocks from the facts folded from its log – no whole day counted (budget, energy), as the change needs neither.
  */
 export async function wakeDayOf(date: string): Promise<WakeDay> {
-  const { rd, templates, lectures, seriesPlans } = useData.getState()
+  const { rd, templates, lectures, seriesPlans, routines } = useData.getState()
   const data = await window.rd.dayData(date)
   // A day that cannot be read whole now says nothing sure about its blocks that have begun: nothing is written – except
   // the day as last read with the data folder away (its change waits for the folder, E8b.1).
   if (!dayUsable(data)) throw new Error('log albo plik tego dnia jest teraz nieczytelny – spróbuj za chwilę')
   const events = data.events as AnyEvent[]
   const dayFile = data.dayFile ? dayFileFrom(data.dayFile, date) : null
-  const { snapshot } = snapshotOf({ changes: rd.settings, templates, lectures, series: seriesPlans }, { date, events, dayFile, nextFile: null }, marketDay, Date.now())
+  const { snapshot } = snapshotOf({ changes: rd.settings, templates, lectures, series: seriesPlans, routines }, { date, events, dayFile, nextFile: null }, marketDay, Date.now())
   return { snapshot, keep: begunIds(foldFacts(gridOf(date), events)) }
 }
 
