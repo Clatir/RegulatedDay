@@ -226,6 +226,11 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] KP8 Blok serii: kopia to pojedynczy blok bez ↻ (1.25.0)
    - [ ] KP9 Wydarzenia całodniowe: Ctrl + przeciągnięcie belki daje kopię tej samej długości (1.25.0)
    - [ ] KP10 Miesiąc i „Agenda”: Ctrl zaznacza dni; blok zaczęty, miniony, sesja i wykład się nie kopiują (1.25.0)
+   - [ ] RE1 ✎ rutyny – pole „Koszt na godzinę”, zapis dopiero po „Zapisz” (1.25.0)
+   - [ ] RE2 Zmiana kosztu rutyny działa na zaczętym bloku od tej chwili (1.25.0)
+   - [ ] RE3 Własny koszt zaczętego bloku zostaje, „Jak rutyna” wraca do nowego kosztu (1.25.0)
+   - [ ] RE4 „Zmieni N bloków” liczy tylko bloki, których to koszt (1.25.0)
+   - [ ] RE5 Drugi komputer z 1.24 po zmianie kosztu rutyny proponuje instalację (1.25.0) (Tylko Ty – dwa komputery)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -2715,6 +2720,43 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** w „Miesiącu” przytrzymaj Ctrl i zaznacz kilka dni. Przejdź na „Agenda” i sprawdź. Spróbuj skopiować blok zaczęty, miniony, sesję i wykład. Sprawdź zwykłe przeciąganie.
 - **Oczekiwany efekt:** w miesiącu Ctrl dalej zaznacza dni, a „Agenda” bez zmian. Blok zaczęty, miniony, sesja i wykład się nie kopiują. Zwykłe przeciąganie działa jak dotąd.
 - **Nie przechodzi, gdy:** Ctrl przestaje zaznaczać dni w miesiącu; blok zaczęty, miniony, sesja albo wykład się kopiuje.
+
+### RE – koszt rutyny w ✎ i na zaczętym bloku (1.25.0, D512, D514)
+
+#### RE1 ✎ rutyny – pole „Koszt na godzinę” (D514)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/cost-routine-change.test.ts`, `tests/web/edit-thing.test.ts`, `tests/web/edit-scope.test.ts`, `tests/web/routine-cost.test.ts`, `tests/e2e/cost-routine.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” otwórz panel bloku rutyny, kliknij ✎ przy „Rutyna”, w polu „Koszt na godzinę” kliknij [+] przy głowie. Zamknij okno przez „Anuluj”. Otwórz je znowu, zmień koszt i kliknij „Zapisz”.
+- **Oczekiwany efekt:** [+] zmienia napis tylko w oknie; „Anuluj” i Esc nic nie zapisują (pierwszy Esc zamyka samo okienko kosztu); po „Zapisz” kafelek od razu pokazuje nowy koszt, a „Rutyny” – ten sam koszt.
+- **Nie przechodzi, gdy:** koszt zapisuje się przed „Zapisz” albo po „Anuluj”; kafelek nie zmienia się po zapisie.
+
+#### RE2 Zaczęty blok rutyny – nowy koszt od tej chwili (D512, D514)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/cost-routine-change.test.ts`, `tests/web/edit-thing.test.ts`, `tests/web/edit-scope.test.ts`, `tests/web/routine-cost.test.ts`, `tests/e2e/cost-routine.spec.ts`.
+- **Jak sprawdzić:** zacznij blok rutyny bez własnego kosztu, po kilku minutach zmień koszt rutyny – raz w „Rutynach”, raz przez ✎.
+- **Oczekiwany efekt:** kafelek od razu pokazuje nowy koszt; pasy energii w „Dziś” zmieniają nachylenie od chwili zmiany, minione minuty zostają bez skoku.
+- **Nie przechodzi, gdy:** zmienia się energia w minionych minutach; zaczęty blok liczy dalej stary koszt.
+
+#### RE3 Własny koszt zaczętego bloku a „Jak rutyna” (D512)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/cost-routine-change.test.ts`, `tests/web/edit-thing.test.ts`, `tests/web/edit-scope.test.ts`, `tests/web/routine-cost.test.ts`, `tests/e2e/cost-routine.spec.ts`.
+- **Jak sprawdzić:** zaczętemu blokowi rutyny ustaw własny koszt w okienku kafelka, potem zmień koszt rutyny, a na koniec kliknij w okienku kafelka „Jak rutyna (…)”.
+- **Oczekiwany efekt:** własny koszt zostaje po zmianie rutyny; przycisk pokazuje nowy koszt rutyny i do niego wraca.
+- **Nie przechodzi, gdy:** zmiana rutyny nadpisuje własny koszt; „Jak rutyna” wraca do starego kosztu.
+
+#### RE4 „Zmieni N bloków” z rutyną (D514)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/edit-scope.test.ts`.
+- **Jak sprawdzić:** zmień przez ✎ koszt podkategorii „Rutyny i opieka nad zwierzętami”, gdy część jej bloków ma rutynę z własnym kosztem; potem zmień koszt samej rutyny.
+- **Oczekiwany efekt:** przy koszcie podkategorii bloki z rutyną z kosztem się nie liczą; przy koszcie rutyny liczą się tylko bloki tej rutyny bez własnego kosztu.
+- **Nie przechodzi, gdy:** liczba obejmuje bloki, których koszt się nie zmieni.
+
+#### RE5 Drugi komputer z 1.24 (D512)
+- [ ] Odebrane
+- **Automatycznie:** nic – dwa komputery sprawdzasz Ty.
+- **Jak sprawdzić:** na tym komputerze (1.25) zmień koszt rutyny przy zaczętym bloku; drugi komputer ma jeszcze 1.24.
+- **Oczekiwany efekt:** drugi komputer proponuje instalację nowej wersji; jego dane się nie psują.
+- **Nie przechodzi, gdy:** błąd na drugim komputerze albo utrata kosztu rutyny.
 
 ### R – bloki równoległe, plan i widoki (1.23.0, część A; D476, D492–D498)
 

@@ -7,7 +7,8 @@
 - W panelu bloku jest jedna lista „Podkategoria” z nagłówkami kategorii; „+ Nowa…” tworzy podkategorię w wybranej kategorii. Ctrl K znajduje kategorie, podkategorie i warianty. Przycisk w okienku kosztu mówi teraz „Jak podkategoria (…)”, „Jak wariant (…)” albo „Jak rutyna (…)” – zależnie od tego, skąd bierze się koszt.
 - Szybka edycja: obok list „Podkategoria”, „Wariant” i „Rutyna” w panelu bloku jest przycisk ✎. Otwiera okno ze wszystkimi polami wybranej rzeczy, zapisuje zmiany od dziś (bez względu na „Od kiedy” w Ustawieniach) i mówi, ile bloków zmieni.
 - Szablony: kafelki bloków mają koszt na godzinę w prawym dolnym rogu i to samo okienko co w „Dziś” – zmiana zapisuje się w bloku szablonu.
-- Rutyny: rutyna może mieć własny koszt na godzinę (głowa, emocje, bodźce) albo „jak podkategoria”. Blok rutyny kosztuje tyle co rutyna, chyba że ma własny koszt.
+- Rutyny: rutyna może mieć własny koszt na godzinę (głowa, emocje, bodźce) albo „jak podkategoria”. Blok rutyny kosztuje tyle co rutyna, chyba że ma własny koszt. To samo pole jest w oknie ✎ „Rutyna <nazwa>” – zmiana zapisuje się po „Zapisz”.
+- Zmiana kosztu rutyny (w „Rutynach” albo w ✎) działa też na zaczętym bloku tej rutyny – od tej chwili do jego końca; minione minuty zostają policzone po staremu, a „Jak rutyna” wraca do nowego kosztu.
 - Kopiowanie: przeciągnij blok z wciśniętym Ctrl, a blok zostanie na miejscu, a w miejscu upuszczenia stanie jego kopia – w „Dziś”, „3 dniach”, „Tygodniu” (także na inny dzień), „Szablonach” i w wydarzeniach całodniowych. Kopia bierze notatkę, kroki i kopie załączników; jedno „Cofnij” zdejmuje wszystko. Kopia bloku serii to pojedynczy blok poza serią.
 - Sprawę z panelu „Sprawy” przeciągniętą na oś z Ctrl aplikacja kopiuje jako nową, osobną sprawę – oryginał zostaje na liście.
 

@@ -95,6 +95,23 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    T, „Przyjęte”, odbiór, CHANGELOG); bez PR. Użytkownik niedostępny ok. 10 h – pytania w trakcie: odpowiedź rekomendowana,
    lista „Przyjęte” po powrocie (także założenia z wiadomości planu 14.11). Środowisko: każde drzewo ma własny
    `npm ci` i `node node_modules/electron/install.js` – bez dowiązania do katalogu głównego.
+   **Stan 15.11 ok. 02:45:** w paczce scalone A (drzewo: A1, A2, dwie rundy xhigh – 14 + 14 uwag, T1310–T1324, T1390–T1394,
+   T1420–T1426), C (ab, T1360–T1374), D (ab, T1375–T1389), E (✎, przegląd high 10 uwag, T1325–T1338), F (koszt rutyny w ✎
+   i na zaczętym bloku – `block.routineCost`, T1395–T1399; przegląd xhigh w toku); wersja 1.25.0, CHANGELOG, odbiór KT, ED,
+   KS, KP, RE. B (sesje) poza 1.25.0 – D515 (użytkownik w sesji a8), a8 przerabia na `claude/1.25-sesje`, wyjdzie jako 1.26.0.
+   Dalej: poprawki F, pełne testy, build, E2E, `npm run dist:win` → Setup w Pobranych, PR (D285), po scaleniu wydanie.
+   **Przyjęte bez użytkownika (pokazać):** właściwości na podkategorii, kategoria bez kosztu i koloru, te same id; „Jak
+   podkategoria / wariant / rutyna (…)”; nowy wariant „jak podkategoria”; „Usuń” podkategorii = archiwum; kategoria bez
+   podkategorii znika bez pytania (z „Cofnij”); „Inne” zawsze jest, nie da się usunąć; kreator zostawia krok „Sposoby
+   regeneracji”; ✎ tylko dla rzeczy obowiązujących dziś, liczba bloków do 62 dni (bez sesji i wykładów), nazwa i kroki
+   rutyny zmieniają się od razu, także wstecz; kopia tylko tego, co da się przeciągać (nie zaczęte, minione, sesje, wykłady),
+   kopia bierze notatkę, kroki, linki i kopie plików, belka całodniowa bez Ctrl nic nie robi; koszt rutyny tylko dla
+   kategorii rodzaju „rutyna”, w ✎ zapis kosztu dopiero po „Zapisz”; lista „Kategoria” pokazuje „<nazwa> (w archiwum)”.
+   **Uwagi na później:** wykrywanie `tree.change` w procesie głównym; wspólny pomocnik kolejności `calendarsFrom` /
+   `categoryGroupsFrom`; jeden pomocnik `{costs, baseFrom}` w `blockCosts.ts`; zmiana kolejności kategorii; Statystyki –
+   kolumna „Kategoria” to podkategorie; „+ Nowa rutyna” bez pola kosztu (pytanie); okienko kosztu w ✎ nie zamyka się
+   klikiem obok; `variants.ts`/`energyOrder.ts` nie widzą zmian kosztu zaczętego bloku; kopia: pytanie o tekst „(z Ctrl –
+   kopię)” w podpowiedzi „Spraw”, `copiedDay` zostawia `task`; ✎ – liczba przy częściowym nadpisaniu przybliżona.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
