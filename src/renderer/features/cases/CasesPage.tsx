@@ -32,7 +32,7 @@ import { useDay } from '../../store/day'
 import { changeTaskSteps } from '../../store/steps'
 import { tickCaseStep } from '../steps/stepsFinish'
 import { takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
-import { categoryOptions } from '../plan/blockView'
+import { groupedCategoryOptions } from '../plan/blockView'
 import { caseTitle, DATE_PRESETS, afterRequestAdded, doDateNote, filterOf, PRIORITY_CHOICES, presetDate, sectionsOf, statusParts, type PriorityChoice } from './casesLogic'
 import { CasesMatrix } from './CasesMatrix'
 import { readCasesView, rememberCasesView, type CasesView } from './casesView'
@@ -258,7 +258,7 @@ function CaseRow({ x, today, marked }: { x: CaseItem; today: string; marked: boo
         )}
         <DurationField value={isTask ? x.estimateMin : r.estimateMin} range={ESTIMATE_RANGE} onCommit={(estimateMin) => set({ estimateMin })} placeholder="szacunek" aria-label="Szacunek" errorPlacement="float" data-testid="request-estimate" />
         <TextField value={r.note} onCommit={(note) => set({ note })} max={CASE_NOTE_MAX} placeholder={isTask ? 'notatka' : 'czego dotyczy'} aria-label="Notatka" errorPlacement="float" data-testid="request-note" />
-        {isTask ? <Choice value={r.categoryId ?? DEFAULT_TASK_CATEGORY} options={categoryOptions(names, r.categoryId ?? DEFAULT_TASK_CATEGORY)} onChange={(categoryId) => set({ categoryId })} aria-label="Kategoria" data-testid="case-category" /> : <span className="text-[12px] text-muted">prośba</span>}
+        {isTask ? <Choice value={r.categoryId ?? DEFAULT_TASK_CATEGORY} groups={groupedCategoryOptions(names, r.categoryId ?? DEFAULT_TASK_CATEGORY)} onChange={(categoryId) => set({ categoryId })} aria-label="Podkategoria" data-testid="case-category" /> : <span className="text-[12px] text-muted">prośba</span>}
       </div>
       <div className="flex flex-wrap items-center gap-2 text-[12px]">
         {badge && <DueMark badge={badge} />}

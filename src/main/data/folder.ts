@@ -48,6 +48,7 @@ import { CLOSE_WINDOW_H, closeEvents, closeRefusal, closeUndoEvents, ritualActiv
 import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
 import { CLOSE_HOWS, compareEvents, daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type CloseHow, type Domain, type FeltCost, type Signal } from '@shared/model/events'
+import { sameCosts } from '@shared/model/blockCosts'
 import { placeOf, type Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type PlanBlock, type Template } from '@shared/model/plan'
 import { MODULES, personName, RD_SCHEMA, rdFrom, type ModuleId, type WriteOnceField } from '@shared/model/rd'
@@ -55,7 +56,7 @@ import { runningRequestOf } from '@shared/engineView'
 import type { RunningRequest } from '@shared/widget'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { blockName, type Names } from '@shared/blockName'
-import { routineFrom, type Routine } from '@shared/model/routines'
+import { routineCostsOf, routineFrom, type Routine } from '@shared/model/routines'
 import { countDatesToRead, ruleDates, seriesFrom, seriesLast, seriesPlans, typeOfDays, type Series, type SeriesPlan } from '@shared/model/series'
 import type { CsvDay } from '@shared/engine/csv'
 import { changeOrder, isDayTypeId, settingsOn, type DayTypeId, type SettingsChange } from '@shared/model/settings'
@@ -102,7 +103,9 @@ const USER_EVENTS: Record<string, Domain> = {
   'plan.freed': 'timer',
   // The cost of a begun block from a minute on (D501, T1300): the timer's on purpose – an older version, which counts the block by
   // its start, installs the new version without the 24 h (`unknownTimerEvents`); passive for this version's day engine (`PASSIVE`).
-  'block.cost': 'timer'
+  'block.cost': 'timer',
+  // The tree of categories changed (D510, T1313): passive; the timer's on purpose – an older version, which shows no tree, installs at once.
+  'tree.change': 'timer'
 }
 /** The journal keeps own events of this many days back (spec: until the day's freeze plus 7 days – freezing is E6). */
 export const JOURNAL_KEEP_DAYS = 14
@@ -298,6 +301,12 @@ export interface Inputs {
   series: SeriesPlan[]
   /** The own types of the days the counts of the series read (date → type; a day without one is not here). */
   seriesDays: Record<string, DayTypeId>
+  /**
+   * The routines (D512: their costs count for their blocks) – a file that cannot be read now as read before; one never read in this run is
+   * left out, never the day, and its id is in `routinesUnknown` (T1372: its blocks' starts write no routine's cost).
+   */
+  routines: Routine[]
+  routinesUnknown: string[]
 }
 
 /** The rounds of reading the days a count of a series reads (a day read may move its end – `countDatesToRead`). */
@@ -355,6 +364,11 @@ export class DataFolder {
   private editSeq = 0
   /** D511: rd.json as read when it said the move of sessions is made (T1419) – the same record is not parsed again. */
   private movedRd: unknown = null
+  /**
+   * Routines' records written with another cost whose `routine.cost` the journal did not take (T1446): the answer of the window's save of
+   * that record says so (`routineCostKept`), once.
+   */
+  private readonly routineCostKept = new Set<string>()
   private lastCopyScan = 0
   /** Conflict copies with fields different on both sides (copy → the file and the fields). */
   readonly copyConflicts = new Map<string, { canonical: string; conflicts: MergeConflict[] }>()
@@ -425,6 +439,7 @@ export class DataFolder {
           this.cache.delete(rel)
           this.absent.add(rel)
         }
+        this.routineWritten(rel, now.before, now.value)
       }
     })
     this.queue = new EditQueue({ stateDir: o.stateDir, computer: o.computer })
@@ -489,8 +504,36 @@ export class DataFolder {
     if (Object.keys(last).length) this.presence.update({ lastEvents: { ...last, ...this.presence.own.lastEvents } })
   }
 
-  /** A new event of this computer; the presence names its last event of the day. */
-  append(draft: EventDraft, opts: { system?: boolean } = {}): AnyEvent {
+  /**
+   * A routine's record written here with another cost (D514 with D512, T1430): one `routine.cost` in today's log, at once (the journal) –
+   * from now on today's begun blocks of the routine count the new cost. Every write of a record goes through `RecordStore`, so this is every
+   * way a cost gets into the file on this computer: a save of „Rutyny” or ✎, an answer to a question of a conflict, „Przywróć”, a conflict
+   * copy joined, an edit waiting for the folder laid on its return. A record written on another computer has its event in that computer's
+   * log of the day. The cost as the engine reads the file (`routineFrom`). A routine removed – none (T1445): a begun block of it counts on
+   * the cost it ran with (made again – „Cofnij” – a file with its cost: an event as any write). The line goes to the journal without fsync,
+   * which the next write of the log does (`syncLater`, T1447). A journal that cannot be written – logged, the record stays, and the window's
+   * save of it says so (`routineCostKept`, T1446).
+   */
+  private routineWritten(rel: string, before: Record<string, unknown> | null, after: Record<string, unknown> | null): void {
+    const c = classify(rel)
+    if (c?.kind !== 'routine' || c.conflict || !c.id || after === null) return
+    const [then, now] = [routineFrom(before), routineFrom(after)]
+    const was = then?.costs ?? null
+    const costs = now?.costs ?? null
+    if (was === costs || (was && costs && sameCosts(was, costs))) return
+    // The id blocks point at (`PlanBlock.routine`) – the record's own, as `inputs()` reads it.
+    const routine = now?.id ?? then?.id ?? c.id
+    const at = this.clock.now()
+    try {
+      this.append({ day: logicalDayOf(at), dom: 'timer', k: 'routine.cost', routine, at, costs, was }, { syncLater: true })
+    } catch (e) {
+      this.routineCostKept.add(rel)
+      this.o.log?.('error', `koszt rutyny ${routine}: zdarzenie nie zapisane – zaczęty blok liczy dotychczasowy koszt (${String(e)})`)
+    }
+  }
+
+  /** A new event of this computer; the presence names its last event of the day (`opts` – how the journal takes it, `EventLog.append`). */
+  append(draft: EventDraft, opts: { system?: boolean; syncLater?: boolean } = {}): AnyEvent {
     const e = this.log.append(draft, opts)
     this.presence.update({ lastEvents: { ...this.presence.own.lastEvents, [e.day]: e.n } })
     return e
@@ -613,9 +656,11 @@ export class DataFolder {
 
   /**
    * A folder of records – as the folder holds it, or (`own`) as this computer sees it, with your queued edits and new
-   * records still in the queue; a listing that fails keeps the names listed before (unknown is never empty).
+   * records still in the queue; a listing that fails keeps the names listed before (unknown is never empty). `day` – a lenient list the
+   * day is counted from (the routines, D512): every file looked at now (never from the memory of `LIST_TRUST_MS`; a file that cannot be
+   * read now is the version read before – `cachedJson`), one never read left out and its id put in `day.unknown`.
    */
-  private async cachedDir(dir: string, parse: (v: unknown) => unknown, lenient = false, own = false): Promise<unknown[]> {
+  private async cachedDir(dir: string, parse: (v: unknown) => unknown, lenient = false, own = false, day?: { unknown: string[] }): Promise<unknown[]> {
     let names: string[]
     try {
       names = (await this.o.fs.list(join(this.o.dataDir, dir))).filter((e) => !e.dir && e.name.endsWith('.json')).map((e) => e.name)
@@ -635,12 +680,16 @@ export class DataFolder {
     // list for showing takes a file looked at a moment ago from memory (`LIST_TRUST_MS`).
     const raws = await mapLimit(list, DIR_CONCURRENCY, async (rel) => {
       try {
-        const known = lenient ? this.trusted(rel) : undefined
+        const known = lenient && !day ? this.trusted(rel) : undefined
         if (known) return own ? this.queue.overlay(rel, known.value as Record<string, unknown> | undefined) : known.value
         return own ? await this.recordView(rel) : await this.shared(rel)
       } catch (e) {
         // A list for showing (requests) goes on without the unknown record; what a day is made from does not.
-        if (lenient && e instanceof UnknownRecordError) return undefined
+        if (lenient && e instanceof UnknownRecordError) {
+          const id = classify(rel)?.id
+          if (day && id) day.unknown.push(id)
+          return undefined
+        }
         throw e
       }
     })
@@ -663,7 +712,11 @@ export class DataFolder {
     const lectures = (await this.cachedDir(ID_COLLECTIONS.schedule, lectureFrom, false, own)) as LectureSeries[]
     const list = (await this.cachedDir(ID_COLLECTIONS.series, seriesFrom, false, own)) as Series[]
     const { plans, days } = await this.seriesOf(list, changes, own)
-    return { changes, templates, lectures, series: plans, seriesDays: days }
+    // D512: a routine's cost counts for its blocks – every file looked at now; one that cannot be read now is as read before, one never
+    // read is left out (its blocks cost their variant's or category's) and not known (T1372): a routine never makes the day unknown.
+    const unreadable = { unknown: [] as string[] }
+    const routines = (await this.cachedDir(ID_COLLECTIONS.routine, routineFrom, true, own, unreadable)) as Routine[]
+    return { changes, templates, lectures, series: plans, seriesDays: days, routines, routinesUnknown: unreadable.unknown.sort() }
   }
 
   /**
@@ -906,7 +959,7 @@ export class DataFolder {
    * Your edits from the main window (spec „Edycje plików … trafiają najpierw do lokalnej trwałej kolejki”): each goes to
    * the queue on the disk first, then the queue is laid onto the folder; what met a change elsewhere stays a question.
    */
-  async edit(entries: ReadonlyArray<Omit<QueuedEdit, 'id' | 'at' | 'schema' | 'after'> & { schema?: number; after?: readonly number[] }>): Promise<Outcome[]> {
+  async edit(entries: ReadonlyArray<Omit<QueuedEdit, 'id' | 'at' | 'schema' | 'after'> & { schema?: number; after?: readonly number[] }>): Promise<Array<Outcome & { routineCostKept?: true }>> {
     // A new record only where there is none: a file that is there but cannot be read now (OneDrive still fetching it) or
     // that came meanwhile is never taken as missing – its every field would be a question about a change you never made.
     const fresh: string[] = []
@@ -948,9 +1001,17 @@ export class DataFolder {
     this.queue.add(...queued)
     // A new record waiting for the folder is not there till then: shown from the queue, never „unknown” (the bar, lists).
     for (const rel of fresh) this.absent.add(rel)
+    // What an earlier write of these records left unsaid is not this save's (T1446).
+    for (const e of entries) this.routineCostKept.delete(e.rel)
     const outcomes = await this.queue.apply(this.records)
     // One outcome per entry, in their order: an entry a run chained before this one laid has its outcome in the queue.
-    return ids.map((id) => outcomes.find((o) => o.id === id) ?? this.queue.outcomeOf(id))
+    return ids.map((id, i) => {
+      const o = outcomes.find((x) => x.id === id) ?? this.queue.outcomeOf(id)
+      const rel = entries[i]!.rel
+      // Written, its routine's cost not followed by today's begun blocks (the journal did not take `routine.cost`): said once.
+      if (o.status !== 'applied' || !this.routineCostKept.delete(rel)) return o
+      return { ...o, routineCostKept: true as const }
+    })
   }
 
   /** What the engine counts a day from: the snapshot from the log, or – before the leader wrote it – the one this computer computes. */
@@ -1518,7 +1579,8 @@ export class DataFolder {
       const dayFile = await this.dayFile(date, true)
       const nextFile = await this.dayFile(next, true)
       const made = daySnapshotOf(read.events) != null
-      const records = made ? [this.recordSig(paths.day(date)), this.recordSig(paths.day(next)), nextWakeForBedtime(null, nextFile, inp.changes, next)] : this.contextSig(date)
+      // A day made (its snapshot in the log) is counted from its files and the routines' costs (D512 – not in the snapshot).
+      const records = made ? [this.recordSig(paths.day(date)), this.recordSig(paths.day(next)), nextWakeForBedtime(null, nextFile, inp.changes, next), this.routinesSig()] : this.contextSig(date)
       const key = JSON.stringify([when === 'today' ? Math.floor(at / 60_000) : when === 'future' ? today : null, read.lastByComputer, read.events.length, read.copies, records, this.queue.pending.length])
       const was = this.horizonMemo.get(date)
       let day: HorizonDay
@@ -1790,13 +1852,33 @@ export class DataFolder {
 
   /**
    * What a day's context is made of in the folder – the settings, the templates, the plan of lectures, the day's file and
-   * the next one's – by size and time of modification as last read (call after reading them: `inputs`, `dayFile`): a day
-   * is counted again only when one of them changed (T501).
+   * the next one's – by size and time of modification as last read, and the routines' costs (D512) (call after reading them:
+   * `inputs`, `dayFile`): a day is counted again only when one of them changed (T501).
    */
   private contextSig(date: string): string {
     const of = (rel: string) => this.recordSig(rel)
     const dir = (d: string) => (this.listed.get(d) ?? []).map((n) => `${n}=${of(`${d}/${n}`)}`).join(',')
-    return [of(paths.settings), dir(ID_COLLECTIONS.template), dir(ID_COLLECTIONS.schedule), dir(ID_COLLECTIONS.series), this.seriesSig, of(paths.day(date)), of(paths.day(addDays(date, 1)))].join('|')
+    return [of(paths.settings), dir(ID_COLLECTIONS.template), dir(ID_COLLECTIONS.schedule), dir(ID_COLLECTIONS.series), this.routinesSig(), this.seriesSig, of(paths.day(date)), of(paths.day(addDays(date, 1)))].join('|')
+  }
+
+  /**
+   * The routines' costs as their files were last listed and read (D512, T1374): what a day counts of them – a change of a routine's steps
+   * or name counts no day again; a file listed and never read is a routine not known (its id).
+   */
+  private routinesSig(): string {
+    const d = ID_COLLECTIONS.routine
+    const routines: Routine[] = []
+    const unknown: string[] = []
+    for (const n of this.listed.get(d) ?? []) {
+      const rel = `${d}/${n}`
+      const k = classify(rel)
+      if (!k || k.conflict) continue
+      const c = this.cache.get(rel)
+      const r = c ? routineFrom(c.value) : null
+      if (r) routines.push(r)
+      else if (!c && !this.absent.has(rel)) unknown.push(rel)
+    }
+    return JSON.stringify([routineCostsOf(routines), unknown])
   }
 
   /** A record as last read: by size and time of modification ('-': not read, or not there). */

@@ -64,7 +64,7 @@ describe('T1161 – grupa w planie', () => {
     const plan = [flex('a', '10:00', 30), beside(flex('b', '09:00', 60), 'a'), flex('c', '12:00', 30)]
     const s = day(plan)
     const st = computeDay(s.contextAt(s.at('07:30')))
-    const infos = blockInfos(st.grid, plan, st.facts, s.contextAt(s.at('07:30')).snapshot.settings)
+    const infos = blockInfos(st.grid, plan, st.facts, s.contextAt(s.at('07:30')).snapshot.settings, {})
     const byId = new Map(infos.map((b) => [b.id, b]))
     const span = plannedSpan(byId.get('b')!, byId)!
     expect(logicalSpan(st.grid, span.start, span.end)).toEqual({ startMin: lm('10:00'), endMin: lm('11:00') })
@@ -167,7 +167,7 @@ describe('T1164, T1165 – upuszczenie na blok', () => {
     const cyc = [beside(flex('x', '10:30', 30), 't'), block({ id: 't', cat: 'inne', after: 'x', min: 30, origin: 'user' })]
     const s = day(cyc)
     const st = computeDay(s.contextAt(s.at('07:30')))
-    const infos = blockInfos(st.grid, cyc, st.facts, s.contextAt(s.at('07:30')).snapshot.settings)
+    const infos = blockInfos(st.grid, cyc, st.facts, s.contextAt(s.at('07:30')).snapshot.settings, {})
     const byId = new Map(infos.map((b) => [b.id, b]))
     expect(byId.get('x')!.alongside).toBeNull()
     expect(plannedSpan(byId.get('x')!, byId)).not.toBeNull()

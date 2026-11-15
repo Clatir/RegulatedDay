@@ -4,7 +4,8 @@
  * blocks as planned, on days gone by as it was, the energy as a strip at the left edge of a column (D500). A click on the
  * heading of a day or on a block opens its plan, as in the calendar (D295); a click on an empty place of a column (or a drag over it) opens
  * the small window of a new block there (D366). A block that may be moved (`HorizonBlock.movable`) is dragged to another hour
- * or another day (D305, D417, D422): the place it would take is shown while it is held, the drop is `moveWeekBlock`.
+ * or another day (D305, D417, D422): the place it would take is shown while it is held, the drop is `moveWeekBlock`; with Ctrl
+ * held when it is let go (D513) – a copy there (`copyDayBlock`), the block stays: the cursor has „+” while Ctrl is held.
  */
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
@@ -33,7 +34,7 @@ import { hasEnergy } from '../plan/energyDraw'
 import { NewBlockPopover } from './NewBlockPopover'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
 import { saveTileCosts, type CostAsk } from '../plan/costSave'
-import { moveWeekBlock } from './weekMove'
+import { copyDayBlock, moveWeekBlock } from './weekMove'
 import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, regenLine, WEEKDAY_FULL, type Tone } from './weekText'
 import { DENIED_TEXT, dropOn, dropStart, dropStays, sameDrop, weekOnto, type BlockDrop } from './weekViews'
 import { inParallelZone, tileAt } from '../plan/parallelDrag'
@@ -82,6 +83,8 @@ interface Lift {
   grabPx: number
   moved: boolean
   last: BlockDrop | null
+  /** The last place at its hour, never beside another block (D513: a copy goes there, D492's drop onto a block is a move's only). */
+  plain: BlockDrop | null
 }
 
 /** What a block needs to be dragged (`BlockBox`): the press, whether a drag has just ended on it (its click is not a click), whether it is the one held. */
@@ -165,6 +168,8 @@ export function DayGrid({
   const [flight, setFlight] = useState<string | null>(null)
   /** The block held, where it would land and how long it is (the band of its drop – kept from the lift, the view may change meanwhile). */
   const [drop, setDrop] = useState<{ blockId: string; at: BlockDrop; durationMin: number } | null>(null)
+  // D513: Ctrl held while a block is held – its drop is a copy (the cursor with „+”, the band at its hour).
+  const [copying, setCopying] = useState(false)
   const unmute = useRef<(() => void) | null>(null)
   useEffect(
     () => () => {
@@ -178,6 +183,7 @@ export function DayGrid({
     unlisten.current = null
     lift.current = null
     setFlight(null)
+    setCopying(false)
   }
   /**
    * The click that follows a drag is no click on the block (it would open the day) – whenever the button is let go: the mute
@@ -196,10 +202,16 @@ export function DayGrid({
     window.addEventListener('pointerdown', off, true)
     unmute.current = off
   }
-  /** The block put down on `at`: the move, and the line with „Cofnij” it leaves (a refusal has said why by its toast). */
-  const land = async (h: Lift, at: BlockDrop) => {
+  /** The block put down on `at`: the move, and the line with „Cofnij” it leaves (a refusal has said why by its toast); `copy` – Ctrl held (D513). */
+  const land = async (h: Lift, at: BlockDrop, copy = false) => {
     busy.current = true
     try {
+      if (copy) {
+        // D513: a copy at that hour, the block stays; its „Cofnij” is the toast's.
+        const status = await copyDayBlock({ blockId: h.id, name: h.name, from: h.date, to: latest.current.days[at.index]!.date, startMin: at.startMin })
+        if (status === 'refused') toast(PAST_DROP_TEXT, 'info')
+        return
+      }
       const onto = at.onto ? { target: at.onto.target, max: latest.current.max } : undefined
       const res = await moveWeekBlock({ blockId: h.id, name: h.name, names: namesOf(h.date), from: h.date, to: latest.current.days[at.index]!.date, startMin: at.startMin, ...(onto ? { onto } : {}) })
       if (res.push) showWeekPush(res.push)
@@ -224,7 +236,9 @@ export function DayGrid({
   }
   const grab = (b: HorizonBlock, date: string, col: number) => (e: PointerEvent<HTMLElement>) => {
     if (e.button !== 0 || !b.movable || busy.current || lift.current) return
-    const h: Lift = { id: b.id, date, name: blockName(b.named, namesOf(date)), durationMin: b.endMin - b.startMin, startMin: b.startMin, col, pointer: e.pointerId, x0: e.clientX, y0: e.clientY, grabPx: e.clientY - e.currentTarget.getBoundingClientRect().top, moved: false, last: null }
+    const h: Lift = { id: b.id, date, name: blockName(b.named, namesOf(date)), durationMin: b.endMin - b.startMin, startMin: b.startMin, col, pointer: e.pointerId, x0: e.clientX, y0: e.clientY, grabPx: e.clientY - e.currentTarget.getBoundingClientRect().top, moved: false, last: null, plain: null }
+    /** The place the band shows: at its hour with Ctrl held (D513 – a copy), else where the drop puts it. */
+    const shown = (copy: boolean): BlockDrop | null => (copy ? h.plain : h.last)
     lift.current = h
     const move = (ev: globalThis.PointerEvent) => {
       if (ev.pointerId !== h.pointer) return
@@ -251,11 +265,16 @@ export function DayGrid({
       const onto = plain.denied ? null : ontoAt(h.id, L.days[i], ev.clientX, ev.clientY, L.max)
       const next: BlockDrop = onto ? { ...plain, startMin: onto.startMin, onto } : plain
       h.last = next
-      setDrop((was) => (was && sameDrop(was.at, next) ? was : { blockId: h.id, at: next, durationMin: h.durationMin }))
+      h.plain = plain
+      setCopying(ev.ctrlKey)
+      const band = shown(ev.ctrlKey)!
+      setDrop((was) => (was && sameDrop(was.at, band) ? was : { blockId: h.id, at: band, durationMin: h.durationMin }))
     }
     const up = (ev: globalThis.PointerEvent) => {
       if (ev.pointerId !== h.pointer) return
-      const at = h.last
+      // D513: Ctrl held when it is let go – a copy at the hour under the pointer (never beside another block).
+      const copy = ev.ctrlKey
+      const at = shown(copy)
       stop()
       if (!h.moved) return
       muteClick()
@@ -264,7 +283,7 @@ export function DayGrid({
         setDrop(null)
         return
       }
-      void land(h, at)
+      void land(h, at, copy)
     }
     const cancel = (ev: globalThis.PointerEvent) => {
       if (ev.pointerId !== h.pointer) return
@@ -274,7 +293,15 @@ export function DayGrid({
     }
     // Esc of a drag in progress is the drag's alone (heard first, in the capture phase): it must not close a layer under it too.
     const escape = (ev: KeyboardEvent) => {
-      if (ev.key !== 'Escape' || !h.moved) return
+      // D513: Ctrl pressed or let go while held – the band and the cursor say what the drop will do.
+      if (ev.key === 'Control' && h.moved) {
+        setCopying(ev.ctrlKey)
+        const band = shown(ev.ctrlKey)
+        if (band) setDrop((was) => (was && sameDrop(was.at, band) ? was : { blockId: h.id, at: band, durationMin: h.durationMin }))
+        return
+      }
+      // Esc only when pressed: letting it go (keyup, heard for Ctrl) changes nothing.
+      if (ev.type !== 'keydown' || ev.key !== 'Escape' || !h.moved) return
       ev.preventDefault()
       ev.stopPropagation()
       muteClick()
@@ -285,20 +312,23 @@ export function DayGrid({
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', cancel)
     window.addEventListener('keydown', escape, true)
+    window.addEventListener('keyup', escape, true)
     unlisten.current = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', cancel)
       window.removeEventListener('keydown', escape, true)
+      window.removeEventListener('keyup', escape, true)
     }
   }
   const refusing = drop?.at.denied === true && flight != null
   return (
     <div
-      className={cx('flex select-none flex-col', flight != null && (refusing ? '[&_*]:cursor-not-allowed!' : '[&_*]:cursor-grabbing!'))}
+      className={cx('flex select-none flex-col', flight != null && (refusing ? '[&_*]:cursor-not-allowed!' : copying ? '[&_*]:cursor-copy!' : '[&_*]:cursor-grabbing!'))}
       data-testid="week-grid"
       data-mode={mode}
       data-dragging={flight != null ? 'true' : undefined}
+      data-copying={flight != null && copying ? 'true' : undefined}
     >
       {/* The headings stay in view while the axis scrolls. */}
       {/* The strip of all-day events (D405) stays with them, in the same columns. */}
@@ -343,7 +373,7 @@ export function DayGrid({
             onPick={pickOn}
             held={held && spanHeld.includes(i) ? held.range : null}
             waiting={pick?.dates.includes(d.date) ? pick : null}
-            grab={(b) => ({ down: grab(b, d.date, i), consumed: () => muted.current, dragging: flight === b.id })}
+            grab={(b) => ({ down: grab(b, d.date, i), consumed: () => muted.current, dragging: flight === b.id && !copying })}
             drop={drop && drop.at.index === i ? { ...drop.at, durationMin: drop.durationMin } : null}
             tight={mode === 'week'}
           />

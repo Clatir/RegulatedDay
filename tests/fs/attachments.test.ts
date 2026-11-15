@@ -39,6 +39,7 @@ const { reloadData, useData } = await load<{ reloadData: () => Promise<void>; us
 const { useUi } = await load<{ useUi: { getState: () => { toasts: Toast[] }; setState: (s: { toasts: Toast[] }) => void } }>('../../src/renderer/store/ui')
 const store = await load<{
   attachFiles: (owner: AttachmentOwner, paths: string[]) => Promise<AttachResult>
+  copyAttachments: (owner: AttachmentOwner, ids: string[]) => Promise<AttachResult>
   pickFiles: (owner: AttachmentOwner) => Promise<AttachResult>
   addLink: (owner: AttachmentOwner, input: string) => Promise<string | null>
   renameAttachment: (id: string, name: string) => Promise<boolean>
@@ -114,6 +115,7 @@ beforeEach(async () => {
       logEvents: (events) => hub.events(events),
       attachFiles: (owner, p) => hub.prepareFiles(owner, p),
       attachCommit: (ids) => hub.commitFiles(ids),
+      attachCopy: (owner, ids) => hub.prepareCopies(owner, ids),
       addLink: (owner, url) => hub.addLink(owner, url),
       openAttachment: (id) => hub.openAttachment(id),
       openAttachments: (ids) => hub.openAttachments(ids),
@@ -218,6 +220,69 @@ describe('dołączenie pliku: najpierw kopia, potem rekord (T802)', () => {
     const r = await hub.attachFiles(own(), [source('a.txt')])
     expect(r.added).toEqual([])
     expect(existsSync(dir)).toBe(false)
+  })
+})
+
+describe('kopia bloku Ctrl + przeciągnięciem: własne kopie plików załączników (D513)', () => {
+  const seen = (blockId: string) => store.attachmentsFor({ id: blockId, origin: 'user', sourceId: null }, { scope: 'day', date: today(), templateId: null }).map((a) => a.name)
+  // The copy of the block stands in the day beside it (a block gone takes its copies to the bin – T839).
+  beforeEach(async () => {
+    const at = (id: string, startMin: number) => planBlock({ id, categoryId: 'inne', startMin, durationMin: 30 })
+    write(paths.day(today()), { schema: 1, date: today(), blocks: { blk: at('blk', 20 * 60), kopia: at('kopia', 21 * 60) } })
+    await reloadData()
+  })
+
+  it('blok kopii zniknął w czasie kopiowania: rekordy kopii od razu w koszu (jak przy upuszczeniu pliku, T839)', async () => {
+    const file = (await store.attachFiles(own(), [source('x.txt')])).added[0]!
+    const r = await store.copyAttachments(own('nie-ma-go'), [file])
+    expect(recordOf(r.added[0]!)!.removedAt).toEqual(expect.any(Number))
+  })
+
+  it('plik kopiuje się do nowego attachments/<id>/ (nowy rekord kopii), link – nowy rekord tego samego adresu; oryginał bez zmian', async () => {
+    const file = (await store.attachFiles(own(), [source('plan.pdf', 'zawartość')])).added[0]!
+    const link = (await store.addLink(own(), 'https://example.com/a'))!
+    const r = await store.copyAttachments(own('kopia'), [file, link])
+    expect(r.failed).toEqual([])
+    expect(r.added).toHaveLength(2)
+    expect(r.added).not.toContain(file)
+    const [copyFile, copyLink] = r.added.map((id) => recordOf(id)!)
+    expect(copyFile).toMatchObject({ kind: 'file', name: 'plan.pdf', file: { fileName: 'plan.pdf', size: Buffer.byteLength('zawartość') }, owner: own('kopia'), removedAt: null })
+    expect(copyLink).toMatchObject({ kind: 'link', link: { url: 'https://example.com/a' }, owner: own('kopia'), removedAt: null })
+    // Its own file – never the original's folder.
+    expect(readFileSync(join(dir, 'attachments', String(copyFile!.id), 'plan.pdf'), 'utf8')).toBe('zawartość')
+    expect(recordOf(file)!.owner).toEqual(own())
+    expect(seen('kopia')).toEqual(['plan.pdf', 'example.com'])
+    expect(seen('blk')).toEqual(['plan.pdf', 'example.com'])
+  })
+
+  it('usunięcie kopii (kosz, po 30 dniach sprzątanie) nie rusza pliku oryginału – i odwrotnie', async () => {
+    const a = (await store.attachFiles(own(), [source('a.txt', 'A')])).added[0]!
+    const b = (await store.attachFiles(own(), [source('b.txt', 'B')])).added[0]!
+    const [ca, cb] = (await store.copyAttachments(own('kopia'), [a, b])).added
+    expect(await store.removeAttachments([ca!])).not.toBeNull()
+    expect(await store.removeAttachments([b])).not.toBeNull()
+    const folder = hub.service!.folder
+    expect(await folder.attachmentSweep(folder.clock.now() + ATTACHMENT_KEEP_MS + 60_000)).toBe(2)
+    // The removed copy and the removed original are gone – each with its own folder only.
+    expect(existsSync(join(dir, 'attachments', ca!))).toBe(false)
+    expect(existsSync(join(dir, 'attachments', b))).toBe(false)
+    expect(readFileSync(join(dir, 'attachments', a, 'a.txt'), 'utf8')).toBe('A')
+    expect(readFileSync(join(dir, 'attachments', cb!, 'b.txt'), 'utf8')).toBe('B')
+    expect(recordOf(a)!.removedAt).toBeNull()
+    expect(recordOf(cb!)!.removedAt).toBeNull()
+  })
+
+  it('plik, który jeszcze nie dotarł, i załącznik usunięty – bez kopii, z powodem; reszta się kopiuje', async () => {
+    write(attachmentRel('brak1'), fileRecord('brak1', 'nie-ma.txt'))
+    const gone = (await store.attachFiles(own(), [source('g.txt')])).added[0]!
+    await store.removeAttachments([gone])
+    const ok = (await store.attachFiles(own(), [source('ok.txt')])).added[0]!
+    await reloadData()
+    const r = await store.copyAttachments(own('kopia'), ['brak1', gone, ok])
+    expect(r.added).toHaveLength(1)
+    expect(recordOf(r.added[0]!)).toMatchObject({ name: 'ok.txt' })
+    expect(r.failed.map((f) => f.name)).toEqual(['nie-ma.txt', 'załącznik'])
+    expect(useUi.getState().toasts.some((t) => t.text.startsWith('Nie dołączono 2 plików'))).toBe(true)
   })
 })
 

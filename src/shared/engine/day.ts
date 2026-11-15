@@ -12,6 +12,7 @@
  */
 import { compareEvents, eventAt, isKnown, type AnyEvent, type DaySnapshot, type MinuteClass } from '../model/events'
 import type { PlanBlock } from '../model/plan'
+import { NO_ROUTINE_COSTS, type RoutineCosts } from '../model/routines'
 import { placeOf } from '../model/categories'
 import type { DayTypeParams, RulesSettings } from '../model/settings'
 import { placeLogical } from '../time/day'
@@ -75,7 +76,15 @@ export interface DayContext {
    * zapisano”): time to explain after a work block without an answer is rest also toward the minimum (D265).
    */
   asWritten?: boolean
+  /**
+   * The costs of the routines with their own (D512, `routineCostsOf` – `dayContextOf` gives them from `PlanInputs.routines`): a block
+   * of a routine not begun costs its routine's before its variant's and category's; a begun one – what its start wrote. None – none.
+   */
+  routineCosts?: RoutineCosts
 }
+
+/** The routines' costs of a day's context (none given – none). */
+export const routineCostsIn = (ctx: Pick<DayContext, 'routineCosts'>): RoutineCosts => ctx.routineCosts ?? NO_ROUTINE_COSTS
 
 /** A session's typical length in the day's context (by the session's id in the layer), null – its whole window. */
 export const typicalOf =
@@ -544,7 +553,7 @@ export function computeDay(ctx: DayContext): DayState {
   const now = Math.max(0, Math.min(cap, idxOf(g, ctx.now)))
   const snapshot = ctx.snapshot
   const settingsAt = (k: number) => settingsAtMinute(snapshot, facts, k)
-  const blocks = blockInfos(g, ctx.plan, facts, snapshot.settings, (k) => settingsAt(k).dayType)
+  const blocks = blockInfos(g, ctx.plan, facts, snapshot.settings, routineCostsIn(ctx), (k) => settingsAt(k).dayType)
   const byId = new Map(blocks.map((b) => [b.id, b]))
   const c: Ctx = {
     g,

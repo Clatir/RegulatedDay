@@ -113,6 +113,7 @@ const api: RdApi = {
   attachFiles: (owner, paths) => ipcRenderer.invoke(CH.attachFiles, owner, paths),
   attachPick: (owner) => ipcRenderer.invoke(CH.attachPick, owner),
   attachCommit: (ids) => ipcRenderer.invoke(CH.attachCommit, ids),
+  attachCopy: (owner, ids) => ipcRenderer.invoke(CH.attachCopy, owner, ids),
   addLink: (owner, url) => ipcRenderer.invoke(CH.addLink, owner, url),
   openAttachment: (id) => ipcRenderer.invoke(CH.openAttachment, id),
   openAttachments: (ids) => ipcRenderer.invoke(CH.openAttachments, ids),

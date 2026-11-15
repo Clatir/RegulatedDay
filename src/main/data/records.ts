@@ -22,9 +22,10 @@ export type RecordRead =
 
 /**
  * A record of the folder written or removed by this computer: always called (its cached copy is stale at once); `now` only
- * once the write or removal is done – the content the file holds now (null: removed), never after a write that failed.
+ * once the write or removal is done – the content the file holds now (null: removed), never after a write that failed – with
+ * `before`, what it held just before (null: no file; for a conflict copy removed – the copy's own content).
  */
-export type Written = (rel: string, now?: { value: Record<string, unknown> | null }) => void
+export type Written = (rel: string, now?: { value: Record<string, unknown> | null; before: Record<string, unknown> | null }) => void
 
 export class BrokenRecordError extends Error {
   constructor(readonly rel: string) {
@@ -78,11 +79,11 @@ export class RecordStore {
       const { kind, id } = historyKey(c)
       await this.o.history.snapshot(kind, id, before.value, reason === 'merge' ? 'merge' : 'edit')
     }
-    await this.put(rel, value)
+    await this.put(rel, value, before.status === 'ok' ? before.value : null)
   }
 
-  /** The file's content written whole (atomically), said to `written` – with the content only once it is there. */
-  private async put(rel: string, value: Record<string, unknown>): Promise<void> {
+  /** The file's content written whole (atomically), said to `written` – with the content only once it is there (`before` – what it held). */
+  private async put(rel: string, value: Record<string, unknown>, before: Record<string, unknown> | null): Promise<void> {
     const text = `${JSON.stringify(value, null, 2)}\n`
     let done = false
     try {
@@ -90,18 +91,18 @@ export class RecordStore {
       done = true
     } finally {
       // As a read of the file would give it (JSON drops what it cannot hold).
-      this.o.written?.(rel, done ? { value: JSON.parse(text) as Record<string, unknown> } : undefined)
+      this.o.written?.(rel, done ? { value: JSON.parse(text) as Record<string, unknown>, before } : undefined)
     }
   }
 
-  /** A file removed, said to `written` like a write (null: not there once the removal is done). */
-  private async drop(rel: string): Promise<void> {
+  /** A file removed, said to `written` like a write (null: not there once the removal is done; `before` – what it held). */
+  private async drop(rel: string, before: Record<string, unknown> | null): Promise<void> {
     let done = false
     try {
       await this.o.fs.remove(join(this.o.dataDir, rel))
       done = true
     } finally {
-      this.o.written?.(rel, done ? { value: null } : undefined)
+      this.o.written?.(rel, done ? { value: null, before } : undefined)
     }
   }
 
@@ -113,7 +114,7 @@ export class RecordStore {
       const { kind, id } = historyKey(c)
       await this.o.history.snapshot(kind, id, before.value, 'delete')
     }
-    await this.drop(rel)
+    await this.drop(rel, before.status === 'ok' ? before.value : null)
   }
 
   /** Conflict copies in a folder of the data (relative paths with the file each is a copy of). */
@@ -145,13 +146,13 @@ export class RecordStore {
       const key = c ? historyKey(c) : null
       if (key && (await this.o.history.lastReason(key.kind, key.id, ['conflict'])) === 'delete') {
         if (!(await this.o.history.snapshot(key.kind, key.id, copy.value, 'conflict'))) return { joined: false, conflicts: [] }
-      } else await this.put(canonicalRel, copy.value)
-      await this.drop(copyRel)
+      } else await this.put(canonicalRel, copy.value, null)
+      await this.drop(copyRel, copy.value)
       return { joined: true, conflicts: [] }
     }
     if (canon.status !== 'ok') return { joined: false, conflicts: [] }
     if (deepEqual(copy.value, canon.value)) {
-      await this.drop(copyRel)
+      await this.drop(copyRel, copy.value)
       return { joined: true, conflicts: [] }
     }
     // Without a common base: what only one side has is an addition, what both have differently is a question – unless
@@ -174,8 +175,8 @@ export class RecordStore {
       await this.o.history.snapshot(kind, id, canon.value, 'conflict')
       await this.o.history.snapshot(kind, id, copy.value, 'conflict')
     }
-    await this.put(canonicalRel, merged)
-    await this.drop(copyRel)
+    await this.put(canonicalRel, merged, canon.value)
+    await this.drop(copyRel, copy.value)
     return { joined: true, conflicts: [] }
   }
 }

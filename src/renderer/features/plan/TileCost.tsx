@@ -1,11 +1,12 @@
 /**
  * The cost per hour on a block's tile (D501): three numbers in the colours of the pools („3 · 1 · 1”, a regeneration „−1 · −2 · −3”,
  * „3·1·1” in the week) and, on a click, a small window beside the tile for this block alone – „głowa”, „emocje”, „bodźce” with [−] and
- * [+] between −5 and 5, and „Jak kategoria (3·1·1)”, which gives the block's own cost up. The tile places the label (`className`);
+ * [+] between −5 and 5, and „Jak podkategoria (3·1·1)” – „Jak wariant (…)” when its variant has a cost of its own (D510, `resetLabel`) –,
+ * which gives the block's own cost up. The tile places the label (`className`);
  * a press and a click on it stop here, so they neither drag the block nor open its panel. The window stands over the page (a portal,
  * the tile clips what is inside it), closes with Esc, a press elsewhere, a scroll and a resize; while a question of a series' scope is open
  * it steps aside (it would stand over the question) and comes back after it. Its clicks are saved one after another, each as what it
- * does (a step of a pool, „Jak kategoria”) over what is saved when its turn comes – a click is never lost, a save that did not surely
+ * does (a step of a pool, „Jak podkategoria”) over what is saved when its turn comes – a click is never lost, a save that did not surely
  * write (refused, a question, unknown) leaves the window at what is saved. A block of a series asks its scope once while the window is
  * open (`CostAsk`, D501): the next clicks use it.
  */
@@ -28,7 +29,7 @@ interface Shown {
   own: boolean
 }
 const sameShown = (a: Shown, b: Shown): boolean => a.own === b.own && sameCosts(a.costs, b.costs)
-/** A click of the window: a step of a pool, or „Jak kategoria”; `ask` – the memory of the window it was made in. */
+/** A click of the window: a step of a pool, or „Jak podkategoria” / „Jak wariant”; `ask` – the memory of the window it was made in. */
 type Op = ({ k: 'step'; pool: Pool; by: 1 | -1 } | { k: 'reset' }) & { ask: CostAsk }
 
 /** The size the window is placed by (its width is fixed, its height a little over three rows and the button). */
@@ -49,6 +50,12 @@ export function popPlace(anchor: { left: number; right: number; top: number; bot
   const below = anchor.bottom + GAP
   const top = below + POP_H + MARGIN <= view.height ? below : Math.max(MARGIN, anchor.top - GAP - POP_H)
   return { left, top }
+}
+
+/** The button that gives the block's own cost up (D510): back to its variant's own cost, else to its subcategory's – with the numbers. */
+export function resetLabel(cost: Pick<TileCostInfo, 'base' | 'baseFrom'>): string {
+  const from = cost.baseFrom === 'routine' ? 'Jak rutyna' : cost.baseFrom === 'variant' ? 'Jak wariant' : 'Jak podkategoria'
+  return `${from} (${costsText(cost.base, true)})`
 }
 
 /** The words the label says to a hand that hovers it (and to a reader of the screen). */
@@ -237,7 +244,7 @@ export function TileCost({
               </div>
             ))}
             <button type="button" className="btn mt-0.5" aria-pressed={!shown.own} onClick={() => push({ k: 'reset', ask: ask.current })} data-testid="cost-pop-reset">
-              Jak kategoria ({costsText(cost.base, true)})
+              {resetLabel(cost)}
             </button>
           </div>,
           document.body

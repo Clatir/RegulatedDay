@@ -287,8 +287,10 @@ function categoryFrom(v: unknown, fallback: CategoryRules | undefined): Category
             {
               id: x.id,
               name: x.name.slice(0, 80),
-              ...(PLACES.has(x.place as string) ? { place: x.place as CategoryRules['place'] } : fv?.place ? { place: fv.place } : {}),
-              ...(x.costs !== undefined ? { costs: costsFrom(x.costs, fv?.costs ?? f.costs) } : fv?.costs ? { costs: fv.costs } : {}),
+              // null – „jak podkategoria” (D510, T1314): a place or a cost given up; left out – the one before stays (a list written
+              // before D510 never left one out on purpose).
+              ...(x.place === null ? {} : PLACES.has(x.place as string) ? { place: x.place as CategoryRules['place'] } : fv?.place ? { place: fv.place } : {}),
+              ...(x.costs === null ? {} : x.costs !== undefined ? { costs: costsFrom(x.costs, fv?.costs ?? f.costs) } : fv?.costs ? { costs: fv.costs } : {}),
               ...(x.archived === true ? { archived: true } : {})
             }
           ]

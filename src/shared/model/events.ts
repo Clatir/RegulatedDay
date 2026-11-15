@@ -45,14 +45,21 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * work in front for requests and the forecast); it gives way to this one as the leader. 13 – the cost of a begun block changed
  * from a minute on (D501, `block.cost`): an older version skips the event and counts the block by its start's costs to its end
  * – the descents it would register (`energy.reserve`) and the reward of the frozen day; it gives way to this one as the leader
- * (and, the event being the timer's, installs the new version without the 24 h – `unknownTimerEvents`). 14 – sessions in the
- * templates (D511, D515, `model/sessionMigration.ts`): the leader moves the layer of sessions into the templates once and makes
- * the days with them (an hour earlier in the weeks of the shift, shortened by an early close, asked about on a weekday
- * „pytaj”, none on a weekday „nie”) – an older version reads the entries as fixed blocks of their category at their Polish
- * hour on every day of their template, „nie” too (no shift, no early close, no question, never twice: the layer is empty
- * from the move, T1403); it gives way to this one as the leader and freezes no day.
+ * (and, the event being the timer's, installs the new version without the 24 h – `unknownTimerEvents`). 14 – the cost of a routine
+ * (D512, `Routine.costs`, `planned.routineCosts`): a block of a routine with a cost of its own costs that before its variant's and
+ * category's – an older version counts it without it (the descents it would register, the reward of the frozen day); it gives way to
+ * this one as the leader. 14 too (the same release, T1430) – the routine's cost changed while its block runs reaches the block from that
+ * minute on (`routine.cost`, the timer's: an older version installs the new one without the 24 h). 15 – sessions in the templates
+ * (D511, D515, `model/sessionMigration.ts`, T1419): the leader moves the layer of sessions into the templates once and makes the days
+ * with them (an hour earlier in the weeks of the shift, shortened by an early close, asked about on a weekday „pytaj”, none on a
+ * weekday „nie”) – an older version reads the entries as fixed blocks of their category at their Polish hour on every day of their
+ * template, „nie” too (no shift, no early close, no question, never twice: the layer is empty from the move, T1403); it gives way to
+ * this one as the leader and freezes no day.
  */
-export const RULES_VERSION = 14
+export const RULES_VERSION = 15
+
+/** The rules since which a block's start writes the cost of its routine (D512, `planned.routineCosts`): an earlier start had none. */
+export const ROUTINE_COSTS_FROM = 14
 
 /** What a block's start wrote of its plan (`block.start.planned`). */
 export interface StartPlanned {
@@ -61,6 +68,12 @@ export interface StartPlanned {
   durationMin: number
   fixed: boolean
   costs?: Costs | null
+  /**
+   * The cost of the block's routine at the start (D512, `BlockInfo.routineCosts`; null – none). No field: a start of an older version
+   * (`v` < `ROUTINE_COSTS_FROM`, which knew no routine's cost) – read as null, the past stays as counted; one of this version – the
+   * routine's file could not be read then (T1372): the routine's cost as known now.
+   */
+  routineCosts?: Costs | null
   bgCostPct?: number | null
   name?: string | null
   task?: string | null
@@ -157,6 +170,24 @@ export type TimerEvent =
    * an unknown event of the timer, counts the block by its start and installs the new version without the 24 h.
    */
   | (EventBase & { k: 'block.cost'; block: string; at: number; costs: Costs | null })
+  /**
+   * The cost of a routine changed (D514 with D512, T1430): the main process writes one whenever this computer writes the routine's record
+   * (`routines/<id>.json`) with another cost – a save of „Rutyny” or ✎, an answer to a question of a conflict, „Przywróć” of an older
+   * version, a conflict copy joined –, never the window. From the minute of `at` every begun block of the day whose start's routine is
+   * `routine` and whose start's category is of the kind „rutyna” (the plan's for a start without them) counts `costs` (null – none: its
+   * variant's or category's) as its routine's cost; `was` – the routine's cost before (a start that wrote none counts it up to the first
+   * change, T1432). Its routine's, not its own: an own cost stays and „Jak rutyna” (`block.cost` null) goes back to it. By time, not by
+   * the block's start: a block begun after it by a start that wrote the old cost (a computer the new file had not reached) counts it from
+   * its start (T1431); the last of a minute wins. Passive for the day engine (`PASSIVE`); the timer's domain on purpose (T1300): an older
+   * version keeps it as an unknown event of the timer and installs the new version without the 24 h.
+   */
+  | (EventBase & { k: 'routine.cost'; routine: string; at: number; costs: Costs | null; was: Costs | null })
+  /**
+   * The tree of categories changed in the window (D510, T1313): a group added, renamed, removed, a subcategory moved, a variant changed.
+   * Nothing reads it – passive (`PASSIVE`); the timer's domain on purpose, as `block.cost` (T1300): an older version, which knows no tree,
+   * keeps it as an unknown event of the timer and installs the new version without the 24 h (`unknownTimerEvents`).
+   */
+  | (EventBase & { k: 'tree.change'; at: number })
   /** `place` (ms, D478): where the paused block stands – the place of the block whose start swapped with it. */
   | (EventBase & { k: 'block.pause'; block: string; at: number; place?: number })
   | (EventBase & { k: 'block.resume'; block: string; at: number; confirmUntil: number | null })
@@ -386,7 +417,9 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'energy.reserve': { at: isNum, pool: isPool },
   'energy.module': { at: isNum, on: (v) => typeof v === 'boolean', was: (v) => v === undefined || typeof v === 'boolean' },
   'energy.cost': { block: isStr, at: isNum, costs: (v) => v === null || isCosts(v) },
-  'block.cost': { block: isStr, at: isNum, costs: (v) => v === null || isCosts(v) }
+  'block.cost': { block: isStr, at: isNum, costs: (v) => v === null || isCosts(v) },
+  'routine.cost': { routine: isStr, at: isNum, costs: (v) => v === null || isCosts(v), was: (v) => v === null || isCosts(v) },
+  'tree.change': { at: isNum }
 }
 
 export const KNOWN_KINDS: ReadonlySet<string> = new Set(Object.keys(NEEDS))

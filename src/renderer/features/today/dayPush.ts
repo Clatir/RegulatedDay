@@ -128,6 +128,23 @@ export function parallelHint(day: { ctx: DayContext; state: DayState }, c: Paral
   return { text: c.text, span, pushed: moves.size ? moves : null }
 }
 
+/**
+ * D513: the key of a copy's own place in the preview while it is held (an id no block has, never written): the axis draws the
+ * copy there (`Timeline` `shownSpan`); the block copied keeps its own key.
+ */
+export const COPY_SPAN_ID = '__copy__'
+
+/**
+ * D513: the copy `copy` of block `originalId` put into the day (`pushes` – a day to come) and what it pushes apart, as a new block
+ * (D367) – the original held where it is, as a fixed block: a copy never changes it (it is neither pushed nor written), the
+ * flexible blocks that would meet it go past it. An original of another day – not in this plan – changes nothing of the rule.
+ */
+export function copyChange(day: { ctx: DayContext; state: DayState }, copy: PlanBlock, originalId: string, pushes: boolean): DayChange {
+  const held = day.ctx.plan.map((b) => (b.id === originalId ? { ...b, fixed: true } : b))
+  const pushed = pushes ? pushApart(day.ctx, day.state, withBlock(held, copy), copy.id, { onUnsettled }).filter((p) => p.id !== originalId) : []
+  return { was: null, block: copy, patch: copy, others: [], pushed }
+}
+
 /** A new block added to a day to come (`pushes`) and what it pushes apart (D367: „Dodaj” in the panel of „Dziś”). */
 export function addChange(day: { ctx: DayContext; state: DayState }, block: PlanBlock, pushes: boolean): DayChange {
   return { was: null, block, patch: block, others: [], pushed: pushes ? pushApart(day.ctx, day.state, withBlock(day.ctx.plan, block), block.id, { onUnsettled }) : [] }

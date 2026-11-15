@@ -1,6 +1,6 @@
-/** D501: the cost a block has – own, else its variant's, else its category's – and how the three numbers are told. */
+/** D501, D512: the cost a block has – own, else its routine's, else its variant's, else its category's – and how the three numbers are told. */
 import { describe, expect, it } from 'vitest'
-import { blockCosts, costNumber, costStep, costsText, sameCosts } from '@shared/model/blockCosts'
+import { baseCosts, blockCosts, costNumber, costStep, costsText, poolCostsFrom, sameCosts } from '@shared/model/blockCosts'
 import { planBlock, planBlockFrom } from '@shared/model/plan'
 import { blockJson, putBlock } from '@shared/data/dayEdits'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
@@ -10,25 +10,56 @@ const analiza = cats.analiza!
 
 describe('blockCosts (D501)', () => {
   it('a block without costs of its own has its category’s', () => {
-    const r = blockCosts({ costs: null, categoryId: 'analiza', variantId: null }, cats, analiza)
+    const r = blockCosts({ costs: null, categoryId: 'analiza', variantId: null, routineCosts: null }, cats, analiza)
     expect(r).toEqual({ costs: { head: 3, emotions: 1, senses: 1 }, base: { head: 3, emotions: 1, senses: 1 }, own: false })
   })
 
   it('the variant’s costs go before the category’s', () => {
-    const r = blockCosts({ costs: null, categoryId: 'regeneracja', variantId: 'drzemka' }, cats, cats.regeneracja!)
+    const r = blockCosts({ costs: null, categoryId: 'regeneracja', variantId: 'drzemka', routineCosts: null }, cats, cats.regeneracja!)
     expect(r.costs).toEqual({ head: -3, emotions: -1, senses: -2 })
     expect(r.own).toBe(false)
   })
 
   it('its own costs win, the base stays what the category says', () => {
-    const r = blockCosts({ costs: { head: 5, emotions: 0, senses: -1 }, categoryId: 'analiza', variantId: null }, cats, analiza)
+    const r = blockCosts({ costs: { head: 5, emotions: 0, senses: -1 }, categoryId: 'analiza', variantId: null, routineCosts: null }, cats, analiza)
     expect(r.costs).toEqual({ head: 5, emotions: 0, senses: -1 })
     expect(r.base).toEqual({ head: 3, emotions: 1, senses: 1 })
     expect(r.own).toBe(true)
   })
 
   it('a category the settings do not know is read from the rules the block was counted with', () => {
-    expect(blockCosts({ costs: null, categoryId: 'gone', variantId: null }, cats, analiza).costs).toEqual(analiza.costs)
+    expect(blockCosts({ costs: null, categoryId: 'gone', variantId: null, routineCosts: null }, cats, analiza).costs).toEqual(analiza.costs)
+  })
+})
+
+describe('koszt rutyny w kolejności kosztu bloku (D512)', () => {
+  const R = { head: 4, emotions: -2, senses: 0 }
+
+  it('blok z rutyną z kosztem: koszt rutyny przed kategorią, „Jak kategoria” wraca do niego', () => {
+    expect(blockCosts({ costs: null, categoryId: 'analiza', variantId: null, routineCosts: R }, cats, analiza)).toEqual({ costs: R, base: R, baseFrom: 'routine', own: false })
+  })
+
+  it('koszt rutyny przed kosztem wariantu', () => {
+    expect(blockCosts({ costs: null, categoryId: 'regeneracja', variantId: 'drzemka', routineCosts: R }, cats, cats.regeneracja!).costs).toEqual(R)
+  })
+
+  it('własny koszt bloku przed kosztem rutyny', () => {
+    const own = { head: 0, emotions: 0, senses: 5 }
+    expect(blockCosts({ costs: own, categoryId: 'analiza', variantId: null, routineCosts: R }, cats, analiza)).toEqual({ costs: own, base: R, baseFrom: 'routine', own: true })
+  })
+
+  it('rutyna bez kosztu – wariant, potem kategoria (jak przed D512)', () => {
+    expect(baseCosts(cats, 'regeneracja', 'drzemka', cats.regeneracja!, null)).toEqual({ head: -3, emotions: -1, senses: -2 })
+    expect(baseCosts(cats, 'analiza', null, analiza, null)).toEqual(analiza.costs)
+    expect(baseCosts(cats, 'analiza', null, analiza, R)).toEqual(R)
+  })
+
+  it('koszt z pliku: trzy całe liczby −5…5, inaczej brak', () => {
+    expect(poolCostsFrom({ head: -5, emotions: 5, senses: 0 })).toEqual({ head: -5, emotions: 5, senses: 0 })
+    expect(poolCostsFrom({ head: 6, emotions: 0, senses: 0 })).toBeNull()
+    expect(poolCostsFrom({ head: 1, emotions: 0 })).toBeNull()
+    expect(poolCostsFrom(null)).toBeNull()
+    expect(poolCostsFrom([1, 1, 1])).toBeNull()
   })
 })
 

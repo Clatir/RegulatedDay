@@ -335,7 +335,7 @@ describe('przeniesienie sesji do szablonów (D511, D515)', () => {
       ['ny', MF.join(' ')]
     ])
     // Its rules are older: it gives way to this version as the leader and freezes no day (`decideLeader`, `mayFreeze`).
-    expect(RULES_VERSION).toBeGreaterThanOrEqual(14)
+    expect(RULES_VERSION).toBeGreaterThanOrEqual(15)
   })
 
   it('kreator zapisuje sesje do szablonów od początku: dni jak z warstwy sesji, bez kopii i bez drugiego przeniesienia', () => {

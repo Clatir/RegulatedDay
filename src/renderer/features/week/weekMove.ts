@@ -18,12 +18,16 @@ import { plDateWithWeekday } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
 import { logicalDayOf } from '@shared/time/day'
 import { countedDay, type DayModel } from '../../store/day'
-import { editOf, isSaved, trySaveWith, withOwner, type SendState } from '../../store/data'
+import { editOf, isSaved, trySaveWith, useData, withOwner, type SendState } from '../../store/data'
 import { hiddenBlocksAmong } from '../calendars/calendarFilter'
 import { MOVE_GONE_TEXT, movedDay, stayedOf, type Stayed, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
 import { blockNow, putChange, withPushed, type PushedStart } from '../today/dayActions'
 import { axisEndOf, dragChange, onUnsettled, parallelChange, pushedStarts } from '../today/dayPush'
 import { blockName } from '../plan/blockView'
+import { copyBlockTo } from '../plan/blockCopy'
+import { dayPlace } from '../attachments/attachView'
+import { dayHeading } from './weekText'
+import { weekday } from '@shared/time/zone'
 import { groupEndMin, parallelDrop, parallelFullText, parallelJoinText } from '@shared/engine/parallel'
 
 /** Where a block was dropped: its day (`from`), the day of the column it was dropped on (`to`) and its new start there. */
@@ -239,6 +243,40 @@ function pushedOn(day: DayModel, block: PlanBlock, followers: readonly PlanBlock
   const plan = followers.reduce((p, f) => withBlock(p, f), withBlock(day.ctx.plan, block))
   const pushed = pushApart(day.ctx, day.state, plan, block.id, { onUnsettled })
   return pushedStarts(day.ctx.plan, { pushed })
+}
+
+/**
+ * The block dropped with Ctrl held (D513) – the one way of „Dziś”, „3 dni” and „Tydzień”: a copy at the hour of the drop – in its own
+ * day or another one (today or later, as a move: D417) – the original stays where it is; the copy pushes the flexible blocks after
+ * it apart (D367, as a new block; the original held), the sprawy it is for copied as new ones, its attachments' files copied in the
+ * background (`copyBlockTo`, one „Cofnij” in the toast). Both days are read and counted in the turn of the write (two quick copies:
+ * the second counts the first; one gone meanwhile – nothing written). Resolves once the plan is saved.
+ */
+export async function copyDayBlock(m: Pick<WeekMove, 'blockId' | 'name' | 'from' | 'to' | 'startMin'>, at = Date.now()): Promise<WeekMoveStatus> {
+  const today = logicalDayOf(at)
+  if (!mayMoveBetween(m.from, m.to, today)) return 'refused'
+  const r = await copyBlockTo({
+    to: m.to,
+    today,
+    startMin: m.startMin,
+    name: m.name,
+    at,
+    ...(m.from !== m.to ? { dayText: dayHeading(m.to, weekday(m.to) - 1) } : {}),
+    read: async () => {
+      const dates = [...new Set([m.from, m.to])]
+      const files = await window.rd.dayFiles(dates)
+      for (const d of dates) if (!(d in files)) throw new Error(moveUnreadableText(d))
+      const [source, there] = await Promise.all(dates.map((d) => countedDay(d, files[d] ?? null, at)))
+      if (!source) throw new Error(moveUncountedText(m.from))
+      const target = m.from === m.to ? source : there
+      if (!target) throw new Error(moveUncountedText(m.to))
+      const was = source.ctx.plan.find((b) => b.id === m.blockId)
+      if (!was) throw new Error(MOVE_GONE_TEXT)
+      const fromFile = files[m.from] ?? null
+      return { block: blockNow(dayRaw(fromFile, m.from), m.from, was), place: dayPlace(m.from, source.snapshot.templateId, useData.getState().templates, source.state.dayType), day: target, file: files[m.to] ?? null }
+    }
+  })
+  return r.saved ? 'saved' : statusOf(r.outcomes, r.sent ?? { afterSend: false })
 }
 
 /** Today's pushing told to the bar for the marker of variants only (D400: no line of its own – the one „Cofnij” is the window's). */

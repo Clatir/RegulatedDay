@@ -49,7 +49,9 @@ import { SettingNumber } from '../settings/SettingNumber'
 import { templateBlockPatch } from '@shared/model/templateSessions'
 import { axisSources, axisVersion, previewChanges } from './sessionChoices'
 import { SessionFields } from './SessionFields'
-import { templateAdd, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
+import { templateAdd, templateCopy, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
+import { copyTemplateBlock } from '../plan/blockCopy'
+import { COPY_SPAN_ID } from '../today/dayPush'
 import { freshAfter, removeTemplate, removeTemplateBlock } from './templateActions'
 
 export function TemplatesPage() {
@@ -260,9 +262,10 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     // D515, T1455: every session of the version on the axis, whole, whatever the sample's weekday and early closes; the shift
     // of the clocks moves it and the wake (D372) – `axisVersion`. The template as written (T1450 – `previewChanges`).
     const t: Template = { ...template, versions: [{ ...axisVersion(version, sample), from: '2000-01-01' }] }
-    return countDay(sample, { date: sample, dayFile: { schema: 1, date: sample, dayType: template.dayType }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: previewChanges(rd.settings), templates: [t], lectures, series: [] }, placeLogical(sample, 4 * 60), false)
-  }, [template, version, sample, rd.settings, lectures])
-  const axis = useMemo(() => dayAxis(model, names, null), [model, names])
+    return countDay(sample, { date: sample, dayFile: { schema: 1, date: sample, dayType: template.dayType }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: previewChanges(rd.settings), templates: [t], lectures, series: [], routines }, placeLogical(sample, 4 * 60), false)
+  }, [template, version, sample, rd.settings, lectures, routines])
+  // D512: the cost on every tile (`planCosts`), its window only on the template's own blocks.
+  const axis = useMemo(() => dayAxis(model, names, null, null, true), [model, names])
   // Template blocks have the day's derived ids: the block of the version is found by its source (a session by its entry, D511).
   const byPlanId = useMemo(() => axisSources(model.ctx.plan, version.blocks), [model, version.blocks])
   // D410: the attachments of the version's blocks (those of the template, by the block's id in it) – 📎N on the tile, a drop of files on it.
@@ -270,7 +273,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const attachPlace = useMemo<BlockPlace>(() => ({ scope: 'template', templateId: template.id }), [template.id])
   const items = useMemo(() => {
     // A template's list has no ticks: no counter „✓ n/m” on its tiles (D443).
-    const own = axis.items.map((i) => ({ ...i, id: byPlanId.get(i.id) ?? i.id, dim: !byPlanId.has(i.id), steps: undefined, movable: i.movable === true && byPlanId.has(i.id) }))
+    const own = axis.items.map((i) => ({ ...i, id: byPlanId.get(i.id) ?? i.id, dim: !byPlanId.has(i.id), steps: undefined, movable: i.movable === true && byPlanId.has(i.id), cost: i.cost && { ...i.cost, edit: byPlanId.has(i.id) } }))
     const blocks = new Map(version.blocks.map((b) => [b.id, b]))
     return withAttachCounts(own, (id) => blocks.get(id) ?? null, attachPlace, attachments)
   }, [axis, byPlanId, version.blocks, attachPlace, attachments])
@@ -384,6 +387,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
             markers={axis.markers}
             selected={selected}
             onSelect={(id) => setSelected(version.blocks.some((b) => b.id === id) ? id : null)}
+            // D512: the window of a tile's cost – the template block's own cost, in the version from the date shown (no series).
+            onCosts={(id, costs) => patchBlock(id, { costs })}
             onMove={(id, startMin) => {
               // D305: the template's block with its own start, moved in steps of 5 min (in the template's hours); D367: with
               // the blocks it pushes apart.
@@ -401,8 +406,18 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
               void saveChange(c)
               return c.span
             }}
-            // D367: while a block is dragged, the blocks it pushes apart at their new places.
-            pushPreview={(id, span, edge, shown) => {
+            // D513: dropped with Ctrl held – a copy of the block at that hour, a new block of the template (one „Cofnij” in the toast).
+            onCopy={(id, startMin) => {
+              const b = version.blocks.find((x) => x.id === id)
+              if (b) void copyTemplateBlock({ templateId: template.id, from, day: model, block: b, startMin, name: blockName(b, names) })
+            }}
+            // D367: while a block is dragged, the blocks it pushes apart at their new places (D513: a copy's too, and where it will stand).
+            pushPreview={(id, span, edge, shown, copy) => {
+              if (copy) {
+                const b = version.blocks.find((x) => x.id === id)
+                const p = b ? templateCopy(model, b, span.startMin, COPY_SPAN_ID).preview : null
+                return p?.size ? p : null
+              }
               const c = templateDrag(model, id, span, edge, shown)
               return c?.preview.size ? c.preview : null
             }}

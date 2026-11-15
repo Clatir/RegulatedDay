@@ -10,6 +10,7 @@
 import { BLOCK_COLORS } from '../theme'
 import { calendarsFrom, categoryCalendarFrom, type Calendar } from './calendars'
 import { DEFAULT_CATEGORIES } from './categories'
+import { categoryGroupsFrom, type CategoryGroup } from './categoryTree'
 import { goalsFrom, type MonthGoals } from './goals'
 import { changeFrom, changeOrder, type SettingsChange } from './settings'
 import { isIsoDate } from '../time/zone'
@@ -70,6 +71,8 @@ export interface CategoryMeta {
   archived: boolean
   /** The calendar it belongs to (D419, `model/calendars.ts`); none: „Moje”. Present only when the file names one. */
   calendar?: string
+  /** Its category in the tree (D510, `model/categoryTree.ts`); none: its group of D510, else „Inne”. Present only when the file names one. */
+  group?: string
 }
 
 export interface Person {
@@ -85,6 +88,11 @@ export interface RdFile {
   categories: Record<string, CategoryMeta>
   /** The calendars (D419): „Moje” first, then the file's in its order; groups of categories, only the views of the window read them. */
   calendars: Calendar[]
+  /**
+   * The categories of the tree (D510, `model/categoryTree.ts`): the groups of D510 and the file's, by order, „Inne” last – the archived ones
+   * too. Old data without them reads as the tree of D510; the engine never reads them.
+   */
+  categoryGroups: CategoryGroup[]
   people: Person[]
   /** The first computer's wizard finished (when, on which computer): the folder holds this app's data. */
   setup: { at: number; by: string } | null
@@ -195,7 +203,8 @@ function categoriesFrom(v: unknown): Record<string, CategoryMeta> {
       name,
       color: typeof x.color === 'string' && (CATEGORY_COLORS as readonly string[]).includes(x.color) ? x.color : (before?.color ?? null),
       archived: x.archived === true,
-      ...(calendar ? { calendar } : {})
+      ...(calendar ? { calendar } : {}),
+      ...(typeof x.group === 'string' && x.group ? { group: x.group } : {})
     }
   }
   return out
@@ -225,6 +234,7 @@ export function rdFrom(v: unknown): RdFile {
     general: generalFrom(r.general),
     categories: categoriesFrom(r.categories),
     calendars: calendarsFrom(r.calendars),
+    categoryGroups: categoryGroupsFrom(r.categoryGroups),
     people: peopleFrom(r.people),
     setup,
     ritualFrom: isIsoDate(r.ritualFrom) ? r.ritualFrom : null,

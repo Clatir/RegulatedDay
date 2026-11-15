@@ -289,6 +289,22 @@ export function moveBetweenDays(fromRaw: Raw | null, toRaw: Raw | null, b: PlanB
 }
 
 /**
+ * What every copy of a block is (the day copied, a block copied by Ctrl + drag – D513): a new id, yours, out of where it came
+ * from (no template's, series' nor session's source – a block of a series copied is a single block out of it), with none of
+ * the original's history (no moves, no day it came from, no variant's mark); its steps start again on the copy (D440: the
+ * day's ticks are the original's, by its id). The note, the name, the costs and the rest stay.
+ */
+/**
+ * A block as a copy of `b` with its own id: none of its history; a template's session a session of its own (its session's id
+ * – `BlockSession.id` – not taken, T1461), a session's place set by a change of type – not its (`byType`).
+ */
+function asCopy(b: PlanBlock, id: string): PlanBlock {
+  const { byType: _t, session, ...rest } = b
+  const own = session ? (({ id: _id, ...field }) => ({ session: field }))(session) : {}
+  return { ...rest, ...own, id, origin: 'user', sourceId: null, moves: 0, movedFrom: null, steps: freshSteps(b.steps), byVariant: false }
+}
+
+/**
  * A day copied to another (spec „Skopiuj ten dzień do…”): your blocks and the template's, with new ids (anchors follow
  * them), as yours; sessions and lectures come from that day's own layer and plan of lectures, so they are not copied.
  * The target's own template blocks are cancelled – its plan becomes the copied one.
@@ -302,24 +318,26 @@ export function copiedDay(plan: readonly PlanBlock[]): PlanBlock[] {
     const start = b.anchor && !anchor ? plannedStartMin(b, plan) : b.startMin
     if (anchor == null && start == null) continue
     out.push({
-      ...b,
-      id: ids.get(b.id)!,
+      ...asCopy(b, ids.get(b.id)!),
       anchor,
       startMin: anchor ? null : start,
-      origin: 'user',
-      sourceId: null,
-      moves: 0,
-      movedFrom: null,
       // A request belongs to one day: a copy is a plain block of its category; no variant changed it there.
       requests: [],
-      // Its steps start again on the day of the copy (D440): the copy has new ids, the day's ticks are the original's.
-      steps: freshSteps(b.steps),
-      byVariant: false,
       // Beside the copy of its group's block (T1167); that one not copied – a block of its own.
       alongside: b.alongside ? (ids.get(b.alongside) ?? null) : null
     })
   }
   return out
+}
+
+/**
+ * A block copied by Ctrl + drag (D513) to `startMin` (kept in the logical day): a copy (`asCopy`) with its own hour – no anchor,
+ * no group of parallel blocks, no recorder; `origin` 'template' – a block of a template's version (`id` – the template's own kind
+ * of id). Its task and requests are the copies the caller made of them (`engine/copy.ts`: a sprawa copied is a new one); none –
+ * a block of its category alone.
+ */
+export function copiedBlock(b: PlanBlock, startMin: number, o: { id?: string; origin?: 'user' | 'template'; task?: string | null; requests?: readonly string[] } = {}): PlanBlock {
+  return { ...asCopy(b, o.id ?? newId()), origin: o.origin ?? 'user', startMin: inDay(startMin), anchor: null, alongside: null, recorder: null, task: o.task ?? null, requests: [...(o.requests ?? [])] }
 }
 
 /**

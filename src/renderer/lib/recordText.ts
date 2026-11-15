@@ -7,6 +7,7 @@ import { classify } from '@shared/data/paths'
 import { countLabel, durationLabel, logicalClock, plDate } from '@shared/format'
 import { ALL_DAY_COLOR_NAMES, type AllDayColor } from '@shared/model/allDay'
 import { DEFAULT_CALENDAR_ID, DEFAULT_CALENDAR_NAME } from '@shared/model/calendars'
+import { OTHER_GROUP } from '@shared/model/categoryTree'
 import { fieldByKey } from '@shared/model/fields'
 import { CASE_LIST_NAMES, isPriority, PRIORITY_NAMES, type CaseList } from '@shared/model/requests'
 import { categoryName, MODULE_NAMES, personName, type ModuleId, type RdFile } from '@shared/model/rd'
@@ -77,6 +78,8 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
     if (key === 'person') return personName(n.rd, v)
     // A calendar by its name (D419): the category's `calendar`, an all-day event's `calendarId`; one the file no longer has is said so.
     if (key === 'calendar' || key === 'calendarId') return n.rd.calendars.find((c) => c.id === v)?.name ?? (v === DEFAULT_CALENDAR_ID ? DEFAULT_CALENDAR_NAME : 'kalendarz usunięty')
+    // The category of the tree a subcategory is in (D510): by its name; one the file does not know is „Inne” (where the subcategory is).
+    if (key === 'group') return (n.rd.categoryGroups.find((g) => g.id === v) ?? n.rd.categoryGroups.find((g) => g.id === OTHER_GROUP))?.name ?? 'Inne'
     if (key === 'dayType') return DAY_TYPE_NAMES[v as DayTypeId] ?? v
     if (key === 'color' && Object.hasOwn(ALL_DAY_COLOR_NAMES, v)) return ALL_DAY_COLOR_NAMES[v as AllDayColor]
     if (key === 'state') return STATES[v] ?? v
@@ -168,7 +171,14 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames, va
   if (kind === 'schedule') return a === 'name' ? 'nazwa' : a === 'weekday' ? 'dzień tygodnia' : a === 'startMin' ? 'godzina' : a === 'durationMin' ? 'długość' : a === 'from' ? 'od' : a === 'to' ? 'do' : 'inne pole wykładu'
   if (kind === 'settings') {
     if (a === 'people') return b ? `osoba ${n.rd.people.find((p) => `#${p.id}` === b)?.name ?? ''}`.trim() : 'osoby'
-    if (a === 'categories') return b ? `kategoria ${categoryName(n.rd, b)}${rest[0] === 'name' ? ': nazwa' : rest[0] === 'color' ? ': kolor' : rest[0] === 'archived' ? ': archiwum' : rest[0] === 'calendar' ? ': kalendarz' : ''}` : 'kategorie'
+    // D510: what the code calls a category is a subcategory of the tree; its `group` – the category (group) it is in.
+    if (a === 'categories') return b ? `podkategoria ${categoryName(n.rd, b)}${rest[0] === 'name' ? ': nazwa' : rest[0] === 'color' ? ': kolor' : rest[0] === 'archived' ? ': archiwum' : rest[0] === 'calendar' ? ': kalendarz' : rest[0] === 'group' ? ': kategoria' : ''}` : 'podkategorie'
+    // The categories of the tree (D510): the list by item and field (`ITEM_LISTS`), the name from the settings as they are now.
+    if (a === 'categoryGroups') {
+      if (!b) return 'kategorie'
+      const group = n.rd.categoryGroups.find((g) => `#${g.id}` === b)
+      return `${group ? `kategoria ${group.name}` : 'kategoria'}${rest[0] === 'name' ? ': nazwa' : rest[0] === 'order' ? ': kolejność' : rest[0] === 'archived' ? ': archiwum' : ''}`
+    }
     // The calendars (D419): the list by item and field (the queue writes them so, `ITEM_LISTS`), the name from the settings as they are now.
     if (a === 'calendars') {
       if (!b) return 'kalendarze'

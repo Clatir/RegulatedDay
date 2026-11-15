@@ -8,8 +8,9 @@
  * `viewAt(facts, m)` is what was known at the start of minute m: only what happened before it (T413) – the engine judges
  * every minute by the values in force when it began.
  */
+import { poolCostsFrom } from '../model/blockCosts'
 import type { Costs } from '../model/categories'
-import { compareEvents, eventAt, isKnown, type AnyEvent, type CloseHow, type EventBase, type LogEvent, type MinuteClass, type StartPlanned } from '../model/events'
+import { compareEvents, eventAt, isKnown, ROUTINE_COSTS_FROM, type AnyEvent, type CloseHow, type EventBase, type LogEvent, type MinuteClass, type StartPlanned } from '../model/events'
 import { settingsFrom, type DayTypeId, type RulesSettings } from '../model/settings'
 import { blockNameFrom, requestIdsFrom, type PlanBlock } from '../model/plan'
 import type { RoutineVersion } from '../model/routines'
@@ -307,7 +308,7 @@ const newBlock = (id: string): BlockFact => ({
 })
 
 /** Events that never change the timer's facts (they do not make segments stale either); energy never does either. */
-const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen', 'fewer.start', 'fewer.end', 'water.drink', 'notice.shown', 'block.exchange', 'cost.felt', 'routine.done', 'plan.freed', 'block.cost'])
+const PASSIVE = new Set(['minutes', 'hardend.pass', 'presence.first', 'gap.open', 'gap.close', 'observe.from', 'observe.alive', 'observe.to', 'module.set', 'question.seen', 'fewer.start', 'fewer.end', 'water.drink', 'notice.shown', 'block.exchange', 'cost.felt', 'routine.done', 'plan.freed', 'block.cost', 'routine.cost', 'tree.change'])
 
 export const isPassive = (e: AnyEvent): boolean => PASSIVE.has(e.k) || e.dom === 'energy'
 
@@ -388,8 +389,16 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[]): DayFacts {
         b.group = typeof e.group === 'string' && e.group.length > 0 ? e.group : null
         b.startOrder = orderOf(e)
         // `tag` of a start an older version wrote (D467) is never read – it may ride along in the spread, unused.
-        const { name, task, routine, requests, ...planned } = e.planned
-        b.planned = { ...planned, variantId: planned.variantId ?? null, fixed: planned.fixed === true, ...startNaming({ name, task, routine, requests }) }
+        const { name, task, routine, requests, routineCosts, ...planned } = e.planned
+        b.planned = {
+          ...planned,
+          variantId: planned.variantId ?? null,
+          fixed: planned.fixed === true,
+          // D512: the routine's cost at the start – a value that is no cost is none; no field: a start of a version before routine costs
+          // had none (null), one of a later version did not know it then (T1372 – no field: the routine's cost as known now).
+          ...(routineCosts !== undefined ? { routineCosts: poolCostsFrom(routineCosts) } : !(e.v >= ROUTINE_COSTS_FROM) ? { routineCosts: null } : {}),
+          ...startNaming({ name, task, routine, requests })
+        }
         b.runs.push({ from: at, to: OPEN, bg: e.bg === true, begun: orderOf(e) })
         if (e.confirmUntil != null) b.confirms.push({ at, from: at, to: idx(e.confirmUntil), order: orderOf(e) })
         break

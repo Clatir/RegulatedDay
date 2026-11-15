@@ -2,6 +2,7 @@
  * How a block is named and coloured in the main window (spec „W interfejsie tylko prawdziwe nazwy”): its category or
  * variant, its routine, the people of its requests; the category's colour or its class's. Never an id.
  */
+import { pickTree } from '@shared/model/categoryTree'
 import { CLASS_COLORS, categoryName } from '@shared/model/rd'
 import type { PlanBlock } from '@shared/model/plan'
 import { blockKind, blockName, nameById, type Names } from '@shared/blockName'
@@ -34,6 +35,18 @@ export function categoryOptions(n: Pick<Names, 'rd' | 'settings'>, keep?: string
     .map(([id, r]) => ({ id, r, name: categoryName(n.rd, id) }))
     .sort((a, b) => order[a.r.cls] - order[b.r.cls] || a.name.localeCompare(b.name, 'pl'))
     .map(({ id, name }) => ({ value: id, label: name }))
+}
+
+/**
+ * The subcategories you can choose for a block in one list with a header for each category of the tree (D510, `pickTree`): the groups in
+ * their order, each with its subcategories (not archived – `keep`, the block's own, stays), by class and name; empty groups left out.
+ */
+export function groupedCategoryOptions(n: Pick<Names, 'rd' | 'settings'>, keep?: string): Array<{ group: string; label: string; options: Array<{ value: string; label: string }> }> {
+  return pickTree(n.rd, n.settings.categories, keep).map(({ group, categories }) => ({
+    group: group.id,
+    label: group.name,
+    options: categories.map((id) => ({ value: id, label: categoryName(n.rd, id) }))
+  }))
 }
 
 /**

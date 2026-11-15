@@ -45,7 +45,7 @@ const TITLES: Record<StepId, string> = {
   calendar: 'Zjazdy',
   people: 'Osoby',
   regenWays: 'Sposoby regeneracji',
-  costs: 'Koszty kategorii',
+  costs: 'Koszty podkategorii',
   modules: 'Moduły',
   computer: 'Ten komputer',
   summary: 'Podsumowanie'
@@ -507,7 +507,7 @@ function StepRegenWays() {
   const setVariants = (variants: typeof regen.variants) => patchSettings({ categories: { regeneracja: { variants } } })
   return (
     <div className="flex flex-col gap-3">
-      <Lead>Sposoby regeneracji, z których wybierasz przy propozycji odpoczynku. Każdy ma własny koszt (ujemny – oddaje energię).</Lead>
+      <Lead>Sposoby regeneracji, z których wybierasz przy propozycji odpoczynku, to warianty podkategorii „Regeneracja” (w ustawieniach: Kategorie → Wolne → Regeneracja). Każdy ma własny koszt (ujemny – oddaje energię).</Lead>
       <ul className="flex flex-col gap-1.5">
         {regen.variants
           .filter((v) => !v.archived)
@@ -698,7 +698,7 @@ function Preview({ today }: { today: string }) {
     return countDay(
       shown,
       { date: shown, dayFile, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false },
-      { changes: draftChanges(w), templates: draftTemplates(), lectures: w.lectures, series: [] },
+      { changes: draftChanges(w), templates: draftTemplates(), lectures: w.lectures, series: [], routines: [] },
       placeLogical(shown, 4 * 60),
       false
     )

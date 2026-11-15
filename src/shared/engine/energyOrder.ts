@@ -19,7 +19,8 @@
  * boundary – before the approval, past the day's maximum (D378).
  */
 import { logicalClock } from '../format'
-import { POOLS, costsOf, type Costs, type Pool } from '../model/categories'
+import { blockCosts } from '../model/blockCosts'
+import { POOLS, type Costs, type Pool } from '../model/categories'
 import { PLAN_MAX } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
 import { ownHourBlock, type BlockInfo } from './blocks'
@@ -129,7 +130,8 @@ export function energyOrderVariant(ctx: DayContext, state: DayState, energy: Ene
     return v
   }
   const settings = state.settings
-  const costs = (b: BlockInfo): Costs => b.costs ?? costsOf(settings.categories[b.categoryId] ?? b.rules, b.variantId)
+  // The one rule of a block's cost (D501, D512: own, routine, variant, category – `blockCosts`).
+  const costs = (b: BlockInfo): Costs => blockCosts(b, settings.categories, b.rules).costs
   const free = regenVariant(settings, 'gra')
   const workEnd = state.lastWorkForecast
   const charge = (b: BlockInfo, prevCat: string | null): PoolUnits => ({

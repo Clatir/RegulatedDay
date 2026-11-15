@@ -19,7 +19,7 @@ import { dayFileFrom, emptyDayFile, planBlock, planBlockFrom, type BlockSession,
 import { DAY_TYPES, NY_ZONE, settingsOn, type SessionChoice, type SettingsChange } from '@shared/model/settings'
 import { daySettings, knownSessionDefs, sessionOwnersOf, templateBlockPatch } from '@shared/model/templateSessions'
 import { RULES_VERSION } from '@shared/model/events'
-import { copiedTemplate } from '@shared/engine/planEdit'
+import { copiedBlock, copiedTemplate } from '@shared/engine/planEdit'
 import { logicalMinuteOf, placeLogical } from '@shared/time/day'
 import { lm } from './dsl'
 import { blockName } from '@shared/blockName'
@@ -204,7 +204,7 @@ describe('sesje z szablonu typu dnia (D511) – „Sesje tradingowe”', () => {
   })
 
   const contextOf = (date: string, templates: Template[], dayFile: DayFile | null, at: number, events: Parameters<typeof dayContextOf>[1]['events'] = []) =>
-    dayContextOf({ changes: [migrated()], templates, lectures: [], series: [] }, { date, events, dayFile, nextFile: null }, holidays, at)
+    dayContextOf({ changes: [migrated()], templates, lectures: [], series: [], routines: [] }, { date, events, dayFile, nextFile: null }, holidays, at)
 
   it('sesja z szablonu w dniu z sesjami nie przesuwa maksimum; zostawiona albo dodana w dniu bez sesji – do swojego końca plus bufor', () => {
     // The template's own maximum 15:00: the day has its sessions by default – the maximum stays.
@@ -354,7 +354,7 @@ describe('sesje z szablonu typu dnia (D511) – „Sesje tradingowe”', () => {
     const date = '2026-10-21'
     const at = placeLogical(date, 9 * 60)
     // The day made by the layer (before the move): its sessions without a block of a template.
-    const layerDay = dayContextOf({ changes: [], templates: [], lectures: [], series: [] }, { date, events: [], dayFile: null, nextFile: null }, holidays, at)
+    const layerDay = dayContextOf({ changes: [], templates: [], lectures: [], series: [], routines: [] }, { date, events: [], dayFile: null, nextFile: null }, holidays, at)
     expect(layerDay.plan.find((b) => b.sourceId === 'ny')!.name).toBeNull()
     const inp = { ctx: layerDay, state: computeDay(layerDay), energyNow: null, to: 'zwykly' as const, settings: daySettings(settingsOn([migrated()], date, at), [ordinary], 'zwykly', date), withAdd: true, dayFile: null }
     const p = planTypeChange(inp)
@@ -441,7 +441,7 @@ describe('sesje z szablonu typu dnia (D511) – „Sesje tradingowe”', () => {
     const at = placeLogical(date, 9 * 60)
     // A Saturday made by the layer (the weekend „nie”), NY answered „tak”: 14:00.
     const file: DayFile = { ...emptyDayFile(date), sessions: { ny: 'yes' } }
-    const ctx = dayContextOf({ changes: [], templates: [], lectures: [], series: [] }, { date, events: [], dayFile: file, nextFile: null }, holidays, at)
+    const ctx = dayContextOf({ changes: [], templates: [], lectures: [], series: [], routines: [] }, { date, events: [], dayFile: file, nextFile: null }, holidays, at)
     expect(ctx.plan.find((b) => b.sourceId === 'ny')!.startMin).toBe(lm('14:00'))
     const ordinary15 = template('zwykly', 'zwykly', [LONDON, { ...NY, startMin: lm('15:00') }])
     const inp = { ctx, state: computeDay(ctx), energyNow: null, to: 'zwykly' as const, settings: daySettings(settingsOn([migrated()], date, at), [ordinary15], 'zwykly', date), dayFile: file }
@@ -459,6 +459,20 @@ describe('sesje z szablonu typu dnia (D511) – „Sesje tradingowe”', () => {
     // Both out: the session is gone – its attachment goes.
     const none2 = { ...tpl, versions: [...tpl.versions, { from: '2026-10-22', budgetMin: null, maxMin: null, blocks: [] }] }
     expect(templateRemovalIds([a], 'zwykly', tpl, none2, '2026-10-22', () => true)).toEqual(['a'])
+  })
+
+  it('kopia bloku Ctrl + przeciągnięciem (D513): wpis sesji – osobna sesja (bez id sesji oryginału), blok ze zmiany typu – bez znacznika (T1461)', () => {
+    const entry = { ...NY, id: 'ny-sesja', session: { ...NY.session!, id: 'ny' } }
+    const copy = copiedBlock(entry, lm('16:00'), { id: 'kopia', origin: 'template' })
+    expect([copy.id, copy.session]).toEqual(['kopia', { zone: NY_ZONE, markets: ['NYSE', 'CME_FX'], days: YES7 }])
+    // In the version with its original: two sessions, each once on the day.
+    const snap = createDay(inputs('2026-10-21', { templates: [template('zwykly', 'zwykly', [entry, copy])] }))
+    expect(snap.blocks.filter((b) => b.origin === 'session').map((b) => [b.sourceId, b.startMin])).toEqual([
+      ['ny', lm('14:00')],
+      ['kopia', lm('16:00')]
+    ])
+    const placed = { ...snap.blocks.find((b) => b.sourceId === 'ny')!, byType: 'zjazd-stacjonarny' as const }
+    expect(copiedBlock(placed, lm('18:00'))).not.toHaveProperty('byType')
   })
 
   it('załączniki wpisu sesji: blok sesji dnia widzi wpis szablonu, który daje mu sesję tego dnia – po zmianie typu nowego typu', () => {
@@ -514,7 +528,7 @@ describe('sesje z szablonu typu dnia (D511) – „Sesje tradingowe”', () => {
     const s = daySettings(settingsOn(changes, '2026-10-21'), [capped], 'zwykly', '2026-10-21')
     expect(s.dayTypes.zwykly.sessions[2]).toBe('yes')
     expect(s.sessions.map((d) => d.id)).toEqual(['londyn', 'ny'])
-    const ctx = dayContextOf({ changes, templates: [capped], lectures: [], series: [] }, { date: '2026-10-21', events: [], dayFile: null, nextFile: null }, holidays, placeLogical('2026-10-21', 7 * 60))
+    const ctx = dayContextOf({ changes, templates: [capped], lectures: [], series: [], routines: [] }, { date: '2026-10-21', events: [], dayFile: null, nextFile: null }, holidays, placeLogical('2026-10-21', 7 * 60))
     const st = computeDay(ctx)
     expect(logicalMinuteOf('2026-10-21', st.grid.start + st.boundary.max * 60_000)).toBe(15 * 60)
   })

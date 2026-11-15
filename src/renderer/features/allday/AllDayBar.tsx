@@ -5,16 +5,24 @@
  * the bars there is always one free row (T747) – „+N więcej” stands in it, the rest of it is a place to click. A click
  * on an empty place opens the card of a new event on that day, in „Tydzień” a drag over several days – on that range; a click on a
  * bar – the card of that event. The gesture is the strip's own (a horizontal one, over the cells below): it never starts the
- * gestures of the axis, which stands in another element. The events never touch the plan (D405).
+ * gestures of the axis, which stands in another element. The events never touch the plan (D405). A bar dragged with Ctrl held when
+ * it is let go (D513) is copied – as many days later or earlier as the columns it was taken over (in „Dziś” the same day), the cursor
+ * with „+” and the band of the copy while Ctrl is held; without Ctrl a drag of a bar changes nothing (an event has no move by drag).
  */
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { copiedAllDay } from '@shared/engine/copy'
 import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
 import { newId } from '@shared/model/ids'
+import { addDays } from '@shared/time/zone'
 import { ALL_DAY_COLOR_HEX, blockFill } from '@shared/theme'
 import { weekStart } from '@shared/time/day'
 import { cx } from '../../components/ui'
 import { useData } from '../../store/data'
+import { removeAllDay, saveAllDay } from '../../store/allDay'
 import { showAllDayLine, type AllDayLinePage } from '../../store/allDayLine'
+import { undoToast } from '../../store/ui'
+import { copiedText } from '../plan/blockCopy'
+import { dragStarted } from '../plan/gridCreate'
 import { useMachine } from '../../store/machine'
 import { calendarName, calendarOfEvent, filterAllDay } from '@shared/model/calendars'
 import { useCalendarFilter, useVisibleAllDay } from '../calendars/calendarFilter'
@@ -66,6 +74,10 @@ export function AllDayBar({
   const [card, setCard] = useState<Open | null>(null)
   const [held, setHeld] = useState<{ from: number; to: number } | null>(null)
   const [typeToday, setTypeToday] = useState(false)
+  // D513: a bar held with Ctrl – where its copy would go (the columns, clipped to the strip; `from`–`to` – the copy's own days).
+  const [copyBand, setCopyBand] = useState<{ left: number; right: number; from: string; to: string } | null>(null)
+  // The click that ends a copy's drag opens no card.
+  const muted = useRef(false)
   const unlisten = useRef<(() => void) | null>(null)
   useEffect(() => () => unlisten.current?.(), [])
   // The bars of the unchecked calendars are not drawn (D425) – but the event Ctrl K found is, while its card is open (D427): the
@@ -157,6 +169,75 @@ export function AllDayBar({
     }
   }
 
+  /**
+   * D513: a bar pressed – with Ctrl held when it is let go after a drag (past the threshold of a click), a copy of its event shifted
+   * by the columns the pointer went over (`copiedAllDay`, saved as a new event; „Cofnij” in the toast removes it). Without Ctrl –
+   * nothing: the click (if any) opens its card as before.
+   */
+  const grabBar = (e: PointerEvent<HTMLButtonElement>, ev: AllDayEvent, fromCol: number, toCol: number) => {
+    if (e.button !== 0) return
+    const rects: Array<{ left: number; right: number }> = []
+    for (let i = 0; i < dates.length; i++) {
+      const r = cellRect(i)
+      if (!r) return
+      rects.push({ left: r.left, right: r.right })
+    }
+    const id = e.pointerId
+    const x0 = e.clientX
+    const y0 = e.clientY
+    const at = columnAt(x0, rects, fromCol)
+    let moved = false
+    let shift = 0
+    const show = (ctrl: boolean) => {
+      if (!ctrl || !moved) return setCopyBand(null)
+      const a = Math.max(0, Math.min(dates.length - 1, fromCol + shift))
+      const b = Math.max(0, Math.min(dates.length - 1, toCol + shift))
+      setCopyBand({ left: a, right: b, from: addDays(ev.startDate, shift), to: addDays(ev.endDate, shift) })
+    }
+    const end = () => {
+      unlisten.current?.()
+      unlisten.current = null
+      setCopyBand(null)
+    }
+    const move = (m: globalThis.PointerEvent) => {
+      if (m.pointerId !== id) return
+      if (m.buttons === 0) return end()
+      if (!moved && !dragStarted(m.clientX - x0, m.clientY - y0, 'xy')) return
+      moved = true
+      shift = columnAt(m.clientX, rects, at) - at
+      show(m.ctrlKey)
+    }
+    const key = (k: KeyboardEvent) => {
+      if (k.key === 'Control') show(k.ctrlKey)
+    }
+    const up = (u: globalThis.PointerEvent) => {
+      if (u.pointerId !== id) return
+      end()
+      if (!moved || !u.ctrlKey) return
+      muted.current = true
+      setTimeout(() => (muted.current = false), 0)
+      void copyEvent(ev, shift)
+    }
+    unlisten.current?.()
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', end)
+    window.addEventListener('keydown', key)
+    window.addEventListener('keyup', key)
+    unlisten.current = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', end)
+      window.removeEventListener('keydown', key)
+      window.removeEventListener('keyup', key)
+    }
+  }
+  /** D513: the event copied `shift` days on (a new event; „Cofnij” in the toast removes it). */
+  const copyEvent = async (ev: AllDayEvent, shift: number) => {
+    const saved = await saveAllDay(copiedAllDay(ev, newId(), addDays(ev.startDate, shift)), null)
+    if (saved) undoToast(copiedText(saved.title), () => void removeAllDay(saved.id))
+  }
+
   const band = held ?? (card && !card.base ? { from: Math.max(0, dates.indexOf(card.event.startDate)), to: Math.max(0, dates.indexOf(card.event.endDate)) } : null)
   const onFree = (r: FreeDaysResult) => {
     if (r.change) showAllDayLine(page, { kind: 'free', change: r.change })
@@ -165,7 +246,7 @@ export function AllDayBar({
   }
 
   return (
-    <div ref={wrap} className="relative select-none" data-testid={`allday-${page}`} data-rows={layout.rows}>
+    <div ref={wrap} className={cx('relative select-none', copyBand && '[&_*]:cursor-copy!')} data-testid={`allday-${page}`} data-rows={layout.rows}>
       <div className={cx('grid', gapClass)} style={{ gridTemplateColumns: columns, gridTemplateRows: `repeat(${layout.rows}, ${ROW_PX}px)`, rowGap: ROW_GAP_PX }}>
         <span className="truncate pr-1.5 text-right text-[10px] leading-[20px] text-muted" style={{ gridColumn: 1, gridRow: 1 }} title="Wydarzenia całodniowe i wielodniowe">
           całodn.
@@ -198,6 +279,15 @@ export function AllDayBar({
             data-to={dates[Math.max(band.from, band.to)]}
           />
         )}
+        {copyBand && (
+          <div
+            className="pointer-events-none z-[3] rounded-sm border border-dashed border-lamp bg-lamp/20"
+            style={{ gridColumn: `${col(copyBand.left)} / ${col(copyBand.right) + 1}`, gridRow: `1 / ${layout.rows + 1}` }}
+            data-testid="allday-copy"
+            data-from={copyBand.from}
+            data-to={copyBand.to}
+          />
+        )}
         {layout.lanes.bars.map((b) => {
           const hex = ALL_DAY_COLOR_HEX[b.event.color]
           // D427: where a bar shown in spite of its unchecked calendar comes from.
@@ -212,7 +302,9 @@ export function AllDayBar({
               data-lane={b.lane}
               data-from={dates[b.fromCol]}
               data-to={dates[b.toCol]}
+              onPointerDown={(e) => grabBar(e, b.event, b.fromCol, b.toCol)}
               onClick={(e) => {
+                if (muted.current) return
                 const r = e.currentTarget.getBoundingClientRect()
                 const x = e.detail === 0 ? (r.left + r.right) / 2 : e.clientX
                 openEdit(b.event, x, x)

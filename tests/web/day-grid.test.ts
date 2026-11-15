@@ -15,13 +15,13 @@ import { DayGrid } from '@renderer/features/week/DayGrid'
 import { POOL_COLOR } from '@renderer/features/plan/energyDraw'
 import { ASSUMED_FACTOR, EnergyStripLegend, hoverPlace, STRIP_OPACITY, STRIP_WIDTH } from '@renderer/features/week/EnergyStrip'
 import { THREE_DAYS_PPM, WEEK_PPM } from '@renderer/features/week/weekLayout'
-import { moveWeekBlock } from '@renderer/features/week/weekMove'
+import { copyDayBlock, moveWeekBlock } from '@renderer/features/week/weekMove'
 import { installEscape, onEscapeLayer } from '@renderer/lib/escape'
 import { useData } from '@renderer/store/data'
 import { useUi } from '@renderer/store/ui'
 import { useWeekPush } from '@renderer/store/weekPush'
 
-vi.mock('@renderer/features/week/weekMove', async (orig) => ({ ...(await orig<typeof import('@renderer/features/week/weekMove')>()), moveWeekBlock: vi.fn() }))
+vi.mock('@renderer/features/week/weekMove', async (orig) => ({ ...(await orig<typeof import('@renderer/features/week/weekMove')>()), moveWeekBlock: vi.fn(), copyDayBlock: vi.fn() }))
 
 const TODAY = '2026-11-18'
 const DATES = ['2026-11-17', TODAY, '2026-11-19']
@@ -303,6 +303,42 @@ describe('przeciąganie bloku między kolumnami (D417)', () => {
     pointer(window, 'pointerup', colLeft(2) + 20, COL_TOP + 360 * THREE_DAYS_PPM + 8, 0)
     expect(moveWeekBlock).toHaveBeenCalledWith(expect.objectContaining({ to: DATES[2], startMin: 720 }))
     await act(async () => undefined)
+  })
+})
+
+describe('kopia Ctrl + przeciągnięciem (D513) i klawisze w trakcie', () => {
+  const key = (type: 'keydown' | 'keyup', k: string, ctrlKey = false) => act(() => void window.dispatchEvent(new KeyboardEvent(type, { key: k, ctrlKey, bubbles: true, cancelable: true })))
+  /** As `pointer`, with Ctrl held. */
+  function pointerCtrl(target: EventTarget, type: string, x: number, y: number, buttons = 1): void {
+    const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons, ctrlKey: true })
+    Object.defineProperty(e, 'pointerId', { value: 1 })
+    act(() => void target.dispatchEvent(e))
+  }
+
+  it('Ctrl wciśnięty w trakcie: siatka mówi „kopia”, oryginał nieprzyciemniony; puszczenie z Ctrl – kopia o godzinie pod wskaźnikiem, nie przeniesienie', async () => {
+    vi.mocked(copyDayBlock).mockResolvedValue('saved')
+    await mount(days())
+    pointer(blockA(), 'pointerdown', colLeft(1) + 20, COL_TOP + 240 * WEEK_PPM + 8)
+    pointer(window, 'pointermove', colLeft(2) + 20, COL_TOP + 360 * WEEK_PPM + 8)
+    expect(q('week-grid')!.getAttribute('data-copying')).toBeNull()
+    key('keydown', 'Control', true)
+    expect(q('week-grid')!.getAttribute('data-copying')).toBe('true')
+    expect(blockA().className).not.toContain('opacity-40')
+    pointerCtrl(window, 'pointerup', colLeft(2) + 20, COL_TOP + 360 * WEEK_PPM + 8, 0)
+    await act(async () => undefined)
+    expect(moveWeekBlock).not.toHaveBeenCalled()
+    expect(copyDayBlock).toHaveBeenCalledWith({ blockId: 'a', name: 'Inne obowiązki', from: TODAY, to: DATES[2], startMin: 720 })
+  })
+
+  it('puszczenie Esc (keyup) w trakcie przeciągania nic nie przerywa – Esc działa tylko przy wciśnięciu', async () => {
+    vi.mocked(moveWeekBlock).mockResolvedValue({ status: 'saved', push: null, pushed: 0 })
+    await mount(days())
+    pointer(blockA(), 'pointerdown', colLeft(1) + 20, COL_TOP + 240 * WEEK_PPM + 8)
+    pointer(window, 'pointermove', colLeft(2) + 20, COL_TOP + 360 * WEEK_PPM + 8)
+    key('keyup', 'Escape')
+    expect(q('week-grid')!.getAttribute('data-dragging')).toBe('true')
+    pointer(window, 'pointerup', colLeft(2) + 20, COL_TOP + 360 * WEEK_PPM + 8, 0)
+    expect(moveWeekBlock).toHaveBeenCalledTimes(1)
   })
 })
 

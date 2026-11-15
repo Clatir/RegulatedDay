@@ -29,8 +29,8 @@ describe('kalendarze w tekstach rekordów', () => {
     expect(fieldText('rd.json', ['calendars', '#zniknal', 'color'], n, ['#F2B66D'])).toBe('kalendarz: kolor')
   })
 
-  it('kalendarz kategorii: „kategoria <nazwa>: kalendarz”, wartość nazwą kalendarza (nie id)', () => {
-    expect(fieldText('rd.json', ['categories', 'analiza', 'calendar'], n)).toBe('kategoria Analiza: kalendarz')
+  it('kalendarz podkategorii (D510): „podkategoria <nazwa>: kalendarz”, wartość nazwą kalendarza (nie id)', () => {
+    expect(fieldText('rd.json', ['categories', 'analiza', 'calendar'], n)).toBe('podkategoria Analiza: kalendarz')
     expect(valueText('calendar', 'praca', n)).toBe('Praca')
     expect(valueText('calendar', 'moje', n)).toBe('Moje')
     expect(valueText('calendar', 'zniknal', n)).toBe('kalendarz usunięty')
@@ -41,5 +41,21 @@ describe('kalendarze w tekstach rekordów', () => {
     expect(fieldText('allday/k1.json', ['calendarId'], n)).toBe('kalendarz')
     expect(valueText('calendarId', 'praca', n)).toBe('Praca')
     expect(valueText('calendarId', null, n)).toBe('—')
+  })
+})
+
+describe('drzewo kategorii w tekstach rekordów (D510)', () => {
+  const t = { rd: rdFrom({ categoryGroups: [{ id: 'trd', name: 'Trading', order: 5 }], categories: { analiza: { name: 'Analiza', group: 'trd' } } }) }
+  it('lista kategorii pole po polu z nazwą; kategoria podkategorii – nazwą grupy, nieznana – „Inne”', () => {
+    expect(fieldText('rd.json', ['categoryGroups'], t)).toBe('kategorie')
+    expect(fieldText('rd.json', ['categoryGroups', '#trd', 'name'], t)).toBe('kategoria Trading: nazwa')
+    expect(fieldText('rd.json', ['categoryGroups', '#g-nauka', 'archived'], t)).toBe('kategoria Nauka: archiwum')
+    expect(fieldText('rd.json', ['categoryGroups', '#trd', 'order'], t)).toBe('kategoria Trading: kolejność')
+    expect(fieldText('rd.json', ['categoryGroups', '#zniknela', 'name'], t)).toBe('kategoria: nazwa')
+    expect(fieldText('rd.json', ['categories', 'analiza', 'group'], t)).toBe('podkategoria Analiza: kategoria')
+    expect(fieldText('rd.json', ['categories'], t)).toBe('podkategorie')
+    expect(valueText('group', 'trd', t)).toBe('Trading')
+    expect(valueText('group', 'g-dom', t)).toBe('Dom i opieka')
+    expect(valueText('group', 'zniknela', t)).toBe('Inne')
   })
 })

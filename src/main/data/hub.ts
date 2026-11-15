@@ -40,7 +40,7 @@ import { addDays, isIsoDate } from '@shared/time/zone'
 import { compareVersions } from '@shared/update'
 import { writeFileAtomic } from '../datastore/atomic'
 import { attachmentFileRelOf, backupEntries, createUpdateBackup, fillAttachmentFiles, listBackups, readBackupFiles, restoreAttachmentFiles, restoreToFolder, type BackupInfo } from './backup'
-import { addLink, attachmentImage, commitFiles, nodeAttachmentFiles, openAttachment, openAttachments, prepareFiles, showAttachment, type AttachmentFiles, type AttachmentIo, type AttachmentShell, type MetaFetch, type PreparedFile } from './attachments'
+import { addLink, attachmentImage, commitFiles, nodeAttachmentFiles, openAttachment, openAttachments, prepareCopies, prepareFiles, showAttachment, type AttachmentFiles, type AttachmentIo, type AttachmentShell, type MetaFetch, type PreparedFile } from './attachments'
 import { attachmentFrom, ownerFrom, type AttachmentOwner } from '@shared/model/attachment'
 import { dayContextOf } from '@shared/engine/context'
 import { seriesFrom } from '@shared/model/series'
@@ -857,7 +857,20 @@ export class DataHub {
    */
   async prepareFiles(owner: unknown, sources: unknown): Promise<AttachPrepared> {
     const io = this.attachmentIo()
-    const p = await prepareFiles(io, owner, sources)
+    return this.keepPrepared(io, await prepareFiles(io, owner, sources))
+  }
+
+  /**
+   * Copies of attachments for a block copied by Ctrl + drag (D513), the first half as `prepareFiles`: new files and records of
+   * their own (never a shared file), written by the window in its turn (`commitFiles`).
+   */
+  async prepareCopies(owner: unknown, ids: unknown): Promise<AttachPrepared> {
+    const io = this.attachmentIo()
+    return this.keepPrepared(io, await prepareCopies(io, owner, ids))
+  }
+
+  /** Copies made, kept for `commitFiles` – those never written within `PREPARED_MS` go. */
+  private keepPrepared(io: AttachmentIo, p: { made: PreparedFile[]; failed: AttachPrepared['failed'] }): AttachPrepared {
     for (const file of p.made) {
       const timer = setTimeout(() => void this.dropPrepared(file.id), PREPARED_MS)
       timer.unref?.()
@@ -997,7 +1010,7 @@ export class DataHub {
     })
     const out = await f.edit(clean)
     this.changed()
-    return out.map((o) => ({ status: o.status, ...(o.status === 'waiting' ? { why: o.why } : {}) }))
+    return out.map((o) => ({ status: o.status, ...(o.status === 'waiting' ? { why: o.why } : {}), ...(o.routineCostKept ? { routineCostKept: true as const } : {}) }))
   }
 
   async events(drafts: EventIn[]): Promise<void> {
