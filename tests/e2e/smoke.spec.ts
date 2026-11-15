@@ -245,6 +245,102 @@ test('pasek pulpitu przeciągnięty za uchwyt idzie za kursorem i zostaje tam, g
   }
 })
 
+test('uchwyt paska bez wciśnięcia w oknie (E4b.12): chwyta ruch z przyciskiem, pasek sam idzie za kursorem, puszczenie nad przyciskiem nic nie klika, puszczenie mówi pomocnik (T1500)', async () => {
+  // The real helper reads the real button – up at once under the test's synthetic events; its release is the stand-in's file.
+  test.skip(process.env.RD_E2E_REAL_HELPER === '1', 'the stand-in helper only (fake-mouse-up)')
+  const { app, page, userData } = await launch()
+  try {
+    await withMainLog(userData, async () => {
+      const barBounds = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'Regulated Day – pasek')!.getBounds())
+      await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – pasek' && w.isVisible())), { timeout: 30_000 }).toBe(true)
+      const bar = await viewPage(app, 'bar')
+      await expect(bar.getByTestId('bar-drag')).toHaveAttribute('aria-label', 'przeciągnij pasek')
+      await expect(bar.getByTestId('bar-quick')).toBeVisible()
+      const start = await settledBarBounds(app)
+      const wa = await app.evaluate(({ ipcMain, screen }, b) => {
+        const g = globalThis as unknown as { rdCursor: { x: number; y: number }; rdDrag: string[] }
+        g.rdCursor = { x: b.x + 6, y: b.y + 10 }
+        screen.getCursorScreenPoint = () => g.rdCursor
+        // What the main process hears from the bar's view.
+        g.rdDrag = []
+        ipcMain.on('rd:barDrag', (_e, phase: string, why?: string) => g.rdDrag.push(why ? `${phase}(${why})` : phase))
+        return screen.getPrimaryDisplay().workArea
+      }, start)
+      const heard = () => app.evaluate(() => (globalThis as unknown as { rdDrag: string[] }).rdDrag)
+      const cursor = (x: number, y: number) => app.evaluate((_e, p) => void ((globalThis as unknown as { rdCursor: { x: number; y: number } }).rdCursor = p), { x, y })
+      // What Windows hands the page when it eats the press: moves (no button, then the left one held) and the release –
+      // under a pointer id of its own (the real mouse's moves over the window are another pointer).
+      const fire = (type: 'pointermove' | 'pointerup', buttons: number, on: string) =>
+        bar.evaluate(
+          ([t, b, id]) =>
+            document.querySelector(`[data-testid="${id}"]`)!.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, composed: true, pointerId: 7, pointerType: 'mouse', isPrimary: true, buttons: b, button: t === 'pointerup' ? 0 : -1 })),
+          [type, buttons, on] as const
+        )
+      // A click reaching the bar after the drag's end (its buttons and its own click act on the release).
+      await bar.evaluate(() => {
+        const w = window as unknown as { rdUps: string[] }
+        w.rdUps = []
+        document.addEventListener('pointerup', (e) => w.rdUps.push((e.target as HTMLElement).dataset.testid ?? '?'))
+      })
+      const ups = () => bar.evaluate(() => (window as unknown as { rdUps: string[] }).rdUps)
+      const placed = async () => (await page.evaluate(() => window.rd.prefs())).barPlacement?.offset
+      // Two frames of the bar's view – past a frame of the main process's drag (16 ms) – before a check that nothing moved.
+      const frames = () => bar.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))))
+      await fire('pointermove', 0, 'bar-drag')
+      await fire('pointermove', 1, 'bar-drag')
+      await expect.poll(heard).toEqual(['start(move)'])
+      // The cursor goes on and the view hears nothing more (it left the bar): the main process moves the bar by itself.
+      await cursor(start.x + 6 + 200, start.y + 10 - 150)
+      await expect.poll(barBounds).toMatchObject({ x: start.x + 200, y: start.y - 150 })
+      expect(await heard()).toEqual(['start(move)'])
+      // Let go over „+” of the bar (the bar lagging behind the cursor): the drag's end – „+” never hears it.
+      await fire('pointerup', 0, 'bar-quick')
+      expect(await ups()).toEqual([])
+      await expect.poll(heard).toEqual(['start(move)', 'end(up)'])
+      await expect.poll(placed).toEqual({ x: start.x + 200 - wa.x, y: start.y - 150 - wa.y })
+      // Let go and gone: the cursor's way no longer moves it (the main process's frame stopped with the end).
+      await cursor(start.x + 6, start.y + 10)
+      await frames()
+      expect(await barBounds()).toMatchObject({ x: start.x + 200, y: start.y - 150 })
+      // A release with no drag held is the bar's own again (the listener hears releases at all).
+      await fire('pointerup', 0, 'bar-desktop')
+      expect(await ups()).toEqual(['bar-desktop'])
+      // Grabbed the same way – the first move with the button already past the handle (moves come once a frame) – and let
+      // go where the page could not hear it: its next move without the button ends the drag.
+      await cursor(start.x + 6 + 200, start.y + 10 - 150)
+      await fire('pointermove', 0, 'bar-drag')
+      await fire('pointermove', 1, 'bar-desktop')
+      await cursor(start.x + 6 + 100, start.y + 10 - 150)
+      await expect.poll(barBounds).toMatchObject({ x: start.x + 100, y: start.y - 150 })
+      await fire('pointermove', 0, 'bar-drag')
+      await expect.poll(heard).toEqual(['start(move)', 'end(up)', 'start(move)', 'end(up)'])
+      await expect.poll(placed).toEqual({ x: start.x + 100 - wa.x, y: start.y - 150 - wa.y })
+      // Let go where the page hears nothing at all (the bar under a window): the helper says the button's release.
+      await cursor(start.x + 6 + 100, start.y + 10 - 150)
+      await fire('pointermove', 0, 'bar-drag')
+      await fire('pointermove', 1, 'bar-drag')
+      await expect.poll(heard).toHaveLength(5)
+      await cursor(start.x + 6 + 40, start.y + 10 - 100)
+      await expect.poll(barBounds).toMatchObject({ x: start.x + 40, y: start.y - 100 })
+      writeFileSync(join(userData, 'fake-mouse-up'), '')
+      await expect.poll(placed).toEqual({ x: start.x + 40 - wa.x, y: start.y - 100 - wa.y })
+      await expect.poll(async () => readFile(join(userData, 'logs', 'main.log'), 'utf8')).toMatch(/pasek: puszczony \(pomocnik\) po \d+ ruchach/)
+      expect(await heard()).toHaveLength(5)
+      await cursor(start.x + 6, start.y + 10)
+      await frames()
+      expect(await barBounds()).toMatchObject({ x: start.x + 40, y: start.y - 100 })
+      // The page let go of its grip with it: the next press it does not hear grabs anew.
+      await fire('pointermove', 0, 'bar-drag')
+      await fire('pointermove', 1, 'bar-drag')
+      await expect.poll(heard).toEqual(['start(move)', 'end(up)', 'start(move)', 'end(up)', 'start(move)', 'start(move)'])
+      await fire('pointermove', 0, 'bar-drag')
+      await expect.poll(heard).toHaveLength(7)
+    })
+  } finally {
+    await app.close()
+  }
+})
+
 test('pasek pulpitu wyłączony tuż po włączeniu: spóźnione potwierdzenie pomocnika go nie pokazuje', async () => {
   test.skip(process.env.RD_E2E_REAL_HELPER === '1', 'the stand-in helper only (it confirms 50 ms after a watch, even one taken back)')
   const { app, page, userData } = await launch()

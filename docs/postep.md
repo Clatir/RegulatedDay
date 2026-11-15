@@ -86,6 +86,13 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    pełne testy, wersja 1.24.0, lokalny Setup.exe w Pobranych; PR do `main` dopiero po zakończonym runie wydania 1.23.0.
    Środowisko: wspólny `node_modules` w katalogu głównym jest ze starego `main` (bez `jsdom`, `@tiptap`) – drzewa paczki
    potrzebują własnego `npm ci`.
+11. **Uchwyt paska (E4b.12 znów nie przechodzi, 15.11, T1500):** wciśnięcie lewego przycisku nie dochodzi do strony
+   paska (okno bez aktywacji) – przeciąganie zaczyna się też od ruchu z przyciskiem, pasek prowadzi proces główny,
+   puszczenie mówi pomocnik (`mouse.watch`). Gałąź `claude/pasek-uchwyt` (drzewo `wdrag`), przegląd xhigh dwie rundy
+   (15 + 14 uwag, poprawione). Wydanie: do decyzji – w paczce 1.25 albo osobno po niej. Uwagi na później: bez pomocnika
+   pasek przykryty oknem po nieusłyszanym puszczeniu jedzie za kursorem, aż ten na niego wróci (najdłużej 2 min);
+   E2E D303 raz padł lokalnie (miejsce paska po samym kliknięciu uchwytu ≠ start; ścieżka bez zmian, 6 kolejnych przebiegów
+   zielonych).
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;

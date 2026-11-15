@@ -44,6 +44,7 @@ const api: RdApi = {
   copyText: (text) => ipcRenderer.invoke(CH.copyText, text),
   onPanelTarget: (cb) => on('rd:panelTarget', cb),
   onBarGrows: (cb) => on('rd:barGrows', cb),
+  onBarDragOver: (cb) => on(CH.onBarDragOver, cb),
   dataView: () => ipcRenderer.invoke(CH.dataView),
   onData: (cb) => on(CH.onData, cb),
   dayData: (date) => ipcRenderer.invoke(CH.dayData, date),

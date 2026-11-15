@@ -15,7 +15,7 @@ Poniżej formaty i podział ról, żeby nie czytać całości przy każdej zmian
 
 ## Programy (helper/src, C# 5, csc.exe; Linux: Roslyn net472)
 - `rd-helper.exe` – pomocnik w tle (proces potomny aplikacji, linie JSON, `alive` co 2 s). Kolejność okien (BarKeeper),
-  pierwszy plan, stan powiadomień, ToastNotifier.Setting (WinRT przez COM, bez winmd), sesja (klucz ulotny
+  pierwszy plan, stan powiadomień, puszczenie lewego przycisku przy przeciąganiu paska (`mouse.watch`, T1500), ToastNotifier.Setting (WinRT przez COM, bez winmd), sesja (klucz ulotny
   `HKCU\Software\RegulatedDay\<tożsamość>` z RunId i LogonId), żądania zasilania, OneDrive, atrybuty plików.
 - `rd-guard.exe` – strażnik: właściciel zadania przy starcie Windows (wpis Run „Regulated Day Guard”) i tryby z jednym
   wierszem JSON (`--query …`, `--run-entry set|remove`, `--process …`); wyjątek w trybie = `{"ok": false}`.

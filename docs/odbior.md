@@ -579,7 +579,8 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - dźwięk gra na dwóch komputerach naraz.
 
 #### E4b.12 Pasek przeciągnięty za uchwyt (0.10.0)
-- [ ] Odebrane — **nie przechodzi (27.10.2026):** uchwyt ⠿ widać, ale po chwyceniu i ciągnięciu pasek nawet nie
+- [ ] Odebrane — **nie przechodzi (15.11.2026, 1.24.0):** wciśnięcie nie dochodziło do strony paska (okno bez aktywacji),
+  poprawka T1500 – przeciąganie zaczyna się też od ruchu z wciśniętym przyciskiem. **Wcześniej nie przechodzi (27.10.2026):** uchwyt ⠿ widać, ale po chwyceniu i ciągnięciu pasek nawet nie
   drgnie. E2E przeciąga z podstawionym kursorem (bez prawdziwej myszy Windows) i tego nie widzi – poprawka z testem
   prawdziwej myszy w CI na Windows, w jednym wydaniu z elementami E5 w pasku (D315).
 - **Tylko Ty:** logikę miejsca sprawdzają testy (`placement.test.ts`), przeciąganie z podstawionym kursorem – E2E
@@ -596,6 +597,8 @@ Nic do ręcznego sprawdzenia – te etapy nie miały interfejsu; ich wynikiem s�
   - pasek „ucieka” od kursora, skacze albo zostaje w tyle o więcej niż chwilę;
   - po puszczeniu wraca na stare miejsce albo po ponownym uruchomieniu stoi gdzie indziej;
   - przeciągnięcie klika przycisk paska (Start, Pauza…) albo otwiera okno;
+  - po chwyceniu pasek nawet nie drgnie – wtedy podaj godzinę próby: w `main.log` szukam „pasek: chwycony za uchwyt”;
+  - po puszczeniu przycisku myszy pasek dalej jedzie za kursorem;
   - część paska wychodzi poza ekran albo na pasek zadań.
 
 #### E4b.15 Kolory „cieplejsze” w pasku, ikonie i panelu (0.11.0)

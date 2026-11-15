@@ -34,7 +34,7 @@ import type { BarSpot, MachinePrefs } from '@shared/machine'
 import { quitNotice } from '@shared/sync/syncLines'
 import { MAX_STEPS, ROUTINE_VERSIONS } from '@shared/model/routines'
 import { BAR_SPOTS, patchMachinePrefs } from '@shared/machine'
-import { displayAt, type Rect } from '@shared/bounds'
+import { displayAt, type DisplayInfo, type Rect } from '@shared/bounds'
 import { barRect, barWidth, draggedBounds, dragHolds, panelDisplay, panelRect, placementAfterDrag, spotPlacement } from '@shared/placement'
 import { urlFromArgv, type PanelTarget } from '@shared/protocol'
 import { compareVersions } from '@shared/update'
@@ -289,11 +289,90 @@ let fullscreenNow = false
 let barTop = false
 
 /**
- * The desktop bar being dragged by its handle (D303): the cursor and the bar where the drag began, whether it moved, and
- * the last message – a drag whose end never came (the bar's view reloaded) holds the layout at most `DRAG_HOLD_MS`. Its
- * end („up”, „cancel”, „lost”) ends it; the limit is only the fallback (`dragHolds`, A4-12).
+ * The desktop bar being dragged by its handle (D303): the cursor and the bar where the drag began (and the monitors then),
+ * whether it moved, and the last word of the bar's view on the monotonic clock – a drag whose end never came holds the
+ * layout at most `DRAG_HOLD_MS` (`dragHolds`, A4-12). Begun by a move (`byMove`, T1500) the page never heard the press:
+ * the helper watches the button and says its release (`mouse.watch`) – the drag then holds as long as the button does;
+ * without the helper only the page's release ends it (the bar follows the cursor back under it).
  */
-let barDrag: { cursor: { x: number; y: number }; bounds: Rect; moved: boolean; last: number; moves: number } | null = null
+interface BarDrag {
+  id: number
+  cursor: { x: number; y: number }
+  bounds: Rect
+  areas: DisplayInfo[]
+  moved: boolean
+  last: number
+  moves: number
+  byMove: boolean
+  watched: boolean
+  to: { x: number; y: number } | null
+  at: Rect | null
+}
+let barDrag: BarDrag | null = null
+let barDragCount = 0
+/**
+ * The main process's own frame of a drag (T1500): the bar follows the cursor without waiting for its view – a press
+ * Windows never handed the page leaves the window without the cursor's capture, so the view hears the cursor only while
+ * it is over the bar.
+ */
+let barDragFrame: ReturnType<typeof setInterval> | null = null
+const BAR_DRAG_FRAME_MS = 16
+
+/** The drag is over: the bar no longer follows the cursor, the helper no longer watches the button. */
+function dropBarDrag(): void {
+  if (barDrag?.watched) helper?.send('mouse.unwatch')
+  barDrag = null
+  if (barDragFrame) clearInterval(barDragFrame)
+  barDragFrame = null
+}
+
+/** The bar where the cursor's way puts it now (past 4 px: a click on the handle moves nothing); a cursor that stood still changes nothing. */
+function followBarDrag(drag: BarDrag): void {
+  const to = screen.getCursorScreenPoint()
+  if (drag.to && drag.to.x === to.x && drag.to.y === to.y) return
+  drag.to = to
+  drag.moved ||= Math.hypot(to.x - drag.cursor.x, to.y - drag.cursor.y) >= 4
+  if (!drag.moved) return
+  drag.at = draggedBounds(drag.bounds, drag.cursor, to, drag.areas)
+  bar?.apply({ bounds: drag.at })
+}
+
+/** A frame of the drag: the bar after the cursor; a drag gone silent ends (see `BarDrag`). */
+function barDragFrameTick(): void {
+  const drag = barDrag
+  if (!drag || !bar?.alive) return dropBarDrag()
+  // The helper gone mid-drag: its release will not come – from now on the drag holds as long as the page speaks.
+  if (drag.watched && !helper?.running) {
+    drag.watched = false
+    drag.last = performance.now()
+  }
+  if (!drag.watched && !dragHolds(drag.last, performance.now())) {
+    log('info', 'pasek: przeciąganie bez wieści od paska – wraca na swoje miejsce')
+    dropBarDrag()
+    tellBarDragOver()
+    return layoutBar()
+  }
+  followBarDrag(drag)
+}
+
+/** The drag ended without the page's word (the helper's release, no word for long): the page lets go of its grip too. */
+function tellBarDragOver(): void {
+  bar?.webContents?.send(CH.onBarDragOver)
+}
+
+/** Let go („up”, „cancel”, „lost” from the view, the helper's release): the bar stays at the cursor of this moment, its place saved. */
+function endBarDrag(why: string, fromPage = true): void {
+  const drag = barDrag
+  if (!drag || !bar?.alive) return
+  followBarDrag(drag)
+  dropBarDrag()
+  if (!fromPage) tellBarDragOver()
+  const to = drag.to ?? screen.getCursorScreenPoint()
+  const at = drag.at
+  log('info', `pasek: puszczony (${why}) po ${drag.moves} ruchach, kursor ${to.x},${to.y}${at ? ` – pasek ${at.x},${at.y}` : ' – bez przesunięcia'}`)
+  if (at) void setPrefs({ barPlacement: placementAfterDrag(at, displays(), barFolded(), barGrowsUp) })
+  else layoutBar()
+}
 /** The desktop bar unfolds upwards where it stands now (its folded part is then the bottom of the window). */
 let barGrowsUp = true
 
@@ -324,8 +403,8 @@ const barWanted = (): boolean => prefs().desktopBar && !widgetView().hidden && !
 function layoutBar(): void {
   // Destroyed at the quit: the helper's last status and events come after the windows. Dragged now: it follows the cursor.
   if (!bar?.alive) return
-  if (barDrag && dragHolds(barDrag.last, Date.now())) return
-  barDrag = null
+  if (barDrag && dragHolds(barDrag.last, performance.now())) return
+  dropBarDrag()
   // „Na wierzchu”: the helper watches the bar's monitor for a full screen (and says it at once); else nothing to watch.
   if (prefs().onTop !== 'off') helper?.send('fullscreen.watch', { hwnd: bar.hwnd })
   else {
@@ -392,6 +471,9 @@ function onHelperEvent(m: HelperMessage): void {
     // Over the bar's monitor: a full screen entered or left (also in place – a film in a browser – or on another monitor).
     log('info', `monitor paska: ${m.fullscreen === true ? 'pełny ekran' : 'bez pełnego ekranu'}`)
     onFullscreen(m.fullscreen === true)
+  } else if (m.type === 'mouse') {
+    // The left button let go during a drag the bar's page may not hear the end of (T1500).
+    if (m.event === 'up' && barDrag?.watched && m.drag === barDrag.id) endBarDrag('pomocnik', false)
   } else if (m.type === 'shell') {
     log('info', 'Eksplorator uruchomiony ponownie – ikona ustawiona jeszcze raz')
     tray?.refresh()
@@ -756,27 +838,29 @@ function registerIpc(): void {
   ipcMain.on(CH.barDrag, (e, phase: unknown, why: unknown) => {
     if (viewOf(e.sender) !== 'bar' || !bar?.alive) return
     if (phase === 'start') {
+      // A drag still going (its release unheard): it ends where it is, its place saved, before the new one.
+      endBarDrag('nowe chwycenie')
       const from = bar.currentBounds
       const cursor = screen.getCursorScreenPoint()
-      barDrag = from ? { cursor, bounds: from, moved: false, last: Date.now(), moves: 0 } : null
+      const byMove = why === 'move'
+      // The page heard no press, so it may not hear the release either: the helper watches the button (T1500).
+      const watched = byMove && !!helper?.running
+      if (from) {
+        barDrag = { id: ++barDragCount, cursor, bounds: from, areas: displays(), moved: false, last: performance.now(), moves: 0, byMove, watched, to: null, at: null }
+        if (watched) helper?.send('mouse.watch', { drag: barDrag.id })
+        barDragFrame = setInterval(barDragFrameTick, BAR_DRAG_FRAME_MS)
+      }
       // The trace of a drag (E4b.12: on a real mouse the bar never moved) – its start, and at its end what came.
-      log('info', `pasek: chwycony za uchwyt – pasek ${from ? `${from.x},${from.y}` : 'bez miejsca'}, kursor ${cursor.x},${cursor.y}, na wierzchu: ${prefs().onTop}`)
+      const heard = byMove ? ` (ruchem – wciśnięcie nie doszło do paska${watched ? '' : ', bez pomocnika'})` : ''
+      log('info', `pasek: chwycony za uchwyt${heard} – pasek ${from ? `${from.x},${from.y}` : 'bez miejsca'}, kursor ${cursor.x},${cursor.y}, na wierzchu: ${prefs().onTop}`)
       return
     }
-    if (!barDrag || (phase !== 'move' && phase !== 'end')) return
     const drag = barDrag
-    const to = screen.getCursorScreenPoint()
-    drag.moved ||= Math.hypot(to.x - drag.cursor.x, to.y - drag.cursor.y) >= 4
-    drag.last = Date.now()
+    if (!drag || (phase !== 'move' && phase !== 'end')) return
+    // The page's word keeps the drag (the main process's frame moves the bar); its end ends it.
+    drag.last = performance.now()
     if (phase === 'move') drag.moves++
-    const at = drag.moved ? draggedBounds(drag.bounds, drag.cursor, to, displays()) : null
-    if (at) bar.apply({ bounds: at })
-    if (phase === 'end') {
-      barDrag = null
-      log('info', `pasek: puszczony (${typeof why === 'string' ? why : '?'}) po ${drag.moves} ruchach, kursor ${to.x},${to.y}${at ? ` – pasek ${at.x},${at.y}` : ' – bez przesunięcia'}`)
-      if (at) void setPrefs({ barPlacement: placementAfterDrag(at, displays(), barFolded(), barGrowsUp) })
-      else layoutBar()
-    }
+    else endBarDrag(typeof why === 'string' ? why : '?')
   })
   handle(CH.barScreens, () => barScreens())
   handle(CH.placeBar, async (_e, id: unknown, spot: unknown) => {
@@ -1318,6 +1402,12 @@ async function main(): Promise<void> {
   bar = new DesktopBar(preload, loadView)
   bar.onExternalClose = quitFromOutside
   bar.onSystemEnd(onSystemEnd)
+  // The bar's view reloaded mid-drag (no crash, no end from the page): the drag is over, the bar lays out again.
+  bar.webContents?.on('did-start-loading', () => {
+    if (!barDrag) return
+    dropBarDrag()
+    layoutBar()
+  })
   panel = new IconPanel(preload, loadView, {
     place: (height, cursor, atCursor) => {
       const all = displays()
@@ -1447,7 +1537,7 @@ process.on('unhandledRejection', (reason) => log('error', 'nieobsłużone odrzuc
 app.on('render-process-gone', (_e, contents, details) => {
   log('error', `okno przestało działać (${viewOf(contents)}): ${details.reason}, kod ${details.exitCode}`)
   // The bar's drag ends with its view: the layout is free again.
-  if (viewOf(contents) === 'bar') barDrag = null
+  if (viewOf(contents) === 'bar') dropBarDrag()
   if (details.reason !== 'clean-exit' && !quitting && !contents.isDestroyed()) contents.reload()
 })
 // A window that stops answering leaves a line in the log, for every window (the bar and the panel too).
