@@ -30,7 +30,7 @@ import { RoutineSteps } from '../routines/RoutineSteps'
 import { CLASS_NAMES } from './blockView'
 
 /** The fields as they are now: a field left by the click on „Zapisz” has told its value before the click is handled (a ref beside the state). */
-function useForm<T>(initial: T): readonly [T, (patch: Partial<T> | ((now: T) => Partial<T>)) => void, { current: T }] {
+export function useForm<T>(initial: T): readonly [T, (patch: Partial<T> | ((now: T) => Partial<T>)) => void, { current: T }] {
   const ref = useRef(initial)
   const [shown, setShown] = useState(initial)
   const set = (patch: Partial<T> | ((now: T) => Partial<T>)) => {
@@ -73,7 +73,7 @@ function useHandOn(onCreated: (id: string) => void, has: (id: string) => boolean
     })
 }
 
-function SaveButtons({ busy, ok, onSave, onClose }: { busy: boolean; ok: boolean; onSave: () => void; onClose: () => void }) {
+export function SaveButtons({ busy, ok, onSave, onClose }: { busy: boolean; ok: boolean; onSave: () => void; onClose: () => void }) {
   return (
     <>
       <button type="button" className="btn" onClick={onClose} data-testid="new-thing-cancel">
@@ -86,27 +86,15 @@ function SaveButtons({ busy, ok, onSave, onClose }: { busy: boolean; ok: boolean
   )
 }
 
-/** A new routine: its name and the two versions of steps; the routine made is handed on (the block takes it with its length – its steps are shown from the routine, never copied, D480). */
-export function NewRoutineDialog({ onCreated, onClose }: { onCreated: (r: Routine) => void; onClose: () => void }) {
-  const [form, set, ref] = useForm<{ name: string; normal: RoutineStep[]; worse: RoutineStep[] }>({ name: '', normal: [{ id: newId(10), name: '', min: 5 }], worse: [] })
-  const [busy, run] = useBusy()
-  const save = () =>
-    run(async () => {
-      commitActiveField()
-      const d = ref.current
-      const name = d.name.trim()
-      if (!name) return
-      const clean = (steps: RoutineStep[]) => steps.filter((s) => s.name.trim()).map((s) => ({ ...s, name: s.name.trim() }))
-      const id = newId()
-      const record = { schema: ROUTINE_SCHEMA, id, name, normal: clean(d.normal), worse: clean(d.worse), archived: false }
-      if (!isSaved(await saveRecord(paths.record('routine', id), null, record))) return
-      const r = routineFrom(record)
-      if (r) onCreated(r)
-    })
+export type RoutineForm = { name: string; normal: RoutineStep[]; worse: RoutineStep[] }
+type SetForm<T> = (patch: Partial<T> | ((now: T) => Partial<T>)) => void
+
+/** The fields of a routine – its name and the two versions of steps (the very editor of „Rutyny”); shared by „Nowa rutyna” and „Rutyna <nazwa>” (D514). */
+export function RoutineFields({ form, set, onEnter }: { form: RoutineForm; set: SetForm<RoutineForm>; onEnter: () => void }) {
   return (
-    <Dialog title="Nowa rutyna" onClose={onClose} wide centered data-testid="new-routine" actions={<SaveButtons busy={busy} ok={form.name.trim() !== ''} onSave={() => void save()} onClose={onClose} />}>
+    <>
       <Field label="Nazwa" labelWidth={70}>
-        <TextField value={form.name} onCommit={(name) => set({ name })} onEnter={() => void save()} max={80} autoFocus errorPlacement="below" aria-label="Nazwa rutyny" data-testid="new-routine-name" />
+        <TextField value={form.name} onCommit={(name) => set({ name })} onEnter={onEnter} max={80} autoFocus errorPlacement="below" aria-label="Nazwa rutyny" data-testid="new-routine-name" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         {(['normal', 'worse'] as RoutineVersion[]).map((v) => (
@@ -114,7 +102,54 @@ export function NewRoutineDialog({ onCreated, onClose }: { onCreated: (r: Routin
         ))}
       </div>
       <p className="text-[12px] text-muted">Wersja na gorsze dni bez kroków znaczy: jak zwykła. Kroki bez nazwy nie zostaną zapisane.</p>
+    </>
+  )
+}
+
+/** The steps as they are saved: a step without a name falls out. */
+export const cleanSteps = (steps: readonly RoutineStep[]): RoutineStep[] => steps.filter((s) => s.name.trim()).map((s) => ({ ...s, name: s.name.trim() }))
+
+/** A new routine: its name and the two versions of steps; the routine made is handed on (the block takes it with its length – its steps are shown from the routine, never copied, D480). */
+export function NewRoutineDialog({ onCreated, onClose }: { onCreated: (r: Routine) => void; onClose: () => void }) {
+  const [form, set, ref] = useForm<RoutineForm>({ name: '', normal: [{ id: newId(10), name: '', min: 5 }], worse: [] })
+  const [busy, run] = useBusy()
+  const save = () =>
+    run(async () => {
+      commitActiveField()
+      const d = ref.current
+      const name = d.name.trim()
+      if (!name) return
+      const id = newId()
+      const record = { schema: ROUTINE_SCHEMA, id, name, normal: cleanSteps(d.normal), worse: cleanSteps(d.worse), archived: false }
+      if (!isSaved(await saveRecord(paths.record('routine', id), null, record))) return
+      const r = routineFrom(record)
+      if (r) onCreated(r)
+    })
+  return (
+    <Dialog title="Nowa rutyna" onClose={onClose} wide centered data-testid="new-routine" actions={<SaveButtons busy={busy} ok={form.name.trim() !== ''} onSave={() => void save()} onClose={onClose} />}>
+      <RoutineFields form={form} set={set} onEnter={() => void save()} />
     </Dialog>
+  )
+}
+
+export type VariantForm = { name: string; same: boolean; costs: Costs; /** The place: one of the three, or `VARIANT_PLACE_SAME` – „miejsce jak podkategoria”. */ place: string }
+export const VARIANT_PLACE_SAME = '-'
+
+/** The fields of a variant: name, cost („jak podkategoria” or three numbers) and – `withPlace` (the edit, D514) – the place. */
+export function VariantFields({ form, set, onEnter, withPlace }: { form: VariantForm; set: SetForm<VariantForm>; onEnter: () => void; withPlace?: boolean }) {
+  return (
+    <>
+      <Field label="Nazwa" labelWidth={70}>
+        <TextField value={form.name} onCommit={(name) => set({ name })} onEnter={onEnter} max={VARIANT_NAME_MAX} autoFocus errorPlacement="below" aria-label="Nazwa wariantu" data-testid="new-variant-name" />
+      </Field>
+      <Toggle checked={form.same} onChange={(same) => set({ same })} label="koszt jak podkategoria" data-testid="new-variant-same" />
+      {!form.same && <CostFields costs={form.costs} onChange={(c) => set((now) => ({ costs: { ...now.costs, ...c } }))} />}
+      {withPlace && (
+        <Field label="Miejsce" labelWidth={70}>
+          <Choice value={form.place} options={[{ value: VARIANT_PLACE_SAME, label: 'miejsce jak podkategoria' }, ...PLACE_OPTIONS]} onChange={(place) => set({ place })} className="w-[240px]" aria-label="Miejsce wariantu" data-testid="new-variant-place" />
+        </Field>
+      )}
+    </>
   )
 }
 
@@ -124,7 +159,7 @@ export function NewRoutineDialog({ onCreated, onClose }: { onCreated: (r: Routin
  */
 export function NewVariantDialog({ categoryId, costs, onCreated, has, onClose }: { categoryId: string; costs: Costs; onCreated: (variantId: string) => void; has: (variantId: string) => boolean; onClose: () => void }) {
   const today = useData((s) => s.view?.today ?? '')
-  const [form, set, ref] = useForm<{ name: string; same: boolean; costs: Costs }>({ name: '', same: true, costs })
+  const [form, set, ref] = useForm<VariantForm>({ name: '', same: true, costs, place: VARIANT_PLACE_SAME })
   const [busy, run] = useBusy()
   const handOn = useHandOn(onCreated, has)
   const save = () =>
@@ -140,16 +175,12 @@ export function NewVariantDialog({ categoryId, costs, onCreated, has, onClose }:
     })
   return (
     <Dialog title="Nowy wariant" onClose={onClose} centered data-testid="new-variant" actions={<SaveButtons busy={busy} ok={form.name.trim() !== ''} onSave={() => void save()} onClose={onClose} />}>
-      <Field label="Nazwa" labelWidth={70}>
-        <TextField value={form.name} onCommit={(name) => set({ name })} onEnter={() => void save()} max={VARIANT_NAME_MAX} autoFocus errorPlacement="below" aria-label="Nazwa wariantu" data-testid="new-variant-name" />
-      </Field>
-      <Toggle checked={form.same} onChange={(same) => set({ same })} label="koszt jak podkategoria" data-testid="new-variant-same" />
-      {!form.same && <CostFields costs={form.costs} onChange={(c) => set((now) => ({ costs: { ...now.costs, ...c } }))} />}
+      <VariantFields form={form} set={set} onEnter={() => void save()} />
     </Dialog>
   )
 }
 
-function CostFields({ costs, onChange }: { costs: Costs; onChange: (c: Partial<Costs>) => void }) {
+export function CostFields({ costs, onChange }: { costs: Costs; onChange: (c: Partial<Costs>) => void }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex flex-wrap items-center gap-3">
@@ -160,7 +191,7 @@ function CostFields({ costs, onChange }: { costs: Costs; onChange: (c: Partial<C
   )
 }
 
-type CategoryForm = {
+export type CategoryForm = {
   name: string
   /** Its category of the tree (D510). */
   group: string
@@ -170,6 +201,48 @@ type CategoryForm = {
   calendar: string
   costs: Costs
   flags: Record<string, boolean>
+}
+
+/**
+ * The fields of a subcategory (as its row in „Kategorie”): name, its category, class, costs, place, colour, calendar, the properties.
+ * Shared by „Nowa podkategoria” and „Podkategoria <nazwa>” (D514); `groups` – the categories to choose from.
+ */
+export function CategoryFields({ form, set, groups, onEnter }: { form: CategoryForm; set: SetForm<CategoryForm>; groups: ReadonlyArray<{ id: string; name: string }>; onEnter: () => void }) {
+  const rd = useData((s) => s.rd)
+  return (
+    <>
+      <Field label="Nazwa" labelWidth={90}>
+        <TextField value={form.name} onCommit={(name) => set({ name })} onEnter={onEnter} max={60} autoFocus errorPlacement="below" aria-label="Nazwa podkategorii" data-testid="new-category-name" />
+      </Field>
+      <Field label="Kategoria" labelWidth={90}>
+        <Choice value={form.group} options={groups.map((g) => ({ value: g.id, label: g.name }))} onChange={(group) => set({ group })} className="w-[200px]" aria-label="Kategoria podkategorii" data-testid="new-category-group" />
+      </Field>
+      <Field label="Klasa" labelWidth={90}>
+        <Choice value={form.cls} options={(['work', 'life', 'free'] as const).map((v) => ({ value: v, label: CLASS_NAMES[v] }))} onChange={(cls) => set({ cls })} className="w-[160px]" aria-label="Klasa" data-testid="new-category-class" />
+      </Field>
+      <Field label="Koszty" labelWidth={90}>
+        <CostFields costs={form.costs} onChange={(c) => set((now) => ({ costs: { ...now.costs, ...c } }))} />
+      </Field>
+      <Field label="Miejsce" labelWidth={90}>
+        <Choice value={form.place} options={[...PLACE_OPTIONS]} onChange={(place) => set({ place })} className="w-[240px]" aria-label="Miejsce" data-testid="new-category-place" />
+      </Field>
+      <Field label="Kolor" labelWidth={90}>
+        <div className="flex flex-wrap items-center gap-2">
+          <ColorSwatches value={form.color} onPick={(color) => set({ color })} />
+        </div>
+      </Field>
+      {rd.calendars.length > 1 && (
+        <Field label="Kalendarz" labelWidth={90}>
+          <Choice value={form.calendar} options={rd.calendars.map((c) => ({ value: c.id, label: c.name }))} onChange={(calendar) => set({ calendar })} className="w-[200px]" aria-label="Kalendarz podkategorii" />
+        </Field>
+      )}
+      <div className="grid grid-cols-2 gap-1.5">
+        {FLAGS.map(([k, label]) => (
+          <Toggle key={k} checked={form.flags[k] === true} onChange={(v) => set((now) => ({ flags: { ...now.flags, [k]: v } }))} label={label} />
+        ))}
+      </div>
+    </>
+  )
 }
 
 /**
@@ -199,36 +272,7 @@ export function NewCategoryDialog({ defaultGroup, onCreated, has, onClose }: { d
     })
   return (
     <Dialog title="Nowa podkategoria" onClose={onClose} wide centered data-testid="new-category" actions={<SaveButtons busy={busy} ok={form.name.trim() !== ''} onSave={() => void save()} onClose={onClose} />}>
-      <Field label="Nazwa" labelWidth={90}>
-        <TextField value={form.name} onCommit={(name) => set({ name })} onEnter={() => void save()} max={60} autoFocus errorPlacement="below" aria-label="Nazwa podkategorii" data-testid="new-category-name" />
-      </Field>
-      <Field label="Kategoria" labelWidth={90}>
-        <Choice value={form.group} options={groups.map((g) => ({ value: g.id, label: g.name }))} onChange={(group) => set({ group })} className="w-[200px]" aria-label="Kategoria podkategorii" data-testid="new-category-group" />
-      </Field>
-      <Field label="Klasa" labelWidth={90}>
-        <Choice value={form.cls} options={(['work', 'life', 'free'] as const).map((v) => ({ value: v, label: CLASS_NAMES[v] }))} onChange={(cls) => set({ cls })} className="w-[160px]" aria-label="Klasa" data-testid="new-category-class" />
-      </Field>
-      <Field label="Koszty" labelWidth={90}>
-        <CostFields costs={form.costs} onChange={(c) => set((now) => ({ costs: { ...now.costs, ...c } }))} />
-      </Field>
-      <Field label="Miejsce" labelWidth={90}>
-        <Choice value={form.place} options={[...PLACE_OPTIONS]} onChange={(place) => set({ place })} className="w-[240px]" aria-label="Miejsce" data-testid="new-category-place" />
-      </Field>
-      <Field label="Kolor" labelWidth={90}>
-        <div className="flex flex-wrap items-center gap-2">
-          <ColorSwatches value={form.color} onPick={(color) => set({ color })} />
-        </div>
-      </Field>
-      {rd.calendars.length > 1 && (
-        <Field label="Kalendarz" labelWidth={90}>
-          <Choice value={form.calendar} options={rd.calendars.map((c) => ({ value: c.id, label: c.name }))} onChange={(calendar) => set({ calendar })} className="w-[200px]" aria-label="Kalendarz podkategorii" />
-        </Field>
-      )}
-      <div className="grid grid-cols-2 gap-1.5">
-        {FLAGS.map(([k, label]) => (
-          <Toggle key={k} checked={form.flags[k] === true} onChange={(v) => set((now) => ({ flags: { ...now.flags, [k]: v } }))} label={label} />
-        ))}
-      </div>
+      <CategoryFields form={form} set={set} groups={groups} onEnter={() => void save()} />
     </Dialog>
   )
 }

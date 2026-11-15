@@ -3,10 +3,16 @@ paths:
   - "src/renderer/lib/deleteKey.ts"
   - "src/renderer/components/DeleteDialog.tsx"
   - "src/renderer/features/plan/NewThingDialogs.tsx"
+  - "src/renderer/features/plan/EditThingDialogs.tsx"
+  - "src/renderer/features/plan/editScope.ts"
+  - "src/renderer/features/plan/editChanges.ts"
   - "src/renderer/features/settings/categoryFields.tsx"
   - "src/renderer/features/routines/RoutineSteps.tsx"
   - "tests/web/delete-key.test.ts"
   - "tests/web/new-thing.test.ts"
+  - "tests/web/edit-thing.test.ts"
+  - "tests/web/edit-scope.test.ts"
+  - "tests/e2e/edit-thing.spec.ts"
   - "tests/web/category-fields.test.ts"
   - "tests/e2e/delete-key.spec.ts"
 ---
@@ -29,3 +35,8 @@ paths:
 - Rutyna: `saveRecord` jak `RoutinesPage` (kroki bez nazwy odpadają); edytor kroków to wspólny `RoutineSteps`. Wariant i podkategoria: „od dziś” zawsze (nowa rzecz nie ma wcześniejszych użyć); wariant przez `saveVariants(…, { from: dziś, at })` (lista z rd.json w turze zapisu; „koszt jak podkategoria” domyślnie), podkategoria przez `createCategory` (reguły, potem `setMeta` – nazwa, kolor, `group` – kategoria z pola „Kategoria”, domyślnie grupa podkategorii bloku) i kalendarz (`saveCalendars`). Wspólne z „Kategoriami” – `settings/categoryFields.tsx` (`FLAGS`, `POOLS`, `PLACE_OPTIONS`, `NEW_CATEGORY_COSTS`, `setMeta`, `createCategory`, `ColorSwatches`, `CostNumbers`); nie kopiuj ich w ekranie.
 - Wariant i kategoria idą do bloku najnowszym `onCreated` (ref, `useHandOn`), dopiero gdy dane panelu je mają (`has` z `names.settings` – w „Dziś” to ustawienia modelu dnia, z których liczy wymiana); bez tego po `HAND_ON_MS` i tak; okno zamknięte w międzyczasie – nic. Dzień bloku przed dziś (`day`, inaczej `place.date`) – bez „+ Nowa…” w Wariancie i Kategorii (Rutyna zostaje: nie jest datowana); szablon i seria – zawsze.
 - Wariant: lista „Wariant” istnieje tylko dla kategorii, która ma już warianty (jak dotąd) – „+ Nowa…” nie tworzy pierwszego wariantu kategorii bez nich.
+
+## ✎ – szybka edycja z panelu (D514, T1325–T1329)
+- `BlockEditor`: obok list Podkategoria / Wariant / Rutyna przycisk ✎ (`EditButton`, `edit-category` / `edit-variant` / `edit-routine`), gdy coś wybrane; tam, gdzie „+ Nowa…” (`canEdit`: nie `readOnly`, podkategoria i wariant nie na dniu minionym, rutyna zawsze). Otwiera `EditThingDialogs` – te same komponenty pól co „+ Nowa…” (`CategoryFields`, `VariantFields` + miejsce, `RoutineFields`), wypełnione ustawieniami z chwili teraz (`settingsOn(rd.settings, dziś, teraz)`).
+- Zapis: tylko zmienione pola (`editChanges.ts`), ustawienia z datą „od dziś” mimo „Od kiedy” (`saveSettingsFrom(…, { from: dziś, at: teraz })`, `saveVariants` z tą samą datą), reszta od razu (`setMeta`, `saveTree`, `saveCalendars`, `updateRecord` rutyny); odmowa zostawia okno. Okno nie zmienia wyboru bloku (`onChange` nie woła).
+- Liczba „Zmieni N bloków od dziś” (`editScope.ts`): pliki dni od dziś (62 dni, jedno `dayFiles` przy otwarciu), ostatnie wersje szablonów i serii (blok raz), nie sesje i wykłady; dzień nieczytelny – „Nie policzono K dni”. Koszt dotyka bloków bez własnego kosztu (podkategorii – też bez wariantu z kosztem), inne pola – wszystkich.
