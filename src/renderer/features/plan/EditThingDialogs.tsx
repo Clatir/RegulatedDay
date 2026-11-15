@@ -4,49 +4,82 @@
  * the name) writes only what changed, from today on whatever „Od kiedy” of the settings says: the dated settings (class, costs, place,
  * the properties of a subcategory; a variant's list) from this moment („od dziś”: a block begun counts its new cost from then on, the
  * minutes gone by as they were, D501), the rest (a name, a colour, a category, a calendar, a routine) at once as „Kategorie” and „Rutyny”
- * save them. „Anuluj” and Esc change nothing. The window says how many blocks it changes (`editScope.ts`, T1325). The values shown are the
- * settings in force now (not the panel's day – an edit is made from now on).
+ * save them. „Anuluj” and Esc change nothing. The window says how many blocks it changes (`editScope.ts`, T1325) – the days' files read once,
+ * at the first change (T1337). The values shown are the settings in force now (not the panel's day – an edit is made from now on), so ✎ is
+ * only offered for a thing there is now (T1330). A variant's save refused says why in the window (T1331).
  */
 import { useEffect, useMemo, useState } from 'react'
+import type { AnyEvent } from '@shared/model/events'
+import { foldFacts } from '@shared/engine/facts'
+import { gridOf } from '@shared/engine/grid'
 import { paths } from '@shared/data/paths'
 import { calendarOfCategory, setCategoryCalendarRaw } from '@shared/model/calendars'
 import type { CategoryRules } from '@shared/model/categories'
 import { changeVariant, groupOfCategory, setCategoryGroupRaw } from '@shared/model/categoryTree'
 import { categoryName } from '@shared/model/rd'
 import { routineFrom } from '@shared/model/routines'
-import { settingsOn } from '@shared/model/settings'
+import { settingsOn, type RulesSettings } from '@shared/model/settings'
 import { Dialog } from '../../components/Dialog'
 import { useBusy } from '../../lib/busy'
 import { commitActiveField } from '../../lib/commit'
 import { isSaved, updateRecord, useData } from '../../store/data'
+import { dayUsable } from '../../store/day'
 import { saveCalendars } from '../settings/calendarEdits'
-import { FLAGS, setMeta } from '../settings/categoryFields'
+import { FLAGS, setMeta, VARIANT_PLACE_SAME } from '../settings/categoryFields'
 import { saveTree, saveVariants } from '../settings/categoryTreeEdits'
 import { saveSettingsFrom } from '../settings/settingsStore'
 import { categoryChange, routineChange, variantChange } from './editChanges'
-import { countScope, scopeDates, scopeDetail, scopeText, type EditTarget, type EditWhat, type ScopeCount } from './editScope'
-import { CategoryFields, RoutineFields, SaveButtons, VARIANT_PLACE_SAME, VariantFields, useForm, type CategoryForm, type RoutineForm, type VariantForm } from './NewThingDialogs'
+import { countScope, overriddenFrom, scopeDates, scopeDetail, scopeText, type EditTarget, type EditWhat, type ScopeCount } from './editScope'
+import { CategoryFields, RoutineFields, SaveButtons, VariantFields, useForm } from './NewThingDialogs'
+import type { CategoryForm, RoutineForm, VariantForm } from './thingForms'
 
 type Files = Record<string, Record<string, unknown> | null>
+const NONE: ReadonlySet<string> = new Set()
 
-/** The blocks the edit reaches: the days' files are read once when the window opens (the count follows the fields); null – still being counted. */
-function useScope(target: EditTarget, what: EditWhat | null, categories: Readonly<Record<string, CategoryRules | undefined>>): ScopeCount | null {
+/** Today's blocks already ended, from today's log (a change of the cost only does not reach them, D501); a log not read whole – none known. */
+async function endedToday(today: string): Promise<ReadonlySet<string>> {
+  try {
+    const data = await window.rd.dayData(today)
+    if (!dayUsable(data)) return NONE
+    const facts = foldFacts(gridOf(today), data.events as AnyEvent[])
+    return new Set([...facts.blocks.values()].filter((f) => f.endedAt != null).map((f) => f.id))
+  } catch {
+    return NONE
+  }
+}
+
+/**
+ * The blocks the edit reaches: the days' files (and, for a change that may be of the cost only, today's log) are read once, at the first
+ * change (`what` no longer null) – a window opened and closed reads nothing; the count follows the fields. `until` – `overriddenFrom`.
+ * Null – nothing changed, or still being counted.
+ */
+function useScope(target: EditTarget, what: EditWhat | null, categories: Readonly<Record<string, CategoryRules | undefined>>, until: string | null): ScopeCount | null {
   const today = useData((s) => s.view?.today ?? '')
   const templates = useData((s) => s.templates)
   const series = useData((s) => s.seriesPlans)
-  const [files, setFiles] = useState<Files | null>(null)
+  // Set once and never put back: going back to „nothing changed” and changing again reads nothing more.
+  const [wanted, setWanted] = useState(false)
   useEffect(() => {
+    if (what) setWanted(true)
+  }, [what])
+  const withLog = target.kind !== 'routine'
+  const [read, setRead] = useState<{ files: Files; ended: ReadonlySet<string> } | null>(null)
+  useEffect(() => {
+    if (!wanted || !today) return
     let alive = true
-    window.rd.dayFiles(scopeDates(today)).then(
-      (f) => alive && setFiles(f),
-      () => alive && setFiles({})
-    )
+    void Promise.all([window.rd.dayFiles(scopeDates(today)).catch((): Files => ({})), withLog ? endedToday(today) : NONE]).then(([files, ended]) => {
+      if (alive) setRead({ files, ended })
+    })
     return () => {
       alive = false
     }
-  }, [today])
+  }, [wanted, today, withLog])
   const key = JSON.stringify(target)
-  return useMemo(() => (files && what ? countScope({ today, files, templates, series, target, what, categories }) : null), [files, what, today, templates, series, key, categories])
+  return useMemo(
+    () => (read && what ? countScope({ today, files: read.files, templates, series, target, what, categories, ended: read.ended, until }) : null),
+    // `target` by its key: a new object of the same thing counts nothing again.
+    [read, what, today, templates, series, key, categories, until]
+  )
 }
 
 function ScopeNote({ count, what, note }: { count: ScopeCount | null; what: EditWhat | null; note?: string }) {
@@ -66,11 +99,34 @@ function ScopeNote({ count, what, note }: { count: ScopeCount | null; what: Edit
   )
 }
 
-/** The settings in force at this moment – what an edit starting now changes. */
-function useSettingsNow() {
+/** The settings in force at this moment – what an edit starting now changes (and what ✎ is offered for, T1330). */
+export function useSettingsNow(): RulesSettings {
   const today = useData((s) => s.view?.today ?? '')
   const changes = useData((s) => s.rd.settings)
   return useMemo(() => settingsOn(changes, today, Date.now()), [changes, today])
+}
+
+/** A change of the dated settings from today on: the date a later entry writes over all of it (T1336); null – none, or nothing dated. */
+function useUntil(written: Record<string, unknown> | null): string | null {
+  const today = useData((s) => s.view?.today ?? '')
+  const changes = useData((s) => s.rd.settings)
+  // `written` by its key: a new object of the same change counts nothing again.
+  const key = written ? JSON.stringify(written) : null
+  return useMemo(() => (written && today ? overriddenFrom(changes, today, written) : null), [changes, today, key])
+}
+
+/** Why a variant's save was refused (T1331) – said in the window, which stays open until „Anuluj” or Esc. */
+export const VARIANT_GONE_TEXT = 'Nie zapisano: tego wariantu już nie ma.'
+export const VARIANT_SAME_TEXT = 'Nic nie zapisano: wariant jest już taki, jak w oknie – zmieniono go w międzyczasie.'
+export const VARIANT_FAILED_TEXT = 'Nie zapisano zmiany wariantu. Spróbuj jeszcze raz albo zamknij okno.'
+
+function SaveError({ text }: { text: string | null }) {
+  if (!text) return null
+  return (
+    <p className="text-[12.5px] text-rose" role="alert" data-testid="edit-error">
+      {text}
+    </p>
+  )
 }
 
 export function EditCategoryDialog({ categoryId, onClose }: { categoryId: string; onClose: () => void }) {
@@ -92,7 +148,10 @@ export function EditCategoryDialog({ categoryId, onClose }: { categoryId: string
   const [form, set, ref] = useForm<CategoryForm>(initial)
   const [busy, run] = useBusy()
   const change = categoryChange(initial, form)
-  const count = useScope({ kind: 'category', id: categoryId }, change.what, settings.categories)
+  const undated = change.meta != null || change.group != null || change.calendar != null
+  // A field without a date reaches every block for good: no entry of the settings writes over it.
+  const until = useUntil(change.patch && !undated ? { categories: { [categoryId]: change.patch } } : null)
+  const count = useScope({ kind: 'category', id: categoryId }, change.what, settings.categories, until)
   const save = () =>
     run(async () => {
       commitActiveField()
@@ -107,7 +166,6 @@ export function EditCategoryDialog({ categoryId, onClose }: { categoryId: string
       if (ch.calendar && !isSaved((await saveCalendars((raw) => setCategoryCalendarRaw(raw, categoryId, ch.calendar!))).out)) return
       onClose()
     })
-  const undated = change.meta != null || change.group != null || change.calendar != null
   return (
     <Dialog title={`Podkategoria ${initial.name}`} onClose={onClose} wide centered data-testid="edit-category-window" actions={<SaveButtons busy={busy} ok={form.name.trim() !== ''} onSave={() => void save()} onClose={onClose} />}>
       <CategoryFields form={form} set={set} groups={groups} onEnter={() => void save()} />
@@ -125,7 +183,10 @@ export function EditVariantDialog({ categoryId, variantId, onClose }: { category
   const [form, set, ref] = useForm<VariantForm>(initial)
   const [busy, run] = useBusy()
   const change = variantChange(initial, form)
-  const count = useScope({ kind: 'variant', categoryId, id: variantId }, change.what, settings.categories)
+  // The list of variants is written whole: an entry of a later date with a list writes over the change (T1328).
+  const until = useUntil(change.patch ? { categories: { [categoryId]: { variants: [] } } } : null)
+  const count = useScope({ kind: 'variant', categoryId, id: variantId }, change.what, settings.categories, until)
+  const [error, setError] = useState<string | null>(null)
   const save = () =>
     run(async () => {
       commitActiveField()
@@ -134,13 +195,34 @@ export function EditVariantDialog({ categoryId, variantId, onClose }: { category
       const ch = variantChange(initial, d)
       if (!ch.patch) return onClose()
       const patch = ch.patch
+      setError(null)
+      // What the turn of the save found (the list is not made when the subcategory is not there then).
+      const turn: { found: 'gone' | 'same' | 'made' | null } = { found: null }
       // The list is whole in a change: made in the turn of the save from the variants in force from now on.
-      if (await saveVariants(categoryId, (now) => changeVariant(now, variantId, patch), { from: today, at: Date.now() })) onClose()
+      const saved = await saveVariants(
+        categoryId,
+        (now) => {
+          if (!now.some((v) => v.id === variantId)) {
+            turn.found = 'gone'
+            return null
+          }
+          const list = changeVariant(now, variantId, patch)
+          turn.found = list ? 'made' : 'same'
+          return list
+        },
+        { from: today, at: Date.now() }
+      )
+      if (saved) return onClose()
+      const state = useData.getState()
+      const gone = turn.found === 'gone' || (turn.found == null && !settingsOn(state.rd.settings, state.view?.today ?? today, Date.now()).categories[categoryId])
+      // Not saved for another reason (the day not read, the folder, a question): its toast says why.
+      setError(gone ? VARIANT_GONE_TEXT : turn.found === 'same' ? VARIANT_SAME_TEXT : VARIANT_FAILED_TEXT)
     })
   return (
     <Dialog title={`Wariant ${initial.name}`} onClose={onClose} centered data-testid="edit-variant-window" actions={<SaveButtons busy={busy} ok={form.name.trim() !== ''} onSave={() => void save()} onClose={onClose} />}>
       <VariantFields form={form} set={set} onEnter={() => void save()} withPlace />
       <ScopeNote count={count} what={change.what} />
+      <SaveError text={error} />
     </Dialog>
   )
 }
@@ -152,7 +234,7 @@ export function EditRoutineDialog({ routineId, onClose }: { routineId: string; o
   const [form, set, ref] = useForm<RoutineForm>(initial)
   const [busy, run] = useBusy()
   const change = routineChange(initial, form)
-  const count = useScope({ kind: 'routine', id: routineId }, change.what, settings.categories)
+  const count = useScope({ kind: 'routine', id: routineId }, change.what, settings.categories, null)
   const save = () =>
     run(async () => {
       commitActiveField()

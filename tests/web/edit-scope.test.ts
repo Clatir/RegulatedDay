@@ -3,9 +3,9 @@
  * series' – a change of cost only reaches blocks without a cost of their own (and, for a subcategory, without a variant that has one).
  */
 import { describe, expect, it } from 'vitest'
-import { countScope, reaches, SCOPE_DAYS, scopeDates, scopeDetail, scopeText } from '@renderer/features/plan/editScope'
+import { countScope, overriddenFrom, reaches, SCOPE_DAYS, scopeDates, scopeDetail, scopeText } from '@renderer/features/plan/editScope'
 import { categoryChange, routineChange, variantChange } from '@renderer/features/plan/editChanges'
-import { DEFAULT_SETTINGS } from '@shared/model/settings'
+import { DEFAULT_SETTINGS, type SettingsChange } from '@shared/model/settings'
 import { planBlock, templateFrom, type PlanBlock } from '@shared/model/plan'
 import { seriesFrom } from '@shared/model/series'
 
@@ -86,14 +86,93 @@ describe('countScope', () => {
     expect(c).toMatchObject({ days: 0, templates: 0, series: 1, total: 1, unread: 0 })
   })
 
+  it('z plików dni bez bloków warstw (sesja, wykład, zjazd) i bez zmienionych kopii bloków szablonu i serii liczonych już raz (T1333)', () => {
+    const files = {
+      ...nulls(),
+      [today]: day(today, [
+        b({ id: 'ses', origin: 'session' }),
+        b({ id: 'lec', origin: 'lecture' }),
+        b({ id: 'zj', origin: 'zjazd' }),
+        // The template's „n1” and the series „s1” changed for this day: counted once, under the template and the series.
+        b({ id: 'tpl-n1', origin: 'template', sourceId: 'n1' }),
+        b({ id: 'ser-s1', origin: 'series', sourceId: 's1' }),
+        // The template's „n3” is of „analiza” (not counted there); its copy of today was changed to „projekty” – a block of its own.
+        b({ id: 'tpl-n3', origin: 'template', sourceId: 'n3' }),
+        b({ id: 'own' })
+      ])
+    }
+    const c = countScope({ today, files, templates: [template], series: [plan(seriesRaw('s1'))], target: { kind: 'category', id: 'projekty' }, what: 'all', categories })
+    expect(c).toMatchObject({ days: 2, templates: 2, series: 1, total: 5 })
+  })
+
+  it('szablon i seria: wersja obowiązująca dziś i każda późniejsza, blok raz; wersja sprzed obowiązującej się nie liczy (T1334)', () => {
+    const t = templateFrom({
+      schema: 1,
+      id: 't2',
+      name: 'Zmiany',
+      dayType: 'zwykly',
+      weekdays: [],
+      versions: {
+        '2026-01-01': { blocks: [b({ id: 'old' })].map((x) => ({ ...x })) },
+        '2026-10-01': { blocks: [b({ id: 'nA' }), b({ id: 'nB' })].map((x) => ({ ...x })) },
+        '2026-12-01': { blocks: [b({ id: 'nB' }), b({ id: 'nC' })].map((x) => ({ ...x })) }
+      }
+    })!
+    const block = (categoryId: string) => ({ block: { categoryId, startMin: 600, durationMin: 30 }, rule: { kind: 'daily' } })
+    // Of „projekty” today, of „analiza” from 1.12: it reaches the blocks until then.
+    const s1 = plan({ schema: 1, id: 's1', start: '2026-11-01', versions: { '2026-11-01': block('projekty'), '2026-12-01': block('analiza') } })
+    // Of „projekty” until 10.11 only – the version in force today is of „analiza”.
+    const s2 = plan({ schema: 1, id: 's2', start: '2026-10-01', versions: { '2026-10-01': block('projekty'), '2026-11-10': block('analiza') } })
+    const c = countScope({ today, files: nulls(), templates: [t], series: [s1, s2], target: { kind: 'category', id: 'projekty' }, what: 'all', categories })
+    expect(c).toMatchObject({ templates: 3, series: 1, total: 4 })
+  })
+
+  it('sam koszt: dzisiejszy blok skończony się nie liczy (minione minuty zostają, D501), zaczęty tak; inna zmiana liczy wszystkie (T1335)', () => {
+    const files = { ...nulls(), [today]: day(today, [b({ id: 'done' }), b({ id: 'run' })]), '2026-11-19': day('2026-11-19', [b({ id: 'done' })]) }
+    const base = { today, files, templates: [], series: [], target: { kind: 'category', id: 'projekty' } as const, categories, ended: new Set(['done']) }
+    expect(countScope({ ...base, what: 'costs' }).days).toBe(2)
+    expect(countScope({ ...base, what: 'all' }).days).toBe(3)
+  })
+
+  it('wpis z późniejszą datą, który nadpisuje ten sam klucz: liczy tylko dni przed nim (T1336)', () => {
+    const files = { ...nulls(), [today]: day(today, [b({ id: 'a' })]), '2026-11-19': day('2026-11-19', [b({ id: 'b' })]), '2026-11-20': day('2026-11-20', [b({ id: 'c' })]) }
+    const t = templateFrom({ schema: 1, id: 't3', name: 'Późny', dayType: 'zwykly', weekdays: [], versions: { '2026-10-01': { blocks: [b({ id: 'n1' })].map((x) => ({ ...x })) }, '2026-11-20': { blocks: [b({ id: 'n9' })].map((x) => ({ ...x })) } } })!
+    const late = plan(seriesRaw('s-late', { start: '2026-11-25', versions: { '2026-11-25': { block: { categoryId: 'projekty', startMin: 600, durationMin: 30 }, rule: { kind: 'daily' } } } }))
+    const c = countScope({ today, files, templates: [t], series: [plan(seriesRaw('s1')), late], target: { kind: 'category', id: 'projekty' }, what: 'costs', categories, until: '2026-11-20' })
+    expect(c).toMatchObject({ days: 2, templates: 1, series: 1, total: 4, unread: 0, until: '2026-11-20' })
+    expect(scopeDetail(c)).toContain('do 19.11.2026')
+    expect(scopeDetail(c)).toContain('od 20.11.2026')
+  })
+
   it('tekst: odmiana i skład liczby', () => {
-    const c = { days: 1, templates: 1, series: 1, total: 3, unread: 2 }
+    const c = { days: 1, templates: 1, series: 1, total: 3, unread: 2, until: null }
     expect(scopeText(c)).toBe('Zmieni 3 bloki od dziś')
     expect(scopeText({ ...c, total: 1 })).toBe('Zmieni 1 blok od dziś')
     expect(scopeText({ ...c, total: 5 })).toBe('Zmieni 5 bloków od dziś')
     expect(scopeDetail(c)).toContain('w dniach: 1 · w szablonach: 1 · w seriach: 1')
     expect(scopeDetail(c)).toContain('Nie policzono 2 nieczytelnych dni')
     expect(scopeDetail({ ...c, unread: 0 })).not.toContain('Nie policzono')
+  })
+})
+
+describe('overriddenFrom (T1336)', () => {
+  const today = '2026-11-18'
+  const ch = (from: string, patch: Record<string, unknown>, at: number | null = null): SettingsChange => ({ id: `c-${from}`, from, at, patch })
+  const head = { categories: { projekty: { costs: { head: 4 } } } }
+  it('pierwsza późniejsza data, od której wpis nadpisuje ten sam klucz; inna pula, wpis wcześniejszy albo z dziś – nie', () => {
+    expect(overriddenFrom([], today, head)).toBeNull()
+    expect(overriddenFrom([ch('2026-12-10', { categories: { projekty: { costs: { head: 1 } } } }), ch('2026-11-25', { categories: { projekty: { costs: { head: 2 } } } })], today, head)).toBe('2026-11-25')
+    expect(overriddenFrom([ch('2026-11-25', { categories: { projekty: { costs: { emotions: 2 } } } })], today, head)).toBeNull()
+    expect(overriddenFrom([ch('2026-11-10', { categories: { projekty: { costs: { head: 2 } } } }), ch(today, { categories: { projekty: { costs: { head: 2 } } } }, 1)], today, head)).toBeNull()
+    expect(overriddenFrom([ch('2026-11-25', { categories: { analiza: { costs: { head: 2 } } } })], today, head)).toBeNull()
+  })
+  it('kilka pól: data, od której nadpisane są wszystkie; lista wariantów – cała', () => {
+    const two = { categories: { projekty: { cls: 'work', costs: { head: 4 } } } }
+    expect(overriddenFrom([ch('2026-11-20', { categories: { projekty: { cls: 'life' } } })], today, two)).toBeNull()
+    expect(overriddenFrom([ch('2026-11-20', { categories: { projekty: { cls: 'life' } } }), ch('2026-11-25', { categories: { projekty: { costs: { head: 1, emotions: 1 } } } })], today, two)).toBe('2026-11-25')
+    const variants = { categories: { regeneracja: { variants: [] } } }
+    expect(overriddenFrom([ch('2026-11-19', { categories: { regeneracja: { variants: [{ id: 'spacer', name: 'Spacer' }] } } })], today, variants)).toBe('2026-11-19')
+    expect(overriddenFrom([ch('2026-11-19', { categories: { regeneracja: { costs: { head: 0 } } } })], today, variants)).toBeNull()
   })
 })
 

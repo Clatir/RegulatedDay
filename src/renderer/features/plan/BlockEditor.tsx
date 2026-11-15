@@ -15,9 +15,11 @@
  * of a day gone by offers no „+ Nowa…” for them (its day would not have the new one); a routine is not dated – always.
  * D514: beside those lists ✎ (`edit-category`, `edit-variant`, `edit-routine`) once something is chosen – the same window filled with the thing
  * (`EditThingDialogs`), saved from today on; offered where „+ Nowa…” is (so not on a day gone by for a subcategory and a variant, nor in a panel
- * that cannot change), a routine's always.
+ * that cannot change), a routine's always; a subcategory and a variant only once they are there today (T1330: one of a later date is not
+ * offered – the window shows and saves the settings of now). The window is the thing's it was opened for: a change of the block's choice
+ * while it is open (another computer) closes it (T1332).
  */
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
 import { groupOfCategory } from '@shared/model/categoryTree'
 import { BLOCK_NAME_MAX, type PlanBlock } from '@shared/model/plan'
@@ -35,7 +37,7 @@ import { useAttachDrop } from '../attachments/attachDrop'
 import { AttachmentsSection } from '../attachments/AttachmentsSection'
 import { NoteEditor } from '../note/NoteEditor'
 import { anchorCandidates, blockName, groupedCategoryOptions, type Names } from './blockView'
-import { EditCategoryDialog, EditRoutineDialog, EditVariantDialog } from './EditThingDialogs'
+import { EditCategoryDialog, EditRoutineDialog, EditVariantDialog, useSettingsNow } from './EditThingDialogs'
 import { NewCategoryDialog, NewRoutineDialog, NewVariantDialog } from './NewThingDialogs'
 
 /** The last item of the lists „Podkategoria”, „Wariant”, „Rutyna” (D463): it makes a new one in a window and chooses it. */
@@ -128,14 +130,32 @@ export function BlockEditor({
         ...anchorCandidates(plan, block.id).map((b) => ({ value: b.id, label: `po: ${blockName(b, names)}${b.startMin != null ? ` (${logicalClock(b.startMin)})` : ''}` }))
       ]
   const routine = block.routine ? names.routines.find((r) => r.id === block.routine) : undefined
-  const [making, setMaking] = useState<'routine' | 'variant' | 'category' | 'editRoutine' | 'editVariant' | 'editCategory' | null>(null)
+  const [making, setMaking] = useState<'routine' | 'variant' | 'category' | null>(null)
   const today = useData((s) => s.view?.today ?? '')
   const blockDay = day ?? (place?.scope === 'day' ? place.date : null)
   // A variant and a category are made „od dziś”: a day gone by would not have them (T1067).
   const newDated = blockDay == null || (today !== '' && blockDay >= today)
   const newOption = (dated: boolean) => (readOnly || (dated && !newDated) ? [] : [NEW_OPTION])
-  // D514: ✎ where „+ Nowa…” is, once something is chosen (a subcategory and a variant are edited from today on – none on a day gone by).
-  const canEdit = { category: !readOnly && newDated && rules != null, variant: !readOnly && newDated && block.variantId != null && variants.some((v) => v.id === block.variantId), routine: !readOnly && routine != null }
+  // D514: ✎ where „+ Nowa…” is, once something is chosen (a subcategory and a variant are edited from today on – none on a day gone by),
+  // and only for a subcategory and a variant there are today (T1330): the panel's settings (a day to come, a template) may have one of a later date.
+  const rulesNow = useSettingsNow().categories[block.categoryId]
+  const canEdit = {
+    category: !readOnly && newDated && rules != null && rulesNow != null,
+    variant: !readOnly && newDated && block.variantId != null && variants.some((v) => v.id === block.variantId) && rulesNow?.variants.some((v) => v.id === block.variantId) === true,
+    routine: !readOnly && routine != null
+  }
+  // T1332: the window ✎ opened is the thing's chosen then – once the block's choice is another (a change from another computer), it closes.
+  const chosen = { category: block.categoryId, variant: block.variantId ? `${block.categoryId}/${block.variantId}` : null, routine: block.routine }
+  const [editing, setEditing] = useState<{ kind: keyof typeof chosen; id: string } | null>(null)
+  const edit = (kind: keyof typeof chosen) => {
+    const id = chosen[kind]
+    if (id) setEditing({ kind, id })
+  }
+  const editingNow = editing && chosen[editing.kind] === editing.id ? editing : null
+  useEffect(() => {
+    if (editing && !editingNow) setEditing(null)
+  }, [editing, editingNow])
+  const stopEditing = () => setEditing(null)
   // D480: the routine and its length – its steps are never copied (the block shows the routine's while it has none of its own).
   const pickRoutine = (r: Routine | undefined) => void set({ routine: r ? r.id : null, ...(r && routineMinutes(r) > 0 ? { durationMin: routineMinutes(r) } : {}) })
   return (
@@ -172,7 +192,7 @@ export function BlockEditor({
             aria-label="Podkategoria"
             data-testid="block-category"
           />
-          {canEdit.category && <EditButton label="Edytuj podkategorię" testId="edit-category" onClick={() => setMaking('editCategory')} />}
+          {canEdit.category && <EditButton label="Edytuj podkategorię" testId="edit-category" onClick={() => edit('category')} />}
         </div>
       </Field>
       {variants.length > 0 && (
@@ -186,7 +206,7 @@ export function BlockEditor({
               aria-label="Wariant"
               data-testid="block-variant"
             />
-            {canEdit.variant && <EditButton label="Edytuj wariant" testId="edit-variant" onClick={() => setMaking('editVariant')} />}
+            {canEdit.variant && <EditButton label="Edytuj wariant" testId="edit-variant" onClick={() => edit('variant')} />}
           </div>
         </Field>
       )}
@@ -256,7 +276,7 @@ export function BlockEditor({
               aria-label="Rutyna"
               data-testid="block-routine"
             />
-            {canEdit.routine && <EditButton label="Edytuj rutynę" testId="edit-routine" onClick={() => setMaking('editRoutine')} />}
+            {canEdit.routine && <EditButton label="Edytuj rutynę" testId="edit-routine" onClick={() => edit('routine')} />}
           </div>
         </Field>
       )}
@@ -304,10 +324,10 @@ export function BlockEditor({
           }}
         />
       )}
-      {/* D514: the same windows filled with the thing chosen – a change changes no choice of the block. */}
-      {making === 'editRoutine' && block.routine && <EditRoutineDialog routineId={block.routine} onClose={() => setMaking(null)} />}
-      {making === 'editVariant' && block.variantId && <EditVariantDialog categoryId={block.categoryId} variantId={block.variantId} onClose={() => setMaking(null)} />}
-      {making === 'editCategory' && <EditCategoryDialog categoryId={block.categoryId} onClose={() => setMaking(null)} />}
+      {/* D514: the same windows filled with the thing chosen – a change changes no choice of the block; one window a thing (its key, T1332). */}
+      {editingNow?.kind === 'routine' && block.routine && <EditRoutineDialog key={editingNow.id} routineId={block.routine} onClose={stopEditing} />}
+      {editingNow?.kind === 'variant' && block.variantId && <EditVariantDialog key={editingNow.id} categoryId={block.categoryId} variantId={block.variantId} onClose={stopEditing} />}
+      {editingNow?.kind === 'category' && <EditCategoryDialog key={editingNow.id} categoryId={block.categoryId} onClose={stopEditing} />}
     </aside>
   )
 }

@@ -15,7 +15,7 @@ import { newId } from '@shared/model/ids'
 import { calendarOfCategory, DEFAULT_CALENDAR_ID, setCategoryCalendarRaw } from '@shared/model/calendars'
 import type { Costs } from '@shared/model/categories'
 import { addVariant, OTHER_GROUP, VARIANT_NAME_MAX } from '@shared/model/categoryTree'
-import { ROUTINE_SCHEMA, routineFrom, type Routine, type RoutineStep, type RoutineVersion } from '@shared/model/routines'
+import { ROUTINE_SCHEMA, routineFrom, type Routine, type RoutineVersion } from '@shared/model/routines'
 import { Choice, TextField } from '../../components/fields'
 import { Dialog } from '../../components/Dialog'
 import { Field, Toggle } from '../../components/ui'
@@ -23,11 +23,12 @@ import { useBusy } from '../../lib/busy'
 import { commitActiveField } from '../../lib/commit'
 import { isSaved, saveRecord, useData } from '../../store/data'
 import { saveCalendars } from '../settings/calendarEdits'
-import { ColorSwatches, CostNumbers, createCategory, FLAGS, NEW_CATEGORY_COSTS, PLACE_OPTIONS } from '../settings/categoryFields'
+import { ColorSwatches, CostNumbers, createCategory, FLAGS, NEW_CATEGORY_COSTS, PLACE_OPTIONS, VARIANT_PLACE_OPTIONS, VARIANT_PLACE_SAME } from '../settings/categoryFields'
 import { saveSettingsFrom } from '../settings/settingsStore'
 import { saveVariants } from '../settings/categoryTreeEdits'
 import { RoutineSteps } from '../routines/RoutineSteps'
 import { CLASS_NAMES } from './blockView'
+import { cleanSteps, type CategoryForm, type RoutineForm, type VariantForm } from './thingForms'
 
 /** The fields as they are now: a field left by the click on „Zapisz” has told its value before the click is handled (a ref beside the state). */
 export function useForm<T>(initial: T): readonly [T, (patch: Partial<T> | ((now: T) => Partial<T>)) => void, { current: T }] {
@@ -86,7 +87,6 @@ export function SaveButtons({ busy, ok, onSave, onClose }: { busy: boolean; ok: 
   )
 }
 
-export type RoutineForm = { name: string; normal: RoutineStep[]; worse: RoutineStep[] }
 type SetForm<T> = (patch: Partial<T> | ((now: T) => Partial<T>)) => void
 
 /** The fields of a routine – its name and the two versions of steps (the very editor of „Rutyny”); shared by „Nowa rutyna” and „Rutyna <nazwa>” (D514). */
@@ -105,9 +105,6 @@ export function RoutineFields({ form, set, onEnter }: { form: RoutineForm; set: 
     </>
   )
 }
-
-/** The steps as they are saved: a step without a name falls out. */
-export const cleanSteps = (steps: readonly RoutineStep[]): RoutineStep[] => steps.filter((s) => s.name.trim()).map((s) => ({ ...s, name: s.name.trim() }))
 
 /** A new routine: its name and the two versions of steps; the routine made is handed on (the block takes it with its length – its steps are shown from the routine, never copied, D480). */
 export function NewRoutineDialog({ onCreated, onClose }: { onCreated: (r: Routine) => void; onClose: () => void }) {
@@ -132,9 +129,6 @@ export function NewRoutineDialog({ onCreated, onClose }: { onCreated: (r: Routin
   )
 }
 
-export type VariantForm = { name: string; same: boolean; costs: Costs; /** The place: one of the three, or `VARIANT_PLACE_SAME` – „miejsce jak podkategoria”. */ place: string }
-export const VARIANT_PLACE_SAME = '-'
-
 /** The fields of a variant: name, cost („jak podkategoria” or three numbers) and – `withPlace` (the edit, D514) – the place. */
 export function VariantFields({ form, set, onEnter, withPlace }: { form: VariantForm; set: SetForm<VariantForm>; onEnter: () => void; withPlace?: boolean }) {
   return (
@@ -146,7 +140,7 @@ export function VariantFields({ form, set, onEnter, withPlace }: { form: Variant
       {!form.same && <CostFields costs={form.costs} onChange={(c) => set((now) => ({ costs: { ...now.costs, ...c } }))} />}
       {withPlace && (
         <Field label="Miejsce" labelWidth={70}>
-          <Choice value={form.place} options={[{ value: VARIANT_PLACE_SAME, label: 'miejsce jak podkategoria' }, ...PLACE_OPTIONS]} onChange={(place) => set({ place })} className="w-[240px]" aria-label="Miejsce wariantu" data-testid="new-variant-place" />
+          <Choice value={form.place} options={[...VARIANT_PLACE_OPTIONS]} onChange={(place) => set({ place })} className="w-[240px]" aria-label="Miejsce wariantu" data-testid="new-variant-place" />
         </Field>
       )}
     </>
@@ -189,18 +183,6 @@ export function CostFields({ costs, onChange }: { costs: Costs; onChange: (c: Pa
       <span className="text-[11.5px] text-muted">Koszty: głowa, emocje, bodźce na godzinę (ujemne oddają energię).</span>
     </div>
   )
-}
-
-export type CategoryForm = {
-  name: string
-  /** Its category of the tree (D510). */
-  group: string
-  cls: 'work' | 'life' | 'free'
-  place: 'computer' | 'passive' | 'away'
-  color: string | null
-  calendar: string
-  costs: Costs
-  flags: Record<string, boolean>
 }
 
 /**

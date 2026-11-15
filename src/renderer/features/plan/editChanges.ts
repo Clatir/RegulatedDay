@@ -6,10 +6,9 @@
 import type { Costs, Place } from '@shared/model/categories'
 import { deepEqual } from '@shared/data/merge'
 import { sameCosts } from '@shared/model/blockCosts'
-import { FLAGS, POOLS } from '../settings/categoryFields'
+import { FLAGS, POOLS, VARIANT_PLACE_SAME } from '../settings/categoryFields'
 import type { EditWhat } from './editScope'
-import { VARIANT_PLACE_SAME, type CategoryForm, type RoutineForm, type VariantForm } from './NewThingDialogs'
-import { cleanSteps } from './NewThingDialogs'
+import { cleanSteps, type CategoryForm, type RoutineForm, type VariantForm } from './thingForms'
 
 export interface CategoryChange {
   /** The dated settings (class, place, the properties, only the costs of a pool that changed) – saved from now on; null – none. */
