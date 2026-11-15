@@ -199,6 +199,33 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] KK2 Okienko kosztu: [−] [+], „Jak kategoria”, przeliczona prognoza (1.24.0)
    - [ ] KK3 Zmiana kosztu trwającego bloku liczy się od chwili zmiany (1.24.0)
    - [ ] KK4 Blok serii pyta o zakres w każdym widoku; blok skończony i dzień miniony – sam napis (1.24.0)
+   - [ ] KT1 Ustawienia → Kategorie: pięć kategorii z podkategoriami, „+ Kategoria” przed „Inne”, „Inne” bez „Usuń” (1.25.0)
+   - [ ] KT2 „więcej” przy podkategorii: pole „Kategoria”, warianty, „Pokaż archiwum” z „Przywróć” (1.25.0)
+   - [ ] KT3 „Usuń” kategorii z podkategoriami: „Przenieś do …” albo „Usuń też podkategorie”, „Cofnij” (1.25.0)
+   - [ ] KT4 Jedna lista „Podkategoria” w panelu bloku, „Tygodniu” i „Sprawach”; „Jak podkategoria / wariant / rutyna (…)” (1.25.0)
+   - [ ] KT5 Ctrl K po nazwie kategorii, podkategorii albo wariantu otwiera Kategorie i przewija do wiersza (1.25.0)
+   - [ ] KT6 Drugi komputer ze starszą wersją (1.24) proponuje instalację nowej; jego dane się nie psują (1.25.0) (Tylko Ty – dwa komputery)
+   - [ ] ED1 ✎ obok „Podkategoria”, „Wariant” i „Rutyna” w „Dziś”, nowym bloku, „Szablonach” i serii (1.25.0)
+   - [ ] ED2 Okno „Podkategoria X” na środku: „Zmieni N bloków od dziś”, skład; Esc i „Anuluj” nic nie zmieniają (1.25.0)
+   - [ ] ED3 Koszt przy „Od kiedy: jutro” i „Zapisz” – kafelek od razu nowy; zaczęty blok zostaje po starym koszcie (1.25.0)
+   - [ ] ED4 ✎ przy wariancie i rutynie – zmiany w „Kategoriach” i „Rutynach”; nieudany zapis mówi dlaczego (1.25.0)
+   - [ ] ED5 Liczba bloków zgadza się z dniami (do 62 dni), szablonami i seriami; sesje i wykłady się nie liczą (1.25.0)
+   - [ ] KS1 Szablony: koszt w prawym dolnym rogu kafelka; okienko bez pytania o serię, od „Zmiany od” (1.25.0)
+   - [ ] KS2 Rutyna – „Koszt na godzinę”: [+] [−] w zakresie −5…5, powrót do „jak podkategoria”, wartość zostaje (1.25.0)
+   - [ ] KS3 Koszt rutyny w „Dziś”, „3 dniach” i „Tygodniu”; własny koszt bloku wygrywa; prognoza energii się zmienia (1.25.0)
+   - [ ] KS4 Zaczęty blok rutyny: minione minuty zostają po starym koszcie; okienko zmienia koszt od teraz (1.25.0)
+   - [ ] KS5 Blok z rutyną przestawiony na podkategorię pracy kosztuje jak praca (1.25.0)
+   - [ ] KS6 Dwa komputery 1.24 i 1.25: folder z rutyną z kosztem bez błędu, koszt zostaje (1.25.0) (Tylko Ty – dwa komputery)
+   - [ ] KP1 „Dziś”: Ctrl + przeciągnięcie kopiuje blok; oryginał zostaje; „Skopiowano: … · Cofnij” (1.25.0)
+   - [ ] KP2 Kopia na zajęte miejsce rozsuwa elastyczne bloki; jedno „Cofnij” przywraca godziny (1.25.0)
+   - [ ] KP3 „Tydzień” i „3 dni”: kopia na inny dzień, dzień źródłowy bez zmian, bez „Przeniesiono” (1.25.0)
+   - [ ] KP4 „Szablony”: Ctrl daje nowy blok szablonu, „Cofnij” go zdejmuje (1.25.0)
+   - [ ] KP5 „Sprawy” na oś z Ctrl: chip z „+”, oryginał zostaje na liście niezaplanowany (1.25.0)
+   - [ ] KP6 Kopia bloku zadania: odhaczenie kroku nie odhacza oryginału; bez ↻ przy zadaniu powtarzanym (1.25.0)
+   - [ ] KP7 Załączniki kopii są własne; usunięcie w jednej nie rusza drugiej; „Kopii nie cofnięto” (1.25.0)
+   - [ ] KP8 Blok serii: kopia to pojedynczy blok bez ↻ (1.25.0)
+   - [ ] KP9 Wydarzenia całodniowe: Ctrl + przeciągnięcie belki daje kopię tej samej długości (1.25.0)
+   - [ ] KP10 Miesiąc i „Agenda”: Ctrl zaznacza dni; blok zaczęty, miniony, sesja i wykład się nie kopiują (1.25.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -2491,6 +2518,203 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** zmień koszt bloku z serii w „Dziś”, w „3 dniach” i w „Tygodniu” – wybierz raz „Tylko to”, raz „To i następne”. Kliknij koszt na bloku skończonym i na bloku dnia minionego.
 - **Oczekiwany efekt:** w każdym widoku pytanie „Tylko to / To i następne / Cała seria”, a zmiana trafia tam, gdzie wybrałeś; blok skończony i dzień miniony pokazują sam napis, bez okienka.
 - **Nie przechodzi, gdy:** w którymś widoku seria nie pyta o zakres; „Tylko to” zmienia całą serię; na bloku skończonym można zmienić koszt.
+
+### KT – drzewo kategorii (1.25.0, D510)
+
+#### KT1 Kategorie w Ustawieniach – pięć kategorii z podkategoriami (D510)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/category-tree.test.ts`, `tests/web/category-tree-save.test.ts`, `tests/web/category-tree-screen.test.ts`, `tests/web/category-tree-log.test.ts`, `tests/fs/category-tree.test.ts`, `tests/e2e/category-tree.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** otwórz w Ustawieniach sekcję Kategorie. Kliknij „+ Kategoria”. Zmień nazwę jednej kategorii. Spróbuj usunąć „Inne”.
+- **Oczekiwany efekt:** widać kategorie „Praca”, „Nauka”, „Dom i opieka”, „Wolne” i „Inne”, a w środku każdej ich podkategorie. Nowa kategoria stoi przed „Inne”. Nazwę da się zmienić. Przy „Inne” nie ma „Usuń”. Sekcji „Sposoby regeneracji” nie ma.
+- **Nie przechodzi, gdy:** po aktualizacji podkategoria stoi w złej kategorii; brakuje którejś dawnej kategorii; „Inne” da się usunąć.
+
+#### KT2 „więcej” przy podkategorii – kategoria, warianty, archiwum (D510)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/category-tree.test.ts`, `tests/web/category-tree-save.test.ts`, `tests/web/category-tree-screen.test.ts`, `tests/web/category-tree-log.test.ts`, `tests/fs/category-tree.test.ts`, `tests/e2e/category-tree.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** przy podkategorii kliknij „więcej”. Zmień pole „Kategoria” na inną kategorię. Kliknij „+ Wariant”, włącz „koszt jak podkategoria”, wyłącz go i wpisz trzy liczby. Zmień miejsce wariantu i usuń jeden wariant przyciskiem „Usuń”. Sprawdź, że dawne sposoby regeneracji są wśród wariantów „Regeneracji”. Kliknij „Pokaż archiwum” i przywróć usunięty wariant przyciskiem „Przywróć”.
+- **Oczekiwany efekt:** zmiana pola „Kategoria” przenosi podkategorię. Lista wariantów ma nazwę, włącznik „koszt jak podkategoria” albo trzy liczby, miejsce, „Usuń” i „+ Wariant”. Dawne sposoby regeneracji są wariantami „Regeneracji”. „Pokaż archiwum” pokazuje usunięte warianty z „Przywróć”. Koszt wariantu zmienia kafelek.
+- **Nie przechodzi, gdy:** znikają dawne sposoby regeneracji; koszt wariantu nie zmienia kafelka.
+
+#### KT3 „Usuń” przy kategorii z podkategoriami (D510)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/category-tree.test.ts`, `tests/web/category-tree-save.test.ts`, `tests/web/category-tree-screen.test.ts`, `tests/web/category-tree-log.test.ts`, `tests/fs/category-tree.test.ts`, `tests/e2e/category-tree.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** przy kategorii, która ma podkategorie, kliknij „Usuń”. Zostaw domyślne „Przenieś do …” (Inne) i potwierdź. Powtórz z wyborem „Usuń też podkategorie”. Po potwierdzeniu kliknij „Cofnij” w komunikacie.
+- **Oczekiwany efekt:** otwiera się okno z wyborem „Przenieś do …” (domyślnie „Inne”) albo „Usuń też podkategorie”. Po potwierdzeniu pojawia się komunikat z „Cofnij”, który przywraca stan sprzed usunięcia.
+- **Nie przechodzi, gdy:** podkategorie znikają bez pytania; „Cofnij” nie przywraca stanu.
+
+#### KT4 Jedna lista „Podkategoria” w panelu bloku, „Tygodniu” i „Sprawach” (D510)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/category-tree.test.ts`, `tests/web/category-tree-save.test.ts`, `tests/web/category-tree-screen.test.ts`, `tests/web/category-tree-log.test.ts`, `tests/fs/category-tree.test.ts`, `tests/e2e/category-tree.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** otwórz panel bloku, okienko nowego bloku w „Tygodniu” i zadanie w „Sprawach” i porównaj listę „Podkategoria”. Na końcu listy wybierz „+ Nowa…”. Sprawdź pole „Kategoria” w nowej podkategorii. Otwórz „Nowy wariant” i zobacz włącznik „koszt jak podkategoria”. Kliknij koszt na kafelku bloku z wariantem, z własnym kosztem i z rutyną.
+- **Oczekiwany efekt:** wszystkie trzy miejsca mają jedną listę z nagłówkami kategorii. „+ Nowa…” na końcu otwiera „Nowa podkategoria” z polem „Kategoria”, domyślnie kategorią bloku. „Nowy wariant” ma włącznik „koszt jak podkategoria”. Okienko kosztu na kafelku mówi „Jak podkategoria (…)”, przy wariancie z własnym kosztem „Jak wariant (…)”, a przy rutynie z kosztem „Jak rutyna (…)”.
+- **Nie przechodzi, gdy:** w którymś miejscu lista wygląda inaczej; „+ Nowa…” nie otwiera okna z kategorią bloku; napis przy koszcie nie pasuje do rodzaju bloku.
+
+#### KT5 Ctrl K po nazwie kategorii, podkategorii albo wariantu (D510)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/category-tree.test.ts`, `tests/web/category-tree-save.test.ts`, `tests/web/category-tree-screen.test.ts`, `tests/web/category-tree-log.test.ts`, `tests/fs/category-tree.test.ts`, `tests/e2e/category-tree.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** naciśnij Ctrl K i wpisz „Kąpiel”. Wybierz wynik. Powtórz z nazwą kategorii i z nazwą podkategorii.
+- **Oczekiwany efekt:** otwiera się Ustawienia z sekcją Kategorie, właściwy wiersz jest rozwinięty i przewinięty do widoku.
+- **Nie przechodzi, gdy:** otwiera się inne miejsce; wiersz zostaje zwinięty albo poza widokiem.
+
+#### KT6 Drugi komputer ze starszą wersją (1.24) po zmianie drzewa (D510) (Tylko Ty – dwa komputery)
+- [ ] Odebrane
+- **Automatycznie:** nic – dwa komputery sprawdzasz Ty. Tylko Ty.
+- **Jak sprawdzić:** na tym komputerze zmień drzewo kategorii (np. dodaj kategorię). Na drugim komputerze ze starszą wersją 1.24 otwórz aplikację. Sprawdź, czy proponuje instalację nowej wersji i czy jej dane są na miejscu.
+- **Oczekiwany efekt:** starsza wersja proponuje instalację nowej wersji. Jej dane się nie psują, a kategorie nie znikają.
+- **Nie przechodzi, gdy:** na starszej wersji pojawia się błąd albo znika kategoria.
+
+### ED – szybka edycja ✎ (1.25.0, D514)
+
+#### ED1 ✎ przy wyborach w „Dziś”, nowym bloku, „Szablonach” i serii (D514)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/edit-thing.test.ts`, `tests/web/edit-scope.test.ts`, `tests/e2e/edit-thing.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” zobacz ✎ przy „Podkategoria”, przy „Wariant” (gdy wybrany) i przy „Rutyna” (gdy wybrana). Sprawdź to samo w nowym bloku, w „Szablonach” i w serii. Otwórz panel tylko do odczytu, dzień miniony i rzecz, która zaczyna się dopiero od jutra.
+- **Oczekiwany efekt:** ✎ stoi obok tych pól w „Dziś”, nowym bloku, „Szablonach” i serii. W panelu tylko do odczytu go nie ma. Przy podkategorii i wariancie nie ma go na dniu minionym ani przy rzeczy, która zaczyna się dopiero od jutra.
+- **Nie przechodzi, gdy:** ✎ stoi przy pustej liście albo na dniu minionym.
+
+#### ED2 Okno „Podkategoria X” na środku (D514)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/edit-thing.test.ts`, `tests/web/edit-scope.test.ts`, `tests/e2e/edit-thing.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** kliknij ✎ przy podkategorii. Zmień jedno pole i zobacz liczbę „Zmieni N bloków od dziś”. Przeczytaj linię pod liczbą. Naciśnij Esc. Otwórz okno znowu, zmień pole i kliknij „Anuluj”.
+- **Oczekiwany efekt:** okno „Podkategoria X” stoi na środku z wypełnionymi polami. Liczba „Zmieni N bloków od dziś” pojawia się po pierwszej zmianie pola. Linia pod liczbą pokazuje skład: dni, szablony, serie. Esc i „Anuluj” nic nie zmieniają.
+- **Nie przechodzi, gdy:** zapis następuje przy Esc.
+
+#### ED3 Koszt przy „Od kiedy: jutro” i „Zapisz” (D514)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/edit-thing.test.ts`, `tests/web/edit-scope.test.ts`, `tests/e2e/edit-thing.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Ustawieniach zmień koszt przy „Od kiedy: jutro” i kliknij „Zapisz”. Zobacz kafelek w „Dziś”. Zacznij blok, po kilku minutach zmień jego koszt i zobacz pasy energii przed „teraz”.
+- **Oczekiwany efekt:** kafelek pokazuje nowy koszt od razu. Dla bloku, który już trwa kilka minut, minione minuty zostają po starym koszcie.
+- **Nie przechodzi, gdy:** kafelek pokazuje stary koszt; minione minuty przeliczają się po nowym koszcie.
+
+#### ED4 ✎ przy wariancie i rutynie (D514)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/edit-thing.test.ts`, `tests/web/edit-scope.test.ts`, `tests/e2e/edit-thing.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** kliknij ✎ przy wariancie i zmień nazwę, koszt albo „jak podkategoria”, miejsce. Kliknij ✎ przy rutynie i zmień nazwę oraz kroki zwykłe i kroki na gorsze dni. Sprawdź zmiany w „Kategoriach” i „Rutynach”. Na drugim komputerze usuń wariant, a na tym spróbuj zapisać jego zmianę.
+- **Oczekiwany efekt:** zmiany wariantu i rutyny widać w „Kategoriach” i „Rutynach”. Gdy zapis się nie uda, okno mówi, dlaczego.
+- **Nie przechodzi, gdy:** zmian nie widać w „Kategoriach” albo „Rutynach”; nieudany zapis zamyka okno bez wyjaśnienia.
+
+#### ED5 Liczba bloków przy zmianie kosztu (D514)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/edit-thing.test.ts`, `tests/web/edit-scope.test.ts`, `tests/e2e/edit-thing.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** kliknij ✎ przy podkategorii, która jest w blokach dni, szablonów i serii. Porównaj liczbę „Zmieni N bloków od dziś” z blokami, które widzisz w dniach do 62 dni naprzód, w szablonach i w seriach. Sprawdź, czy sesje i wykłady są liczone. Zmień sam koszt przy bloku skończonym dziś.
+- **Oczekiwany efekt:** liczba zgadza się z blokami w dniach (do 62 dni naprzód), szablonach i seriach. Sesje i wykłady się nie liczą. Skończone dziś bloki nie liczą się przy zmianie samego kosztu.
+- **Nie przechodzi, gdy:** liczba nie zgadza się z blokami w dniach, szablonach albo seriach; liczą się sesje lub wykłady.
+
+### KS – koszt w szablonach i rutynach (1.25.0, D512)
+
+#### KS1 Szablony – koszt na każdym kafelku (D512)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/block-costs.test.ts`, `tests/unit/engine/routine-cost.test.ts`, `tests/web/tile-cost.test.ts`, `tests/e2e/cost-routine.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Szablonach” zobacz prawy dolny róg każdego kafelka. Kliknij koszt na bloku szablonu i zmień go. Sprawdź, czy okienko pyta o serię i od której daty działa („Zmiany od”). Kliknij koszt na sesji i na wykładzie.
+- **Oczekiwany efekt:** każdy kafelek w „Szablonach” ma koszt w prawym dolnym rogu. Na bloku szablonu okienko otwiera się jak w „Dziś”. Zmiana nie pyta o serię i działa od daty „Zmiany od”. Sesja i wykład pokazują sam napis.
+- **Nie przechodzi, gdy:** brakuje napisu; okienko pyta o serię; zmiana dotyka dni przed „Zmiany od”.
+
+#### KS2 Rutyna – pole „Koszt na godzinę” (D512)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/block-costs.test.ts`, `tests/unit/engine/routine-cost.test.ts`, `tests/web/tile-cost.test.ts`, `tests/e2e/cost-routine.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** otwórz rutynę bez własnego kosztu i zobacz pole „Koszt na godzinę”. Kliknij [+] i [−] i spróbuj wyjść poza −5 albo 5. Kliknij przycisk, który przywraca „jak podkategoria”. Zamknij rutynę i otwórz ją znowu. Sprawdź, że kroki zostają.
+- **Oczekiwany efekt:** bez własnego kosztu pole pokazuje koszt podkategorii i „jak podkategoria”. [+] i [−] ustawiają własny koszt w zakresie −5…5. Przycisk wraca do „jak podkategoria”. Po ponownym otwarciu wartość zostaje. Kroki rutyny zostają.
+- **Nie przechodzi, gdy:** znikają kroki; wartość wychodzi poza zakres; po ponownym otwarciu wartość się nie zapisała.
+
+#### KS3 Koszt rutyny w „Dziś”, „3 dniach” i „Tygodniu” (D512)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/block-costs.test.ts`, `tests/unit/engine/routine-cost.test.ts`, `tests/web/tile-cost.test.ts`, `tests/e2e/cost-routine.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** utwórz blok z rutyną, która ma koszt, i zobacz kafelek w „Dziś”, „3 dniach” i „Tygodniu”. Ustaw własny koszt bloku i zobacz, że wygrywa. Kliknij „Jak rutyna (…)”. Zmień koszt rutyny i zobacz prognozę energii w „Dziś”.
+- **Oczekiwany efekt:** kafelki bloku z rutyną pokazują koszt rutyny. Własny koszt bloku wygrywa. „Jak rutyna (…)” wraca do kosztu rutyny. Prognoza energii zmienia się po zmianie kosztu rutyny.
+- **Nie przechodzi, gdy:** kafelek pokazuje koszt podkategorii; prognoza się nie zmienia.
+
+#### KS4 Zaczęty blok rutyny (D512)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/block-costs.test.ts`, `tests/unit/engine/routine-cost.test.ts`, `tests/web/tile-cost.test.ts`, `tests/e2e/cost-routine.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** zacznij blok z rutyną. Po kilku minutach zmień jego koszt w okienku kafelka. Sprawdź pasy energii przed „teraz”.
+- **Oczekiwany efekt:** minione minuty zostają po starym koszcie. Okienko kafelka zmienia koszt od teraz.
+- **Nie przechodzi, gdy:** minione minuty są przeliczone po nowym koszcie.
+
+#### KS5 Blok z rutyną przestawiony na podkategorię pracy (D512)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/block-costs.test.ts`, `tests/unit/engine/routine-cost.test.ts`, `tests/web/tile-cost.test.ts`, `tests/e2e/cost-routine.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w bloku z rutyną zmień podkategorię na podkategorię pracy. Zobacz koszt kafelka.
+- **Oczekiwany efekt:** blok kosztuje jak praca.
+- **Nie przechodzi, gdy:** blok dalej kosztuje jak rutyna.
+
+#### KS6 Dwa komputery 1.24 i 1.25 – rutyna z kosztem (D512) (Tylko Ty – dwa komputery)
+- [ ] Odebrane
+- **Automatycznie:** nic – dwa komputery sprawdzasz Ty. Tylko Ty.
+- **Jak sprawdzić:** na komputerze z 1.24 otwórz folder z rutyną z kosztem. Na 1.24 edytuj rutynę i sprawdź, czy koszt zostaje. Otwórz ten sam folder na 1.25 i przejmij prowadzenie. Wróć na 1.24 i zobacz propozycję instalacji.
+- **Oczekiwany efekt:** 1.24 otwiera folder z rutyną z kosztem bez błędu. Edycja rutyny w 1.24 zostawia koszt. 1.25 przejmuje prowadzenie, a 1.24 proponuje instalację.
+- **Nie przechodzi, gdy:** pojawia się błąd albo znika pole kosztu.
+
+### KP – kopia Ctrl + przeciągnięcie (1.25.0, D513)
+
+#### KP1 „Dziś”: Ctrl + przeciągnięcie bloku (D513)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/block-copy.test.ts`, `tests/web/block-copy-review.test.ts`, `tests/e2e/copy.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” przytrzymaj Ctrl i przeciągnij blok na inne miejsce. Puść. Sprawdź oryginał, notatkę i kroki kopii. Kliknij „Cofnij” w dymku „Skopiowano: …”.
+- **Oczekiwany efekt:** kursor ma „+”, a kafelek jest przerywany z „+”. Po puszczeniu oryginał zostaje, a kopia stoi w nowym miejscu z notatką i krokami, nieodhaczonymi. Dymek „Skopiowano: … · Cofnij” zdejmuje kopię.
+- **Nie przechodzi, gdy:** oryginał się przesuwa albo znika; kopia nie ma notatki lub kroków; „Cofnij” nie działa.
+
+#### KP2 Kopia na zajęte miejsce – rozsuwanie (D513)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/block-copy.test.ts`, `tests/web/block-copy-review.test.ts`, `tests/e2e/copy.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** przeciągnij blok z Ctrl na zajęte miejsce, na którym stoją bloki elastyczne. Zobacz w trakcie, jak kolejne bloki się rozsuwają. Sprawdź, że oryginał stoi. Kliknij „Cofnij” raz.
+- **Oczekiwany efekt:** kopia przesuwa kolejne bloki elastyczne (widać to w trakcie). Oryginał stoi. Jedno „Cofnij” przywraca godziny i zdejmuje kopię.
+- **Nie przechodzi, gdy:** bloki nachodzą na siebie; oryginał został przesunięty.
+
+#### KP3 „Tydzień” i „3 dni”: kopia na inny dzień (D513)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/block-copy.test.ts`, `tests/web/block-copy-review.test.ts`, `tests/e2e/copy.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Tygodniu” albo w „3 dniach” przeciągnij blok z Ctrl na inny dzień. Sprawdź dzień źródłowy i komunikaty.
+- **Oczekiwany efekt:** na innym dniu powstaje kopia. Dzień źródłowy nie zmienia się. Nie pojawia się „Przeniesiono”.
+- **Nie przechodzi, gdy:** blok znika ze źródła.
+
+#### KP4 „Szablony”: nowy blok z Ctrl (D513)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/block-copy.test.ts`, `tests/web/block-copy-review.test.ts`, `tests/e2e/copy.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Szablonach” przytrzymaj Ctrl i przeciągnij blok. Kliknij „Cofnij”.
+- **Oczekiwany efekt:** powstaje nowy blok szablonu, a oryginał zostaje. „Cofnij” zdejmuje nowy blok.
+- **Nie przechodzi, gdy:** przesuwa się oryginał.
+
+#### KP5 „Sprawy” na oś z Ctrl (D513)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/block-copy.test.ts`, `tests/web/block-copy-review.test.ts`, `tests/e2e/copy.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Sprawach” przeciągnij zadanie z Ctrl na oś. Zobacz chip. Sprawdź listę niezaplanowanych. Kliknij „Cofnij” raz.
+- **Oczekiwany efekt:** chip ma „+”. W bloku pojawia się nowa sprawa. Oryginał zostaje na liście niezaplanowanych. Jedno „Cofnij” działa.
+- **Nie przechodzi, gdy:** oryginał dostaje blok.
+
+#### KP6 Kopia bloku zadania (D513)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/block-copy.test.ts`, `tests/web/block-copy-review.test.ts`, `tests/e2e/copy.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** skopiuj blok zadania z Ctrl. Na liście są teraz dwie sprawy. Odhacz krok w kopii i sprawdź oryginał. Sprawdź kopię zadania powtarzanego.
+- **Oczekiwany efekt:** na liście są dwie sprawy. Odhaczenie kroku w kopii nie odhacza oryginału. Kopia zadania powtarzanego nie ma ↻.
+- **Nie przechodzi, gdy:** odhaczenia są wspólne; powstają dwa ciągi powtórzeń.
+
+#### KP7 Załączniki kopii (D513)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/block-copy.test.ts`, `tests/web/block-copy-review.test.ts`, `tests/e2e/copy.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** skopiuj blok z załącznikiem. Usuń załącznik w kopii i sprawdź oryginał. Usuń załącznik w oryginale i sprawdź kopię. Edytuj kopię, kliknij „Cofnij” i przeczytaj komunikat.
+- **Oczekiwany efekt:** kopia ma własne pliki. Usunięcie załącznika w jednej nie rusza drugiej. „Cofnij” po edycji kopii mówi „Kopii nie cofnięto – plan zmienił się po niej”, a pliki kopii zostają.
+- **Nie przechodzi, gdy:** plik oryginału znika.
+
+#### KP8 Blok serii (D513)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/block-copy.test.ts`, `tests/web/block-copy-review.test.ts`, `tests/e2e/copy.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w serii skopiuj blok z Ctrl. Sprawdź kopię.
+- **Oczekiwany efekt:** kopia to pojedynczy blok bez ↻.
+- **Nie przechodzi, gdy:** kopia pojawia się w serii.
+
+#### KP9 Wydarzenia całodniowe (D513)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/block-copy.test.ts`, `tests/web/block-copy-review.test.ts`, `tests/e2e/copy.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** przeciągnij belkę wydarzenia całodniowego z Ctrl o dwa dni. Spróbuj kliknąć kopię.
+- **Oczekiwany efekt:** kopia ma tę samą długość. Karta wydarzenia się nie otwiera. Oryginał stoi.
+- **Nie przechodzi, gdy:** oryginał się przesuwa.
+
+#### KP10 Miesiąc i „Agenda” (D513)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/block-copy.test.ts`, `tests/web/block-copy-review.test.ts`, `tests/e2e/copy.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Miesiącu” przytrzymaj Ctrl i zaznacz kilka dni. Przejdź na „Agenda” i sprawdź. Spróbuj skopiować blok zaczęty, miniony, sesję i wykład. Sprawdź zwykłe przeciąganie.
+- **Oczekiwany efekt:** w miesiącu Ctrl dalej zaznacza dni, a „Agenda” bez zmian. Blok zaczęty, miniony, sesja i wykład się nie kopiują. Zwykłe przeciąganie działa jak dotąd.
+- **Nie przechodzi, gdy:** Ctrl przestaje zaznaczać dni w miesiącu; blok zaczęty, miniony, sesja albo wykład się kopiuje.
 
 ### R – bloki równoległe, plan i widoki (1.23.0, część A; D476, D492–D498)
 
