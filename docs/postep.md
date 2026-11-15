@@ -86,7 +86,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    pełne testy, wersja 1.24.0, lokalny Setup.exe w Pobranych; PR do `main` dopiero po zakończonym runie wydania 1.23.0.
    Środowisko: wspólny `node_modules` w katalogu głównym jest ze starego `main` (bez `jsdom`, `@tiptap`) – drzewa paczki
    potrzebują własnego `npm ci`.
-12. **1.25.0 – uwagi po 1.24 (14.11 ok. 23:30, D510–D514, w toku):** gałąź paczki `claude/1.25.0` (drzewo `w125`, od
+12. **1.25.0 – uwagi po 1.24 (14.11 ok. 23:30, D510–D515; wydane 15.11 07:09, PR #92, `main` 0a140ac, run 43676056865 – raz ponowiony po `tests/fs/horizon.test.ts:180`):** gałąź paczki `claude/1.25.0` (drzewo `w125`, od
    `claude/1.24.0` cfdbab8; po scaleniu PR #91 – `git merge origin/main`), koordynator regulatedday-d7, jeden PR po wydaniu
    1.24.0. Zadania (plan: „Uwagi po 1.24 – paczka 1.25.0”): A drzewo kategorii (D510) – d7, `claude/1.25-kategorie`
    (`w125a`, T1310–T1324; A1 model i migracja `wykonawca-opus`, A2 ekran `wykonawca-sonnet`); B sesje w szablonach (D511) –
@@ -99,7 +99,10 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    T1420–T1426), C (ab, T1360–T1374), D (ab, T1375–T1389), E (✎, przegląd high 10 uwag, T1325–T1338), F (koszt rutyny w ✎
    i na zaczętym bloku – zdarzenie `routine.cost` z procesu głównego, T1395–T1399, T1430–T1447; dwie rundy xhigh – 11 + 9); wersja 1.25.0, CHANGELOG, odbiór KT, ED,
    KS, KP, RE. B (sesje) poza 1.25.0 – D515 (użytkownik w sesji a8), a8 przerabia na `claude/1.25-sesje`, wyjdzie jako 1.26.0.
-   Pełne testy 3843, build, lint zielone (20e9a24). Dalej: E2E, `npm run dist:win` → Setup w Pobranych, PR (D285), wydanie.
+   Pełne testy 3843, build, lint, E2E zielone; Setup 1.25.0 zbudowany w `w125elease\` (kopia do Pobranych – ręcznie, brak zgody
+   na kopiowanie). Niestabilne: `tests/e2e/screens.spec.ts:67` (CI Linux raz), `:853` (lokalnie raz), `tests/fs/horizon.test.ts:180`
+   (run na `main` raz – dzień liczony 9 razy zamiast 8; podejrzenie: pamięć rutyn 60 s i klucz `routinesSig` w trakcie testu).
+   Do odbioru: KT1–KT6, ED1–ED5, KS1–KS6, KP1–KP10, RE1–RE5. Drzewa `w125*` do usunięcia (własne `node_modules`, bez dowiązań).
    **Przyjęte bez użytkownika (pokazać):** właściwości na podkategorii, kategoria bez kosztu i koloru, te same id; „Jak
    podkategoria / wariant / rutyna (…)”; nowy wariant „jak podkategoria”; „Usuń” podkategorii = archiwum; kategoria bez
    podkategorii znika bez pytania (z „Cofnij”); „Inne” zawsze jest, nie da się usunąć; kreator zostawia krok „Sposoby
