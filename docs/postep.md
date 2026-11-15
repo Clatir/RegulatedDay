@@ -99,7 +99,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    T1420–T1426), C (ab, T1360–T1374), D (ab, T1375–T1389), E (✎, przegląd high 10 uwag, T1325–T1338), F (koszt rutyny w ✎
    i na zaczętym bloku – zdarzenie `routine.cost` z procesu głównego, T1395–T1399, T1430–T1447; dwie rundy xhigh – 11 + 9); wersja 1.25.0, CHANGELOG, odbiór KT, ED,
    KS, KP, RE. B (sesje) poza 1.25.0 – D515 (użytkownik w sesji a8), a8 przerabia na `claude/1.25-sesje`, wyjdzie jako 1.26.0.
-   Pełne testy 3843, build, lint, E2E zielone; Setup 1.25.0 zbudowany w `w125elease\` (kopia do Pobranych – ręcznie, brak zgody
+   Pełne testy 3843, build, lint, E2E zielone; Setup 1.25.0 zbudowany w `w125/release/` (kopia do Pobranych – ręcznie, brak zgody
    na kopiowanie). Niestabilne: `tests/e2e/screens.spec.ts:67` (CI Linux raz), `:853` (lokalnie raz), `tests/fs/horizon.test.ts:180`
    (run na `main` raz – dzień liczony 9 razy zamiast 8; podejrzenie: pamięć rutyn 60 s i klucz `routinesSig` w trakcie testu).
    Do odbioru: KT1–KT6, ED1–ED5, KS1–KS6, KP1–KP10, RE1–RE5. Drzewa `w125*` do usunięcia (własne `node_modules`, bez dowiązań).
