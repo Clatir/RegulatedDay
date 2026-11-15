@@ -145,12 +145,12 @@ describe('koszt rutyny na kafelku i w zdarzeniu startu (D512)', () => {
     const ctx = s.contextAt(s.at('08:10'))
     const state = computeDay(ctx)
     const info = state.blocks.find((b) => b.id === 'm')!
-    expect(begunCosts(ctx, state, info)).toEqual({ costs: R, base: R, own: false })
+    expect(begunCosts(ctx, state, info)).toEqual({ costs: R, base: R, baseFrom: 'routine', own: false })
     const own: Costs = { head: 1, emotions: 1, senses: 1 }
     s.write([{ k: 'block.cost', block: 'm', at: s.at('08:20'), costs: own }], s.at('08:20'))
     const ctx2 = s.contextAt(s.at('08:30'))
     const state2 = computeDay(ctx2)
-    expect(begunCosts(ctx2, state2, state2.blocks.find((b) => b.id === 'm')!)).toEqual({ costs: own, base: R, own: true })
+    expect(begunCosts(ctx2, state2, state2.blocks.find((b) => b.id === 'm')!)).toEqual({ costs: own, base: R, baseFrom: 'routine', own: true })
   })
 
   it('start bloku zapisuje koszt rutyny z tej chwili (blok bez rutyny – null)', () => {
@@ -175,8 +175,8 @@ describe('kopie reguły kosztu z rutyną (D512)', () => {
   it('„Tydzień” i „3 dni”: kafelek bloku z rutyną mówi koszt rutyny, „Jak kategoria” wraca do niego', () => {
     const s = new Scenario({ date: DATE, plan: [withRoutine(m(), 'poranna'), m({ id: 'own', startMin: 11 * 60, costs: ZERO_COSTS, routine: 'poranna' })], routineCosts: { poranna: R } })
     const by = Object.fromEntries(horizonDay(s.contextAt(s.at('04:00')), 'future').blocks.map((b) => [b.id, b.cost]))
-    expect(by.m).toEqual({ costs: R, base: R, own: false, edit: true })
-    expect(by.own).toEqual({ costs: ZERO_COSTS, base: R, own: true, edit: true })
+    expect(by.m).toEqual({ costs: R, base: R, baseFrom: 'routine', own: false, edit: true })
+    expect(by.own).toEqual({ costs: ZERO_COSTS, base: R, baseFrom: 'routine', own: true, edit: true })
   })
 
   it('wariant przy rezerwie: najdroższy blok puli liczy koszt rutyny', () => {

@@ -36,7 +36,7 @@ describe('koszt rutyny w kolejności kosztu bloku (D512)', () => {
   const R = { head: 4, emotions: -2, senses: 0 }
 
   it('blok z rutyną z kosztem: koszt rutyny przed kategorią, „Jak kategoria” wraca do niego', () => {
-    expect(blockCosts({ costs: null, categoryId: 'analiza', variantId: null, routineCosts: R }, cats, analiza)).toEqual({ costs: R, base: R, own: false })
+    expect(blockCosts({ costs: null, categoryId: 'analiza', variantId: null, routineCosts: R }, cats, analiza)).toEqual({ costs: R, base: R, baseFrom: 'routine', own: false })
   })
 
   it('koszt rutyny przed kosztem wariantu', () => {
@@ -45,7 +45,7 @@ describe('koszt rutyny w kolejności kosztu bloku (D512)', () => {
 
   it('własny koszt bloku przed kosztem rutyny', () => {
     const own = { head: 0, emotions: 0, senses: 5 }
-    expect(blockCosts({ costs: own, categoryId: 'analiza', variantId: null, routineCosts: R }, cats, analiza)).toEqual({ costs: own, base: R, own: true })
+    expect(blockCosts({ costs: own, categoryId: 'analiza', variantId: null, routineCosts: R }, cats, analiza)).toEqual({ costs: own, base: R, baseFrom: 'routine', own: true })
   })
 
   it('rutyna bez kosztu – wariant, potem kategoria (jak przed D512)', () => {
