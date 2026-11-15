@@ -471,3 +471,5 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1720 | `MenuBlock.state` (open, begun, past, off) zamiast `begun` – wyłączenia „Odwołaj”, „Zaparkuj”, „Przesuń”, „Przenieś” z powodem stanu |
 | T1721 | `menuBind(open)` w `ContextMenu.tsx` – jedyna para prawy przycisk + klawisz menu (oś, „Tydzień”, wiersz Spraw, dzień Kalendarza) |
 | T1722 | Klik oddalony od naciśnięcia o 4 px i więcej to koniec przeciągnięcia także na nieprzeciągalnym kafelku; klik z klawiatury działa zawsze |
+| T1723 | E2E zaznaczania używają dni z przyszłości (jutro, następny tydzień, następny miesiąc) od `logicalToday()` – wynik nie zależy od godziny ani dnia tygodnia testu |
+| T1724 | E2E klikają działania menu bloków dopiero po podpięciu logiki Z4-A do `groupRunner` |

@@ -21,6 +21,7 @@ paths:
   - "tests/web/axis-select.test.ts"
   - "tests/web/week-select.test.ts"
   - "tests/web/group-menu.test.ts"
+  - "tests/e2e/group-select.spec.ts"
   - "tests/web/calendar-selection.test.ts"
   - "tests/unit/selection.test.ts"
   - "tests/unit/group-summary.test.ts"
@@ -109,3 +110,4 @@ paths:
   pierwszego zaznaczonego). `BlockGroupMenu` składa menu i dwa okna dla ekranów. Prawy przycisk i klawisz menu na elemencie: `menuBind(open)` w `ContextMenu.tsx` (kafelek osi, `BlockBox`, wiersz Spraw, dzień Kalendarza).
 - **Zaślepka Z4-A:** każda zmiana idzie przez `runGroupAction(view, ids, akcja)` → `groupRunner.run` (akcje `GroupAction`: category, variant, cost, routine, shift (ze znakiem), moveTo, cancel, park, remove;
   `ids` w „Tygodniu” to `blockKey(date, id)`). Domyślnie biegacz mówi toastem „…jeszcze nie jest podłączona”; Z4-A podmienia `groupRunner.run` i bierze wyłączenia z `judgeGroup`.
+- E2E ciągu Z: `tests/e2e/group-select.spec.ts` (oś jutra: Ctrl/Shift/klik/Esc/kopia Ctrl/menu; „Tydzień”: Ctrl+klik dwóch dni; Kalendarz: 7 dni → „Wolne” → linia → „Cofnij”) – dni z przyszłości liczone od `logicalToday()`, nic nie zależy od godziny testu.
