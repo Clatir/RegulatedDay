@@ -31,6 +31,9 @@ paths:
 - Kolejność: kopia pliku (tymczasowy + `rename`), dopiero potem rekordy jedną edycją (T802). Dwie połowy (T839): `prepareFiles`
   (IPC `attachFiles`/`attachPick` – poza turą okna) i `commitFiles` (`attachCommit` w turze okna; ten sam folder, blok usunięty –
   rekord od razu z `removedAt`, `ownerAlive`); niezapisana kopia znika po `PREPARED_MS`. Brak pliku – `attachmentsMissing`, `code: 'missing'`.
+- Kopia bloku Ctrl + przeciągnięciem (D513): `prepareCopies` (IPC `attachCopy`, `hub.prepareCopies` – ta sama pamięć `prepared` co
+  `prepareFiles`) kopiuje plik z folderu oryginału (ścieżka z rekordu, `realInside`) do nowego `attachments/<id>/`, link – nowy rekord;
+  rekordy kopii pisze `attachCommit` (blok kopii zniknął – od razu w koszu). Pliki nigdy wspólne: kosz i sprzątanie kopii nie ruszają oryginału.
 - Otwieranie tylko po id, ścieżka z rekordu przez `realInside` (realpath, bez junction), wykonywalne → „pokaż w folderze”
   (`EXECUTABLE_EXTS`), linki `safeAttachmentUrl` ponownie przed `openExternal` (T803, T804). Okno nigdy nie podaje ścieżki do otwarcia.
 - Tytuł i ikona linku: `linkFetch.fetchPageMeta` (sesja w pamięci, limity), parser czysty w

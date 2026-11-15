@@ -82,6 +82,12 @@ async function attachCall(call: () => Promise<AttachPrepared>): Promise<AttachRe
 /** Files dropped on a block (paths from `window.rd.pathForFile`): the attachments made. */
 export const attachFiles = (owner: AttachmentOwner, paths: readonly string[]): Promise<AttachResult> => attachCall(() => window.rd.attachFiles(owner, [...paths]))
 
+/**
+ * The attachments `ids` copied for the block `owner` (D513: a block copied by Ctrl + drag): the main process copies their files
+ * into new folders of their own (never a shared file), their records go in the window's turn, as a drop's.
+ */
+export const copyAttachments = (owner: AttachmentOwner, ids: readonly string[]): Promise<AttachResult> => (ids.length ? attachCall(() => window.rd.attachCopy(owner, [...ids])) : Promise.resolve({ added: [], failed: [] }))
+
 /** „Dołącz plik…”: the dialog of Windows in the main process; nothing chosen – nothing. */
 export const pickFiles = (owner: AttachmentOwner): Promise<AttachResult> => attachCall(() => window.rd.attachPick(owner))
 

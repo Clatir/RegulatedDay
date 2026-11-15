@@ -257,3 +257,18 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1372 | Rutyna nieodczytana od uruchomienia jest „nieznana” (`routinesUnknown`): jej bloki kosztują jak bez rutyny, start nie zapisuje `routineCosts`; start `v` ≥ 14 bez pola liczy koszt rutyny znany teraz, `v` < 14 bez pola – brak |
 | T1373 | Wariant przy rezerwie liczy koszt przez `blockCosts` na regułach bloku, z mapą kategorii bez prototypu |
 | T1374 | Pamięć dni (`contextSig`, klucz `horizonDay` dnia z migawką) zależy od kosztów rutyn (`routinesSig`), nie od plików – edycja kroków rutyny nie przelicza dni |
+| T1375 | Kopia D513 w jednym miejscu: `engine/copy.ts` (`copiedCase`, `blockCopy`, `copiedAllDay`) i `planEdit.copiedBlock`/`asCopy`, wspólne z `copiedDay`; okno – `plan/blockCopy.ts` i `week/weekMove.ts` `copyDayBlock` („Dziś”, „3 dni”, „Tydzień”); reguły modułu w `.claude/rules/kopia.md` (`interfejs.md` przy limicie) |
+| T1376 | Kopia bloku zadania lub próśb tworzy nowe sprawy w tej samej edycji co plik dnia, z właścicielem = plik dnia (T923); rekordu, którego już nie ma, kopia nie bierze – zostaje blok kategorii |
+| T1377 | Kopie plików załączników robi proces główny (`prepareCopies`, kanał `attachCopy`, ta sama pamięć przygotowanych i `attachCommit` co upuszczenie pliku): nowy `attachments/<id>/`, pliki nigdy wspólne |
+| T1378 | Jedno „Cofnij” kopii jest w dymku okna; pasek „Dziś” dostaje tylko znacznik wariantów (`planPushed(…, false)`, także kopia sprawy z panelu); zapis kopii kończy się po zapisie planu, kopie plików idą w tle (siatka nie czeka) |
+| T1379 | Ctrl liczy się w chwili puszczenia, w czasie trzymania na bieżąco z `keydown`/`keyup`; kopiuje tylko ciało bloku, krawędzie nie; Esc przerywa przeciąganie tylko przy `keydown` |
+| T1380 | Z Ctrl kopia idzie zawsze na godzinę pod wskaźnikiem, nigdy obok innego bloku (D492) |
+| T1381 | Upuszczenie kopii w miejscu oryginału nic nie robi |
+| T1382 | W podglądzie miejsce kopii jest pod jedną stałą `COPY_SPAN_ID` (`today/dayPush.ts`), kafelek kopii stawia `shownSpan` |
+| T1383 | Kopia nie proponuje wymiany (jak przeniesienie bloku na dziś i sprawa upuszczona na oś) |
+| T1384 | Kopiować można tylko bloki, które da się dziś przeciągać (niezaczęte, nie sesja, wykład ani zjazd, nie minione); cel – dziś i dni przyszłe |
+| T1385 | Kopia bierze kopie wszystkich załączników, które blok widzi – własnych, z szablonu i z serii |
+| T1386 | Kopia sprawy zachowuje treść i pola nieznane, bez `stepsDone` i bez `repeat` – kopia zadania powtarzanego jest jednorazowa |
+| T1387 | Belka całodniowa z Ctrl → kopia przesunięta o przeciągnięte kolumny („Dziś” – ten sam dzień); bez Ctrl przeciągnięcie belki nic nie robi (wydarzeń nie przenosi się przeciąganiem); kopia „To wolne” nie pyta o typ „Wolne” |
+| T1388 | „Cofnij” kopii to jedna zmiana sprawdzająca plik, w którym stoi kopia: zmieniony po kopii – nic nie cofa („Kopii nie cofnięto – plan zmienił się po niej”); kopie załączników do kosza tylko po faktycznym zdjęciu kopii; rekordy kopii dla bloku, którego przy zapisie nie ma – od razu do kosza (T839) |
+| T1389 | Przy rozsuwaniu kopii oryginał liczy się jak blok stały (`fixed` tylko w planie dla `pushApart`, `copyChange`, w „Szablonach” `inTemplate(…, stay)`): nigdy nie jest przesuwany ani zapisywany, w podglądzie nie jest rysowany jako przesunięty |
