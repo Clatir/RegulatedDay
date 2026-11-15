@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.26.1
+- Pasek pulpitu znów da się przeciągnąć za uchwyt ⠿. Windows czasem nie przekazywał paskowi samego wciśnięcia przycisku myszy i pasek stał w miejscu – teraz chwyta go już pierwszy ruch z wciśniętym przyciskiem. Pasek idzie za kursorem także wtedy, gdy kursor go wyprzedzi, a puszczenie przycisku nad przyciskiem paska nic nie klika.
+
 ## 1.26.0
 - Sesje tradingowe są teraz wpisami w szablonach typów dni. W panelu bloku sesji w „Szablonach” wybierasz „według czasu” (Nowy Jork, Londyn, Polska albo zwykły blok) i dla każdego dnia tygodnia ✓ tak, ? pytaj rano albo ✗ nie. Sekcja „Sesje” zniknęła z Ustawień.
 - Aktualizacja sama przenosi Twoje sesje i odpowiedzi tak/nie/pytaj z Ustawień do szablonów, od dziś. Szablony się nie dzielą, a Twoje zmiany przyszłych dni i załączniki zostają. Dni minione się nie zmieniają.

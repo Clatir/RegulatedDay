@@ -1,12 +1,15 @@
 // A stand-in for the helper (rd-helper.exe) in tests and in CI on Linux (RD_HELPER_PATH): the same JSON lines, no Windows.
-// RD_FAKE_HELPER_BAR=fail – the desktop bar is never confirmed; RD_FAKE_HELPER_CRASH_MS=<n> – exits after n ms. The
+// RD_FAKE_HELPER_BAR=fail – the desktop bar is never confirmed; RD_FAKE_HELPER_CRASH_MS=<n> – exits after n ms; the file
+// `fake-mouse-up` in its working folder – the left button of a watched drag let go (`mouse.watch`, T1500). The
 // volatile key of the logon session is a file in its working folder (the app's data): it lasts as long as the folder.
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 
 const out = (obj) => process.stdout.write(`${JSON.stringify(obj)}\n`)
 const barMode = process.env.RD_FAKE_HELPER_BAR ?? 'ok'
 let watched = null
+const MOUSE_UP = 'fake-mouse-up'
+let mouseWatch = null
 
 const sessionKey = 'fake-session-key.json'
 
@@ -37,6 +40,21 @@ input.on('line', (line) => {
       break
     case 'bar.unwatch':
       watched = null
+      break
+    case 'mouse.watch': {
+      // The left button is let go when the test puts the file `fake-mouse-up` into the working folder (the app's data).
+      clearInterval(mouseWatch)
+      const drag = m.drag
+      mouseWatch = setInterval(() => {
+        if (!existsSync(MOUSE_UP)) return
+        clearInterval(mouseWatch)
+        rmSync(MOUSE_UP, { force: true })
+        out({ type: 'mouse', event: 'up', drag })
+      }, 15)
+      break
+    }
+    case 'mouse.unwatch':
+      clearInterval(mouseWatch)
       break
     case 'notificationState':
       reply({ state: 'accepts' })

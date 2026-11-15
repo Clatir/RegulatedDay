@@ -38,6 +38,7 @@ export const CH = {
   widgetAction: 'rd:widgetAction',
   barLayout: 'rd:barLayout',
   barDrag: 'rd:barDrag',
+  onBarDragOver: 'rd:onBarDragOver',
   barScreens: 'rd:barScreens',
   placeBar: 'rd:placeBar',
   panelTouch: 'rd:panelTouch',
@@ -741,8 +742,11 @@ export interface RdApi {
   onWidget(cb: (view: WidgetView) => void): () => void
   widgetAction(action: WidgetAction, arg?: string): Promise<void>
   barLayout(layout: BarLayout): void
-  /** The desktop bar dragged by its handle (D303): the main process follows the cursor between start and end. */
-  barDrag(phase: 'start' | 'move' | 'end', why?: 'up' | 'cancel' | 'lost'): void
+  /**
+   * The desktop bar dragged by its handle (D303): the main process follows the cursor between start and end. The start
+   * says how it was heard – the press itself, or a move with the button held whose press never reached the page (T1500).
+   */
+  barDrag(phase: 'start' | 'move' | 'end', why?: 'press' | 'move' | 'up' | 'cancel' | 'lost'): void
   /** The monitors and where the desktop bar stands (D304): for the settings' mock-up. */
   barScreens(): Promise<BarScreens>
   /** The desktop bar to a place on a monitor (by its id), from the settings' mock-up. */
@@ -760,6 +764,8 @@ export interface RdApi {
   onPanelTarget(cb: (target: { line: string | null; day: string | null; quick?: boolean } | null) => void): () => void
   /** The desktop bar: which way it unfolds (up, or down when it stands at the top). */
   onBarGrows(cb: (dir: 'up' | 'down') => void): () => void
+  /** The main process ended the bar's drag by itself (the helper's release, T1500): the page lets go of its grip. */
+  onBarDragOver(cb: () => void): () => void
   dataView(): Promise<DataView>
   /** Something in the data changed (a check of the folder, an edit, another computer's file). */
   onData(cb: () => void): () => void
