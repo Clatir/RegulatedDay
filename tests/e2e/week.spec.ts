@@ -893,7 +893,10 @@ test('Przeciąganie bloku (SNT1, D417, D422): wtorek → środa z podglądem mie
       const h2 = await freeHour(page, tomorrow, 90, 14 * 60, 1.2)
       const y2 = await hourY(page, h2)
       const box2 = (await mine.boundingBox())!
-      const x2 = box2.x + box2.width / 2
+      // On a weekday the tile stands beside the session of the afternoon, half a column wide: its cost is shown while the pointer is
+      // over it, in its top right corner (D501), four numbers reaching past the tile's middle (D524), and a press on it opens the
+      // window of the cost, not a drag – so the hand takes the tile at its left part.
+      const x2 = box2.x + 16
       await page.mouse.move(x2, box2.y + 10)
       await page.mouse.down()
       await page.mouse.move(x2, box2.y + 30, { steps: 3 })
