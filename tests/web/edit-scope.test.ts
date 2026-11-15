@@ -33,6 +33,31 @@ describe('reaches', () => {
     expect(reaches(b({ id: 'x', routine: 'r1' }), { kind: 'routine', id: 'r1' }, 'all', categories)).toBe(true)
     expect(reaches(b({ id: 'x', routine: 'r2' }), { kind: 'routine', id: 'r1' }, 'all', categories)).toBe(false)
   })
+  it('koszt rutyny (D512, T1398): bloki z tą rutyną bez własnego kosztu, tylko w kategorii rodzaju „rutyna”; inne pola – wszystkie bloki z rutyną', () => {
+    const r = { kind: 'routine', id: 'r1' } as const
+    expect(reaches(b({ id: 'x', categoryId: 'rutyny', routine: 'r1' }), r, 'costs', categories)).toBe(true)
+    expect(reaches(b({ id: 'x', categoryId: 'rutyny', routine: 'r1', costs }), r, 'costs', categories)).toBe(false)
+    // A routine left on a block of another kind costs nothing (T1371): its cost does not reach it.
+    expect(reaches(b({ id: 'x', categoryId: 'projekty', routine: 'r1' }), r, 'costs', categories)).toBe(false)
+    expect(reaches(b({ id: 'x', categoryId: 'rutyny', routine: 'r2' }), r, 'costs', categories)).toBe(false)
+    expect(reaches(b({ id: 'x', categoryId: 'projekty', routine: 'r1', costs }), r, 'all', categories)).toBe(true)
+  })
+  it('kolejność blok → rutyna → wariant → podkategoria: koszt podkategorii i wariantu nie sięga bloku, którego rutyna ma własny koszt (T1398)', () => {
+    const routines = { r1: costs, r3: 'unknown' } as const
+    const rutyny = { kind: 'category', id: 'rutyny' } as const
+    expect(reaches(b({ id: 'x', categoryId: 'rutyny', routine: 'r1' }), rutyny, 'costs', categories, routines)).toBe(false)
+    expect(reaches(b({ id: 'x', categoryId: 'rutyny', routine: 'r1' }), rutyny, 'all', categories, routines)).toBe(true)
+    // The routine without a cost, or not known now (it costs as none, T1372): the subcategory's cost reaches the block.
+    expect(reaches(b({ id: 'x', categoryId: 'rutyny', routine: 'r2' }), rutyny, 'costs', categories, routines)).toBe(true)
+    expect(reaches(b({ id: 'x', categoryId: 'rutyny', routine: 'r3' }), rutyny, 'costs', categories, routines)).toBe(true)
+    // A routine left on a block of another kind costs nothing (T1371): the subcategory's cost reaches it.
+    expect(reaches(b({ id: 'x', categoryId: 'projekty', routine: 'r1' }), { kind: 'category', id: 'projekty' }, 'costs', categories, routines)).toBe(true)
+    const withVariant = { ...categories, rutyny: { ...categories.rutyny!, variants: [{ id: 'krotka', name: 'Krótka', costs: { head: 0, emotions: 0, senses: 0 } }] } }
+    const krotka = { kind: 'variant', categoryId: 'rutyny', id: 'krotka' } as const
+    expect(reaches(b({ id: 'x', categoryId: 'rutyny', variantId: 'krotka', routine: 'r1' }), krotka, 'costs', withVariant, routines)).toBe(false)
+    expect(reaches(b({ id: 'x', categoryId: 'rutyny', variantId: 'krotka', routine: 'r2' }), krotka, 'costs', withVariant, routines)).toBe(true)
+    expect(reaches(b({ id: 'x', categoryId: 'rutyny', variantId: 'krotka', routine: 'r1' }), krotka, 'all', withVariant, routines)).toBe(true)
+  })
 })
 
 describe('countScope', () => {
@@ -134,6 +159,16 @@ describe('countScope', () => {
     expect(countScope({ ...base, what: 'all' }).days).toBe(3)
   })
 
+  it('koszt rutyny: dziś bez skończonych, bez bloków z własnym kosztem i innego rodzaju; koszt podkategorii – bez bloków, których rutyna ma koszt (T1398)', () => {
+    const rut = (p: Partial<PlanBlock> & { id: string }) => b({ categoryId: 'rutyny', routine: 'r1', ...p })
+    const files = { ...nulls(), [today]: day(today, [rut({ id: 'run' }), rut({ id: 'done' }), rut({ id: 'own', costs }), b({ id: 'other', routine: 'r1' })]), '2026-11-19': day('2026-11-19', [rut({ id: 'next' })]) }
+    const base = { today, files, templates: [], series: [], categories, ended: new Set(['done']) }
+    expect(countScope({ ...base, target: { kind: 'routine', id: 'r1' }, what: 'costs' }).days).toBe(2)
+    expect(countScope({ ...base, target: { kind: 'routine', id: 'r1' }, what: 'all' }).days).toBe(5)
+    expect(countScope({ ...base, target: { kind: 'category', id: 'rutyny' }, what: 'costs', routineCosts: { r1: costs } }).days).toBe(0)
+    expect(countScope({ ...base, target: { kind: 'category', id: 'rutyny' }, what: 'costs' }).days).toBe(2)
+  })
+
   it('wpis z późniejszą datą, który nadpisuje ten sam klucz: liczy tylko dni przed nim (T1336)', () => {
     const files = { ...nulls(), [today]: day(today, [b({ id: 'a' })]), '2026-11-19': day('2026-11-19', [b({ id: 'b' })]), '2026-11-20': day('2026-11-20', [b({ id: 'c' })]) }
     const t = templateFrom({ schema: 1, id: 't3', name: 'Późny', dayType: 'zwykly', weekdays: [], versions: { '2026-10-01': { blocks: [b({ id: 'n1' })].map((x) => ({ ...x })) }, '2026-11-20': { blocks: [b({ id: 'n9' })].map((x) => ({ ...x })) } } })!
@@ -200,5 +235,14 @@ describe('zmiany z okna', () => {
     expect(routineChange(r, { ...r, normal: [...r.normal, { id: 's2', name: ' ', min: 5 }] })).toMatchObject({ patch: null, what: null })
     expect(routineChange(r, { ...r, name: 'Wieczorna' })).toMatchObject({ patch: { name: 'Wieczorna' }, what: 'all' })
     expect(routineChange(r, { ...r, worse: [{ id: 's3', name: 'Woda', min: 2 }] }).patch).toEqual({ worse: [{ id: 's3', name: 'Woda', min: 2 }] })
+  })
+  it('rutyna: koszt (D512) – sam koszt to „costs”, razem z nazwą albo krokami – „all”; „jak podkategoria” (null) ↔ własny', () => {
+    const r = { name: 'Poranna', normal: [{ id: 's1', name: 'Woda', min: 5 }], worse: [], costs: null }
+    expect(routineChange(r, { ...r })).toMatchObject({ patch: null, what: null })
+    expect(routineChange(r, { ...r, costs })).toMatchObject({ patch: { costs }, what: 'costs' })
+    expect(routineChange({ ...r, costs }, { ...r, costs: null })).toMatchObject({ patch: { costs: null }, what: 'costs' })
+    expect(routineChange({ ...r, costs }, { ...r, costs: { ...costs, head: 3 } })).toMatchObject({ patch: { costs: { ...costs, head: 3 } }, what: 'costs' })
+    expect(routineChange({ ...r, costs }, { ...r, costs: { ...costs } })).toMatchObject({ patch: null, what: null })
+    expect(routineChange(r, { ...r, name: 'Wieczorna', costs })).toMatchObject({ patch: { name: 'Wieczorna', costs }, what: 'all' })
   })
 })

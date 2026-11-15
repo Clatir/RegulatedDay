@@ -9,7 +9,7 @@
  * can use them; the panel of a day gone by does not offer them). They are handed to the panel once its data have them (`has`):
  * what the panel's change reaches (the exchange of a new work block in „Dziś”) counts with the new rules.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { paths } from '@shared/data/paths'
 import { newId } from '@shared/model/ids'
 import { calendarOfCategory, DEFAULT_CALENDAR_ID, setCategoryCalendarRaw } from '@shared/model/calendars'
@@ -89,13 +89,17 @@ export function SaveButtons({ busy, ok, onSave, onClose }: { busy: boolean; ok: 
 
 type SetForm<T> = (patch: Partial<T> | ((now: T) => Partial<T>)) => void
 
-/** The fields of a routine – its name and the two versions of steps (the very editor of „Rutyny”); shared by „Nowa rutyna” and „Rutyna <nazwa>” (D514). */
-export function RoutineFields({ form, set, onEnter }: { form: RoutineForm; set: SetForm<RoutineForm>; onEnter: () => void }) {
+/**
+ * The fields of a routine – its name and the two versions of steps (the very editor of „Rutyny”); shared by „Nowa rutyna” and „Rutyna <nazwa>”
+ * (D514). `cost` – the field of its cost under the name (the window ✎, T1397: `RoutineCostField`, as „Rutyny”).
+ */
+export function RoutineFields({ form, set, onEnter, cost }: { form: RoutineForm; set: SetForm<RoutineForm>; onEnter: () => void; cost?: ReactNode }) {
   return (
     <>
       <Field label="Nazwa" labelWidth={70}>
         <TextField value={form.name} onCommit={(name) => set({ name })} onEnter={onEnter} max={80} autoFocus errorPlacement="below" aria-label="Nazwa rutyny" data-testid="new-routine-name" />
       </Field>
+      {cost}
       <div className="grid grid-cols-2 gap-3">
         {(['normal', 'worse'] as RoutineVersion[]).map((v) => (
           <RoutineSteps key={v} version={v} steps={form[v]} onChange={(fn) => set((now) => ({ [v]: fn(now[v]) }))} />

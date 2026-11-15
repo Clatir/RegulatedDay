@@ -6,28 +6,30 @@
  * minutes gone by as they were, D501), the rest (a name, a colour, a category, a calendar, a routine) at once as „Kategorie” and „Rutyny”
  * save them. „Anuluj” and Esc change nothing. The window says how many blocks it changes (`editScope.ts`, T1325) – the days' files read once,
  * at the first change (T1337). The values shown are the settings in force now (not the panel's day – an edit is made from now on), so ✎ is
- * only offered for a thing there is now (T1330). A variant's save refused says why in the window (T1331).
+ * only offered for a thing there is now (T1330). A variant's save refused says why in the window (T1331). A routine's window has the field of
+ * its cost of „Rutyny” (T1397: the form holds it until „Zapisz”, saved with the record by `saveRoutine` – a begun block of the routine counts
+ * the new cost from then on, T1395).
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { AnyEvent } from '@shared/model/events'
 import { foldFacts } from '@shared/engine/facts'
 import { gridOf } from '@shared/engine/grid'
-import { paths } from '@shared/data/paths'
 import { calendarOfCategory, setCategoryCalendarRaw } from '@shared/model/calendars'
 import type { CategoryRules } from '@shared/model/categories'
 import { changeVariant, groupOfCategory, setCategoryGroupRaw } from '@shared/model/categoryTree'
 import { categoryName } from '@shared/model/rd'
-import { routineFrom } from '@shared/model/routines'
+import { routineCostsOf } from '@shared/model/routines'
 import { settingsOn, type RulesSettings } from '@shared/model/settings'
 import { Dialog } from '../../components/Dialog'
 import { useBusy } from '../../lib/busy'
 import { commitActiveField } from '../../lib/commit'
-import { isSaved, updateRecord, useData } from '../../store/data'
+import { isSaved, useData } from '../../store/data'
 import { dayUsable } from '../../store/day'
 import { saveCalendars } from '../settings/calendarEdits'
 import { FLAGS, setMeta, VARIANT_PLACE_SAME } from '../settings/categoryFields'
 import { saveTree, saveVariants } from '../settings/categoryTreeEdits'
 import { saveSettingsFrom } from '../settings/settingsStore'
+import { RoutineCostField, saveRoutine } from '../routines/routineCost'
 import { categoryChange, routineChange, variantChange } from './editChanges'
 import { countScope, overriddenFrom, scopeDates, scopeDetail, scopeText, type EditTarget, type EditWhat, type ScopeCount } from './editScope'
 import { CategoryFields, RoutineFields, SaveButtons, VariantFields, useForm } from './NewThingDialogs'
@@ -49,36 +51,38 @@ async function endedToday(today: string): Promise<ReadonlySet<string>> {
 }
 
 /**
- * The blocks the edit reaches: the days' files (and, for a change that may be of the cost only, today's log) are read once, at the first
- * change (`what` no longer null) – a window opened and closed reads nothing; the count follows the fields. `until` – `overriddenFrom`.
- * Null – nothing changed, or still being counted.
+ * The blocks the edit reaches: the days' files and today's log (a change of the cost only does not reach today's blocks ended – of a routine
+ * too, T1398) are read once, at the first change (`what` no longer null) – a window opened and closed reads nothing; the count follows the
+ * fields. `until` – `overriddenFrom`. Null – nothing changed, or still being counted.
  */
 function useScope(target: EditTarget, what: EditWhat | null, categories: Readonly<Record<string, CategoryRules | undefined>>, until: string | null): ScopeCount | null {
   const today = useData((s) => s.view?.today ?? '')
   const templates = useData((s) => s.templates)
   const series = useData((s) => s.seriesPlans)
+  // The routines' costs now: a block whose routine has one costs that before its variant's and subcategory's (D512).
+  const routines = useData((s) => s.routines)
+  const routineCosts = useMemo(() => routineCostsOf(routines), [routines])
   // Set once and never put back: going back to „nothing changed” and changing again reads nothing more.
   const [wanted, setWanted] = useState(false)
   useEffect(() => {
     if (what) setWanted(true)
   }, [what])
-  const withLog = target.kind !== 'routine'
   const [read, setRead] = useState<{ files: Files; ended: ReadonlySet<string> } | null>(null)
   useEffect(() => {
     if (!wanted || !today) return
     let alive = true
-    void Promise.all([window.rd.dayFiles(scopeDates(today)).catch((): Files => ({})), withLog ? endedToday(today) : NONE]).then(([files, ended]) => {
+    void Promise.all([window.rd.dayFiles(scopeDates(today)).catch((): Files => ({})), endedToday(today)]).then(([files, ended]) => {
       if (alive) setRead({ files, ended })
     })
     return () => {
       alive = false
     }
-  }, [wanted, today, withLog])
+  }, [wanted, today])
   const key = JSON.stringify(target)
   return useMemo(
-    () => (read && what ? countScope({ today, files: read.files, templates, series, target, what, categories, ended: read.ended, until }) : null),
+    () => (read && what ? countScope({ today, files: read.files, templates, series, target, what, categories, routineCosts, ended: read.ended, until }) : null),
     // `target` by its key: a new object of the same thing counts nothing again.
-    [read, what, today, templates, series, key, categories, until]
+    [read, what, today, templates, series, key, categories, routineCosts, until]
   )
 }
 
@@ -230,11 +234,13 @@ export function EditVariantDialog({ categoryId, variantId, onClose }: { category
 export function EditRoutineDialog({ routineId, onClose }: { routineId: string; onClose: () => void }) {
   const routine = useData((s) => s.routines.find((r) => r.id === routineId))
   const settings = useSettingsNow()
-  const [initial] = useState<RoutineForm>(() => ({ name: routine?.name ?? '', normal: routine?.normal ?? [], worse: routine?.worse ?? [] }))
+  const [initial] = useState<RoutineForm>(() => ({ name: routine?.name ?? '', normal: routine?.normal ?? [], worse: routine?.worse ?? [], costs: routine?.costs ?? null }))
   const [form, set, ref] = useForm<RoutineForm>(initial)
   const [busy, run] = useBusy()
   const change = routineChange(initial, form)
   const count = useScope({ kind: 'routine', id: routineId }, change.what, settings.categories, null)
+  // The name and the steps have no date (they change in the days gone by too); the cost reaches what is begun from now on (T1395).
+  const undated = change.patch != null && (change.patch.name !== undefined || change.patch.normal !== undefined || change.patch.worse !== undefined)
   const save = () =>
     run(async () => {
       commitActiveField()
@@ -242,14 +248,27 @@ export function EditRoutineDialog({ routineId, onClose }: { routineId: string; o
       if (!d.name.trim()) return
       const ch = routineChange(initial, d)
       if (!ch.patch) return onClose()
-      const patch = ch.patch
-      const out = await updateRecord(paths.record('routine', routineId), (raw) => (routineFrom(raw) ? { ...raw, ...patch } : raw))
+      // The save of „Rutyny” (T1397): the record, then – the cost changed – today's begun blocks of the routine from now on.
+      const { out } = await saveRoutine(routineId, ch.patch)
       if (isSaved(out)) onClose()
     })
   return (
     <Dialog title={`Rutyna ${initial.name}`} onClose={onClose} wide centered data-testid="edit-routine-window" actions={<SaveButtons busy={busy} ok={form.name.trim() !== ''} onSave={() => void save()} onClose={onClose} />}>
-      <RoutineFields form={form} set={set} onEnter={() => void save()} />
-      <ScopeNote count={count} what={change.what} note="Rutyna nie ma daty: zmiana działa od razu, także w dniach minionych." />
+      <RoutineFields
+        form={form}
+        set={set}
+        onEnter={() => void save()}
+        // The window's clicks change the form only: nothing is saved before „Zapisz” („Anuluj” and Esc change nothing).
+        cost={
+          <RoutineCostField
+            id={`edit-routine:${routineId}`}
+            costs={form.costs ?? null}
+            categories={settings.categories}
+            onChange={(costs) => set({ costs })}
+          />
+        }
+      />
+      <ScopeNote count={count} what={change.what} note={undated ? 'Rutyna nie ma daty: nazwa i kroki zmieniają się od razu, także w dniach minionych.' : undefined} />
     </Dialog>
   )
 }

@@ -2,21 +2,20 @@
  * Rutyny (spec „Rutyna”): a sequence of steps with the time of each, in two versions – the usual one and one for worse
  * days. You set the order here; the app never changes it, at most it moves the whole routine in time. A block of the
  * plan points at its routine (the panel of a block of the „Rutyny” category). Ctrl+N makes a new routine. D512: the routine's own cost
- * per hour – the label and window of a tile's cost (`TileCost`), or none („jak podkategoria”).
+ * per hour – the label and window of a tile's cost (`TileCost`), or none („jak podkategoria”); the field and its save are those of ✎
+ * (`routineCost.tsx`): a begun block of the routine counts the new cost from now on (D514, T1395).
  */
 import { useEffect, useMemo, useState } from 'react'
 import { paths } from '@shared/data/paths'
 import { durationLabel } from '@shared/format'
-import type { TileCost as TileCostInfo } from '@shared/model/blockCosts'
-import type { CategoryRules, Costs } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
 import { ROUTINE_SCHEMA, routineFrom, routineMinutes, type Routine, type RoutineVersion } from '@shared/model/routines'
 import { settingsOn } from '@shared/model/settings'
 import { TextField } from '../../components/fields'
-import { EmptyState, Field, cx } from '../../components/ui'
-import { TileCost } from '../plan/TileCost'
+import { EmptyState, cx } from '../../components/ui'
+import { RoutineCostField, saveRoutine } from './routineCost'
 import { RoutineSteps } from './RoutineSteps'
-import { saveRecord, storedAnswer, tryRemoveRecord, tryUpdateRecord, updateRecord, useData, type SaveAnswer, type SendState } from '../../store/data'
+import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
 import { useNewShortcut } from '../../lib/escape'
 import { removeTarget, useDeleteResolver } from '../../lib/deleteKey'
 import { takeFoundPick, undoToast, useUi } from '../../store/ui'
@@ -28,17 +27,6 @@ async function removeRoutine(routine: Routine): Promise<boolean> {
   if (!saved) return false
   undoToast(`Usunięta rutyna: ${routine.name}`, () => void saveRecord(rel, null, before))
   return true
-}
-
-const NO_COSTS: Costs = { head: 0, emotions: 0, senses: 0 }
-
-/**
- * The cost of a routine as „Rutyny” shows it (D512): its own, else – „jak podkategoria” – the cost of the category of routines (the first of
- * the kind „rutyna”, the block of a routine usually has it); the window's button gives the routine's own cost up.
- */
-export function routineCostShown(routine: Pick<Routine, 'costs'>, categories: Readonly<Record<string, CategoryRules | undefined>>): TileCostInfo {
-  const base = Object.values(categories).find((c) => c?.kind === 'routine')?.costs ?? NO_COSTS
-  return { costs: routine.costs ?? base, base, own: routine.costs != null, edit: true }
 }
 
 export function RoutinesPage() {
@@ -109,11 +97,6 @@ function Editor({ routine, onRemoved }: { routine: Routine; onRemoved: () => voi
   const rd = useData((s) => s.rd)
   const today = useData((s) => s.view?.today ?? '')
   const categories = useMemo(() => settingsOn(rd.settings, today).categories, [rd.settings, today])
-  /** D512: the routine's own cost (null – none, „jak podkategoria”) over the record as it is when the change's turn comes; what became of it. */
-  const saveCosts = (costs: Costs | null): Promise<SaveAnswer> => {
-    const state: SendState = { afterSend: false }
-    return tryUpdateRecord(rel, (raw) => (routineFrom(raw) ? { ...raw, costs } : raw), state).then((out) => storedAnswer(out, state))
-  }
   /** The routine changed by `fn` from what it is when the change's turn comes (A6-01). */
   const change = (fn: (r: Routine) => Partial<Routine>) =>
     void updateRecord(rel, (raw) => {
@@ -136,14 +119,8 @@ function Editor({ routine, onRemoved }: { routine: Routine; onRemoved: () => voi
           Usuń
         </button>
       </div>
-      <Field label="Koszt na godzinę" labelWidth={120} hint="Blok z tą rutyną kosztuje tyle, chyba że ma własny koszt. Bez kosztu rutyny – jak podkategoria (albo wariant) bloku.">
-        <div className="flex items-center gap-2">
-          <TileCost cost={routineCostShown(routine, categories)} id={`routine:${routine.id}`} testId="routine-cost" onChange={(costs) => saveCosts(costs)} />
-          <span className="text-[12px] text-muted" data-testid="routine-cost-from">
-            {routine.costs ? 'własny koszt rutyny' : 'jak podkategoria'}
-          </span>
-        </div>
-      </Field>
+      {/* D512: the routine's own cost (null – „jak podkategoria”) over the record as it is when the change's turn comes; what became of it. */}
+      <RoutineCostField id={`routine:${routine.id}`} costs={routine.costs ?? null} categories={categories} onChange={async (costs) => (await saveRoutine(routine.id, { costs })).answer} />
       <div className="grid grid-cols-2 gap-4">
         {(['normal', 'worse'] as RoutineVersion[]).map((v) => (
           <RoutineSteps key={v} version={v} steps={routine[v]} onChange={(fn) => change((r) => ({ [v]: fn(r[v]) }))} />
