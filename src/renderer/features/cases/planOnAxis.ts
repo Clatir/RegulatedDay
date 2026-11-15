@@ -16,6 +16,7 @@ import { editOf } from '../../store/data'
 import type { DayModel } from '../../store/day'
 import { undoToast } from '../../store/ui'
 import { addChange, pushedStarts } from '../today/dayPush'
+import { copiedText } from '../plan/blockCopy'
 
 /**
  * The sprawa's own block of before on this day that the drop takes out (`casePlan`: not begun – a task's, or a block of
@@ -48,12 +49,14 @@ export const plannedText = (title: string, block: Pick<PlanBlock, 'startMin'>): 
  * The sprawa `r` on the axis of `model`'s day at `startMin`: whether its old block began is the log's (`planCase`, T769);
  * the day's file as the window knows it is the fallback for one not readable now; the pushed blocks are written while the
  * day's plan after the change has them (its snapshot with the new file, T770); `durationMin` – the block's length when not the estimate
- * (D464). Returns whether it was saved.
+ * (D464); `copy` – a copy of the sprawa is planned, the original stays on its list as it is (D513). Returns whether it was saved.
  */
-export async function planOnAxis(model: DayModel, today: string, r: RequestRecord, title: string, startMin: number, durationMin?: number): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
-  const { pushed } = planningOf(model, today, r, startMin, durationMin)
+export async function planOnAxis(model: DayModel, today: string, r: RequestRecord, title: string, startMin: number, durationMin?: number, copy = false): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
+  // D513 (Ctrl held at the drop): a new sprawa of the same content – it has no block of before to take out of the day.
+  const { pushed } = planningOf(model, today, copy ? { ...r, day: null, block: null } : r, startMin, durationMin)
   const res = await planCase(r.id, model.date, startMin, {
     ...(durationMin != null ? { durationMin } : {}),
+    ...(copy ? { copy } : {}),
     push: { blocks: pushed, planOf: (file) => dayPlan(model.ctx.snapshot, file) },
     seen: (date) => (date === model.date ? model.data.dayFile : undefined)
   })
@@ -63,8 +66,10 @@ export async function planOnAxis(model: DayModel, today: string, r: RequestRecor
     // sprawa then reads as not „zaplanowane” by itself – its block is gone, T752).
     const u = res.undo.find((x) => x.rel === paths.day(model.date))
     const entry = u ? editOf(u.rel, u.before, u.after) : null
-    if (entry) await window.rd.planPushed(model.date, res.moved, entry, entry.create ? u!.after : null).catch(() => undefined)
+    // D513: a copy's one „Cofnij” is the toast's (it takes the new sprawa back with the day) – the bar hears of the pushing only.
+    const made = entry?.create ? u!.after : null
+    if (entry) await (copy ? window.rd.planPushed(model.date, res.moved, entry, made, false) : window.rd.planPushed(model.date, res.moved, entry, made)).catch(() => undefined)
   }
-  undoToast(plannedText(title, res.block), () => void undoCase(res.undo))
+  undoToast(copy ? copiedText(title, { pushed: res.moved }) : plannedText(title, res.block), () => void undoCase(res.undo))
   return res
 }

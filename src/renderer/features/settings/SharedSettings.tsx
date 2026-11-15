@@ -1,11 +1,11 @@
 /**
  * The shared settings (spec „Macierz ustawień”, „Moduły”): the date changes apply from (by default tomorrow; „od dziś”
  * with a snapshot of today), the modules (at once), the day types and the week, sleep, sessions and their layer, the
- * boundary, energy, reminders, the questions of the day, the breaks, water and solitude, the ways of regeneration. The
+ * boundary, energy, reminders, the questions of the day, the breaks, water and solitude (the ways of regeneration are variants in „Kategorie”, D510). The
  * fields show the values in force from the chosen date; a minimum of regeneration that would not fit before the bedtime
  * (the same function as the hard end) is a warning – saving is still possible.
  */
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { DAY_TYPE_FIELDS, FIELD_GROUP_NAMES, NUMBER_FIELDS, type FieldGroup } from '@shared/model/fields'
 import { plDate, WEEKDAY_SHORT } from '@shared/format'
 import { newId } from '@shared/model/ids'
@@ -97,7 +97,7 @@ export function DayTypesSection() {
     const d = addDays(today, 1)
     return DAY_TYPES.filter((t) => {
       if (t === 'wolne') return false
-      const m = countDay(d, { date: d, dayFile: { schema: 1, date: d, dayType: t }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rd.settings, templates, lectures, series: [] }, placeLogical(d, 4 * 60), false)
+      const m = countDay(d, { date: d, dayFile: { schema: 1, date: d, dayType: t }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rd.settings, templates, lectures, series: [], routines: [] }, placeLogical(d, 4 * 60), false)
       return m.state.hardEnd.unreachable || (m.state.forecastWorkEnd != null && m.state.hardEnd.at < m.state.forecastWorkEnd)
     })
   }, [today, rd.settings, templates, lectures])
@@ -241,54 +241,6 @@ export function FieldsSection({ group }: { group: FieldGroup }) {
           </Field>
         )
       })}
-    </Section>
-  )
-}
-
-/** The ways of regeneration: the variants of the regeneration category, each with its costs (spec „Sposoby regeneracji”). */
-export function RegenWaysSection() {
-  const { s, save } = useShared()
-  const regen = s.categories.regeneracja
-  const [name, setName] = useState('')
-  if (!regen) return null
-  const setVariants = (variants: typeof regen.variants) => save({ categories: { regeneracja: { variants } } })
-  const pools = ['head', 'emotions', 'senses'] as const
-  return (
-    <Section title="Sposoby regeneracji" data-testid="settings-regen-ways">
-      {regen.variants
-        .filter((v) => !v.archived)
-        .map((v) => (
-          <div key={v.id} className="flex flex-wrap items-center gap-2">
-            <TextField value={v.name} onCommit={(n) => setVariants(regen.variants.map((x) => (x.id === v.id ? { ...x, name: n } : x)))} required max={80} shellClassName="w-[260px]" aria-label="Sposób regeneracji" />
-            {pools.map((p) => (
-              <SettingNumber
-                key={p}
-                field={{ kind: 'integer', range: RANGES.cost, label: `${v.name}: ${p}` }}
-                value={(v.costs ?? regen.costs)[p]}
-                onCommit={(c) => setVariants(regen.variants.map((x) => (x.id === v.id ? { ...x, costs: { ...(x.costs ?? regen.costs), [p]: c } } : x)))}
-                className="w-[52px]"
-              />
-            ))}
-            <button type="button" className="text-[12px] text-muted hover:text-rose" onClick={() => setVariants(regen.variants.map((x) => (x.id === v.id ? { ...x, archived: true } : x)))}>
-              Archiwizuj
-            </button>
-          </div>
-        ))}
-      <span className="text-[11.5px] text-muted">Koszty: głowa, emocje, bodźce na godzinę (ujemne oddają energię).</span>
-      <div className="flex items-center gap-2">
-        <input className="input w-[260px]" value={name} maxLength={80} placeholder="+ dodaj sposób" onChange={(e) => setName(e.currentTarget.value)} />
-        <button
-          type="button"
-          className="btn"
-          disabled={!name.trim()}
-          onClick={() => {
-            setVariants([...regen.variants, { id: newId(10), name: name.trim(), costs: { head: -1, emotions: -1, senses: -1 } }])
-            setName('')
-          }}
-        >
-          Dodaj
-        </button>
-      </div>
     </Section>
   )
 }

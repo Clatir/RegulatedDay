@@ -10,7 +10,8 @@
  */
 import { dayRaw, putBlock, type Raw } from '../data/dayEdits'
 import { logicalClock } from '../format'
-import { REGEN_CATEGORY, costsOf, type Pool } from '../model/categories'
+import { blockCosts } from '../model/blockCosts'
+import { REGEN_CATEGORY, type CategoryRules, type Pool } from '../model/categories'
 import { dayFileFrom, type PlanBlock } from '../model/plan'
 import { logicalMinuteOf } from '../time/day'
 import { isBoundaryWork, plannedSpan, type BlockInfo } from './blocks'
@@ -64,6 +65,8 @@ export interface Variant {
 }
 
 const lmOf = (s: DayState, idx: number) => logicalMinuteOf(s.grid.date, atOf(s.grid, idx))
+/** No categories of the settings: a block's cost from the rules it is counted with (`BlockInfo.rules`) – no prototype („constructor” is none). */
+const NO_CATEGORIES: Readonly<Record<string, CategoryRules | undefined>> = Object.freeze(Object.create(null) as Record<string, CategoryRules | undefined>)
 
 /** The most steps `zeroOf` takes (a bound for safety: a block's end changes a few times a day). */
 const ZERO_STEPS = 32
@@ -408,7 +411,8 @@ export function variantsFor(ctx: DayContext, state: DayState, cause: VariantCaus
   const regenName = state.settings.categories[REGEN_CATEGORY]?.variants.find((v) => v.id === way)?.name ?? 'regeneracja'
   const nowMin = lmOf(state, state.now)
   const regen: VariantChange = { k: 'regen', startMin: nowMin, durationMin: REGEN_VARIANT_MIN, variantId: way }
-  const costOf = (b: BlockInfo) => (b.costs ?? costsOf(b.rules, b.variantId))[cause.pool]
+  // The one rule of a block's cost (D501, D512: own, routine, variant, category) on the rules the block is counted with (`b.rules`).
+  const costOf = (b: BlockInfo) => blockCosts(b, NO_CATEGORIES, b.rules).costs[cause.pool]
   const costly = candidates(state, (b) => costOf(b) > 0).sort((a, b) => costOf(b.info) - costOf(a.info) || a.from - b.from)[0]
   // A category „nie przenosić na jutro” may be shortened, never moved (spec „Kategorie”).
   const movable = costly != null && !costly.info.rules.noMoveTomorrow

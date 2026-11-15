@@ -4,7 +4,7 @@
  */
 import { computeDay, type DayContext, type DayState } from '@shared/engine/day'
 import { computeEnergy, type EnergyOptions, type EnergyState } from '@shared/engine/energy'
-import type { Pool } from '@shared/model/categories'
+import type { Costs, Pool } from '@shared/model/categories'
 import type { AnyEvent, Answer, DaySnapshot, Domain, Signal, TimerEvent } from '@shared/model/events'
 import { RULES_VERSION } from '@shared/model/events'
 import { planBlock, type PlanBlock } from '@shared/model/plan'
@@ -55,6 +55,12 @@ export interface ScenarioOptions {
   plan: PlanBlock[]
   wake?: string
   nextWake?: string
+  /**
+   * The costs of the routines with their own (D512, `DayContext.routineCosts`); given – a start of a block writes the cost of its
+   * routine as the version with routine costs does (`planned.routineCosts`), left out – no such field (as the version when the routine
+   * cannot be read; a start of an older version – `v` 13 by `write`).
+   */
+  routineCosts?: Record<string, Costs>
 }
 
 export class Scenario {
@@ -113,7 +119,9 @@ export class Scenario {
       durationMin: o.min ?? p?.durationMin ?? 30,
       fixed: p?.fixed ?? false,
       costs: p?.costs ?? null,
-      bgCostPct: p?.bgCostPct ?? null
+      bgCostPct: p?.bgCostPct ?? null,
+      // As `startPlanned`: only a block of a category of the kind „rutyna” has its routine's cost (T1371).
+      ...(this.opts.routineCosts ? { routineCosts: (p?.routine && this.settings.categories[p.categoryId]?.kind === 'routine' ? this.opts.routineCosts[p.routine] : undefined) ?? null } : {})
     }
     return this.push({ k: 'block.start', block: id, at: this.at(at), bg: o.bg === true, planned, confirmUntil: o.confirmUntil ? this.at(o.confirmUntil) : null, how: 'click' }, at)
   }
@@ -262,6 +270,7 @@ export class Scenario {
       nextWakeMin: lm(this.opts.nextWake ?? '06:00'),
       events: this.events.filter((e) => e.t <= t),
       now: t,
+      ...(this.opts.routineCosts ? { routineCosts: this.opts.routineCosts } : {}),
       ...extra
     }
   }

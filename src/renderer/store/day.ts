@@ -113,6 +113,7 @@ export function useDay(date: string): DayModel | null {
   const templates = useData((s) => s.templates)
   const lectures = useData((s) => s.lectures)
   const series = useData((s) => s.seriesPlans)
+  const routines = useData((s) => s.routines)
   const calibration = useData((s) => s.view?.calibration === true)
   const tick = useNow(30_000)
   return useMemo(() => {
@@ -120,8 +121,8 @@ export function useDay(date: string): DayModel | null {
     // The day at this very instant (read when the data change or the clock ticks): an action written a moment ago – an
     // approval at 12:34:45 counts from the minute it rounds to – is in the day at once.
     void tick
-    return countDay(date, data, { changes: rd.settings, templates, lectures, series }, Date.now(), rd.general.modules.energy, calibration)
-  }, [data, date, rd, templates, lectures, series, tick, calibration])
+    return countDay(date, data, { changes: rd.settings, templates, lectures, series, routines }, Date.now(), rd.general.modules.energy, calibration)
+  }, [data, date, rd, templates, lectures, series, routines, tick, calibration])
 }
 
 /**
@@ -158,10 +159,10 @@ export async function plannedDay(date: string, at = Date.now()): Promise<Planned
     const data = await window.rd.dayData(date)
     if (data.unknown) return 'file'
     if (!dayUsable(data)) return 'log'
-    const { rd, templates, lectures, seriesPlans } = useData.getState()
+    const { rd, templates, lectures, seriesPlans, routines } = useData.getState()
     const events = data.events as AnyEvent[]
     const src = { date, events, dayFile: data.dayFile ? dayFileFrom(data.dayFile, date) : null, nextFile: data.nextFile ? dayFileFrom(data.nextFile, addDays(date, 1)) : null }
-    const ctx = dayContextOf({ changes: rd.settings, templates, lectures, series: seriesPlans }, src, marketDay, at)
+    const ctx = dayContextOf({ changes: rd.settings, templates, lectures, series: seriesPlans, routines }, src, marketDay, at)
     return { ctx, facts: foldFacts(gridOf(date), events), file: data.dayFile }
   } catch {
     return 'log'
@@ -177,8 +178,8 @@ export async function countedDay(date: string, base: RawRecord | null, at = Date
   try {
     const data = await window.rd.dayData(date)
     if (!dayUsable(data)) return null
-    const { rd, templates, lectures, seriesPlans } = useData.getState()
-    return countDay(date, { ...data, dayFile: base }, { changes: rd.settings, templates, lectures, series: seriesPlans }, at, false)
+    const { rd, templates, lectures, seriesPlans, routines } = useData.getState()
+    return countDay(date, { ...data, dayFile: base }, { changes: rd.settings, templates, lectures, series: seriesPlans, routines }, at, false)
   } catch {
     return null
   }

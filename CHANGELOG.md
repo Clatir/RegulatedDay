@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.25.0
+- Kategorie to teraz drzewo: kategoria → podkategoria → wariant. Kategoria jest ogólna i nie ma kosztu („Praca”, „Nauka”, „Dom i opieka”, „Wolne”, „Inne”), podkategoria ma koszt i wszystkie dotychczasowe właściwości, a wariant może mieć własny koszt i miejsce albo być „jak podkategoria”. Twoje dotychczasowe kategorie stały się podkategoriami w tych grupach – bloki, historia i statystyki się nie zmieniają. W Ustawieniach dodajesz, przenosisz i usuwasz rzeczy na każdym poziomie.
+- Usunięcie kategorii, która ma podkategorie, pyta, dokąd je przenieść (domyślnie „Inne”), albo usuwa je razem z nią; „Cofnij” przywraca.
+- Sposoby regeneracji to warianty podkategorii „Regeneracja” w drzewie – osobnej sekcji w Ustawieniach już nie ma.
+- W panelu bloku jest jedna lista „Podkategoria” z nagłówkami kategorii; „+ Nowa…” tworzy podkategorię w wybranej kategorii. Ctrl K znajduje kategorie, podkategorie i warianty. Przycisk w okienku kosztu mówi teraz „Jak podkategoria (…)”, „Jak wariant (…)” albo „Jak rutyna (…)” – zależnie od tego, skąd bierze się koszt.
+- Szybka edycja: obok list „Podkategoria”, „Wariant” i „Rutyna” w panelu bloku jest przycisk ✎. Otwiera okno ze wszystkimi polami wybranej rzeczy, zapisuje zmiany od dziś (bez względu na „Od kiedy” w Ustawieniach) i mówi, ile bloków zmieni.
+- Szablony: kafelki bloków mają koszt na godzinę w prawym dolnym rogu i to samo okienko co w „Dziś” – zmiana zapisuje się w bloku szablonu.
+- Rutyny: rutyna może mieć własny koszt na godzinę (głowa, emocje, bodźce) albo „jak podkategoria”. Blok rutyny kosztuje tyle co rutyna, chyba że ma własny koszt. To samo pole jest w oknie ✎ „Rutyna <nazwa>” – zmiana zapisuje się po „Zapisz”.
+- Zmiana kosztu rutyny (w „Rutynach” albo w ✎) działa też na zaczętym bloku tej rutyny – od tej chwili do jego końca; minione minuty zostają policzone po staremu, a „Jak rutyna” wraca do nowego kosztu.
+- Kopiowanie: przeciągnij blok z wciśniętym Ctrl, a blok zostanie na miejscu, a w miejscu upuszczenia stanie jego kopia – w „Dziś”, „3 dniach”, „Tygodniu” (także na inny dzień), „Szablonach” i w wydarzeniach całodniowych. Kopia bierze notatkę, kroki i kopie załączników; jedno „Cofnij” zdejmuje wszystko. Kopia bloku serii to pojedynczy blok poza serią.
+- Sprawę z panelu „Sprawy” przeciągniętą na oś z Ctrl aplikacja kopiuje jako nową, osobną sprawę – oryginał zostaje na liście.
+
 ## 1.24.0
 - Czytelna energia w „Dziś”: obok osi zamiast trzech cienkich linii stoją trzy wąskie pasy G · E · B (głowa, emocje, bodźce), każdy od 0 do 100, z wypełnionym słupkiem. Rezerwa to kreska w każdym pasie, a słupek poniżej rezerwy jest jaśniejszy. Przy linii „teraz” widać trzy aktualne liczby, a najechanie na pasy pokazuje godzinę i wartości („10:30 · głowa 71 · emocje 66 · bodźce 41”). Legenda nad osią mówi „energia 0–100”.
 - Energia w „Tygodniu” i „3 dniach”: zamiast krzywych w tle kolumny jest wąski pasek przy jej lewej krawędzi, w kolorze najsłabszej puli i w trzech odcieniach – dobrze, uwaga (najsłabsza pula mniej niż 15 nad rezerwą) i poniżej rezerwy. Bloki stoją na prawo od paska, nic nie leży pod nimi. Dzień przyszły ma pasek jaśniejszy z podpisem „przyjęte”; najechanie na pasek pokazuje godzinę i trzy wartości, a legenda nad kolumnami nazywa odcienie. Kształt energii jest wygładzony, ale nigdy nie wychodzi ponad ani pod wartości prognozy.

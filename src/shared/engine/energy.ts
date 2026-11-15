@@ -10,14 +10,15 @@
  * The check-in and the signals are anchors: a signal carries the exact state before it as its computer knew it, so
  * corrections of times before it never change the state after it; a descent the leader registered stays. A block counts
  * as it began (its start event): a later edit of the plan never changes its past; a change of its cost in the window of its tile
- * (`block.cost`, D501) counts from its minute on (`costChange.ts`).
+ * (`block.cost`, D501) counts from its minute on (`costChange.ts`). The order of a block's cost (D512): its own, its routine's, its
+ * variant's, its category's.
  */
 import { POOLS, REGEN_CATEGORY, REQUEST_CATEGORY, costsOf, type CategoryRules, type Costs, type Pool, type PoolValues } from '../model/categories'
 import { baseCosts } from '../model/blockCosts'
 import { compareEvents, isKnown, type AnyEvent, type EnergyEvent } from '../model/events'
 import { DEFAULT_SETTINGS, type RulesSettings } from '../model/settings'
 import type { BlockInfo } from './blocks'
-import { costChangesOf, ownAt, startCostOf, type CostChange } from './costChange'
+import { costChangesOf, ownAt, routineAt, startCostOf, type CostChange } from './costChange'
 import { REST_FREE, settingsAtMinute, type DayContext, type DayState } from './day'
 import { compareOrder, type EventOrder, OPEN } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
@@ -99,7 +100,12 @@ interface Kind {
   cat: string
   variant: string | null
   own: Costs | null
-  /** Its cost changed from a minute on (D501, `block.cost`), in the order they apply; null – none (the cost of its start all along). */
+  /** The cost of its routine (D512): from its start (`planned.routineCosts`), not begun – the routine's now; null – none. */
+  routine: Costs | null
+  /**
+   * Its cost changed from a minute on (D501, `block.cost`) and its routine's (D514, `routine.cost` – T1430), in the order they apply;
+   * null – none (the cost of its start all along).
+   */
   changes: readonly CostChange[] | null
   bgPct: number | null
   rules: CategoryRules
@@ -141,9 +147,13 @@ export function regenVariant(s: RulesSettings, id: string): Costs {
   return cat && v ? (v.costs ?? cat.costs) : costsOf(DEFAULT_SETTINGS.categories[REGEN_CATEGORY]!, id)
 }
 
-/** What a block costs an hour at minute k: its own (changed from a minute on, D501), else its variant's or category's (`baseCosts`). */
+/**
+ * What a block costs an hour at minute k: its own (changed from a minute on, D501), else its routine's (D512; changed from a minute on, T1430),
+ * variant's or category's (`baseCosts`).
+ */
 function costOf(x: Kind, s: RulesSettings, k: number): Costs {
-  return (x.changes ? ownAt(x.changes, k, x.own) : x.own) ?? baseCosts(s.categories, x.cat, x.variant, x.rules)
+  if (!x.changes) return x.own ?? baseCosts(s.categories, x.cat, x.variant, x.rules, x.routine)
+  return ownAt(x.changes, k, x.own) ?? baseCosts(s.categories, x.cat, x.variant, x.rules, routineAt(x.changes, k, x.routine))
 }
 
 /** Among blocks in the foreground at once (minute k): regeneration and a protected life block stay, then the class mode, the costlier, the earlier. */
@@ -194,19 +204,21 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
   const c0 = checkins.length ? Math.min(...checkins.map((e) => idx(e.at))) : null
 
   // D501: the changes of a begun block's cost from a minute on (only after its start – `costChange.ts`).
-  const changes = costChangesOf(ctx.events, day.facts)
+  const changes = costChangesOf(ctx, day.facts)
   const kinds = new Map<string, Kind>()
   const kindOf = (b: BlockInfo): Kind => {
     let k = kinds.get(b.id)
     if (!k) {
       const p = day.facts.blocks.get(b.id)?.planned
-      const { cat, variant, own } = startCostOf(b, p)
+      const ch = changes.get(b.id) ?? null
+      const { cat, variant, own, routine } = startCostOf(b, p, ch)
       k = {
         block: b,
         cat,
         variant,
         own,
-        changes: changes.get(b.id) ?? null,
+        routine,
+        changes: ch,
         bgPct: p?.bgCostPct !== undefined ? p.bgCostPct : b.bgCostPct,
         rules: ctx.snapshot.settings.categories[cat] ?? b.rules,
         flexible: !(p ? p.fixed : b.fixed) && !b.waits

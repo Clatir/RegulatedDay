@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * „+ Nowa…” in the lists of a block's panel (D463): „Kategoria”, „Wariant” and „Rutyna” end with it; it opens a window in the middle of
+ * „+ Nowa…” in the lists of a block's panel (D463): „Podkategoria” (D510), „Wariant” and „Rutyna” end with it; it opens a window in the middle of
  * the screen with the fields of the thing; „Zapisz” makes the thing through the same save as its screen and the block takes it (the
  * routine with its length – its steps never copied, D480); „Anuluj” and Esc leave the block as it was; a list of a panel that cannot change (read
  * only) has no such item.
@@ -84,7 +84,7 @@ const regen = planBlock({ id: 'b1', categoryId: 'regeneracja', startMin: 9 * 60,
 const routineBlock = planBlock({ id: 'b2', categoryId: 'rutyny', startMin: 8 * 60, durationMin: 20, origin: 'user' })
 
 describe('lista kończy się pozycją „+ Nowa…”', () => {
-  it('Kategoria, Wariant i Rutyna mają ją na końcu; panel tylko do odczytu – nie', async () => {
+  it('Podkategoria, Wariant i Rutyna mają ją na końcu; panel tylko do odczytu – nie', async () => {
     await mount(regen)
     expect(labels('block-category').at(-1)).toBe('+ Nowa…')
     expect(labels('block-variant').at(-1)).toBe('+ Nowa…')
@@ -97,6 +97,23 @@ describe('lista kończy się pozycją „+ Nowa…”', () => {
     await mount(regen, { readOnly: true })
     expect(labels('block-category')).not.toContain('+ Nowa…')
     expect(labels('block-variant')).not.toContain('+ Nowa…')
+  })
+})
+
+describe('lista „Podkategoria” z nagłówkami kategorii (D510)', () => {
+  it('jedna lista: etykieta „Podkategoria”, nagłówki kategorii w kolejności, pod nimi podkategorie, „+ Nowa…” bez nagłówka na końcu', async () => {
+    await mount(regen)
+    expect(document.body.textContent).toContain('Podkategoria')
+    const select = q<HTMLSelectElement>('block-category')!
+    const headers = [...select.querySelectorAll('optgroup')].map((g) => g.label)
+    // „Inne” has no subcategory of its own here: no header for an empty category.
+    expect(headers).toEqual(['Praca', 'Nauka', 'Dom i opieka', 'Wolne'])
+    const free = [...select.querySelectorAll('optgroup')].find((g) => g.label === 'Wolne')!
+    expect([...free.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Projekty', 'Regeneracja'])
+    expect(select.value).toBe('regeneracja')
+    const last = select.lastElementChild as HTMLOptionElement
+    expect(last.tagName).toBe('OPTION')
+    expect(last.value).toBe('__new__')
   })
 })
 
@@ -161,12 +178,15 @@ describe('„+ Nowa…” → wariant i kategoria', () => {
     type('new-variant-name', 'Kąpiel')
     await save()
     expect(saveSettingsFrom).toHaveBeenCalledTimes(1)
-    const [patch, from] = vi.mocked(saveSettingsFrom).mock.calls[0]!
-    const variants = (patch as { categories: { regeneracja: { variants: Array<{ id: string; name: string; costs: unknown }> } } }).categories.regeneracja.variants
+    const [make, from] = vi.mocked(saveSettingsFrom).mock.calls[0]!
+    // The list is made in the turn of the save from the record then (`saveVariants`).
+    const patch = (make as (raw: Record<string, unknown>) => unknown)({ schema: 1 })
+    const variants = (patch as { categories: { regeneracja: { variants: Array<{ id: string; name: string; costs?: unknown }> } } }).categories.regeneracja.variants
     expect(variants.slice(0, -1).map((v) => v.name)).toEqual(DEFAULT_SETTINGS.categories.regeneracja!.variants.map((v) => v.name))
     const added = variants.at(-1)!
     expect(added.name).toBe('Kąpiel')
-    expect(added.costs).toEqual(DEFAULT_SETTINGS.categories.regeneracja!.costs)
+    // „Koszt jak podkategoria” is on by default: no cost of its own is written (it follows the subcategory's).
+    expect(added).not.toHaveProperty('costs')
     expect(from.from).toBe('2026-11-18')
     expect(from.at).not.toBeNull()
     // Handed on once the panel's data have it – to the screen's code of that render.
@@ -176,6 +196,35 @@ describe('„+ Nowa…” → wariant i kategoria', () => {
     expect(now).toHaveBeenCalledWith({ variantId: added.id })
     expect(onChange).not.toHaveBeenCalled()
     expect(q('new-variant')).toBeNull()
+  })
+
+  it('wariant z własnym kosztem: wyłączony „koszt jak podkategoria” pokazuje liczby i zapisuje je', async () => {
+    await mount(regen)
+    choose('block-variant', '__new__')
+    expect(q('new-cost-head')).toBeNull()
+    type('new-variant-name', 'Kąpiel')
+    await act(async () => void q('new-variant-same')!.click())
+    expect(q('new-cost-head')).not.toBeNull()
+    await save()
+    const make = vi.mocked(saveSettingsFrom).mock.calls[0]![0] as (raw: Record<string, unknown>) => unknown
+    const variants = (make({ schema: 1 }) as { categories: { regeneracja: { variants: Array<{ name: string; costs?: unknown }> } } }).categories.regeneracja.variants
+    expect(variants.at(-1)).toMatchObject({ name: 'Kąpiel', costs: DEFAULT_SETTINGS.categories.regeneracja!.costs })
+  })
+
+  it('podkategoria: okno ma pole „Kategoria” – domyślnie kategoria podkategorii bloku, do wyboru inne; zapis niesie wybraną', async () => {
+    await mount(regen)
+    choose('block-category', '__new__')
+    expect(q('new-category')!.textContent).toContain('Nowa podkategoria')
+    const group = q<HTMLSelectElement>('new-category-group')!
+    // „Regeneracja” stands in „Wolne” (D510).
+    expect(group.value).toBe('g-wolne')
+    expect([...group.options].map((o) => o.textContent)).toEqual(['Praca', 'Nauka', 'Dom i opieka', 'Wolne', 'Inne'])
+    choose('new-category-group', 'g-dom')
+    type('new-category-name', 'Ogród')
+    await save()
+    expect(saveRd).toHaveBeenCalledTimes(1)
+    const fn = vi.mocked(saveRd).mock.calls[0]![0] as (raw: Record<string, unknown>) => { categories: Record<string, { name: string; group?: string }> }
+    expect(Object.values(fn({ schema: 1 }).categories)[0]).toMatchObject({ name: 'Ogród', group: 'g-dom' })
   })
 
   it('kategoria: nazwa, klasa, koszty, miejsce i własności; blok dostaje nową kategorię bez wariantu', async () => {

@@ -57,7 +57,7 @@ const make = (id: string, rule: SeriesRule, start: string, o: { block?: SeriesBl
 
 /** The series as days are made from them, with the own types of days (`types`). */
 const plansOf = (list: readonly Series[], types: Record<string, DayTypeId> = {}) => seriesPlans(list, typeOfDays([], (d) => types[d] ?? null), marketDay)
-const inputs = (list: readonly Series[], types: Record<string, DayTypeId> = {}, templates: Template[] = []): PlanInputs => ({ changes: [], templates, lectures: [], series: plansOf(list, types) })
+const inputs = (list: readonly Series[], types: Record<string, DayTypeId> = {}, templates: Template[] = []): PlanInputs => ({ changes: [], templates, lectures: [], series: plansOf(list, types), routines: [] })
 const fileOf = (date: string, dayType: DayTypeId | null): DayFile | null => (dayType ? { ...dayFileFrom({}, date), dayType } : null)
 
 /** The day's snapshot (made now, nothing in the log). */

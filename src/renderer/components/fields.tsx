@@ -308,16 +308,32 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
   )
 }
 
-/** A choice from a list (a native list: the main window only – the bar never opens one, D229). */
-export function Choice<T extends string>({ value, options, onChange, className, ...rest }: {
+/** An option of `Choice`. */
+export interface ChoiceOption<T extends string> {
+  value: T
+  label: string
+  disabled?: boolean
+}
+
+/**
+ * A choice from a list (a native list: the main window only – the bar never opens one, D229). `groups` – options under headers
+ * (`<optgroup>`: the subcategory list of a block, D510), `options` after them without a header (there the „+ Nowa…” item).
+ */
+export function Choice<T extends string>({ value, options = [], groups, onChange, className, ...rest }: {
   value: T | null
-  options: Array<{ value: T; label: string; disabled?: boolean }>
+  options?: Array<ChoiceOption<T>>
+  groups?: Array<{ label: string; options: Array<ChoiceOption<T>> }>
   onChange: (v: T) => void
   className?: string
   placeholder?: string
   'aria-label'?: string
   'data-testid'?: string
 }) {
+  const option = (o: ChoiceOption<T>) => (
+    <option key={o.value} value={o.value} disabled={o.disabled}>
+      {o.label}
+    </option>
+  )
   return (
     <select
       className={cx('input pr-6', className)}
@@ -327,11 +343,12 @@ export function Choice<T extends string>({ value, options, onChange, className, 
       onChange={(e) => onChange(e.currentTarget.value as T)}
     >
       {value == null && <option value="">{rest.placeholder ?? '— wybierz —'}</option>}
-      {options.map((o) => (
-        <option key={o.value} value={o.value} disabled={o.disabled}>
-          {o.label}
-        </option>
+      {groups?.map((g, i) => (
+        <optgroup key={i} label={g.label}>
+          {g.options.map(option)}
+        </optgroup>
       ))}
+      {options.map(option)}
     </select>
   )
 }

@@ -10,7 +10,7 @@ import { computeDay } from '@shared/engine/day'
 import { PLAN_MAX, planBlock, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { placeLogical } from '@shared/time/day'
-import { templateAdd, templateDrag, withTemplateChange } from '@renderer/features/templates/templatePush'
+import { templateAdd, templateCopy, templateDrag, withTemplateChange } from '@renderer/features/templates/templatePush'
 import { countDay } from '@renderer/store/day'
 import { lm, Scenario } from '../unit/engine/dsl'
 
@@ -20,7 +20,7 @@ const tb = (id: string, at: string, min: number, o: Partial<PlanBlock> = {}): Pl
 function templateDay(date: string, blocks: PlanBlock[]) {
   const version: TemplateVersion = { from: '2000-01-01', blocks, budgetMin: null, maxMin: null }
   const t: Template = { id: 'zwykly', name: 'Dzień zwykły', dayType: 'zwykly', weekdays: [], versions: [version], archived: false }
-  const day = countDay(date, { date, dayFile: { schema: 1, date, dayType: 'zwykly' }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [t], lectures: [], series: [] }, placeLogical(date, 4 * 60), false)
+  const day = countDay(date, { date, dayFile: { schema: 1, date, dayType: 'zwykly' }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [t], lectures: [], series: [], routines: [] }, placeLogical(date, 4 * 60), false)
   return { day, version }
 }
 const span = (from: string, to: string) => ({ startMin: lm(from), endMin: lm(to) })
@@ -61,6 +61,19 @@ describe('D367, D372 – rozsuwanie w „Szablonach”', () => {
     const blocks = withTemplateChange(version, c)
     expect(starts(blocks)).toEqual({ a: lm('18:30'), b: lm('19:30'), c: lm('20:30'), x: lm('18:00') })
     expect(blocks.find((b) => b.id === 'x')).toMatchObject({ origin: 'template', sourceId: null, durationMin: 30 })
+  })
+
+  it('D513: kopia bloku Ctrl + przeciągnięciem – nowy blok szablonu, kolejne przesunięte jak przy nowym bloku; oryginał stoi (jak stały – kolejne go przeskakują)', () => {
+    const { day, version } = templateDay(SUNDAY, [...EVENING.slice(0, 2), tb('c', '20:00', 60, { note: 'notatka', steps: [{ id: 's1', title: 'krok', order: 0, done: false }] })])
+    const c = templateCopy(day, version.blocks.find((b) => b.id === 'c')!, lm('18:00'), 'kopia')
+    expect(c.pushed).toBe(2)
+    const blocks = withTemplateChange(version, c)
+    expect(starts(blocks)).toEqual({ a: lm('19:00'), b: lm('21:00'), c: lm('20:00'), kopia: lm('18:00') })
+    expect(blocks.find((b) => b.id === 'kopia')).toMatchObject({ origin: 'template', sourceId: null, durationMin: 60, note: 'notatka', steps: [{ id: 's1', title: 'krok', order: 0, done: false }] })
+    expect(blocks.filter((b) => b.id === 'c')).toHaveLength(1)
+    // The preview: the copy where it will stand, the pushed blocks – never the original.
+    expect(c.preview.get('kopia')).toEqual(span('18:00', '19:00'))
+    expect(c.preview.has('c')).toBe(false)
   })
 
   it('stały blok szablonu zostaje, elastyczny przeskakuje go; w wolne miejsce – bez przesunięć', () => {

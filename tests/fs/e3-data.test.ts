@@ -8,10 +8,12 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { readLogText } from '@shared/data/logText'
+import { recordEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
+import { isPassive } from '@shared/engine/facts'
 import { placeLogical } from '@shared/time/day'
 import { createUpdateBackup, readBackupEntry } from '../../src/main/data/backup'
 import { DataFolder } from '../../src/main/data/folder'
@@ -217,6 +219,126 @@ describe('folder danych dla okna głównego', () => {
     writeFileSync(join(dataDir, paths.log(DAY, 'pcb')), `${JSON.stringify(later)}
 `)
     expect(await folder.unknownTimerEvents(placeLogical(DAY, 12 * 60))).toBe(true)
+  })
+
+  describe('zmiana kosztu rutyny (D514, T1430): routine.cost pisze proces główny przy każdym zapisie rekordu rutyny z innym kosztem', () => {
+    const rut = paths.record('routine', 'r1')
+    const C0 = { head: 4, emotions: 0, senses: 1 }
+    const C1 = { head: 5, emotions: 0, senses: 1 }
+    const C2 = { head: -1, emotions: 2, senses: 3 }
+    const routine = (costs: unknown, extra: Record<string, unknown> = {}) => ({ schema: 1, id: 'r1', name: 'Poranna', normal: [{ id: 's1', name: 'Woda', min: 5 }], worse: [], archived: false, costs, ...extra })
+    /** Today's changes of a routine's cost as this computer sees them (its journal with the folder's logs). */
+    const changes = async (folder: DataFolder) => (await folder.readDay(DAY)).events.filter((e) => e.k === 'routine.cost').map((e) => ({ ...e }) as Record<string, unknown>)
+
+    it('zapis z okna: jedno zdarzenie w dziedzinie timera (koszt, koszt sprzed, chwila zegara procesu głównego), bierne; zmiana nazwy – bez zdarzenia', async () => {
+      write(rut, routine(C0))
+      const { folder } = await make()
+      expect((await folder.edit([{ rel: rut, edits: [{ path: ['costs'], base: C0, value: C1 }] }]))[0]!.status).toBe('applied')
+      expect(read(rut).costs).toEqual(C1)
+      const [e] = await changes(folder)
+      expect(e).toMatchObject({ dom: 'timer', c: 'pca', routine: 'r1', costs: C1, was: C0, at: placeLogical(DAY, 10 * 60) })
+      expect(isPassive(e as never)).toBe(true)
+      // Another field: no event; „jak podkategoria”: costs null.
+      await folder.edit([{ rel: rut, edits: [{ path: ['name'], base: 'Poranna', value: 'Ranna' }] }])
+      await folder.edit([{ rel: rut, edits: [{ path: ['costs'], base: C1, value: null }] }])
+      expect((await changes(folder)).map((x) => [x.costs, x.was])).toEqual([
+        [C1, C0],
+        [null, C1]
+      ])
+      // In the folder's log with the next write of the log (the check), as every event of the day.
+      await folder.check()
+      expect(readLogText(readFileSync(join(dataDir, paths.log(DAY, 'pca')), 'utf8')).events.filter((x) => x.k === 'routine.cost')).toHaveLength(2)
+      // This version knows it; an older one (1.24, `RULES_VERSION` 13) – an unknown event of the timer: the night installation without the 24 h.
+      expect(await folder.unknownTimerEvents(placeLogical(DAY, 12 * 60))).toBe(false)
+    })
+
+    it('okno nie pisze zdarzeń kosztu rutyny (ani routine.cost, ani dawnego block.routineCost)', async () => {
+      const { folder } = await make()
+      await expect(folder.userEvents([{ k: 'routine.cost', day: DAY, routine: 'r1', costs: C1, was: null }])).rejects.toThrow(/nie pochodzi z okna/)
+      await expect(folder.userEvents([{ k: 'block.routineCost', day: DAY, block: 'x', costs: C1 }])).rejects.toThrow(/nie pochodzi z okna/)
+    })
+
+    it('odpowiedź na pytanie o konflikt: dopiero „moje” zapisuje koszt – i wtedy zdarzenie; „ich” – bez zdarzenia', async () => {
+      write(rut, routine(C0))
+      const { folder } = await make()
+      // Elsewhere the cost became C2 (that computer's log has its own event); here, from C0, C1.
+      write(rut, routine(C2))
+      expect((await folder.edit([{ rel: rut, edits: [{ path: ['costs'], base: C0, value: C1 }] }]))[0]!.status).toBe('conflict')
+      expect(await changes(folder)).toEqual([])
+      await folder.queue.resolve(folder.queue.questions()[0]!.edit.id, 'mine')
+      await folder.queue.apply(folder.records)
+      expect(read(rut).costs).toEqual(C1)
+      expect((await changes(folder)).map((x) => [x.costs, x.was])).toEqual([[C1, C2]])
+      write(rut, routine(C0))
+      await folder.edit([{ rel: rut, edits: [{ path: ['costs'], base: C1, value: C2 }] }])
+      await folder.queue.resolve(folder.queue.questions()[0]!.edit.id, 'theirs')
+      await folder.queue.apply(folder.records)
+      expect(await changes(folder)).toHaveLength(1)
+    })
+
+    it('zmiana czekająca na folder: zdarzenie, gdy kolejka ją zapisze', async () => {
+      write(rut, routine(C0))
+      let away = false
+      const fs: DataFs = { ...nodeFs, writeAtomic: (p, t) => (away && p.includes('routines') ? Promise.reject(Object.assign(new Error('EBUSY'), { code: 'EBUSY' })) : nodeFs.writeAtomic(p, t)) }
+      const { folder, tick } = await make({ fs })
+      away = true
+      expect((await folder.edit([{ rel: rut, edits: [{ path: ['costs'], base: C0, value: C1 }] }]))[0]!.status).toBe('waiting')
+      expect(await changes(folder)).toEqual([])
+      away = false
+      tick()
+      await folder.queue.apply(folder.records)
+      expect(await changes(folder)).toEqual([expect.objectContaining({ costs: C1, was: C0, at: placeLogical(DAY, 10 * 60) + 61_000 })])
+    })
+
+    it('usunięcie rutyny: bez zdarzenia – zaczęty blok liczy dalej koszt, z którym biegł (T1445); plik z powrotem („Cofnij”) – zdarzenie z kosztem z pliku', async () => {
+      write(rut, routine(C1))
+      const { folder } = await make()
+      expect((await folder.edit([{ rel: rut, edits: [], remove: true, base: routine(C1) }]))[0]!.status).toBe('applied')
+      expect(existsSync(join(dataDir, rut))).toBe(false)
+      expect(await changes(folder)).toEqual([])
+      // „Cofnij”: the record made again – a file with a cost where there was none (the begun block keeps the same cost).
+      expect((await folder.edit([recordEdit(rut, null, routine(C1))!]))[0]!.status).toBe('applied')
+      expect((await changes(folder)).map((x) => [x.costs, x.was])).toEqual([[C1, null]])
+    })
+
+    it('dziennik nie przyjął zdarzenia: rekord zapisany, odpowiedź zapisu mówi to oknu (routineCostKept, T1446) – tylko przy tym zapisie', async () => {
+      write(rut, routine(C0))
+      const { folder } = await make()
+      const append = vi.spyOn(folder.log, 'append').mockImplementationOnce(() => {
+        throw Object.assign(new Error('ENOSPC: brak miejsca'), { code: 'ENOSPC' })
+      })
+      const [out] = await folder.edit([{ rel: rut, edits: [{ path: ['costs'], base: C0, value: C1 }] }])
+      expect(out).toMatchObject({ status: 'applied', routineCostKept: true })
+      expect(read(rut).costs).toEqual(C1)
+      expect(await changes(folder)).toEqual([])
+      // The next save writes its event and says nothing more.
+      const [next] = await folder.edit([{ rel: rut, edits: [{ path: ['costs'], base: C1, value: C2 }] }])
+      expect(next).toEqual(expect.not.objectContaining({ routineCostKept: true }))
+      expect((await changes(folder)).map((x) => [x.costs, x.was])).toEqual([[C2, C1]])
+      append.mockRestore()
+    })
+
+    it('kopia konfliktowa rutyny połączona z odpowiedzią „ich”: zapis z kosztem kopii – zdarzenie', async () => {
+      write(rut, routine(C0))
+      write('routines/r1-DESKTOP-B.json', routine(C2))
+      const { folder } = await make()
+      await folder.check()
+      expect([...folder.copyConflicts.keys()]).toEqual(['routines/r1-DESKTOP-B.json'])
+      await folder.resolveCopy('routines/r1-DESKTOP-B.json', 'theirs')
+      expect(read(rut).costs).toEqual(C2)
+      expect((await changes(folder)).map((x) => [x.costs, x.was])).toEqual([[C2, C0]])
+    })
+  })
+
+  it('zmiana drzewa kategorii z okna (D510, T1313): tree.change w dziedzinie timera, bierne; ta wersja je zna, starsza – nie (instalacja bez 24 h)', async () => {
+    const { folder } = await make()
+    await folder.userEvents([{ k: 'tree.change', day: DAY }])
+    const events = readLogText(readFileSync(join(dataDir, paths.log(DAY, 'pca')), 'utf8')).events
+    const tree = events.filter((e) => e.k === 'tree.change')
+    expect(tree).toEqual([expect.objectContaining({ dom: 'timer', at: expect.any(Number) })])
+    expect(isPassive(tree[0]!)).toBe(true)
+    // This version knows it: no „unknown events of the timer” here (one before 1.25 reads it as unknown – `block.later` above).
+    expect(await folder.unknownTimerEvents(placeLogical(DAY, 12 * 60))).toBe(false)
   })
 
   it('kopia konfliktowa rd.json: różnice tylko z jednej strony się łączą, po obu stronach – pytanie; odpowiedź zamyka kopię', async () => {

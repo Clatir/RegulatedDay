@@ -58,9 +58,9 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   prowadzącego); `settingsAtMinute`. Energia (E2) – osobne reguły `energia.md`.
 - E11 (T546–T550): `import/zjazdy.ts` (parser PDF z elementów tekstu), `import/zjazdDay.ts` (`zjazdDayRaw`,
   `withoutZjazd`, `zjazdTypeRaw`, `classImport`, `sameDayFile`); bloki `origin: 'zjazd'` i zajęcia zdalne w dniu zjazdu
-  (`blockInfos(…, typeAt)`, D359) są `lectureOrCommute`; `PlanBlock.name` – nowe pole bloku dopisz w `planBlock()`,
+  (`blockInfos(…, routines, typeAt)`, D359) są `lectureOrCommute`; `PlanBlock.name` – nowe pole bloku dopisz w `planBlock()`,
   `planBlockFrom` i literale w `blockInfos`. `RULES_VERSION` 7 od 1.4.0 (`block.shorten`, D365), 8 – serie w `day.create` (T716), 9 – bez drugiej
-  zmiany (D467), 10 – bloki bez komputera same, zamiana przy „Zacznij” (D475, D478) i grupy w prognozie (T1162), 11 – timer grupy (D493), 12 – przejęcie przodu grupy (T1259), 13 – koszt zaczętego bloku od minuty (`block.cost`, dziedzina timera, bierne – `PASSIVE`; D501).
+  zmiany (D467), 10 – bloki bez komputera same, zamiana przy „Zacznij” (D475, D478) i grupy w prognozie (T1162), 11 – timer grupy (D493), 12 – przejęcie przodu grupy (T1259), 13 – koszt zaczętego bloku od minuty (`block.cost`, dziedzina timera, bierne – `PASSIVE`; D501), 14 – koszt rutyny (`Routine.costs`, `planned.routineCosts`; D512, reguły `koszt.md`).
 - Serie (OPS1, D381, D382, D401, D404, T700–T719): `model/series.ts` (rekord, `ruleFallsOn`, `seriesVersionOn`,
   `specialOutcome`, licznik `countedBefore`/`seriesLast`, `seriesPlans` – `SeriesPlan { series, last }`, `countDatesToRead`,
   `seriesOfBlock`, `currentSeries` – lista), `engine/series.ts` (`seriesBlocks` w `createDay`, `pushedBySeries` – rozsuwanie

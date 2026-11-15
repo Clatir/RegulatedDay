@@ -14,7 +14,7 @@ import { templateVersionOn, type Template } from '../model/plan'
 import type { RulesSettings } from '../model/settings'
 import { addDays } from '../time/zone'
 import { settingsAtMinute, type DayContext, type DayState } from './day'
-import { costChangesOf } from './costChange'
+import { costChangesOf, startCostOf } from './costChange'
 import { anchorEffect } from './energy'
 import { OPEN, ranMinutes } from './facts'
 import { blockEvidence } from './game'
@@ -110,10 +110,11 @@ export interface CostEvidence {
 
 /**
  * Which costs a block ran with (its key in the evidence): a variant with its own costs – `category:variant`, else the
- * category; a block with its own costs is none of them (null: no evidence for a proposal).
+ * category; a block with its own costs or with its routine's (D512, `planned.routineCosts`) is none of them (null: no
+ * evidence for a proposal).
  */
-export function costKey(settings: RulesSettings, p: { categoryId: string; variantId: string | null; costs?: Costs | null }): string | null {
-  if (p.costs) return null
+export function costKey(settings: RulesSettings, p: { categoryId: string; variantId: string | null; costs?: Costs | null; routineCosts?: Costs | null }): string | null {
+  if (p.costs || p.routineCosts) return null
   const variant = p.variantId ? settings.categories[p.categoryId]?.variants.find((v) => v.id === p.variantId) : undefined
   return variant?.costs ? `${p.categoryId}:${variant.id}` : p.categoryId
 }
@@ -143,15 +144,26 @@ export function costEvidence(ctx: DayContext, state: DayState, energyOn: boolean
   const from = Math.min(...checkins)
   const now = Math.min(state.now, g.length)
   const fg: Array<string | null> = new Array(Math.max(0, now)).fill(null)
-  // D501: a begun block's cost changed from a minute on (`block.cost`) – a minute of its own cost is no evidence for its category.
-  // Its key is counted once for each stretch between its changes (from the start's cost, then each change from its minute).
-  const changes = costChangesOf(ctx.events, state.facts)
+  // D501: a begun block's cost changed from a minute on (`block.cost`) – a minute of its own cost is no evidence for its category; nor is
+  // one of its routine's cost (D512), changed from a minute on too (`routine.cost`, T1430). Its key is counted once for each stretch
+  // between its changes (from the start's cost, then each change from its minute, with the own and the routine's cost in force then).
+  // The start's cost as the energy counts it (`startCostOf`, T1442): its start's category, variant, own cost and routine's cost – a start
+  // without the routine's cost (T1372) up to the routine's first change its cost before it (T1432), with no change its cost now.
+  const changes = costChangesOf(ctx, state.facts)
+  const infos = new Map(state.blocks.map((b) => [b.id, b]))
   const runs: Array<{ from: number; to: number; keys: Array<{ from: number; key: string | null }> }> = []
   for (const f of state.facts.blocks.values()) {
     if (!f.planned) continue
     const planned = f.planned
-    const keys = [{ from: Number.NEGATIVE_INFINITY, key: costKey(state.settings, planned) }]
-    for (const c of changes.get(f.id) ?? []) keys.push({ from: c.at, key: costKey(state.settings, { ...planned, costs: c.costs }) })
+    const ofBlock = changes.get(f.id) ?? []
+    const start = startCostOf(infos.get(f.id) ?? { categoryId: planned.categoryId, variantId: planned.variantId, costs: null, routineCosts: null }, planned, ofBlock)
+    const keyOf = (held: { costs: Costs | null; routineCosts: Costs | null }) => costKey(state.settings, { categoryId: start.cat, variantId: start.variant, ...held })
+    let held = { costs: start.own, routineCosts: start.routine }
+    const keys = [{ from: Number.NEGATIVE_INFINITY, key: keyOf(held) }]
+    for (const c of ofBlock) {
+      held = c.routine ? { ...held, routineCosts: c.costs } : { ...held, costs: c.costs }
+      keys.push({ from: c.at, key: keyOf(held) })
+    }
     for (const r of f.runs) if (!r.bg) runs.push({ from: r.from, to: r.to === OPEN ? now : r.to, keys })
   }
   for (const r of runs.sort((a, b) => a.from - b.from)) {

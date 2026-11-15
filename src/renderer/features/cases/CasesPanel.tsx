@@ -69,7 +69,9 @@ export function CasesPanel({ drag, grab, onPlan }: { drag: CaseDragState | null;
         Wszystkie sprawy…
       </button>
       {drag && dragged && (
-        <div className="pointer-events-none fixed z-50 max-w-[220px] truncate rounded border border-lamp bg-panel px-2 py-1 text-[12px] shadow-lg" style={{ left: drag.x + 12, top: drag.y + 8 }} data-testid="case-drag">
+        // D513: Ctrl held – the drop puts a copy of the sprawa on the axis (the original stays on its list): „+” before its title.
+        <div className="pointer-events-none fixed z-50 max-w-[220px] truncate rounded border border-lamp bg-panel px-2 py-1 text-[12px] shadow-lg" style={{ left: drag.x + 12, top: drag.y + 8 }} data-testid="case-drag" data-copy={drag.copy ? 'true' : undefined}>
+          {drag.copy ? '+ ' : ''}
           {caseTitle(dragged.record, rd)}
         </div>
       )}

@@ -711,6 +711,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
         afterWorkMark: false,
         protectedLife: rules.cls === 'life' && rules.protected,
         costs: null,
+        routineCosts: null,
         bgCostPct: null
       }
       const cost = workCost(state, info, m, m + act.durationMin)
