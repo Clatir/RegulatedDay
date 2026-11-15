@@ -215,6 +215,56 @@ export async function prepareFiles(io: AttachmentIo, ownerIn: unknown, sourcesIn
   return { made, failed }
 }
 
+/** Why an attachment was not copied for a block copied (D513), in words; its name when the record is read, else „załącznik”. */
+const COPY_GONE = 'tego załącznika już nie ma'
+const COPY_MISSING = 'plik jeszcze nie dotarł na ten komputer'
+const COPY_OUTSIDE = 'plik nie leży w folderze załącznika'
+
+/**
+ * The attachments `ids` copied for another block (D513: a block copied by Ctrl + drag takes copies of its files – never a shared
+ * one, so removing either never takes the other's): the first half, as `prepareFiles` (T839) – each file copied from its own
+ * folder (its path from the record, checked to lie in it: the window names ids only) into a new attachments/<id>/, a link a new
+ * record of the same address; no records yet (`commitFiles`). The name stays as written (empty – the file's or the page's own);
+ * the copies keep the originals' order (`addedAt` one after another). One removed, unreadable or not here yet is said by name.
+ */
+export async function prepareCopies(io: AttachmentIo, ownerIn: unknown, idsIn: unknown): Promise<{ made: PreparedFile[]; failed: AttachResult['failed'] }> {
+  const owner = ownerFrom(ownerIn)
+  if (!owner) return { made: [], failed: [{ name: '', error: 'nie wiadomo, do którego bloku' }] }
+  const ids = Array.isArray(idsIn) ? [...new Set(idsIn.filter((x): x is string => isId(x)))] : []
+  const failed: AttachResult['failed'] = []
+  const made: PreparedFile[] = []
+  const at = io.now()
+  for (const [i, from] of ids.entries()) {
+    const raw = await io.folder.recordView(attachmentRel(from)).catch(() => undefined)
+    const a = raw ? attachmentFrom(raw) : null
+    if (!raw || !a || a.removedAt != null) {
+      failed.push({ name: 'załącznik', error: COPY_GONE })
+      continue
+    }
+    if (i >= ATTACH_MAX) {
+      failed.push({ name: a.name, error: `najwyżej ${ATTACH_MAX} plików naraz` })
+      continue
+    }
+    const id = newId()
+    const copy: Attachment = { ...a, id, owner, addedAt: at + i, removedAt: null }
+    if (a.kind === 'file' && a.file) {
+      const where = await fileOf(io, from, a)
+      if (!where.ok) {
+        failed.push({ name: a.name, error: where.result.code === 'missing' ? COPY_MISSING : COPY_OUTSIDE })
+        continue
+      }
+      try {
+        copy.file = { ...a.file, size: await io.files.copyIn(io.dataDir, id, a.file.fileName, where.abs) }
+      } catch (e) {
+        failed.push({ name: a.name, error: copyError(e) })
+        continue
+      }
+    }
+    made.push({ id, owner, raw: { ...attachmentJson(copy), name: typeof raw.name === 'string' ? raw.name : '' } })
+  }
+  return { made, failed }
+}
+
 /**
  * The records of copies made (`prepareFiles`) as one edit (T839). `removedAt` – the block is gone meanwhile (removed while
  * the files were copied): the records are written removed at once, so the leader deletes the files after 30 days (D410)

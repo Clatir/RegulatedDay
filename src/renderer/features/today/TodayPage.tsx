@@ -61,6 +61,8 @@ import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
 import { begunIds } from '@shared/engine/facts'
 import { clickResize, newBlocksToast, patchDayBlock, pushDayBlocks, putChange, removeDayBlock, saveDay, saveParallel, setDayWake, tellFreed } from './dayActions'
+import { copyPreview } from '../plan/blockCopy'
+import { copyDayBlock } from '../week/weekMove'
 import { addChange, dragChange, parallelChange, parallelHint, pushedSpans, pushedStarts, type DayChange } from './dayPush'
 import { placePatch } from '@shared/engine/parallel'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
@@ -216,9 +218,10 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   // D384: a sprawa of the panel beside the axis put on it – dropped at a minute, or in the nearest free place from now. A day
   // gone is history: no panel there (as no pushing, D367).
   const casesOn = date >= today
-  const planCaseAt = (id: string, minute: number) => {
+  // D513: Ctrl held at the drop – a copy of the sprawa is planned there, the original stays on its list.
+  const planCaseAt = (id: string, minute: number, copy = false) => {
     const r = requests.find((x) => x.id === id)
-    if (r) void planOnAxis(model, today, r, caseTitle(r, rd), minute)
+    if (r) void planOnAxis(model, today, r, caseTitle(r, rd), minute, undefined, copy)
   }
   const planCaseNext = (x: CaseItem) => planCaseAt(x.record.id, nextPlace(x.estimateMin))
   const { drag: caseDrag, grab: grabCase } = useCaseDrag(planCaseAt)
@@ -383,6 +386,20 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     const endOf = (x: string) => axis.items.find((i) => i.id === x)?.endMin ?? null
     return parallelChange(model, id, target, rd.general.parallelMax, endOf, (b) => blockName(b, names), pushes)
   }
+  /** D513: what a copy of the movable block `id` dropped at `startMin` pushes apart (the preview: as a new block, D367). */
+  const copyChange = (id: string, startMin: number): DayChange | null => {
+    const b = plan.find((x) => x.id === id)
+    return b && axis.items.find((i) => i.id === id)?.movable ? copyPreview(model, b, startMin, pushes) : null
+  }
+  /**
+   * D513: the block `id` dropped with Ctrl held – its copy at `startMin` (the sprawy it is for copied, its attachments' files too) by
+   * the way of „Tydzień”: the day read and counted in the turn of the write (two quick copies – the second counts the first); one
+   * „Cofnij” in the toast.
+   */
+  const copyHere = (id: string, startMin: number) => {
+    const b = plan.find((x) => x.id === id)
+    if (b) void copyDayBlock({ blockId: id, name: blockName(b, names), from: date, to: date, startMin })
+  }
   const ontoShown = (id: string) => {
     const i = axis.items.find((x) => x.id === id)
     return i ? { startMin: i.startMin, endMin: i.endMin } : null
@@ -527,7 +544,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
 
   const typeColor = DAY_TYPE_COLORS[currentType]
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-testid="today">
+    <div className={cx('flex min-h-0 flex-1 flex-col', caseDrag?.copy && '[&_*]:cursor-copy!')} data-testid="today">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2">
         <button type="button" className="btn h-[26px] px-2" onClick={() => openDay(addDays(date, -1))} aria-label="Poprzedni dzień" data-testid="day-prev">
           ‹
@@ -640,6 +657,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               onCreate={create}
               // D496: a bare click on the axis makes no draft – only a drag over it does.
               clickCreates={false}
+              // D513: dropped with Ctrl held – a copy at that hour, the original where it is (today and later), pushing apart as a new block.
+              onCopy={date >= today ? copyHere : undefined}
               // D305: the dragged block's planned start, as an edit of the day – today and later (a day gone is history);
               // D367: with the blocks it pushes apart.
               onMove={
@@ -676,7 +695,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               resizeNote={resizeNote}
               edgeLimits={edgeLimits}
               // D367: while a block is dragged, the blocks it pushes apart at their new places.
-              pushPreview={pushes ? (id, span, edge, shown) => pushedSpans(model, movableChange(id, span, edge, shown), isToday ? 'forecast' : 'plan') : undefined}
+              pushPreview={pushes ? (id, span, edge, shown, copy) => pushedSpans(model, copy ? copyChange(id, span.startMin) : movableChange(id, span, edge, shown), isToday ? 'forecast' : 'plan') : undefined}
               // D492: a block dropped onto another one stands beside it (today and later – a day gone is history).
               parallelPreview={pushes ? (id, target) => parallelHint(model, ontoChange(id, target), ontoShown(id), isToday ? 'forecast' : 'plan') : undefined}
               onParallel={

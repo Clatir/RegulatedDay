@@ -12,6 +12,7 @@
 import { firstFixedStart, shiftedStart, unshiftedStart } from '@shared/engine/createDay'
 import type { DayContext, DayState } from '@shared/engine/day'
 import { idxOfLogical, logicalSpan } from '@shared/engine/grid'
+import { copiedBlock } from '@shared/engine/planEdit'
 import { axisMoves, pushApart, withBlock, type PushHold } from '@shared/engine/pushApart'
 import type { DaySnapshot } from '@shared/model/events'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN, type PlanBlock, type TemplateVersion } from '@shared/model/plan'
@@ -48,7 +49,7 @@ const sources = (day: TemplateDay): Map<string, string> => new Map(day.ctx.plan.
  * its own start, unless the day's end holds it earlier – the blocks it pushes apart, each in the template's hours (`id` –
  * its id in the version; null: a new block), and every block whose place on the axis the change moves (the preview).
  */
-function inTemplate(day: TemplateDay, block: PlanBlock, patch: Partial<PlanBlock>, id: string | null, how: DragEdge | 'move' | 'new', atMin?: number, endMin?: number): TemplateChange {
+function inTemplate(day: TemplateDay, block: PlanBlock, patch: Partial<PlanBlock>, id: string | null, how: DragEdge | 'move' | 'new', atMin?: number, endMin?: number, stay: string | null = null): TemplateChange {
   const delta = day.snapshot.wakeMin - day.snapshot.templateWakeMin
   const firstFixed = firstFixedStart(withBlock(day.ctx.plan, block))
   const toTemplate = (b: Pick<PlanBlock, 'fixed' | 'anchor' | 'durationMin'>, startMin: number) => unshiftedStart(b, startMin, delta, firstFixed)
@@ -73,7 +74,9 @@ function inTemplate(day: TemplateDay, block: PlanBlock, patch: Partial<PlanBlock
     }),
     put
   )
-  const pushed = pushApart(day.ctx, day.state, after, put.id, { atMin, hold, onUnsettled })
+  // D513: the block a copy was made of (`stay`, its id in the day) stands as a fixed one – a copy never changes it.
+  const pushPlan = stay ? after.map((b) => (b.id === stay ? { ...b, fixed: true } : b)) : after
+  const pushed = pushApart(day.ctx, day.state, pushPlan, put.id, { atMin, hold, onUnsettled }).filter((p) => p.id !== stay)
   const src = sources(day)
   const own: Partial<PlanBlock> = { ...patch, ...(patch.startMin != null || put.startMin !== block.startMin ? { startMin: toTemplate(put, put.startMin!) } : {}), ...(patch.durationMin != null ? { durationMin: put.durationMin } : {}) }
   const patches: TemplateChange['patches'] = id != null ? [{ id, patch: own }] : []
@@ -119,6 +122,18 @@ export function templateDrag(day: TemplateDay, id: string, span: BlockSpan, edge
 export function templateAdd(day: TemplateDay, block: PlanBlock): TemplateChange {
   const c = addChange(day, { ...block, origin: 'template', sourceId: block.id }, false)
   return inTemplate(day, c.block, c.patch, null, 'new')
+}
+
+/**
+ * A block of the version copied by Ctrl + drag (D513) to the hour of the drop (as the axis shows it): a new block of the template
+ * (`copiedBlock` – its own id `id`, none of the original's history), with the blocks it pushes apart, as a new one from the grid –
+ * the original held where it is (as a fixed block: a copy never changes it).
+ */
+export function templateCopy(day: TemplateDay, block: PlanBlock, startMin: number, id: string): TemplateChange {
+  const copy = copiedBlock(block, startMin, { id, origin: 'template' })
+  const c = addChange(day, { ...copy, origin: 'template', sourceId: copy.id }, false)
+  const stay = [...sources(day)].find(([, of]) => of === block.id)?.[0] ?? null
+  return inTemplate(day, c.block, c.patch, null, 'new', undefined, undefined, stay)
 }
 
 /** The version's blocks with the change laid on (each patch over the block as the version holds it then). */

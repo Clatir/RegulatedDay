@@ -46,7 +46,9 @@ import { StepsEditor } from '../steps/StepsEditor'
 import { stepsAnswer } from '../steps/stepsUi'
 import { changeTemplateSteps } from '../../store/steps'
 import { SettingNumber } from '../settings/SettingNumber'
-import { templateAdd, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
+import { templateAdd, templateCopy, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
+import { copyTemplateBlock } from '../plan/blockCopy'
+import { COPY_SPAN_ID } from '../today/dayPush'
 import { freshAfter, removeTemplate, removeTemplateBlock } from './templateActions'
 
 export function TemplatesPage() {
@@ -396,8 +398,18 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
               void saveChange(c)
               return c.span
             }}
-            // D367: while a block is dragged, the blocks it pushes apart at their new places.
-            pushPreview={(id, span, edge, shown) => {
+            // D513: dropped with Ctrl held – a copy of the block at that hour, a new block of the template (one „Cofnij” in the toast).
+            onCopy={(id, startMin) => {
+              const b = version.blocks.find((x) => x.id === id)
+              if (b) void copyTemplateBlock({ templateId: template.id, from, day: model, block: b, startMin, name: blockName(b, names) })
+            }}
+            // D367: while a block is dragged, the blocks it pushes apart at their new places (D513: a copy's too, and where it will stand).
+            pushPreview={(id, span, edge, shown, copy) => {
+              if (copy) {
+                const b = version.blocks.find((x) => x.id === id)
+                const p = b ? templateCopy(model, b, span.startMin, COPY_SPAN_ID).preview : null
+                return p?.size ? p : null
+              }
               const c = templateDrag(model, id, span, edge, shown)
               return c?.preview.size ? c.preview : null
             }}

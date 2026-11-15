@@ -93,6 +93,8 @@ paths:
   zadania ani dnia), „↻ …” w `statusParts`.
 - Kroki zadania (D440, T792, reguły `kroki.md`): `RequestRecord.steps` + `stepsDone`; `caseBlock` kopiuje listę do bloku,
   `withTaskBlock` – odhaczenia; zmiany w bloku i w zadaniu idą w obie strony (`engine/steps.ts`).
+- Kopia (D513, reguły `kopia.md`): Ctrl przy upuszczeniu z panelu – `planCase(…, { copy })` planuje nową sprawę (`copiedCase`, rekord
+  za plikiem dnia – T923), oryginał nietknięty; kopia bloku zadania/próśb na osi – nowe sprawy w tej samej edycji (`blockCopy`).
 - „Powtarzaj” nie dotyczy bloku zadania ani próśb (D408): `blockNotSeries` (kod `task` / `requests`), w panelu bloku `RepeatNote`.
 - Okienko „Do skrzynki” na wierzch tylko w `raise()` ze skrótu (`check-code` – `checkQuickWindow`); „+” paska pulpitu
   otwiera panel z polem (pasek nie przyjmuje klawiszy, T756). „+” jest w każdym trybie paska.
