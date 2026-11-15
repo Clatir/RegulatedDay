@@ -48,6 +48,7 @@ import { CLOSE_WINDOW_H, closeEvents, closeRefusal, closeUndoEvents, ritualActiv
 import { atOf, gridOf, idxOf } from '@shared/engine/grid'
 import { derivedId } from '@shared/model/ids'
 import { CLOSE_HOWS, compareEvents, daySnapshotOf, isKnown, parseEvent, RULES_VERSION, type AnyEvent, type CloseHow, type Domain, type FeltCost, type Signal } from '@shared/model/events'
+import { sameCosts } from '@shared/model/blockCosts'
 import { placeOf, type Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type PlanBlock, type Template } from '@shared/model/plan'
 import { MODULES, personName, RD_SCHEMA, rdFrom, type ModuleId, type WriteOnceField } from '@shared/model/rd'
@@ -100,8 +101,6 @@ const USER_EVENTS: Record<string, Domain> = {
   // The cost of a begun block from a minute on (D501, T1300): the timer's on purpose – an older version, which counts the block by
   // its start, installs the new version without the 24 h (`unknownTimerEvents`); passive for this version's day engine (`PASSIVE`).
   'block.cost': 'timer',
-  // The cost of a begun block's routine from a minute on (D514, T1395): the timer's on purpose, as `block.cost`; passive (`PASSIVE`).
-  'block.routineCost': 'timer',
   // The tree of categories changed (D510, T1313): passive; the timer's on purpose – an older version, which shows no tree, installs at once.
   'tree.change': 'timer'
 }
@@ -430,6 +429,7 @@ export class DataFolder {
           this.cache.delete(rel)
           this.absent.add(rel)
         }
+        this.routineWritten(rel, now.before, now.value)
       }
     })
     this.queue = new EditQueue({ stateDir: o.stateDir, computer: o.computer })
@@ -492,6 +492,30 @@ export class DataFolder {
       }
     }
     if (Object.keys(last).length) this.presence.update({ lastEvents: { ...last, ...this.presence.own.lastEvents } })
+  }
+
+  /**
+   * A routine's record written here with another cost (D514 with D512, T1430): one `routine.cost` in today's log, at once (the journal) –
+   * from now on today's begun blocks of the routine count the new cost. Every write of a record goes through `RecordStore`, so this is every
+   * way a cost gets into the file on this computer: a save of „Rutyny” or ✎, an answer to a question of a conflict, „Przywróć”, a conflict
+   * copy joined, an edit waiting for the folder laid on its return. A record written on another computer has its event in that computer's
+   * log of the day. The cost as the engine reads the file (`routineFrom`); a journal that cannot be written – logged, the record stays.
+   */
+  private routineWritten(rel: string, before: Record<string, unknown> | null, after: Record<string, unknown> | null): void {
+    const c = classify(rel)
+    if (c?.kind !== 'routine' || c.conflict || !c.id) return
+    const [then, now] = [routineFrom(before), routineFrom(after)]
+    const was = then?.costs ?? null
+    const costs = now?.costs ?? null
+    if (was === costs || (was && costs && sameCosts(was, costs))) return
+    // The id blocks point at (`PlanBlock.routine`) – the record's own, as `inputs()` reads it.
+    const routine = now?.id ?? then?.id ?? c.id
+    const at = this.clock.now()
+    try {
+      this.append({ day: logicalDayOf(at), dom: 'timer', k: 'routine.cost', routine, at, costs, was })
+    } catch (e) {
+      this.o.log?.('error', `koszt rutyny ${routine}: zdarzenie nie zapisane – zaczęty blok liczy dotychczasowy koszt (${String(e)})`)
+    }
   }
 
   /** A new event of this computer; the presence names its last event of the day. */

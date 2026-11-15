@@ -1,14 +1,15 @@
 /**
- * D514 with D512 (T1395): the cost of a routine changed while a block of it runs – from „Rutyny” or from ✎ – reaches the block from that
- * moment on: the window writes `block.routineCost` for each begun block of the routine (its start's routine and category of the kind
- * „rutyna”), and the engine counts the routine's cost of the start up to that minute, the new one from it (the minutes gone by as they were).
- * It changes the block's routine's cost, not its own: a block with its own cost keeps it, and „Jak rutyna” (`block.cost` null) goes back to
- * the new cost of the routine, never the old one. The same order as `block.cost`: only after the block's start in the log's order, the
- * last of a minute wins whatever computer wrote it.
+ * D514 with D512 (T1430–T1433): the cost of a routine changed while a block of it runs reaches the block from that moment on. The main
+ * process writes one `routine.cost` (`routine`, `at`, `costs`, `was`) whenever it writes the routine's record with another cost – a save
+ * of „Rutyny” or ✎, an answer to a question of a conflict, „Przywróć”, a joined conflict copy –, and the engine matches it to the day's
+ * begun blocks by their start's routine and category of the kind „rutyna” (the plan's for a start without them): the routine's cost from
+ * the minute of the change on, the minutes before as they were. It changes the block's routine's cost, not its own: a block with its own
+ * cost keeps it, and „Jak rutyna” (`block.cost` null) goes back to the new cost of the routine. The day's logs are every computer's: a
+ * change of another computer reaches a block here the same way, also one begun here before its new file came.
  */
 import { describe, expect, it } from 'vitest'
 import { costEvidence } from '@shared/engine/calibration'
-import { begunCosts, routineCostTargets } from '@shared/engine/costChange'
+import { begunCosts, costChangesOf } from '@shared/engine/costChange'
 import { computeDay } from '@shared/engine/day'
 import { computeEnergy, type EnergyState } from '@shared/engine/energy'
 import { isPassive } from '@shared/engine/facts'
@@ -26,21 +27,31 @@ const RUTYNY: Costs = { head: 1, emotions: 0, senses: 1 }
 const ANSWERS: Record<Pool, [Answer, Answer]> = { head: [0, 0], emotions: [0, 0], senses: [0, 0] }
 
 const curve = (e: EnergyState) => (['head', 'emotions', 'senses'] as const).map((p) => Array.from(e.series[p]))
+const at = (e: EnergyState, time: string) => {
+  const k = lm(time) - 4 * 60
+  return { head: e.series.head[k], emotions: e.series.emotions[k], senses: e.series.senses[k] }
+}
 /** A block of „Rutyny” with the routine „poranna”, 08:00–09:30. */
 const m = (o: Partial<PlanBlock> = {}): PlanBlock => ({ ...block({ id: 'm', cat: 'rutyny', at: '08:00', min: 90 }), routine: 'poranna', ...o })
-/** A day with a check-in at 07:00; `routineCosts` – the routines' costs the window knows. */
-const day = (plan: PlanBlock[], routineCosts: Record<string, Costs> = { poranna: R }) =>
-  new Scenario({ date: DATE, plan, wake: '06:30', routineCosts }).observe('06:30', null).checkin('07:00', ANSWERS)
-/** The change of the routine's cost as the window writes it for a begun block (`block.routineCost`, the timer's domain) at `time`. */
-const routineCost = (s: Scenario, time: string, costs: Costs | null, computer?: string) => s.write([{ k: 'block.routineCost', block: 'm', at: s.at(time), costs }], s.at(time), computer)
+/** A day with a check-in at 07:00; `routineCosts` – the routines' costs known at a start (none – a start without the field). */
+const day = (plan: PlanBlock[], routineCosts: Record<string, Costs> | null = { poranna: R }) =>
+  new Scenario({ date: DATE, plan, wake: '06:30', ...(routineCosts ? { routineCosts } : {}) }).observe('06:30', null).checkin('07:00', ANSWERS)
+/** The routine's record written with another cost at `time` (`routine.cost` of the main process, the timer's domain). */
+const routineCost = (s: Scenario, time: string, costs: Costs | null, was: Costs | null = R, computer?: string, routine = 'poranna') =>
+  s.write([{ k: 'routine.cost', routine, at: s.at(time), costs, was }], s.at(time), computer)
 const ownCost = (s: Scenario, time: string, costs: Costs | null) => s.write([{ k: 'block.cost', block: 'm', at: s.at(time), costs }], s.at(time))
-const tile = (s: Scenario, time: string) => {
+const tile = (s: Scenario, time: string, id = 'm') => {
   const ctx = s.contextAt(s.at(time))
   const state = computeDay(ctx)
-  return begunCosts(ctx, state, state.blocks.find((b) => b.id === 'm')!)
+  return begunCosts(ctx, state, state.blocks.find((b) => b.id === id)!)
+}
+/** The day's energy at `time` with the routines' costs known then (`routineCosts` – what the window's files say then). */
+const energyWith = (s: Scenario, time: string, routineCosts: Record<string, Costs>) => {
+  const ctx = s.contextAt(s.at(time), { routineCosts })
+  return computeEnergy(ctx, computeDay(ctx))
 }
 
-describe('zmiana kosztu rutyny przy zaczętym bloku (D514, T1395)', () => {
+describe('zmiana kosztu rutyny przy zaczętym bloku (D514, T1430)', () => {
   it('stary koszt rutyny do chwili zmiany, nowy od niej – jak ten sam koszt własny bloku od tej minuty', () => {
     const s = routineCost(day([m()]).start('m', '08:00'), '08:30', R2)
     const same = ownCost(day([m()]).start('m', '08:00'), '08:30', R2)
@@ -66,7 +77,8 @@ describe('zmiana kosztu rutyny przy zaczętym bloku (D514, T1395)', () => {
   })
 
   it('blok z kosztem rutyny od zmiany, choć start był bez niego (rutyna nie miała kosztu)', () => {
-    const s = routineCost(day([m()], {}).start('m', '08:00'), '08:30', R2)
+    const s = routineCost(day([m()], {}).start('m', '08:00'), '08:30', R2, null)
+    expect(tile(s, '08:20')).toEqual({ costs: RUTYNY, base: RUTYNY, own: false })
     expect(tile(s, '08:40')).toEqual({ costs: R2, base: R2, own: false, baseFrom: 'routine' })
   })
 
@@ -88,18 +100,38 @@ describe('zmiana kosztu rutyny przy zaczętym bloku (D514, T1395)', () => {
     const s = routineCost(day([m()]).start('m', '08:00'), '08:30', R2)
     const then = s.energy('08:45').now
     s.end('m', '09:30')
-    const later = s.energy('11:00')
-    const k = lm('08:45') - 4 * 60
-    expect({ head: later.series.head[k], emotions: later.series.emotions[k], senses: later.series.senses[k] }).toEqual(then)
+    expect(at(s.energy('11:00'), '08:45')).toEqual(then)
   })
 
-  it('dwa komputery: zmiana zapisana na drugim komputerze liczy się tak samo; w jednej minucie wygrywa późniejsza w logu', () => {
-    const one = routineCost(day([m()]).start('m', '08:00'), '08:30', R2, 'pcb')
+  it('blok skończony przed zmianą i niezaczęty – bez zmiany (niezaczęty bierze koszt rutyny teraz); zaczęty po niej – od startu nowy koszt', () => {
+    const plan = [m({ durationMin: 15 }), m({ id: 'next', startMin: lm('09:00') })]
+    const s = routineCost(day(plan).ran('m', '08:00', '08:15'), '08:30', R2)
+    expect(curve(s.energy('08:50'))).toEqual(curve(day(plan).ran('m', '08:00', '08:15').energy('08:50')))
+    // Begun after the change by a start that wrote the old cost: the change counts from its start.
+    s.start('next', '09:00')
+    expect(tile(s, '09:10', 'next')).toEqual({ costs: R2, base: R2, own: false, baseFrom: 'routine' })
+  })
+
+  it('start bez kosztu rutyny w zdarzeniu (rutyna nieodczytana przy starcie, T1372): przeszłość stała – przed zmianą koszt sprzed niej (`was`), nie koszt rutyny teraz', () => {
+    // Before the change: the start has no field, the routine costs R now – its minutes count R.
+    const s = day([m()], null).start('m', '08:00')
+    const before = energyWith(s, '08:30', { poranna: R })
+    // The routine's record written with R2 at 08:30: the window and the engine know R2 now.
+    routineCost(s, '08:30', R2, R)
+    const after = energyWith(s, '09:00', { poranna: R2 })
+    expect(at(after, '08:30')).toEqual(before.now)
+    expect(at(after, '08:20')).toEqual(at(before, '08:20'))
+    // From the change on – the new cost (as a start that wrote R and the same change).
+    expect(curve(after)).toEqual(curve(routineCost(day([m()]).start('m', '08:00'), '08:30', R2).energy('09:00')))
+  })
+
+  it('dwa komputery: zmiana z logu drugiego komputera liczy się tak samo; w jednej minucie wygrywa późniejsza w logu', () => {
+    const one = routineCost(day([m()]).start('m', '08:00'), '08:30', R2, R, 'pcb')
     const here = routineCost(day([m()]).start('m', '08:00'), '08:30', R2)
     expect(curve(one.energy('09:00'))).toEqual(curve(here.energy('09:00')))
     const both = day([m()]).start('m', '08:00')
-    routineCost(both, '08:30', OWN, 'pcb')
-    routineCost(both, '08:30', R2, 'pcc')
+    routineCost(both, '08:30', OWN, R, 'pcb')
+    routineCost(both, '08:30', R2, OWN, 'pcc')
     // The logs arrive in any order: the later of the minute (the log's full order) wins.
     const n = both.events.length
     ;[both.events[n - 2], both.events[n - 1]] = [both.events[n - 1]!, both.events[n - 2]!]
@@ -107,14 +139,21 @@ describe('zmiana kosztu rutyny przy zaczętym bloku (D514, T1395)', () => {
     expect(curve(both.energy('09:00'))).toEqual(curve(here.energy('09:00')))
   })
 
-  it('zmiana należy do startu, po którym ją zapisano: start cofnięty i ponowny – blok liczy koszt rutyny swojego startu', () => {
+  it('dwa komputery: blok zaczęty tu ze starym kosztem, zanim przyszedł nowy plik rutyny, po zmianie z drugiego komputera liczy nowy od startu', () => {
+    // pcb changed the routine at 07:50; this computer still had R when it began the block at 08:00 (its start wrote R).
+    const s = routineCost(day([m()]), '07:50', R2, R, 'pcb').start('m', '08:00')
+    expect(tile(s, '08:10')).toEqual({ costs: R2, base: R2, own: false, baseFrom: 'routine' })
+    expect(curve(s.energy('09:00'))).toEqual(curve(day([m()], { poranna: R2 }).start('m', '08:00').energy('09:00')))
+  })
+
+  it('start cofnięty i ponowny: zmiana kosztu rutyny jest zmianą rutyny – liczy się w każdym jej starcie od swojej chwili', () => {
     const s = day([m()])
     const t = s.at('08:00')
     s.write([{ id: 'first', k: 'block.start', block: 'm', at: t, bg: false, planned: { categoryId: 'rutyny', variantId: null, durationMin: 90, fixed: false, costs: null, bgCostPct: null, routine: 'poranna', routineCosts: R }, confirmUntil: null, how: 'click' }], t)
     routineCost(s, '08:10', R2)
     s.write([{ k: 'undo', at: s.at('08:20'), target: 'first' }], s.at('08:20'))
     s.start('m', '08:30')
-    expect(tile(s, '08:40')).toEqual({ costs: R, base: R, own: false, baseFrom: 'routine' })
+    expect(tile(s, '08:40')).toEqual({ costs: R2, base: R2, own: false, baseFrom: 'routine' })
   })
 
   it('kalibracja: minuty z kosztem rutyny nie są dowodem; po zmianie rutyny na „jak podkategoria” – znów są', () => {
@@ -124,13 +163,14 @@ describe('zmiana kosztu rutyny przy zaczętym bloku (D514, T1395)', () => {
     expect(costEvidence(ctx, computeDay(ctx), true)!.minutes).toEqual({ rutyny: 50 })
   })
 
-  it('zdarzenie: znane z polem block, at i costs (−5…5 albo null); bierne dla silnika dnia', () => {
+  it('zdarzenie: znane z polami routine, at, costs i was (−5…5 albo null); bierne dla silnika dnia', () => {
     const line = (o: Record<string, unknown>) => JSON.stringify({ id: 'x', c: 'pca', n: 1, t: 1, l: 1, v: 14, day: DATE, dom: 'timer', at: 1, ...o })
-    expect(parseEvent(line({ k: 'block.routineCost', block: 'm', costs: R2 }))).toMatchObject({ ok: true })
-    expect(parseEvent(line({ k: 'block.routineCost', block: 'm', costs: null }))).toMatchObject({ ok: true })
-    expect(parseEvent(line({ k: 'block.routineCost', block: 'm', costs: { head: 6, emotions: 0, senses: 0 } }))).toEqual({ ok: false, why: 'pole costs' })
-    expect(parseEvent(line({ k: 'block.routineCost', costs: null }))).toEqual({ ok: false, why: 'pole block' })
-    const parsed = parseEvent(line({ k: 'block.routineCost', block: 'm', costs: null }))
+    expect(parseEvent(line({ k: 'routine.cost', routine: 'poranna', costs: R2, was: null }))).toMatchObject({ ok: true })
+    expect(parseEvent(line({ k: 'routine.cost', routine: 'poranna', costs: null, was: R }))).toMatchObject({ ok: true })
+    expect(parseEvent(line({ k: 'routine.cost', routine: 'poranna', costs: { head: 6, emotions: 0, senses: 0 }, was: null }))).toEqual({ ok: false, why: 'pole costs' })
+    expect(parseEvent(line({ k: 'routine.cost', routine: 'poranna', costs: null }))).toEqual({ ok: false, why: 'pole was' })
+    expect(parseEvent(line({ k: 'routine.cost', costs: null, was: null }))).toEqual({ ok: false, why: 'pole routine' })
+    const parsed = parseEvent(line({ k: 'routine.cost', routine: 'poranna', costs: null, was: null }))
     expect(parsed.ok && isPassive(parsed.event)).toBe(true)
     // Passive: the day (its facts, the end of work, the bedtime) as without it.
     const s = day([m()]).start('m', '08:00')
@@ -141,41 +181,48 @@ describe('zmiana kosztu rutyny przy zaczętym bloku (D514, T1395)', () => {
   })
 })
 
-describe('które zaczęte bloki zmiana kosztu rutyny sięga (routineCostTargets, T1395)', () => {
+describe('które zaczęte bloki zmiana kosztu rutyny sięga (costChangesOf, T1430)', () => {
   const plan = [
     m(),
     m({ id: 'own', costs: OWN }),
-    m({ id: 'ended' }),
     m({ id: 'later', startMin: lm('12:00') }),
     m({ id: 'other', routine: 'wieczorna' }),
     { ...block({ id: 'inne', cat: 'inne', at: '08:00', min: 30 }), routine: 'poranna' }
   ]
-  const s = day(plan)
   /** A start as this version writes it (`startPlanned`: with the block's routine and the routine's cost). */
-  const begin = (id: string) => {
-    const p = plan.find((b) => b.id === id)!
-    const planned = { categoryId: p.categoryId, variantId: null, durationMin: p.durationMin, fixed: false, costs: p.costs, bgCostPct: null, routine: p.routine, routineCosts: null }
-    s.write([{ k: 'block.start', block: id, at: s.at('08:00'), bg: false, planned, confirmUntil: null, how: 'click' }], s.at('08:00'))
+  const begin = (s: Scenario, p: PlanBlock, o: { routine?: string | null; categoryId?: string } = {}) => {
+    const planned = { categoryId: o.categoryId ?? p.categoryId, variantId: null, durationMin: p.durationMin, fixed: false, costs: p.costs, bgCostPct: null, routine: o.routine !== undefined ? o.routine : p.routine, routineCosts: null }
+    s.write([{ k: 'block.start', block: p.id, at: s.at('08:00'), bg: false, planned, confirmUntil: null, how: 'click' }], s.at('08:00'))
   }
-  for (const id of ['m', 'own', 'ended', 'other', 'inne']) begin(id)
-  s.end('ended', '08:20')
-  const facts = (t: string) => s.state(t).facts
+  const reached = (s: Scenario, ps: readonly PlanBlock[], time = '08:40') => {
+    const ctx = { ...s.contextAt(s.at(time)), plan: ps }
+    const changes = costChangesOf(ctx, computeDay(ctx).facts)
+    return [...changes.entries()].filter(([, list]) => list.some((c) => c.routine)).map(([id]) => id).sort()
+  }
 
-  it('zaczęte i nieskończone bloki tej rutyny w kategorii rodzaju „rutyna” – także z własnym kosztem; bez skończonych, niezaczętych, innej rutyny i innej kategorii', () => {
-    expect(routineCostTargets(plan, facts('08:30'), s.settings, 'poranna').sort()).toEqual(['m', 'own'])
-    expect(routineCostTargets(plan, facts('08:30'), s.settings, 'wieczorna')).toEqual(['other'])
-    expect(routineCostTargets(plan, facts('08:30'), s.settings, 'nic')).toEqual([])
+  it('zaczęte bloki tej rutyny w kategorii rodzaju „rutyna” – także z własnym kosztem; bez niezaczętych, innej rutyny i innej kategorii', () => {
+    const s = day(plan)
+    for (const p of plan.filter((x) => x.id !== 'later')) begin(s, p)
+    routineCost(s, '08:30', R2)
+    expect(reached(s, plan)).toEqual(['m', 'own'])
+    routineCost(s, '08:35', R2, null, undefined, 'wieczorna')
+    expect(reached(s, plan)).toEqual(['m', 'other', 'own'])
   })
 
-  it('rutyna i kategoria ze startu: blok, któremu po starcie zmieniono rutynę w planie, idzie za rutyną startu', () => {
-    const changed = plan.map((b) => (b.id === 'm' ? { ...b, routine: 'wieczorna' } : b))
-    expect(routineCostTargets(changed, facts('08:30'), s.settings, 'poranna')).toContain('m')
-    expect(routineCostTargets(changed, facts('08:30'), s.settings, 'wieczorna')).not.toContain('m')
+  it('rutyna i kategoria ze startu: blok, któremu po starcie zmieniono rutynę w planie, idzie za rutyną startu; kategoria startu innego rodzaju – nie', () => {
+    const s = day(plan)
+    begin(s, plan[0]!)
+    begin(s, plan[1]!, { categoryId: 'inne' })
+    routineCost(s, '08:30', R2)
+    const changed = plan.map((b) => (b.id === 'm' ? { ...b, routine: 'wieczorna' } : b.id === 'own' ? { ...b, categoryId: 'rutyny' } : b))
+    expect(reached(s, changed)).toEqual(['m'])
   })
 
-  it('start bez rutyny w zdarzeniu (starsza wersja) – rutyna z planu', () => {
+  it('start bez rutyny w zdarzeniu (starsza wersja) – rutyna i kategoria z planu', () => {
     const old = day([m()])
     old.write([{ k: 'block.start', block: 'm', at: old.at('08:00'), bg: false, planned: { categoryId: 'rutyny', variantId: null, durationMin: 90, fixed: false, costs: null, bgCostPct: null }, confirmUntil: null, how: 'click', v: 13 }], old.at('08:00'))
-    expect(routineCostTargets([m()], old.state('08:30').facts, old.settings, 'poranna')).toEqual(['m'])
+    routineCost(old, '08:30', R2)
+    expect(reached(old, [m()])).toEqual(['m'])
+    expect(reached(old, [m({ routine: 'wieczorna' })])).toEqual([])
   })
 })

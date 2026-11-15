@@ -3,7 +3,7 @@
  * days. You set the order here; the app never changes it, at most it moves the whole routine in time. A block of the
  * plan points at its routine (the panel of a block of the „Rutyny” category). Ctrl+N makes a new routine. D512: the routine's own cost
  * per hour – the label and window of a tile's cost (`TileCost`), or none („jak podkategoria”); the field and its save are those of ✎
- * (`routineCost.tsx`): a begun block of the routine counts the new cost from now on (D514, T1395).
+ * (`routineCost.tsx`): a begun block of the routine counts the new cost from now on (D514, T1430).
  */
 import { useEffect, useMemo, useState } from 'react'
 import { paths } from '@shared/data/paths'
@@ -13,7 +13,7 @@ import { ROUTINE_SCHEMA, routineFrom, routineMinutes, type Routine, type Routine
 import { settingsOn } from '@shared/model/settings'
 import { TextField } from '../../components/fields'
 import { EmptyState, cx } from '../../components/ui'
-import { RoutineCostField, saveRoutine } from './routineCost'
+import { RoutineCostField, saveRoutineRecord } from './routineCost'
 import { RoutineSteps } from './RoutineSteps'
 import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
 import { useNewShortcut } from '../../lib/escape'
@@ -120,7 +120,7 @@ function Editor({ routine, onRemoved }: { routine: Routine; onRemoved: () => voi
         </button>
       </div>
       {/* D512: the routine's own cost (null – „jak podkategoria”) over the record as it is when the change's turn comes; what became of it. */}
-      <RoutineCostField id={`routine:${routine.id}`} costs={routine.costs ?? null} categories={categories} onChange={async (costs) => (await saveRoutine(routine.id, { costs })).answer} />
+      <RoutineCostField id={`routine:${routine.id}`} costs={routine.costs ?? null} categories={categories} onChange={async (costs) => (await saveRoutineRecord(routine.id, { costs })).answer} />
       <div className="grid grid-cols-2 gap-4">
         {(['normal', 'worse'] as RoutineVersion[]).map((v) => (
           <RoutineSteps key={v} version={v} steps={routine[v]} onChange={(fn) => change((r) => ({ [v]: fn(r[v]) }))} />

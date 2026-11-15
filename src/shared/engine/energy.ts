@@ -103,7 +103,7 @@ interface Kind {
   /** The cost of its routine (D512): from its start (`planned.routineCosts`), not begun – the routine's now; null – none. */
   routine: Costs | null
   /**
-   * Its cost changed from a minute on (D501, `block.cost`) and its routine's (D514, `block.routineCost` – T1395), in the order they apply;
+   * Its cost changed from a minute on (D501, `block.cost`) and its routine's (D514, `routine.cost` – T1430), in the order they apply;
    * null – none (the cost of its start all along).
    */
   changes: readonly CostChange[] | null
@@ -148,7 +148,7 @@ export function regenVariant(s: RulesSettings, id: string): Costs {
 }
 
 /**
- * What a block costs an hour at minute k: its own (changed from a minute on, D501), else its routine's (D512; changed from a minute on, T1395),
+ * What a block costs an hour at minute k: its own (changed from a minute on, D501), else its routine's (D512; changed from a minute on, T1430),
  * variant's or category's (`baseCosts`).
  */
 function costOf(x: Kind, s: RulesSettings, k: number): Costs {
@@ -204,20 +204,21 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
   const c0 = checkins.length ? Math.min(...checkins.map((e) => idx(e.at))) : null
 
   // D501: the changes of a begun block's cost from a minute on (only after its start – `costChange.ts`).
-  const changes = costChangesOf(ctx.events, day.facts)
+  const changes = costChangesOf(ctx, day.facts)
   const kinds = new Map<string, Kind>()
   const kindOf = (b: BlockInfo): Kind => {
     let k = kinds.get(b.id)
     if (!k) {
       const p = day.facts.blocks.get(b.id)?.planned
-      const { cat, variant, own, routine } = startCostOf(b, p)
+      const ch = changes.get(b.id) ?? null
+      const { cat, variant, own, routine } = startCostOf(b, p, ch)
       k = {
         block: b,
         cat,
         variant,
         own,
         routine,
-        changes: changes.get(b.id) ?? null,
+        changes: ch,
         bgPct: p?.bgCostPct !== undefined ? p.bgCostPct : b.bgCostPct,
         rules: ctx.snapshot.settings.categories[cat] ?? b.rules,
         flexible: !(p ? p.fixed : b.fixed) && !b.waits

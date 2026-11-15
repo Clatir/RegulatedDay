@@ -14,7 +14,7 @@ import { templateVersionOn, type Template } from '../model/plan'
 import type { RulesSettings } from '../model/settings'
 import { addDays } from '../time/zone'
 import { settingsAtMinute, type DayContext, type DayState } from './day'
-import { costChangesOf } from './costChange'
+import { costChangesOf, routineBefore } from './costChange'
 import { anchorEffect } from './energy'
 import { OPEN, ranMinutes } from './facts'
 import { blockEvidence } from './game'
@@ -145,16 +145,19 @@ export function costEvidence(ctx: DayContext, state: DayState, energyOn: boolean
   const now = Math.min(state.now, g.length)
   const fg: Array<string | null> = new Array(Math.max(0, now)).fill(null)
   // D501: a begun block's cost changed from a minute on (`block.cost`) – a minute of its own cost is no evidence for its category; nor is
-  // one of its routine's cost (D512), changed from a minute on too (`block.routineCost`, T1395). Its key is counted once for each stretch
+  // one of its routine's cost (D512), changed from a minute on too (`routine.cost`, T1430). Its key is counted once for each stretch
   // between its changes (from the start's cost, then each change from its minute, with the own and the routine's cost in force then).
-  const changes = costChangesOf(ctx.events, state.facts)
+  const changes = costChangesOf(ctx, state.facts)
   const runs: Array<{ from: number; to: number; keys: Array<{ from: number; key: string | null }> }> = []
   for (const f of state.facts.blocks.values()) {
     if (!f.planned) continue
     const planned = f.planned
-    const keys = [{ from: Number.NEGATIVE_INFINITY, key: costKey(state.settings, planned) }]
-    let held = { costs: planned.costs, routineCosts: planned.routineCosts }
-    for (const c of changes.get(f.id) ?? []) {
+    const ofBlock = changes.get(f.id) ?? []
+    // A start without the routine's cost (T1372): up to the routine's first change – its cost before it (T1432, as the energy).
+    const before = planned.routineCosts === undefined ? routineBefore(ofBlock) : undefined
+    let held = { costs: planned.costs, routineCosts: before !== undefined ? before : planned.routineCosts }
+    const keys = [{ from: Number.NEGATIVE_INFINITY, key: costKey(state.settings, { ...planned, ...held }) }]
+    for (const c of ofBlock) {
       held = c.routine ? { ...held, routineCosts: c.costs } : { ...held, costs: c.costs }
       keys.push({ from: c.at, key: costKey(state.settings, { ...planned, ...held }) })
     }

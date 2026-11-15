@@ -218,7 +218,7 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen, withCos
   const naming = namingOf(ctx, state.facts)
   // D501: the cost on the tile – a begun block's as the engine counts it now (its start, its changes), another's as planned; changed there
   // on a day not gone by: a block still to come (into the plan), a begun one until it ends (from now on) – `costEditable`.
-  const changes = withCosts ? costChangesOf(ctx.events, state.facts) : new Map()
+  const changes = withCosts ? costChangesOf(ctx, state.facts) : new Map()
   const tileCost = (info: BlockInfo, st: HorizonBlockState): TileCost => {
     const f = state.facts.blocks.get(info.id)
     const costs = f?.startedAt != null ? begunCosts(ctx, state, info, changes) : blockCosts(info, state.settings.categories, info.rules)
