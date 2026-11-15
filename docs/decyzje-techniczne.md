@@ -448,3 +448,13 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1587 | `readDayFiles` czyta porcjami po 62 dni (limit `dayFiles` w procesie głównym) – także w `dayFilesNow`, `undoDayEdits`, `undoFreeDays`, `undoWeekPush` |
 | T1588 | `takeBackDays` (`store/dayUndo.ts`) – jedna reguła cofania dni dla linii „Tygodnia”, dni wolnych i Kalendarza |
 | T1589 | Kolejność dni dla Shift+klik w Kalendarzu – dni po dacie od siatki, rozszerzone o zaznaczone spoza niej; pozycje menu wyłączone „Zapisuję…” w trakcie zapisu |
+| T1568 | Jeden hook `useCasesGroup` dla ekranu Spraw i panelu „Sprawy” przy osi |
+| T1569 | `order` zaznaczenia Spraw to lista kotwicy; zaznaczone z innych list stoją po niej; Shift+klik w innej liście działa jak klik |
+| T1570 | „Zaplanuj…” grupy stawia sprawy w kolejności widocznej na ekranie (Skrzynka przed „Dziś”), nie w kolejności zaznaczania |
+| T1571 | Del dla zaznaczenia ≥ 2 spraw przez zwykły `DeleteTarget` („Usunąć 3 sprawy?”), bez zmian w `deleteKey.ts` |
+| T1572 | W menu Spraw „Zrobione” / „Przywróć” tylko wtedy, gdy ma sens (obie przy mieszanym zaznaczeniu); lista, na której są wszystkie – ✓ i wyłączona |
+| T1573 | Czasowniki linii Spraw: Przeniesiono, Zrobiono, Przywrócono, Zaplanowano, Skopiowano, Usunięto; panel przy osi ma to samo menu i okno „Zaplanuj…” |
+| T1574 | `carriedBy` – jedyna reguła grupy niesionej przeciąganiem (≥ 2 i zawiera chwyconą); panel zgłasza zaznaczenie przez `onSelected` |
+| T1575 | Chip panelu ma znacznik Del tylko przy zaznaczeniu ≥ 2 – jedna sprawa nie przejmuje Del od zaznaczonego bloku osi |
+| T1576 | „Zaplanuj…” po kliknięciu czeka na dane wpisanego dnia; wpisana godzina zostaje przy zmianie dnia; pola – `DateField`/`TimeField` |
+| T1577 | Energia w linii planowania grupy – `lowestEnergyChange` (najniższa energia przed i po, jak „Ułóż pod energię”) |

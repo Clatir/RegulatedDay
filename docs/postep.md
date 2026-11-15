@@ -63,7 +63,7 @@ Autowznowienie po limicie: zadanie cron w sesji (co ok. 35 min) czyta ten wpis. 
 | --- | --- | --- |
 | Z0 | dokumenty gotowe | D527–D531, specyfikacja „Zaznaczanie wielu i zmiany grupowe”, plan „Ciąg Z” |
 | Z1 | scalone 35b7148 (15.11 23:10) | przegląd high 9 uwag poprawionych, T1541–T1555; `installer-close.test.ts` pada lokalnie w obu drzewach (środowisko, PowerShell) – sprawdzi CI |
-| Z2 | A zatwierdzone (4857e23), B – poprawki po przeglądzie high (11 uwag) | `wykonawca-sonnet`, drzewo `C:/CC-Projekty/RD-z2`, gałąź `claude/z2-sprawy` |
+| Z2 | scalone 15b2e2c (16.11 00:00) | A + B, dwa przeglądy high (10 + 11 uwag), T1560–T1577; E2E Spraw i Del lokalnie zielone |
 | Z3 | scalone a0a8042 (15.11 23:40) | przegląd high 10 uwag poprawionych, T1580–T1589; klik w dzień dalej go otwiera (zakres od Ctrl+klik) |
 | Z4 | A – poprawki po przeglądzie xhigh (15 uwag) | `wykonawca-opus`, drzewo `C:/CC-Projekty/RD-z4`, gałąź `claude/z4-bloki`; B (oś) – `wykonawca-sonnet` po scaleniu A |
 | Z5 | czeka na Z4 | wiele dni |
