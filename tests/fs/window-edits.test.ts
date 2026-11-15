@@ -32,7 +32,7 @@ const { copyDayTo, patchDayBlock, removeDayBlock, saveDay, setDayWake, setWakeOn
   copyDayTo: (s: CopySource, targets: string[], rawOf: (d: string) => RawRecord | null) => Promise<boolean>
   patchDayBlock: (date: string, seen: RawRecord | null, b: PlanBlock, patch: Partial<PlanBlock>) => Promise<unknown>
   removeDayBlock: (date: string, seen: RawRecord | null, b: PlanBlock, inSnapshot: boolean, name: string, begun?: 'no' | 'over' | 'open') => Promise<boolean>
-  setDayWake: (dates: string[], seen: (d: string) => RawRecord | null, wakeMin: number | null, days?: Record<string, WakeDay>) => Promise<boolean>
+  setDayWake: (dates: string[], seen: (d: string) => RawRecord | null, wakeMin: number | null, days?: Record<string, WakeDay>, group?: (line: { changed: number; undo: () => Promise<string | void> }) => void) => Promise<boolean>
   wakeDayOf: (date: string) => Promise<WakeDay>
   setWakeOnDays: (dates: string[], today: string, seen: (d: string) => RawRecord | null, wakeMin: number | null) => Promise<boolean>
   saveDay: (date: string, seen: RawRecord | null, next: (raw: RawRecord) => RawRecord) => Promise<unknown>
@@ -373,6 +373,29 @@ describe('pobudka przesuwa bloki ręczne (D334)', () => {
     useUi.getState().toasts.find((t) => t.text.startsWith('Pobudka'))!.action!.run()
     await vi.waitFor(() => expect(fileOf(date)!.blocks!.find((b) => b.id === 'rano')!.startMin).toBe(4 * 60 + 30))
     expect(fileOf(date)!.wakeMin).toBe(wake + 120)
+  })
+
+  it('„Cofnij” grupy pobudki (D529): dzień, którego pobudka zmieniła się od tego czasu, zostaje cały – także bloki; reszta wraca; linia zastępuje toast', async () => {
+    const [d1, d2] = [addDays(today(), 2), addDays(today(), 3)]
+    await put(d1, 'rano', 5 * 60)
+    await put(d2, 'rano', 5 * 60)
+    await reloadData()
+    const seen = (d: string) => (fileOf(d) as unknown as RawRecord) ?? null
+    let line: { changed: number; undo: () => Promise<string | void> } | null = null
+    expect(await setDayWake([d1, d2], seen, 7 * 60 + 30, {}, (l) => (line = l))).toBe(true)
+    expect(line!.changed).toBe(2)
+    // The group's line says it: no toast of the moved blocks.
+    expect(useUi.getState().toasts.some((t) => t.text.startsWith('Pobudka'))).toBe(false)
+    const movedStart = fileOf(d2)!.blocks!.find((b) => b.id === 'rano')!.startMin
+    expect(movedStart).not.toBe(5 * 60)
+    // Another computer set the wake of the second day meanwhile.
+    await saveDay(d2, null, (raw) => ({ ...raw, wakeMin: 8 * 60 + 20 }))
+    expect(await line!.undo()).toBe('1 dzień zmieniony od tego czasu – został')
+    expect(fileOf(d1)!.wakeMin).toBeUndefined()
+    expect(fileOf(d1)!.blocks!.find((b) => b.id === 'rano')!.startMin).toBe(5 * 60)
+    // The day whose wake changed stays whole: its wake and the block as they are, the block is not given back on its own.
+    expect(fileOf(d2)!.wakeMin).toBe(8 * 60 + 20)
+    expect(fileOf(d2)!.blocks!.find((b) => b.id === 'rano')!.startMin).toBe(movedStart)
   })
 
   it('Kalendarz: dziś z dnia silnika (zaczęty blok zostaje), a błąd mostu przy czytaniu dnia nie jest nieobsłużony – komunikat i nic zapisanego', async () => {

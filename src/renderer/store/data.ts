@@ -279,12 +279,22 @@ export function trySaveWith(make: () => Promise<ReadonlyArray<EditEntry | null>>
   return inTurn(() => send(make, state))
 }
 
+/** The most days one `dayFiles` answers (the main process reads no more at once): a longer list goes in these portions. */
+export const DAY_FILES_MAX = 62
+
+/** The files of `dates` as `window.rd.dayFiles` gives them, read in portions of `DAY_FILES_MAX`; a day missing from the answer cannot be read now. */
+export async function readDayFiles(dates: readonly string[]): Promise<Record<string, RawRecord | null>> {
+  const out: Record<string, RawRecord | null> = {}
+  for (let i = 0; i < dates.length; i += DAY_FILES_MAX) Object.assign(out, await window.rd.dayFiles(dates.slice(i, i + DAY_FILES_MAX)))
+  return out
+}
+
 /**
  * The days' files as this computer sees them now (the folder's with the edits still queued); a file that cannot be read
  * now is the one the window saw (`seen`) – its edit waits until it can be read, as the day says.
  */
 export async function dayFilesNow(dates: readonly string[], seen: (date: string) => RawRecord | null): Promise<Record<string, RawRecord | null>> {
-  const files = await window.rd.dayFiles([...dates])
+  const files = await readDayFiles(dates)
   return Object.fromEntries(dates.map((d) => [d, d in files ? (files[d] ?? null) : seen(d)]))
 }
 

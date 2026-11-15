@@ -8,6 +8,13 @@ paths:
   - "src/renderer/store/groupLine.ts"
   - "src/renderer/lib/useSelection.ts"
   - "src/renderer/lib/escape.ts"
+  - "src/renderer/features/calendar/CalendarPage.tsx"
+  - "src/renderer/features/calendar/MonthGrid.tsx"
+  - "src/renderer/features/calendar/dayGroup.ts"
+  - "src/renderer/features/calendar/dayMenu.ts"
+  - "src/renderer/store/dayUndo.ts"
+  - "tests/web/day-undo.test.ts"
+  - "tests/web/calendar-selection.test.ts"
   - "tests/unit/selection.test.ts"
   - "tests/unit/group-summary.test.ts"
   - "tests/unit/group-text.test.ts"
@@ -61,3 +68,18 @@ paths:
   (mimo upływu czasu); zwrócony napis → `toast` (D313); wyjątek – linia zostaje (do końca terminu albo nowe 15 min) i `UNDO_FAILED_TEXT`.
   Tylko tekst linii ma `role="status"` – „Cofnij” liczy się jako klik poza dla menu i okienek (`outside.ts` pomija `[role=status]`). Zmiana grupowa pisze jeden zapis na plik dnia, a cofnięcie przywraca tylko zmienione pola
   – to robi ekran (Z2–Z6), nie podstawa.
+
+## Kalendarz (Z3)
+- `CalendarPage`: dni przez `useSelection({ order: siatka, all: dni miesiąca, arrows: 'grid' (←→ dzień, ↑↓ tydzień = 7), prune: false })` – zaznaczenie
+  przeżywa zmianę miesiąca (jak dotąd; `prune: false`), Ctrl+A bierze tylko dni pokazanego miesiąca. `MonthGrid` ma dwa tryby: `selected`/`onSelect`
+  (kreator, kopia dnia – bez zmian) albo `selection` + `onContext` (Kalendarz). **Zwykły klik tylko otwiera dzień** (D295, T1585) i nie rusza zaznaczenia; zaznaczanie zaczyna się
+  od Ctrl+klik albo przeciągnięcia (zakres zaczyna się po wejściu w inny dzień, powrót na dzień startowy zwija go, puszczenie tam nie otwiera dnia), potem Shift+klik. `order` hooka
+  to dni po dacie od początku siatki do końca, rozszerzone o zaznaczone dni spoza niej (`daysBetween`, `reach`) – zakres i Shift+strzałki idą przez miesiące.
+- Liczba „Zaznaczone dni: N” zostaje tylko w pasku działań (T1586; `daysSummary` jest w `shared`, Kalendarz go nie używa). Menu „Zmień N dni” (`dayMenu.ts`, czyste): „Typ dnia”
+  (podmenu z ✓/„—”, „Typ z tygodnia”), „Pobudka” (pole z Enter, `parseField` jak `TimeField`) i „Pobudka z typu”; stany ✓/„—” z plików zaznaczonych dni, także spoza siatki
+  (`readDayFiles` przed otwarciem); wyłączone z powodem, gdy żaden dzień nie pasuje (typ – od jutra, pobudka – od dziś), w trakcie zapisu – „Zapisuję…”.
+- Linia `GroupLine view="calendar"` po zmianie ≥ 2 dni (jeden dzień – jak dotąd, bez linii): typ – `saveDays` zbiera `WeekPushedDay` (`movedDay`), `undoDayEdits` (`dayGroup.ts`);
+  pobudka – `setDayWake(…, group)` zamiast toastu z blokami, `undoWakeGroup` (dzień z pobudką albo przesuniętym blokiem zmienionym od tego czasu zostaje cały, `keptText`). Pominięte dni
+  (minione, dzisiejszy przy typie) w linii: „pominięto 2: miniony, dzisiejszy” – przy linii bez toastu o nich (toast tylko, gdy linii nie ma). Zaznaczenie po zmianie czyści się.
+- Pliki dni czytają się porcjami po 62 (`readDayFiles`, `dayFilesNow`; hub odpowiada najwyżej 62 dniami); jedno „Cofnij” zmian dni to `takeBackDays` (`store/dayUndo.ts`: „Tydzień”,
+  „Wolne”, Kalendarz).

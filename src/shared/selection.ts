@@ -63,12 +63,16 @@ export function clickSelect(state: Selection, id: string, keys: ClickKeys, order
   return single(id)
 }
 
-/** Shift+arrow (`step` −1 up / left, +1 down / right): the far end of the range moves by one from the anchor, never past the ends of the order. */
-export function extendSelect(state: Selection, step: 1 | -1, order: readonly string[]): Selection {
+/**
+ * Shift+arrow (`step` −1 up / left, +1 down / right; a grid of days – a whole row, ±7): the far end of the range moves by `step` from the
+ * anchor, cut to the ends of the order; already at an end (or the step is 0) – the same state.
+ */
+export function extendSelect(state: Selection, step: number, order: readonly string[]): Selection {
   if (state.anchor == null || !order.includes(state.anchor)) return state
   const from = state.cursor != null && order.includes(state.cursor) ? state.cursor : state.anchor
-  const to = order[order.indexOf(from) + step]
-  return to === undefined ? state : withRange(state, to, order)
+  const at = order.indexOf(from)
+  const to = Math.max(0, Math.min(order.length - 1, at + step))
+  return to === at ? state : withRange(state, order[to]!, order)
 }
 
 /** Ctrl+A: everything in the order; the anchor stays when `previous` had one that is in it. */

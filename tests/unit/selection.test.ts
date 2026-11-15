@@ -195,3 +195,24 @@ describe('inRange i triState', () => {
     expect(JSON.parse(JSON.stringify(s))).toEqual(s)
   })
 })
+
+describe('Shift+strzałki o więcej niż jeden element (siatka dni, Z3)', () => {
+  const DAYS = Array.from({ length: 14 }, (_, i) => `d${i}`)
+
+  it('krok 7 – tydzień niżej / wyżej od kotwicy: zakres wszystkich dni pomiędzy', () => {
+    let s = clickSelect(EMPTY_SELECTION, 'd2', NONE, DAYS)
+    s = extendSelect(s, 7, DAYS)
+    expect(s.ids).toEqual(DAYS.slice(2, 10))
+    s = extendSelect(s, -7, DAYS)
+    expect(s.ids).toEqual(['d2'])
+    s = extendSelect(s, -7, DAYS)
+    expect(s.ids).toEqual(DAYS.slice(0, 3))
+  })
+
+  it('krok przy końcu listy przycina się do końca; będąc na końcu – bez zmiany', () => {
+    let s = clickSelect(EMPTY_SELECTION, 'd10', NONE, DAYS)
+    s = extendSelect(s, 7, DAYS)
+    expect(s.ids).toEqual(DAYS.slice(10))
+    expect(extendSelect(s, 7, DAYS)).toBe(s)
+  })
+})

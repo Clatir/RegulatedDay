@@ -3,10 +3,11 @@
  */
 import type { EditEntry, EditOutcome, RawRecord } from '@shared/api'
 import { putBlock } from '@shared/data/dayEdits'
-import { editStands, inverseEdit } from '@shared/data/merge'
+import { editStands } from '@shared/data/merge'
 import { plDateWithWeekday } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
-import { isSaved, trySaveWith, withOwner } from '../../store/data'
+import { isSaved, readDayFiles, trySaveWith, withOwner } from '../../store/data'
+import { takeBackDays } from '../../store/dayUndo'
 import { countedDay } from '../../store/day'
 import { toast, undoToast } from '../../store/ui'
 import { hiddenBlocksAmong } from '../calendars/calendarFilter'
@@ -186,7 +187,7 @@ export async function undoWeekPush(push: WeekPush): Promise<WeekUndone> {
   // The dates of the edits sent, in their order: what the main process answers goes by it.
   const sent: string[] = []
   const out = await trySaveWith(async () => {
-    const files = await window.rd.dayFiles(push.days.map((d) => d.date))
+    const files = await readDayFiles(push.days.map((d) => d.date))
     const back: EditEntry[] = []
     // D417: a block moved between two days goes back to both or to none – one day alone would leave it on neither day
     // or on both. A day not readable now: nothing is done, the line stays; one changed since: both stay as they are.
@@ -198,17 +199,12 @@ export async function undoWeekPush(push: WeekPush): Promise<WeekUndone> {
         return []
       }
     }
-    for (const d of push.days) {
-      if (!(d.date in files)) {
-        r.unreadable.push(d.date)
-        continue
-      }
-      const now = files[d.date] ?? null
-      const edit = editStands(d.entry, now, d.made) ? inverseEdit(d.entry, now, d.made) : null
-      if (edit) {
-        back.push(edit)
-        sent.push(d.date)
-      } else r.changed.push(d.date)
+    const t = takeBackDays(push.days, files)
+    r.unreadable.push(...t.unreadable)
+    r.changed.push(...t.changed)
+    for (const x of t.back) {
+      back.push(x.edit)
+      sent.push(x.date)
     }
     // A move back (T953): the source's half that brings the block back is the owner, the target's that takes it off goes
     // with it – a question about the source keeps the block on the target, „theirs” leaves it there; never on neither day.

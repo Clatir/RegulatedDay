@@ -28,6 +28,7 @@ import type { Variant } from '@shared/engine/variants'
 import { nameById, type Names } from '@shared/blockName'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
 import { countLabel, logicalClock, plDate, plural } from '@shared/format'
+import { keptText } from '@shared/groupText'
 import type { DaySnapshot } from '@shared/model/events'
 import { attachmentUndoOf, ownAttachmentIds, removalEdits, restoreEdits, type AttachmentUndo } from '@shared/model/attachment'
 import { dayFilesNow, editOf, isSaved, trySaveWith, useData, withOwner, type SendState } from '../../store/data'
@@ -442,15 +443,22 @@ export async function wakeDayOf(date: string): Promise<WakeDay> {
  * A change of wake of days from the calendar (D334): today as the engine has it (`wakeDayOf`), the rest from the files. Whole
  * inside the caller's busy state; a day that cannot be read now, or a bridge that fails, is said and nothing is written.
  */
-export async function setWakeOnDays(dates: readonly string[], today: string, seen: (date: string) => RawRecord | null, wakeMin: number | null): Promise<boolean> {
+export async function setWakeOnDays(dates: readonly string[], today: string, seen: (date: string) => RawRecord | null, wakeMin: number | null, group?: WakeGroup): Promise<boolean> {
   try {
     const days = dates.includes(today) ? { [today]: await wakeDayOf(today) } : {}
-    return await setDayWake(dates, seen, wakeMin, days)
+    return await setDayWake(dates, seen, wakeMin, days, group)
   } catch (e) {
     toast(`Nie zapisano pobudki: ${e instanceof Error ? e.message : String(e)}`, 'error', 6000)
     return false
   }
 }
+
+/**
+ * What a change of wake of two or more days says to the calendar's line (D529): how many days it changed and its „Cofnij” – every day back to
+ * its wake (and its blocks to their places) only while it stands as this change left it; the answer is the words about the days changed since
+ * (they stay as they are), or none. Given, the line replaces the toast of the moved blocks; a change of one day keeps the toast.
+ */
+export type WakeGroup = (line: { changed: number; undo: () => Promise<string | void> }) => void
 
 type WakeWas = Map<string, { wake: number | null; next: number | null; after: RawRecord; moved: Array<{ id: string; from: number; to: number }> }>
 
@@ -462,11 +470,14 @@ type WakeWas = Map<string, { wake: number | null; next: number | null; after: Ra
  * a day to come. Every day from its file as it is then (A6-01). When blocks moved „Cofnij” for 10 s gives each day its
  * wake and those blocks back – only what is still as this change left it, so a later change stays (A6-07).
  */
-export async function setDayWake(dates: readonly string[], seen: (date: string) => RawRecord | null, wakeMin: number | null, days: Readonly<Record<string, WakeDay>> = {}): Promise<boolean> {
+export async function setDayWake(dates: readonly string[], seen: (date: string) => RawRecord | null, wakeMin: number | null, days: Readonly<Record<string, WakeDay>> = {}, group?: WakeGroup): Promise<boolean> {
   const { rd, templates, lectures, seriesPlans } = useData.getState()
   const was: WakeWas = new Map()
+  // The days this change really changed (a day already at this wake is no change).
+  const changed = new Set<string>()
   const out = await trySaveWith(async () => {
     const now = await dayFilesNow(dates, seen)
+    changed.clear()
     return dates.map((date) => {
       const before = now[date] ?? null
       const raw = dayRaw(before, date)
@@ -478,10 +489,17 @@ export async function setDayWake(dates: readonly string[], seen: (date: string) 
       for (const b of moved) after = putBlock(after, b)
       const from = new Map(file.blocks.map((b) => [b.id, b.startMin!]))
       was.set(date, { wake: file.wakeMin, next: wakeMin, after, moved: moved.map((b) => ({ id: b.id, from: from.get(b.id)!, to: b.startMin! })) })
-      return editOf(paths.day(date), before, after)
+      const edit = editOf(paths.day(date), before, after)
+      if (edit) changed.add(date)
+      return edit
     })
   })
   if (!isSaved(out)) return false
+  if (group && changed.size >= 2) {
+    const mine: WakeWas = new Map([...was].filter(([d]) => changed.has(d)))
+    group({ changed: changed.size, undo: () => undoWakeGroup(mine) })
+    return true
+  }
   const count = [...was.values()].reduce((n, w) => n + w.moved.length, 0)
   if (count) undoToast(`Pobudka ${wakeMin != null ? logicalClock(wakeMin) : 'z typu dnia'}: przesunięto ${countLabel(count, 'blok', 'bloki', 'bloków')}`, () => void undoWake(was))
   return true
@@ -491,15 +509,21 @@ export async function setDayWake(dates: readonly string[], seen: (date: string) 
  * A change of wake taken back, over the file as it is now: the wake only when it is still the one this change set, and each
  * moved block only when it is still where this change put it – anything changed since stays.
  */
-function undoWake(was: WakeWas): Promise<EditOutcome[] | null> {
+function undoWake(was: WakeWas, kept?: { n: number }): Promise<EditOutcome[] | null> {
   const dates = [...was.keys()]
   return trySaveWith(async () => {
     const now = await dayFilesNow(dates, (d) => was.get(d)?.after ?? null)
+    if (kept) kept.n = 0
     return dates.map((date) => {
       const before = now[date] ?? null
       const w = was.get(date)!
       const raw = dayRaw(before, date)
       const file = dayFileFrom(raw, date)
+      // The group's „Cofnij” (D529, T1582): a day stands whole or stays whole – its wake changed since, or a moved block of it, and nothing of it is touched.
+      if (kept && !(file.wakeMin === w.next && w.moved.every((m) => file.blocks.find((x) => x.id === m.id)?.startMin === m.to))) {
+        kept.n++
+        return null
+      }
       let after = file.wakeMin === w.next ? setDayField(raw, 'wakeMin', w.wake) : raw
       for (const m of w.moved) {
         const b = file.blocks.find((x) => x.id === m.id)
@@ -508,6 +532,14 @@ function undoWake(was: WakeWas): Promise<EditOutcome[] | null> {
       return editOf(paths.day(date), before, after)
     })
   })
+}
+
+/** „Cofnij” of the calendar's line after a change of wake of days (D529): a day changed since (its wake or a block it moved) stays whole, its count is the words said (`keptText`). A save that did not go through throws (the line stays). */
+async function undoWakeGroup(was: WakeWas): Promise<string | void> {
+  const kept = { n: 0 }
+  const out = await undoWake(was, kept)
+  if (!isSaved(out)) throw new Error('not saved')
+  return kept.n ? keptText(kept.n, 'day') : undefined
 }
 
 /** What „Przenieś na…” came to: the write's outcome, and the move for its „Cofnij” (`tellMoved`; null – nothing saved). */

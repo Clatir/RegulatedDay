@@ -9,7 +9,6 @@
  */
 import type { EditEntry, RawRecord } from '@shared/api'
 import { dayRaw, setDayField } from '@shared/data/dayEdits'
-import { editStands, inverseEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import { defaultDayType } from '@shared/engine/createDay'
 import { plDateWithWeekday } from '@shared/format'
@@ -17,7 +16,8 @@ import { zjazdTypeRaw } from '@shared/import/zjazdDay'
 import { freeCandidateDays, freeDaysToAsk, type AllDayEvent, type FreeDayInfo } from '@shared/model/allDay'
 import { dayFileFrom } from '@shared/model/plan'
 import { settingsOn } from '@shared/model/settings'
-import { editOf, isSaved, saveAnswer, trySaveWith, useData, type SendState } from '../../store/data'
+import { editOf, isSaved, readDayFiles, saveAnswer, trySaveWith, useData, type SendState } from '../../store/data'
+import { takeBackDays } from '../../store/dayUndo'
 import { dropAllDayLine, narrowFreeLine, useAllDayLines } from '../../store/allDayLine'
 import { countDay, dayTypeNow, dayUsable } from '../../store/day'
 import { toast } from '../../store/ui'
@@ -44,16 +44,6 @@ async function todayDay(today: string): Promise<FreeDay | null> {
 function comingDay(raw: RawRecord | null, date: string): FreeDay {
   const own = raw ? dayFileFrom(raw, date).dayType : null
   return { type: own ?? defaultDayType(date, settingsOn(useData.getState().rd.settings, date)), closed: false, duringDay: false }
-}
-
-/** The most days one `dayFiles` answers (the main process reads no more at once): a longer list goes in these portions. */
-export const DAY_FILES_MAX = 62
-
-/** The files of `dates` as `window.rd.dayFiles` gives them, read in portions of `DAY_FILES_MAX`; a day missing from the answer cannot be read now. */
-async function readDayFiles(dates: readonly string[]): Promise<Record<string, RawRecord | null>> {
-  const out: Record<string, RawRecord | null> = {}
-  for (let i = 0; i < dates.length; i += DAY_FILES_MAX) Object.assign(out, await window.rd.dayFiles(dates.slice(i, i + DAY_FILES_MAX)))
-  return out
 }
 
 /**
@@ -181,21 +171,11 @@ export async function undoFreeDays(change: FreeDaysChange): Promise<FreeDaysUndo
   const r: FreeDaysUndone = { saved: false, undone: [], changed: [], unreadable: [] }
   const back: string[] = []
   const out = await trySaveWith(async () => {
-    const files = await readDayFiles(change.days.map((d) => d.date))
-    const edits: EditEntry[] = []
-    for (const d of change.days) {
-      if (!(d.date in files)) {
-        r.unreadable.push(d.date)
-        continue
-      }
-      const now = files[d.date] ?? null
-      const edit = editStands(d.entry, now, d.made) ? inverseEdit(d.entry, now, d.made) : null
-      if (edit) {
-        edits.push(edit)
-        back.push(d.date)
-      } else r.changed.push(d.date)
-    }
-    return edits
+    const t = takeBackDays(change.days, await readDayFiles(change.days.map((d) => d.date)))
+    r.unreadable.push(...t.unreadable)
+    r.changed.push(...t.changed)
+    back.push(...t.back.map((x) => x.date))
+    return t.back.map((x) => x.edit)
   })
   out?.forEach((o, i) => {
     if (o.status === 'applied' || o.status === 'waiting') r.undone.push(back[i]!)

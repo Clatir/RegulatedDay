@@ -438,3 +438,13 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1565 | „Cofnij” grupy zostawia sprawy z dnia o zmienionym pliku i następne zadanie serii, gdy jego właściciel został |
 | T1566 | „Zaplanuj…” grupy pomija tylko zrobione; zaplanowane (także na dzień miniony) planuje od nowa, jak „Zaplanuj” jednej |
 | T1567 | Błąd kroku jednej sprawy (np. zadanie bez tytułu) to pominięcie „nie da się”; całość odrzuca tylko błędna wspólna wartość (szacunek spoza zakresu) |
+| T1580 | Zaznaczenie dni w Kalendarzu przeżywa zmianę miesiąca; Ctrl+A bierze dni pokazanego miesiąca |
+| T1581 | `MonthGrid` ma dwa tryby zaznaczania (Kalendarz – `useSelection`, Kreator i kopia dnia – dawny `selected`/`onSelect`); zwykły klik w Kalendarzu dalej otwiera dzień |
+| T1582 | „Cofnij” typu dni przez `editStands` i `inverseEdit` całego wpisu dnia – dzień z polem zmienionym od tego czasu zostaje cały; tak samo pobudka (dzień z pobudką albo przesuniętym blokiem zmienionym od tego czasu zostaje cały) |
+| T1583 | Powody pominięcia dni w linii: „miniony”, „dzisiejszy” (typ dzisiejszego dnia zmienia się w „Dziś”) |
+| T1584 | Pobudka z menu – `parseField` z zakresem `RANGES.wakeMin`, jak pole pobudki |
+| T1585 | Przykład Kalendarza zaczyna się od Ctrl+klik (zwykły klik otwiera dzień, D527) |
+| T1586 | Liczba zaznaczonych dni tylko w pasku działań Kalendarza (bez drugiego napisu nad siatką); przy linii grupowej bez osobnego komunikatu o pominiętych dniach |
+| T1587 | `readDayFiles` czyta porcjami po 62 dni (limit `dayFiles` w procesie głównym) – także w `dayFilesNow`, `undoDayEdits`, `undoFreeDays`, `undoWeekPush` |
+| T1588 | `takeBackDays` (`store/dayUndo.ts`) – jedna reguła cofania dni dla linii „Tygodnia”, dni wolnych i Kalendarza |
+| T1589 | Kolejność dni dla Shift+klik w Kalendarzu – dni po dacie od siatki, rozszerzone o zaznaczone spoza niej; pozycje menu wyłączone „Zapisuję…” w trakcie zapisu |

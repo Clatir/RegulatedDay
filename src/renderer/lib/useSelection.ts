@@ -27,8 +27,17 @@ export interface UseSelectionOptions {
   present?: readonly string[]
   /** Another value drops the selection (the day, week, template, page). */
   scope?: string | null
-  /** Which Shift+arrows extend the selection: up / down (the axis, the lists), left / right (the calendar), none. Default: vertical. */
-  arrows?: 'vertical' | 'horizontal' | false
+  /**
+   * Which Shift+arrows extend the selection: up / down (the axis, the lists), left / right, a grid of days (left / right a day, up / down a
+   * row of `columns`), none. Default: vertical.
+   */
+  arrows?: 'vertical' | 'horizontal' | 'grid' | false
+  /** The row of a grid (default 7 – the weeks of the calendar). */
+  columns?: number
+  /** What Ctrl+A selects (default: all of `order`) – the days of the shown month, not the neighbours on its grid. */
+  all?: readonly string[]
+  /** Whether a selected id the screen no longer lists drops out (default yes); the calendar keeps days of other months. */
+  prune?: boolean
   /** Whether the keys are heard at all (default yes) – a screen that is not shown does not take them. */
   enabled?: boolean
   /** An extra condition of the keys (e.g. the focus is in this list): several selections on one page do not all take Ctrl+A. */
@@ -47,7 +56,7 @@ export interface SelectionApi {
   selectAll: () => void
   clear: () => void
   /** Shift+arrow by hand (−1 up / left, 1 down / right). */
-  extend: (step: 1 | -1) => void
+  extend: (step: number) => void
   /** The state itself (the anchor, for a screen that needs it – „Sprawy” selects all of the list with the anchor). */
   state: Selection
 }
@@ -66,19 +75,21 @@ interface Held {
 }
 
 export function useSelection(opts: UseSelectionOptions): SelectionApi {
-  const { order, scope = null, arrows = 'vertical', enabled = true } = opts
+  const { order, scope = null, arrows = 'vertical', columns = 7, enabled = true, prune = true } = opts
   const present = opts.present ?? order
   const [held, setHeld] = useState<Held>({ scope, sel: EMPTY_SELECTION })
   const raw = held.scope === scope ? held.sel : EMPTY_SELECTION
   const presentKey = present.join('\u0000')
   // What vanished is off at once (in this very render), the state follows in an effect.
-  const state = useMemo(() => pruneSelect(raw, present), [raw, presentKey])
+  const state = useMemo(() => (prune ? pruneSelect(raw, present) : raw), [raw, presentKey, prune])
   const ref = useRef(state)
   ref.current = state
   const scopeRef = useRef(scope)
   scopeRef.current = scope
   const orderRef = useRef(order)
   orderRef.current = order
+  const allRef = useRef(opts.all)
+  allRef.current = opts.all
   const whenRef = useRef(opts.when)
   whenRef.current = opts.when
   const set = useCallback((next: Selection) => {
@@ -95,20 +106,22 @@ export function useSelection(opts: UseSelectionOptions): SelectionApi {
   // focus is in is cleared, not the newest.
   useEscapeLayer(enabled && count > 0, clear, true, (e) => (e && whenRef.current ? whenRef.current(e) : true))
 
-  const extend = useCallback((step: 1 | -1) => set(extendSelect(ref.current, step, orderRef.current)), [set])
+  const extend = useCallback((step: number) => set(extendSelect(ref.current, step, orderRef.current)), [set])
   useEffect(() => {
     if (!enabled) return
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.altKey || e.metaKey || modalOpen() || isEditable(e.target)) return
       if (whenRef.current && !whenRef.current(e)) return
       if (e.code === 'KeyA' && e.ctrlKey && !e.shiftKey) {
-        if (e.repeat || orderRef.current.length === 0) return
+        const every = allRef.current ?? orderRef.current
+        if (e.repeat || every.length === 0) return
         e.preventDefault()
-        set(allOf(orderRef.current, ref.current))
+        set(allOf(every, ref.current))
         return
       }
       if (!e.shiftKey || e.ctrlKey || arrows === false || ref.current.anchor == null || keepsArrows(e.target)) return
-      const step = arrows === 'vertical' ? (e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0) : e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
+      const by = (down: string, up: string, size: number) => (e.key === down ? size : e.key === up ? -size : 0)
+      const step = arrows === 'vertical' ? by('ArrowDown', 'ArrowUp', 1) : arrows === 'horizontal' ? by('ArrowRight', 'ArrowLeft', 1) : by('ArrowRight', 'ArrowLeft', 1) || by('ArrowDown', 'ArrowUp', columns)
       if (step === 0) return
       // The key is taken only when it changes something (at the end of the list it is still the page's).
       const next = extendSelect(ref.current, step, orderRef.current)
@@ -118,7 +131,7 @@ export function useSelection(opts: UseSelectionOptions): SelectionApi {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [enabled, arrows, set])
+  }, [enabled, arrows, columns, set])
 
   const ids = useMemo(() => new Set(state.ids), [state])
   const isSelected = useCallback((id: string) => ids.has(id), [ids])
@@ -139,7 +152,7 @@ export function useSelection(opts: UseSelectionOptions): SelectionApi {
     },
     [set]
   )
-  const selectEvery = useCallback(() => set(allOf(orderRef.current, ref.current)), [set])
+  const selectEvery = useCallback(() => set(allOf(allRef.current ?? orderRef.current, ref.current)), [set])
   // One object while nothing changed; the functions never change.
   return useMemo(
     () => ({ selected: state.ids, count, isSelected, onItemClick, onItemContext, selectAll: selectEvery, clear, extend, state }),

@@ -325,3 +325,45 @@ describe('poprawki po przeglądzie Z1', () => {
     expect(first.isSelected('c')).toBe(false)
   })
 })
+
+describe('siatka dni (Z3): all, prune, arrows grid', () => {
+  const DAYS = Array.from({ length: 14 }, (_, i) => `d${i}`)
+  const MONTH = DAYS.slice(3, 11)
+
+  it('Ctrl+A bierze `all` (dni miesiąca), nie całą siatkę; kotwica zostaje', () => {
+    render(createElement(Screen, { order: DAYS, all: MONTH }))
+    key(document.body, 'a', { ctrlKey: true, code: 'KeyA' })
+    expect(selected()).toEqual(MONTH)
+    act(() => api.clear())
+    act(() => void api.onItemClick('d5', { ctrlKey: false, shiftKey: false }))
+    act(() => api.selectAll())
+    expect(selected()).toEqual(MONTH)
+    expect(api.state.anchor).toBe('d5')
+  })
+
+  it('arrows: grid – lewo / prawo o dzień, góra / dół o wiersz (7); ostatni wiersz przycina; Shift+strzałka w polu nic', () => {
+    render(createElement(Screen, { order: DAYS, arrows: 'grid' }))
+    act(() => void api.onItemClick('d2', { ctrlKey: false, shiftKey: false }))
+    expect(key(document.body, 'ArrowRight', { shiftKey: true }).defaultPrevented).toBe(true)
+    expect(selected()).toEqual(['d2', 'd3'])
+    key(document.body, 'ArrowLeft', { shiftKey: true })
+    key(document.body, 'ArrowLeft', { shiftKey: true })
+    expect(selected()).toEqual(['d1', 'd2'])
+    act(() => void api.onItemClick('d9', { ctrlKey: false, shiftKey: false }))
+    key(document.body, 'ArrowDown', { shiftKey: true })
+    expect(selected()).toEqual(DAYS.slice(9))
+    key(document.body, 'ArrowUp', { shiftKey: true })
+    expect(selected()).toEqual(DAYS.slice(6, 10))
+    key(q('field')!, 'ArrowDown', { shiftKey: true })
+    expect(selected()).toEqual(DAYS.slice(6, 10))
+  })
+
+  it('prune: false – zaznaczenie spoza `order` (inny miesiąc) nie wypada', () => {
+    render(createElement(Screen, { order: DAYS, prune: false }))
+    act(() => void api.onItemClick('d4', { ctrlKey: false, shiftKey: false }))
+    act(() => void api.onItemClick('inny', { ctrlKey: true, shiftKey: false }))
+    expect(selected()).toEqual(['d4', 'inny'])
+    render(createElement(Screen, { order: DAYS.slice(5), prune: false }))
+    expect(selected()).toEqual(['d4', 'inny'])
+  })
+})
