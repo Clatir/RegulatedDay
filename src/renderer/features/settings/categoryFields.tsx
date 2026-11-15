@@ -1,7 +1,7 @@
 /**
  * The fields of a category shared by „Kategorie” (`CategoriesSection`) and the window of a new one made from a block's list
  * (`NewCategoryDialog`, D463): the properties the rules read (`FLAGS`), the pools of the costs (`POOLS`, `CostNumbers`), the place
- * (`PLACE_OPTIONS`), the colour (`ColorSwatches`) and the one way a category is made (`createCategory`: its rules first, then its
+ * (`PLACE_OPTIONS`; a variant's – `VARIANT_PLACE_OPTIONS`), the colour (`ColorSwatches`) and the one way a category is made (`createCategory`: its rules first, then its
  * name and colour – a change refused leaves no category without rules).
  */
 import type { CategoryRules, Costs } from '@shared/model/categories'
@@ -36,6 +36,11 @@ export const PLACE_OPTIONS = [
   { value: 'passive', label: 'pasywnie przy komputerze' },
   { value: 'away', label: 'poza komputerem' }
 ] as const
+
+/** A variant's place „jak podkategoria” in its list (no place of its own) – „Kategorie” and the windows of a block's panel (T1338). */
+export const VARIANT_PLACE_SAME = '-'
+/** The list of a variant's place: „miejsce jak podkategoria”, then the three places. */
+export const VARIANT_PLACE_OPTIONS = [{ value: VARIANT_PLACE_SAME, label: 'miejsce jak podkategoria' }, ...PLACE_OPTIONS] as const
 
 /** The costs of a category made new (each pool 1 an hour). */
 export const NEW_CATEGORY_COSTS: Costs = { head: 1, emotions: 1, senses: 1 }

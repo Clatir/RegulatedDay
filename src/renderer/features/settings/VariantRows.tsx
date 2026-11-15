@@ -13,9 +13,7 @@ import { Choice, TextField } from '../../components/fields'
 import { Toggle, cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { saveVariants } from './categoryTreeEdits'
-import { CostNumbers, PLACE_OPTIONS } from './categoryFields'
-
-const SAME = '-'
+import { CostNumbers, VARIANT_PLACE_OPTIONS, VARIANT_PLACE_SAME } from './categoryFields'
 
 function VariantRow({ categoryId, rules, v }: { categoryId: string; rules: CategoryRules; v: Variant }) {
   const edit = (change: (now: readonly Variant[]) => VariantEntry[] | null) => void saveVariants(categoryId, change)
@@ -26,9 +24,9 @@ function VariantRow({ categoryId, rules, v }: { categoryId: string; rules: Categ
       <Toggle checked={own == null} onChange={(same) => edit((now) => changeVariant(now, v.id, { costs: same ? null : { ...rules.costs } }))} label="koszt jak podkategoria" data-testid="variant-costs-same" />
       {own && <CostNumbers costs={own} label={(pool) => `${v.name}: ${pool}`} onCommit={(p, value) => edit((now) => changeVariant(now, v.id, { costs: { ...(now.find((x) => x.id === v.id)?.costs ?? own), [p]: value } }))} />}
       <Choice
-        value={v.place ?? SAME}
-        options={[{ value: SAME, label: 'miejsce jak podkategoria' }, ...PLACE_OPTIONS]}
-        onChange={(place) => edit((now) => changeVariant(now, v.id, { place: place === SAME ? null : (place as Place) }))}
+        value={v.place ?? VARIANT_PLACE_SAME}
+        options={[...VARIANT_PLACE_OPTIONS]}
+        onChange={(place) => edit((now) => changeVariant(now, v.id, { place: place === VARIANT_PLACE_SAME ? null : (place as Place) }))}
         className="w-[230px]"
         aria-label="Miejsce wariantu"
         data-testid="variant-place"
