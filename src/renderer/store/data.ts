@@ -151,11 +151,15 @@ export function inTurn<T>(fn: () => Promise<T>): Promise<T> {
 /** What a broken file is said with (never written over – restored from the history). */
 export const BROKEN_FILE_TEXT = 'Plik jest uszkodzony i nie jest nadpisywany – przywróć go z historii.'
 
+/** A routine's cost saved, its `routine.cost` not written (T1446): today's begun block of it counts the cost it had. */
+export const ROUTINE_COST_KEPT_TEXT = 'Koszt rutyny zapisany, ale zaczęty blok liczy na razie dotychczasowy – zmień koszt jeszcze raz, żeby blok zaczął liczyć nowy.'
+
 /** What the window says after edits that did not simply apply (spec „nic nie udaje sukcesu”); null – nothing. */
 export function editNotice(out: readonly EditOutcome[]): { text: string; kind: 'info' | 'error' } | null {
   if (out.some((o) => o.status === 'changedElsewhere')) return { text: 'Tego rekordu nie usunięto – w tym czasie zmieniono go na innym komputerze. Odpowiedz na pytanie u góry okna.', kind: 'info' }
   if (out.some((o) => o.status === 'conflict' || o.status === 'removedElsewhere')) return { text: 'Ta zmiana spotkała się ze zmianą z innego komputera – odpowiedz na pytanie u góry okna.', kind: 'info' }
   if (out.some((o) => o.status === 'broken')) return { text: BROKEN_FILE_TEXT, kind: 'error' }
+  if (out.some((o) => o.routineCostKept)) return { text: ROUTINE_COST_KEPT_TEXT, kind: 'error' }
   return null
 }
 

@@ -51,7 +51,7 @@ test('koszt rutyny (D512): zmiana w „Rutynach” zapisuje plik rutyny, kafelek
   }
 })
 
-test('koszt rutyny z ✎ (D514, T1395): zaczęty blok tej rutyny liczy nowy koszt od tej chwili – kafelek go mówi, log ma block.routineCost', async () => {
+test('koszt rutyny z ✎ (D514, T1430): zaczęty blok tej rutyny liczy nowy koszt od tej chwili – kafelek go mówi, log ma routine.cost procesu głównego', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cost-routine-begun-'))
   const { today } = seedAwake(dataDir, [{ id: 'rut', categoryId: 'rutyny', startMin: 26 * 60, durationMin: 60, fixed: false, origin: 'user', routine: 'poranek' }])
   mkdirSync(join(dataDir, 'routines'), { recursive: true })
@@ -70,10 +70,10 @@ test('koszt rutyny z ✎ (D514, T1395): zaczęty blok tej rutyny liczy nowy kosz
     return names.flatMap((n) =>
       readFileSync(join(dir, n), 'utf8')
         .split('\n')
-        .filter((l) => l.includes('"block.routineCost"'))
+        .filter((l) => l.includes('"routine.cost"'))
         .map((l) => {
-          const e = JSON.parse(l) as { block: string; costs: unknown }
-          return { block: e.block, costs: e.costs }
+          const e = JSON.parse(l) as { routine: string; costs: unknown; was: unknown }
+          return { routine: e.routine, costs: e.costs, was: e.was }
         })
     )
   }
@@ -103,9 +103,10 @@ test('koszt rutyny z ✎ (D514, T1395): zaczęty blok tej rutyny liczy nowy kosz
       await page.getByTestId('new-thing-save').click()
       await expect(dialog).toHaveCount(0)
       await expect.poll(costs).toEqual({ head: 5, emotions: 0, senses: 1 })
-      // From now on: the begun block counts the new cost (its minutes gone by stay by the old one).
-      await expect.poll(logged, { timeout: 15_000 }).toEqual([{ block: 'rut', costs: { head: 5, emotions: 0, senses: 1 } }])
+      // From now on: the begun block counts the new cost (its minutes gone by stay by the old one) – the main process wrote the record
+      // and with it `routine.cost` (at once in its journal; the folder's log with the next check).
       await expect(tile).toHaveText('5 · 0 · 1', { timeout: 15_000 })
+      await expect.poll(logged, { timeout: 40_000 }).toEqual([{ routine: 'poranek', costs: { head: 5, emotions: 0, senses: 1 }, was: { head: 4, emotions: 0, senses: 1 } }])
     })
     expect(errors).toEqual([])
   } finally {

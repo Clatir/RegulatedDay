@@ -7,7 +7,7 @@
  */
 import { REGEN_CATEGORY, type CategoryRules, type Costs } from '../model/categories'
 import type { PlanBlock } from '../model/plan'
-import { routineCostOf, type RoutineCosts } from '../model/routines'
+import { routineCostApplies, routineCostOf, type RoutineCosts } from '../model/routines'
 import type { RulesSettings } from '../model/settings'
 import type { BlockFact, DayFacts } from './facts'
 import { idxOfLogical, type Grid } from './grid'
@@ -121,7 +121,7 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
       afterWorkMark: false,
       protectedLife: rules.cls === 'life' && rules.protected,
       costs: p.costs,
-      routineCosts: rules.kind === 'routine' ? routineCostOf(routines, p.routine) : null,
+      routineCosts: routineCostApplies(settings.categories, p.categoryId) ? routineCostOf(routines, p.routine) : null,
       bgCostPct: p.bgCostPct
     }
   }

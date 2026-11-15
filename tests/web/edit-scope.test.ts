@@ -3,11 +3,13 @@
  * series' – a change of cost only reaches blocks without a cost of their own (and, for a subcategory, without a variant that has one).
  */
 import { describe, expect, it } from 'vitest'
-import { countScope, overriddenFrom, reaches, SCOPE_DAYS, scopeDates, scopeDetail, scopeText } from '@renderer/features/plan/editScope'
+import { begunToday, countScope, overriddenFrom, reaches, SCOPE_DAYS, scopeDates, scopeDetail, scopeText } from '@renderer/features/plan/editScope'
+import { computeDay } from '@shared/engine/day'
 import { categoryChange, routineChange, variantChange } from '@renderer/features/plan/editChanges'
 import { DEFAULT_SETTINGS, type SettingsChange } from '@shared/model/settings'
 import { planBlock, templateFrom, type PlanBlock } from '@shared/model/plan'
 import { seriesFrom } from '@shared/model/series'
+import { Scenario } from '../unit/engine/dsl'
 
 const categories = DEFAULT_SETTINGS.categories
 const b = (p: Partial<PlanBlock> & { id: string }): PlanBlock => planBlock({ categoryId: 'projekty', startMin: 600, durationMin: 30, origin: 'user', ...p })
@@ -187,6 +189,70 @@ describe('countScope', () => {
     expect(scopeDetail(c)).toContain('w dniach: 1 · w szablonach: 1 · w seriach: 1')
     expect(scopeDetail(c)).toContain('Nie policzono 2 nieczytelnych dni')
     expect(scopeDetail({ ...c, unread: 0 })).not.toContain('Nie policzono')
+  })
+})
+
+describe('zaczęty dziś blok liczony jak silnik (begunToday, T1434)', () => {
+  const today = '2026-11-18'
+  const R = { head: 3, emotions: 1, senses: 1 }
+  const nulls = () => Object.fromEntries(scopeDates(today).map((d) => [d, null])) as Record<string, Record<string, unknown> | null>
+  const m = b({ id: 'm', categoryId: 'rutyny', routine: 'r1', startMin: 8 * 60, durationMin: 90 })
+  const n = b({ id: 'n', categoryId: 'rutyny', routine: 'r1', startMin: 12 * 60 })
+  const files = { ...nulls(), [today]: day(today, [m, n]) }
+  /** Today at 08:30 as the window reads it (`plannedDay`): `now` – the routines' costs its files say now. */
+  const begun = (s: Scenario, now: Record<string, typeof R>, plan?: PlanBlock[]) => {
+    const t = s.at('08:30')
+    const ctx = s.contextAt(t, { routineCosts: now, ...(plan ? { plan } : {}) })
+    return begunToday(ctx, computeDay(ctx).facts, t)
+  }
+  const count = (target: Parameters<typeof countScope>[0]['target'], now: Record<string, typeof R>, b: ReadonlyMap<string, unknown>) =>
+    countScope({ today, files, templates: [], series: [], target, what: 'costs', categories, routineCosts: now, begun: b as never }).days
+
+  it('koszt rutyny ze startu, nie z rutyny teraz: start z kosztem rutyny – koszt podkategorii go nie sięga, choć rutyna teraz bez kosztu', () => {
+    const s = new Scenario({ date: today, plan: [m, n], routineCosts: { r1: R } }).start('m', '08:00')
+    expect(count({ kind: 'category', id: 'rutyny' }, {}, begun(s, {}))).toBe(1)
+  })
+
+  it('start starszej wersji (bez kosztu rutyny): koszt podkategorii go sięga, choć rutyna teraz ma koszt', () => {
+    const s = new Scenario({ date: today, plan: [m, n] })
+    s.write([{ k: 'block.start', block: 'm', at: s.at('08:00'), bg: false, planned: { categoryId: 'rutyny', variantId: null, durationMin: 90, fixed: false, costs: null, bgCostPct: null }, confirmUntil: null, how: 'click', v: 13 }], s.at('08:00'))
+    expect(count({ kind: 'category', id: 'rutyny' }, { r1: R }, begun(s, { r1: R }))).toBe(1)
+  })
+
+  it('zmiana kosztu rutyny z logu (routine.cost) i własny koszt z kafelka (block.cost) – jak silnik teraz', () => {
+    const s = new Scenario({ date: today, plan: [m, n], routineCosts: { r1: R } }).start('m', '08:00')
+    s.write([{ k: 'routine.cost', routine: 'r1', at: s.at('08:10'), costs: null, was: R }], s.at('08:10'))
+    // The routine has no cost from 08:10: the subcategory's cost reaches the begun block, the routine's too (no own cost).
+    expect(count({ kind: 'category', id: 'rutyny' }, {}, begun(s, {}))).toBe(2)
+    s.write([{ k: 'block.cost', block: 'm', at: s.at('08:20'), costs }], s.at('08:20'))
+    // Its own cost from 08:20: neither the subcategory's nor the routine's reaches it.
+    expect(count({ kind: 'category', id: 'rutyny' }, {}, begun(s, {}))).toBe(1)
+    expect(count({ kind: 'routine', id: 'r1' }, {}, begun(s, {}))).toBe(1)
+  })
+
+  it('kategoria i rutyna ze startu: blok, któremu po starcie zmieniono w pliku rutynę, liczy się dla rutyny startu', () => {
+    const s = new Scenario({ date: today, plan: [m, n] })
+    s.write([{ k: 'block.start', block: 'm', at: s.at('08:00'), bg: false, planned: { categoryId: 'rutyny', variantId: null, durationMin: 90, fixed: false, costs: null, bgCostPct: null, routine: 'r1', routineCosts: null }, confirmUntil: null, how: 'click' }], s.at('08:00'))
+    const plan = [{ ...m, routine: 'r2' }, n]
+    const changed = { ...nulls(), [today]: day(today, plan) }
+    const at = (id: string) => countScope({ today, files: changed, templates: [], series: [], target: { kind: 'routine', id }, what: 'costs', categories, begun: begun(s, {}, plan) }).days
+    expect([at('r1'), at('r2')]).toEqual([2, 0])
+  })
+
+  it('zmiana inna niż sam koszt (nazwa, kroki, kolor) idzie za planem: blok zaczęty z inną rutyną albo podkategorią liczy się według pliku dnia (T1443)', () => {
+    const s = new Scenario({ date: today, plan: [m, n] })
+    s.write([{ k: 'block.start', block: 'm', at: s.at('08:00'), bg: false, planned: { categoryId: 'rutyny', variantId: null, durationMin: 90, fixed: false, costs: null, bgCostPct: null, routine: 'r1', routineCosts: null }, confirmUntil: null, how: 'click' }], s.at('08:00'))
+    const plan = [{ ...m, routine: 'r2' }, n]
+    const changed = { ...nulls(), [today]: day(today, plan) }
+    const at = (target: Parameters<typeof countScope>[0]['target'], what: 'costs' | 'all', p = plan, files = changed) => countScope({ today, files, templates: [], series: [], target, what, categories, begun: begun(s, {}, p) }).days
+    // The routine's name or steps: the block of the plan's routine; its cost: the start's (as the engine counts it).
+    expect([at({ kind: 'routine', id: 'r1' }, 'all'), at({ kind: 'routine', id: 'r2' }, 'all')]).toEqual([1, 1])
+    expect([at({ kind: 'routine', id: 'r1' }, 'costs'), at({ kind: 'routine', id: 'r2' }, 'costs')]).toEqual([2, 0])
+    // The subcategory changed in the file after the start: its name follows the file, its cost – the start's subcategory.
+    const moved = [{ ...m, categoryId: 'projekty' }, n]
+    const movedFiles = { ...nulls(), [today]: day(today, moved) }
+    expect(at({ kind: 'category', id: 'projekty' }, 'all', moved, movedFiles)).toBe(1)
+    expect(at({ kind: 'category', id: 'projekty' }, 'costs', moved, movedFiles)).toBe(0)
   })
 })
 

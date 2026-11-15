@@ -48,8 +48,8 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * (and, the event being the timer's, installs the new version without the 24 h – `unknownTimerEvents`). 14 – the cost of a routine
  * (D512, `Routine.costs`, `planned.routineCosts`): a block of a routine with a cost of its own costs that before its variant's and
  * category's – an older version counts it without it (the descents it would register, the reward of the frozen day); it gives way to
- * this one as the leader. 14 too (the same release, T1395) – the routine's cost changed while its block runs reaches the block from that
- * minute on (`block.routineCost`, the timer's: an older version installs the new one without the 24 h).
+ * this one as the leader. 14 too (the same release, T1430) – the routine's cost changed while its block runs reaches the block from that
+ * minute on (`routine.cost`, the timer's: an older version installs the new one without the 24 h).
  */
 export const RULES_VERSION = 14
 
@@ -166,14 +166,17 @@ export type TimerEvent =
    */
   | (EventBase & { k: 'block.cost'; block: string; at: number; costs: Costs | null })
   /**
-   * The cost of a begun block's routine changed (D514 with D512, T1395): the window that saved the routine's cost („Rutyny”, ✎) writes one for
-   * each begun block of the routine not ended – from the minute of `at` to the block's end its routine's cost is `costs` (null – none: its
-   * variant's or category's) instead of what its start wrote (`planned.routineCosts`). Its routine's, not its own: an own cost stays and
-   * „Jak rutyna” (`block.cost` null) goes back to it. The same order as `block.cost` (only after the block's start in the log's order, the last
-   * of a minute wins); passive for the day engine (`PASSIVE`); the timer's domain on purpose (T1300): an older version keeps it as an unknown
-   * event of the timer and installs the new version without the 24 h.
+   * The cost of a routine changed (D514 with D512, T1430): the main process writes one whenever this computer writes the routine's record
+   * (`routines/<id>.json`) with another cost – a save of „Rutyny” or ✎, an answer to a question of a conflict, „Przywróć” of an older
+   * version, a conflict copy joined –, never the window. From the minute of `at` every begun block of the day whose start's routine is
+   * `routine` and whose start's category is of the kind „rutyna” (the plan's for a start without them) counts `costs` (null – none: its
+   * variant's or category's) as its routine's cost; `was` – the routine's cost before (a start that wrote none counts it up to the first
+   * change, T1432). Its routine's, not its own: an own cost stays and „Jak rutyna” (`block.cost` null) goes back to it. By time, not by
+   * the block's start: a block begun after it by a start that wrote the old cost (a computer the new file had not reached) counts it from
+   * its start (T1431); the last of a minute wins. Passive for the day engine (`PASSIVE`); the timer's domain on purpose (T1300): an older
+   * version keeps it as an unknown event of the timer and installs the new version without the 24 h.
    */
-  | (EventBase & { k: 'block.routineCost'; block: string; at: number; costs: Costs | null })
+  | (EventBase & { k: 'routine.cost'; routine: string; at: number; costs: Costs | null; was: Costs | null })
   /**
    * The tree of categories changed in the window (D510, T1313): a group added, renamed, removed, a subcategory moved, a variant changed.
    * Nothing reads it – passive (`PASSIVE`); the timer's domain on purpose, as `block.cost` (T1300): an older version, which knows no tree,
@@ -410,7 +413,7 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'energy.module': { at: isNum, on: (v) => typeof v === 'boolean', was: (v) => v === undefined || typeof v === 'boolean' },
   'energy.cost': { block: isStr, at: isNum, costs: (v) => v === null || isCosts(v) },
   'block.cost': { block: isStr, at: isNum, costs: (v) => v === null || isCosts(v) },
-  'block.routineCost': { block: isStr, at: isNum, costs: (v) => v === null || isCosts(v) },
+  'routine.cost': { routine: isStr, at: isNum, costs: (v) => v === null || isCosts(v), was: (v) => v === null || isCosts(v) },
   'tree.change': { at: isNum }
 }
 

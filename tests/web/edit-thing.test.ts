@@ -12,6 +12,7 @@ import { rdFrom } from '@shared/model/rd'
 import { routineFrom } from '@shared/model/routines'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
 import { BlockEditor } from '@renderer/features/plan/BlockEditor'
+import { begunToday } from '@renderer/features/plan/editScope'
 import { saveCalendars } from '@renderer/features/settings/calendarEdits'
 import { saveSettingsFrom, useSettingsFrom } from '@renderer/features/settings/settingsStore'
 import { installEscape } from '@renderer/lib/escape'
@@ -26,6 +27,11 @@ vi.mock('@renderer/store/data', async (orig) => ({
   updateRecord: vi.fn(async () => [{ status: 'applied' }]),
   tryUpdateRecord: vi.fn(async () => [{ status: 'applied' }])
 }))
+// The count of today's begun blocks as it is, unless a test makes it fail (T1444).
+vi.mock('@renderer/features/plan/editScope', async (orig) => {
+  const m = await orig<typeof import('@renderer/features/plan/editScope')>()
+  return { ...m, begunToday: vi.fn(m.begunToday) }
+})
 vi.mock('@renderer/features/settings/settingsStore', async (orig) => ({ ...(await orig<typeof import('@renderer/features/settings/settingsStore')>()), saveSettingsFrom: vi.fn(async () => true) }))
 vi.mock('@renderer/features/settings/calendarEdits', async (orig) => ({ ...(await orig<typeof import('@renderer/features/settings/calendarEdits')>()), saveCalendars: vi.fn(async () => ({ out: [{ status: 'applied' }], entry: null })) }))
 
@@ -286,6 +292,20 @@ describe('okno podkategorii', () => {
     expect(q('edit-scope')!.textContent).toBe('Zmieni 2 bloki od dziś')
   })
 
+  it('dzisiejszego dnia nie da się policzyć (wyjątek): liczba bez wiedzy o zaczętych i skończonych – linia nie zostaje na „Liczę bloki…” (T1444)', async () => {
+    files[TODAY] = { schema: 1, date: TODAY, blocks: [fileBlock('done', { startMin: 8 * 60 }), fileBlock('run', { startMin: 9 * 60 })] }
+    todayEvents = new Scenario({ date: TODAY, plan: [fileBlock('done', { startMin: 8 * 60 }), fileBlock('run', { startMin: 9 * 60 })] }).ran('done', '08:00', '08:30').start('run', '09:00').events
+    vi.mocked(begunToday).mockImplementationOnce(() => {
+      throw new Error('dzień nie do policzenia')
+    })
+    await mount(projekty)
+    await click('edit-category')
+    await type('new-cost-head', '4')
+    await flush()
+    // As a log not read whole (T1335): today's blocks as the file says – the ended one too.
+    expect(q('edit-scope')!.textContent).toBe('Zmieni 2 bloki od dziś')
+  })
+
   it('wpis z Ustawień od późniejszej daty z tym samym kluczem: liczy dni do niego i mówi o tym w składzie (T1336)', async () => {
     files[TODAY] = { schema: 1, date: TODAY, blocks: [fileBlock('a')] }
     files['2026-11-21'] = { schema: 1, date: '2026-11-21', blocks: [fileBlock('e')] }
@@ -441,12 +461,12 @@ describe('okno rutyny', () => {
     expect(q('edit-routine-window')).toBeNull()
   })
 
-  it('„Koszt na godzinę” jak w „Rutynach” (D512): okienko kosztu zmienia pole; „Zapisz” – rekord rutyny i od tej chwili zaczęty dziś blok tej rutyny (T1395, T1397)', async () => {
+  it('„Koszt na godzinę” jak w „Rutynach” (D512): okienko kosztu zmienia pole; „Zapisz” – sam rekord rutyny, zaczęty blok liczy go z `routine.cost` procesu głównego (T1397, T1430)', async () => {
     const plan = [withRoutine, fileBlock('own', { categoryId: 'rutyny', routine: 'r1', costs: { head: 3, emotions: 3, senses: 3 } }), fileBlock('n', { categoryId: 'rutyny', routine: 'r1', startMin: 12 * 60 })]
     files[TODAY] = { schema: 1, date: TODAY, blocks: plan }
     const s = new Scenario({ date: TODAY, plan })
     todayEvents = s.start('b3', '08:00').start('own', '08:00').events
-    // Today's 08:30: the begun blocks are read in today's log once the record is saved.
+    // Today's 08:30: the count reads today's log (the begun block counts as the engine has it).
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(s.at('08:30')))
     await mount(withRoutine)
@@ -469,13 +489,8 @@ describe('okno rutyny', () => {
     expect(rel).toBe('routines/r1.json')
     const raw = { schema: 1, id: 'r1', name: 'Poranna', normal: [{ id: 's1', name: 'Woda', min: 5 }], worse: [], archived: false, future: 'kept' }
     expect(fn(raw)).toEqual({ ...raw, costs: { head: 2, emotions: 0, senses: 1 } })
-    // Every begun block of the routine, its own cost too (its „Jak rutyna” goes back to the new cost); not the one not begun.
-    expect(window.rd.logEvents).toHaveBeenCalledTimes(1)
-    const events = vi.mocked(window.rd.logEvents).mock.calls[0]![0] as unknown as Array<{ block: string }>
-    expect([...events].sort((a, b) => a.block.localeCompare(b.block))).toEqual([
-      { k: 'block.routineCost', day: TODAY, block: 'b3', costs: { head: 2, emotions: 0, senses: 1 } },
-      { k: 'block.routineCost', day: TODAY, block: 'own', costs: { head: 2, emotions: 0, senses: 1 } }
-    ])
+    // The window writes no event: the main process does, writing the record with another cost (T1430).
+    expect(window.rd.logEvents).not.toHaveBeenCalled()
     expect(q('edit-routine-window')).toBeNull()
   })
 

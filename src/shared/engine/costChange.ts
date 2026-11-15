@@ -7,13 +7,15 @@
  * start taken back („Cofnij”) never reaches a later start (T1301). Minutes before a change
  * stay as they were counted, so the log counted again at any later moment gives the same past. One rule for the energy (`energy.ts`:
  * `Kind`, `costOf`), the calibration's evidence and the tile's label (`begunCosts`). The cost of the block's routine changed while it runs
- * (D514, T1395: `block.routineCost`, written by the window that saved the routine's cost for each block of `routineCostTargets`) follows the
- * same rule for its routine's cost – the base its own cost falls back to.
+ * (D514, T1430: `routine.cost`, written by the main process with every write of the routine's record with another cost) follows the same
+ * rule for its routine's cost – the base its own cost falls back to – matched here to the begun blocks of that routine (T1431, T1440: one
+ * after the start in the log's order always, one before it only when the start did not know the routine's cost).
  */
 import { baseCosts, baseFromOf, type BlockCosts } from '../model/blockCosts'
 import type { Costs } from '../model/categories'
 import { compareEvents, isKnown, type AnyEvent, type LogEvent, type StartPlanned } from '../model/events'
 import type { PlanBlock } from '../model/plan'
+import { routineCostApplies } from '../model/routines'
 import type { RulesSettings } from '../model/settings'
 import { plannedSpan, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
@@ -22,39 +24,78 @@ import { idxOf } from './grid'
 
 /**
  * A change of a block's cost: from the minute `at` (index) on, `costs` – its own (null – no own cost any more), or with `routine` its
- * routine's (D514, `block.routineCost`; null – the routine has none: the variant's or category's).
+ * routine's (D514, `routine.cost`; null – the routine has none: the variant's or category's) and `was` – the routine's cost before it.
  */
 export interface CostChange {
   at: number
   costs: Costs | null
   routine?: true
+  was?: Costs | null
 }
 
-type CostEvent = Extract<LogEvent, { k: 'block.cost' | 'energy.cost' | 'block.routineCost' }>
+type CostEvent = Extract<LogEvent, { k: 'block.cost' | 'energy.cost' }>
+type RoutineCostEvent = Extract<LogEvent, { k: 'routine.cost' }>
+
+/** A change of a block's cost, as written now (`block.cost`) or by the first builds of 1.24 (`energy.cost`, the energy's domain). */
+export const isCostChange = (e: AnyEvent): e is CostEvent & AnyEvent => isKnown(e) && (e.k === 'block.cost' || e.k === 'energy.cost')
+
+/** A change of a routine's cost (`routine.cost`, T1430). */
+export const isRoutineCostChange = (e: AnyEvent): e is RoutineCostEvent & AnyEvent => isKnown(e) && e.k === 'routine.cost'
+
+/** The routine a begun block began with: its start's (`planned.routine`), a start without it (an older version) – the plan's; null – none. */
+export const startRoutine = (f: Pick<BlockFact, 'planned'>, p: Pick<PlanBlock, 'routine'> | undefined): string | null =>
+  f.planned?.routine !== undefined ? f.planned.routine : (p?.routine ?? null)
 
 /**
- * A change of a block's cost, as written now (`block.cost`) or by the first builds of 1.24 (`energy.cost`, the energy's domain), or of its
- * routine's cost (`block.routineCost`, T1395).
+ * The routine whose cost a begun block counts (D512, T1371): its start's (`startRoutine`), when its start's category (else the plan's) is
+ * of the kind „rutyna” in `categories` (the day's snapshot, as `blockInfos`); null – none.
  */
-export const isCostChange = (e: AnyEvent): e is CostEvent & AnyEvent => isKnown(e) && (e.k === 'block.cost' || e.k === 'energy.cost' || e.k === 'block.routineCost')
+export function routineOfStart(f: Pick<BlockFact, 'planned'>, p: Pick<PlanBlock, 'routine' | 'categoryId'> | undefined, categories: RulesSettings['categories']): string | null {
+  const routine = startRoutine(f, p)
+  const cat = f.planned?.categoryId ?? p?.categoryId
+  return routine != null && cat != null && routineCostApplies(categories, cat) ? routine : null
+}
 
 /**
  * The changes of every begun block, in the order they apply: by their minute, then by the log's full order (`compareEvents`) – the last
- * of a minute wins, whatever the order the logs of the computers arrived in. Only those after the block's start (`startOrder`).
+ * of a minute wins, whatever the order the logs of the computers arrived in. A change of its own cost only after the block's start
+ * (`startOrder`); a change of its routine's cost (`routine.cost`) of its routine (`routineOfStart`) – one after the start always, one before
+ * it only for a start without the routine's cost (T1372: it did not know it – the change counts from the start, T1431); a start with it
+ * wrote the cost it knew, maybe newer than the change (the file came before the other computer's log, T1440).
  */
-export function costChangesOf(events: readonly AnyEvent[], facts: Pick<DayFacts, 'grid' | 'blocks'>): Map<string, CostChange[]> {
-  const list = events.filter((e): e is CostEvent & AnyEvent => {
-    if (!isCostChange(e)) return false
-    const start = facts.blocks.get(e.block)?.startOrder
-    return start != null && compareEvents(e, start) > 0
-  })
-  const at = new Map(list.map((e) => [e, idxOf(facts.grid, e.at)]))
-  const out = new Map<string, CostChange[]>()
-  for (const e of list.sort((a, b) => at.get(a)! - at.get(b)! || compareEvents(a, b))) {
-    let changes = out.get(e.block)
-    if (!changes) out.set(e.block, (changes = []))
-    changes.push(e.k === 'block.routineCost' ? { at: at.get(e)!, costs: e.costs, routine: true } : { at: at.get(e)!, costs: e.costs })
+export function costChangesOf(ctx: Pick<DayContext, 'events' | 'plan' | 'snapshot'>, facts: Pick<DayFacts, 'grid' | 'blocks'>): Map<string, CostChange[]> {
+  const found = new Map<string, Array<{ e: AnyEvent; change: CostChange }>>()
+  const add = (block: string, e: AnyEvent, change: CostChange) => {
+    let list = found.get(block)
+    if (!list) found.set(block, (list = []))
+    list.push({ e, change })
   }
+  const ofRoutine = new Map<string, Array<RoutineCostEvent & AnyEvent>>()
+  for (const e of ctx.events) {
+    if (isCostChange(e)) {
+      const start = facts.blocks.get(e.block)?.startOrder
+      if (start != null && compareEvents(e, start) > 0) add(e.block, e, { at: idxOf(facts.grid, e.at), costs: e.costs })
+    } else if (isRoutineCostChange(e)) {
+      let list = ofRoutine.get(e.routine)
+      if (!list) ofRoutine.set(e.routine, (list = []))
+      list.push(e)
+    }
+  }
+  if (ofRoutine.size) {
+    // The plan by id once (a start without its routine or category names the plan's).
+    const plan = new Map(ctx.plan.map((b) => [b.id, b]))
+    for (const f of facts.blocks.values()) {
+      if (f.startedAt == null) continue
+      const routine = routineOfStart(f, plan.get(f.id), ctx.snapshot.settings.categories)
+      const knew = f.planned?.routineCosts !== undefined && f.startOrder != null
+      for (const e of (routine != null ? ofRoutine.get(routine) : undefined) ?? []) {
+        if (knew && compareEvents(e, f.startOrder!) < 0) continue
+        add(f.id, e, { at: idxOf(facts.grid, e.at), costs: e.costs, routine: true, was: e.was })
+      }
+    }
+  }
+  const out = new Map<string, CostChange[]>()
+  for (const [block, list] of found) out.set(block, list.sort((a, b) => a.change.at - b.change.at || compareEvents(a.e, b.e)).map((x) => x.change))
   return out
 }
 
@@ -64,63 +105,80 @@ export function ownAt(changes: readonly CostChange[], k: number, own: Costs | nu
   return own
 }
 
-/** The cost of the block's routine at minute k (D514, T1395): the last change of it from k or before, else its start's (`routine`). */
+/** The cost of the block's routine at minute k (D514, T1430): the last change of it from k or before, else its start's (`routine`). */
 export function routineAt(changes: readonly CostChange[], k: number, routine: Costs | null): Costs | null {
   for (let i = changes.length - 1; i >= 0; i--) if (changes[i]!.at <= k && changes[i]!.routine) return changes[i]!.costs
   return routine
 }
 
 /**
- * The blocks a change of the routine `routine`'s cost reaches from now on (D514, T1395): begun and not ended, whose start's routine
- * (`planned.routine`; a start without it, of an older version – the plan's) is it and whose start's category (else the plan's) is of the
- * kind „rutyna” in `settings` (the day's snapshot, as `blockInfos` – T1371). A block with its own cost too: its cost stays, but „Jak rutyna”
- * goes back to the routine's new cost. Ids in the order of the facts.
+ * The routine's cost before its first change of the day (`was` of the earliest `routine.cost` among `changes`, T1432); undefined – no
+ * change of it.
  */
-export function routineCostTargets(plan: readonly PlanBlock[], facts: Pick<DayFacts, 'blocks'>, settings: RulesSettings, routine: string): string[] {
-  const out: string[] = []
-  for (const f of facts.blocks.values()) {
-    if (f.startedAt == null || f.endedAt != null) continue
-    const p = plan.find((b) => b.id === f.id)
-    const ofStart = f.planned?.routine !== undefined ? f.planned.routine : (p?.routine ?? null)
-    const cat = f.planned?.categoryId ?? p?.categoryId
-    if (ofStart === routine && cat != null && Object.hasOwn(settings.categories, cat) && settings.categories[cat]?.kind === 'routine') out.push(f.id)
-  }
-  return out
-}
+export const routineBefore = (changes: readonly CostChange[] | null | undefined): Costs | null | undefined => changes?.find((c) => c.routine)?.was
 
 /**
  * What a block's cost counts from: its start's category, variant, own cost and its routine's cost (`block.start.planned`), else the plan's
  * (an older start). D512: a start of a version before routine costs has none (`foldFacts` – null: the past stays as counted, whatever the
- * routine costs later); a start of this version without the field (the routine's file could not be read then, T1372) and a block not begun
- * – the routine's cost now (`BlockInfo.routineCosts`; not known now – none).
+ * routine costs later); a start of this version without the field (the routine's file could not be read then, T1372) – the routine's cost
+ * before its first change that day (`routineBefore(changes)`, T1432: the log alone says it, so a change never changes the minutes before
+ * it), with no change – the routine's cost now, as a block not begun (`BlockInfo.routineCosts`; not known now – none).
  */
 export function startCostOf(
   b: Pick<BlockInfo, 'categoryId' | 'variantId' | 'costs' | 'routineCosts'>,
-  p: StartPlanned | null | undefined
+  p: StartPlanned | null | undefined,
+  changes?: readonly CostChange[] | null
 ): { cat: string; variant: string | null; own: Costs | null; routine: Costs | null } {
-  return { cat: p?.categoryId ?? b.categoryId, variant: p ? p.variantId : b.variantId, own: p?.costs !== undefined ? p.costs : b.costs, routine: p?.routineCosts !== undefined ? p.routineCosts : (b.routineCosts ?? null) }
+  const before = p && p.routineCosts === undefined ? routineBefore(changes) : undefined
+  return {
+    cat: p?.categoryId ?? b.categoryId,
+    variant: p ? p.variantId : b.variantId,
+    own: p?.costs !== undefined ? p.costs : b.costs,
+    routine: p?.routineCosts !== undefined ? p.routineCosts : before !== undefined ? before : (b.routineCosts ?? null)
+  }
 }
 
 /**
- * What a block costs at minute k (now, by default) as the engine counts it – for the tile of a begun block (D501): from its start and its
- * changes; `base` – its routine's (from its start, D512, changed from a minute on – T1395), variant's or subcategory's in the settings of now (what „Jak rutyna” / „Jak wariant” /
- * „Jak podkategoria” goes back to).
+ * What a begun block's cost is made of at minute k as the engine counts it (`energy.ts` `costOf`): its start's category and variant (D501),
+ * its own cost and its routine's then (`startCostOf`, changed from a minute on – `ownAt`, `routineAt`). The tile (`begunCosts`) and the count
+ * of ✎ (`editScope.ts` `begunToday`, T1434) take it from here.
+ */
+export function begunBasis(
+  b: Pick<BlockInfo, 'categoryId' | 'variantId' | 'costs' | 'routineCosts'>,
+  p: StartPlanned | null | undefined,
+  changes: readonly CostChange[] | undefined,
+  k: number
+): { cat: string; variant: string | null; own: Costs | null; routine: Costs | null } {
+  const start = startCostOf(b, p, changes)
+  return changes ? { ...start, own: ownAt(changes, k, start.own), routine: routineAt(changes, k, start.routine) } : start
+}
+
+/**
+ * The minute a begun block's cost is told at (the tile, T1441): `k`, for one ended – at most its last minute (`endedAt` − 1, never before its
+ * start): a change after its end (of its routine, written while it no longer ran) never reaches it – as the energy and the calibration,
+ * which count only the minutes it ran. Begun again („Zacznij jeszcze raz”) – not ended, `k`.
+ */
+const toldAt = (f: Pick<BlockFact, 'startedAt' | 'endedAt'> | undefined, k: number): number =>
+  f?.endedAt != null ? Math.min(k, Math.max(f.startedAt ?? f.endedAt, f.endedAt - 1)) : k
+
+/**
+ * What a block costs at minute k (now, by default; an ended one – at its last minute, `toldAt`) as the engine counts it – for the tile of a
+ * begun block (D501): from its start and its changes (`begunBasis`); `base` – its routine's (from its start, D512, changed from a minute on
+ * – T1430), variant's or subcategory's in the settings of now (what „Jak rutyna” / „Jak wariant” / „Jak podkategoria” goes back to).
  */
 export function begunCosts(
-  ctx: Pick<DayContext, 'events' | 'snapshot'>,
+  ctx: Pick<DayContext, 'events' | 'plan' | 'snapshot'>,
   state: Pick<DayState, 'facts' | 'settings' | 'now'>,
   b: BlockInfo,
   /** The day's changes (`costChangesOf`) – counted once for every tile of the day. */
-  all: ReadonlyMap<string, readonly CostChange[]> = costChangesOf(ctx.events, state.facts),
+  all: ReadonlyMap<string, readonly CostChange[]> = costChangesOf(ctx, state.facts),
   k = state.now
 ): BlockCosts {
-  const start = startCostOf(b, state.facts.blocks.get(b.id)?.planned)
-  const changes = all.get(b.id)
-  const own = changes ? ownAt(changes, k, start.own) : start.own
-  const routine = changes ? routineAt(changes, k, start.routine) : start.routine
-  const fallback = ctx.snapshot.settings.categories[start.cat] ?? b.rules
-  const base = baseCosts(state.settings.categories, start.cat, start.variant, fallback, routine)
-  return { costs: own ?? base, base, own: own != null, ...baseFromOf(state.settings.categories, start.cat, start.variant, fallback, routine) }
+  const f = state.facts.blocks.get(b.id)
+  const { cat, variant, own, routine } = begunBasis(b, f?.planned, all.get(b.id), toldAt(f, k))
+  const fallback = ctx.snapshot.settings.categories[cat] ?? b.rules
+  const base = baseCosts(state.settings.categories, cat, variant, fallback, routine)
+  return { costs: own ?? base, base, own: own != null, ...baseFromOf(state.settings.categories, cat, variant, fallback, routine) }
 }
 
 /**

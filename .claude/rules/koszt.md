@@ -23,7 +23,7 @@ paths:
 # Koszt na kafelku (D501) i koszt rutyny (D512)
 
 Źródło prawdy: specyfikacja „Koszt na kafelku (D501)” (Konwencje interfejsu), „Rutyna” (Bloki), decyzje T1270–T1279, T1300–T1306,
-T1360–T1374, T1395–T1399.
+T1360–T1374, T1395–T1399, T1430–T1437, T1440–T1447.
 
 ## Jedna reguła kosztu
 - Kolejność (D512): własny bloku → rutyny → wariantu → kategorii (podkategorii). `model/blockCosts.ts`: `baseCosts(kategorie,
@@ -44,29 +44,36 @@ T1360–T1374, T1395–T1399.
   `countDay`/`dayContextOf` podaje `routines` ze store'u.
 - Start bloku zapisuje `planned.routineCosts` (`startPlanned`; nieznana rutyna – bez pola, T1372); zaczęty liczy koszt rutyny ze startu
   (`startCostOf`); start bez pola: `v` < `ROUTINE_COSTS_FROM` (14, starsza wersja) – `foldFacts` daje null (przeszłość jak policzona),
-  tej wersji – koszt rutyny teraz; niezaczęty – rutyny teraz. `block.cost` null wraca do rutyny.
-- Zmiana kosztu rutyny przy zaczętym bloku (D514, T1395): okno po zapisanym rekordzie (`saveRoutine` w `routines/routineCost.tsx` – jedna
-  droga „Rutyn” i ✎) czyta dziś (`plannedDay`) i pisze `block.routineCost` (`block`, `at`, `costs` lub null; timer, `PASSIVE`, `USER_EVENTS`)
-  dla każdego z `routineCostTargets` (zaczęty, nieskończony; rutyna i kategoria rodzaju „rutyna” ze startu, bez pola – z planu; także z
-  własnym kosztem – „Jak rutyna” wraca do nowego). Dziś nieczytelne – toast `ROUTINE_BEGUN_KEPT_TEXT`, bez zdarzeń (T1399).
+  tej wersji – do pierwszej zmiany kosztu rutyny jej `was` (`routineBefore`, T1432), bez zmian – koszt rutyny teraz; niezaczęty – rutyny
+  teraz. `block.cost` null wraca do rutyny. Rodzaj „rutyna” – jeden predykat `routineCostApplies` (`model/routines.ts`, T1435).
+- Zmiana kosztu rutyny przy zaczętym bloku (D514, T1430–T1433): `routine.cost` (`routine`, `at`, `costs`, `was`; timer, `PASSIVE`, nie w
+  `USER_EVENTS`) pisze proces główny – `RecordStore` → `written(rel, { value, before })` → `folder.routineWritten` przy każdym zapisie
+  `routines/<id>.json` z innym kosztem (okno, odpowiedź na konflikt, „Przywróć”, kopia konfliktowa, kolejka po powrocie folderu; usunięcie
+  pliku – bez zdarzenia, T1445), od razu do dziennika bez fsync (`syncLater` – fsync w najbliższym `flush`, T1447; log folderu – przy
+  sprawdzeniu); dziennik odmówił – `routineCostKept` w odpowiedzi `edit` → toast `ROUTINE_COST_KEPT_TEXT` (`editNotice`, T1446). Okno tylko
+  zapisuje rekord (`saveRoutineRecord`), dnia nie czyta. Drugi komputer – zdarzenie w jego logu dnia. Silnik: `costChangesOf(ctx, fakty)`
+  dopasowuje je do zaczętych bloków przez `routineOfStart` (rutyna ze startu – `startRoutine`, kategoria ze startu, bez pól – z planu): po
+  starcie w kolejności logu – zawsze, sprzed niego – tylko start bez `routineCosts` (T1431, T1440: start z polem liczy koszt, który znał).
 - Blok zaczęty (reguła A, `engine/costChange.ts`): koszt ze startu (`startCostOf` – `block.start.planned`, bez pól – z planu),
   zmieniony od minuty zdarzeniem `block.cost` (`block`, `at`, `costs` lub null; dziedzina timera, w `PASSIVE` – bierne dla silnika
-  dnia; `energy.cost` pierwszych wersji 1.24 czytane tak samo, nie pisane), koszt rutyny – `block.routineCost` (`CostChange.routine`:
-  `ownAt` je pomija, `routineAt` – koszt rutyny od minuty; w `costOf`, `begunCosts`, kluczach `costEvidence`). Liczy się tylko zmiana po starcie bloku w kolejności logu
-  (`BlockFact.startOrder`) – zmiana cofniętego startu nie sięga następnego. `costChangesOf(zdarzenia, fakty)` – po minucie, potem
-  `compareEvents` (ostatnia w minucie wygrywa); `ownAt(k)`. Minuty przed zmianą zostają, przeliczenie logu daje to samo. To samo w
-  energii (`Kind.changes`), dowodach kalibracji (`costEvidence`, klucz raz na odcinek między zmianami) i na kafelku (`begunCosts`).
+  dnia; `energy.cost` pierwszych wersji 1.24 czytane tak samo, nie pisane), koszt rutyny – `routine.cost` (`CostChange.routine`:
+  `ownAt` je pomija, `routineAt` – koszt rutyny od minuty; w `costOf`, `begunBasis`/`begunCosts`, kluczach `costEvidence`). `block.cost`
+  liczy się tylko po starcie bloku w kolejności logu (`BlockFact.startOrder`) – zmiana cofniętego startu nie sięga następnego.
+  `costChangesOf` – po minucie, potem `compareEvents` (ostatnia w minucie wygrywa); `ownAt(k)`. Minuty przed zmianą zostają, przeliczenie
+  logu daje to samo. To samo w energii (`Kind.changes`), dowodach kalibracji (`costEvidence`: koszt startu – `startCostOf`, T1442; klucz
+  raz na odcinek między zmianami), na kafelku (`begunCosts`; skończony – w swojej ostatniej minucie, `toldAt`, T1441) i w liczbie ✎
+  (`begunToday`, T1434 – tylko przy zmianie samego kosztu, inna idzie za planem, T1443; `todayOf` z błędem – jak dzień nieznany, T1444).
 - Starsza wersja (≤ 1.23): `block.cost` to nieznane zdarzenie timera – pomija je (blok po starcie), `unknownTimerEvents` → instalacja w
   nocy bez 24 h; `RULES_VERSION` 13 – ustępuje prowadzenia (zejścia, zamrożenie). Nic innego nie czyta nieznanych zdarzeń (T1300).
   Koszt rutyny (≤ 1.24): pole `costs` rutyny i `planned.routineCosts` pomija (liczy bez nich); `RULES_VERSION` 14 – ustępuje prowadzenia;
-  `block.routineCost` – nieznane zdarzenie timera (instalacja bez 24 h), `RULES_VERSION` bez zmian – to samo wydanie (T1396).
+  `routine.cost` – nieznane zdarzenie timera (instalacja bez 24 h), `RULES_VERSION` bez zmian – to samo wydanie (T1396, T1430).
 
 ## Kafelek i zapis
 - `TimelineItem.cost` („Dziś” – `dayAxis` z `today`; „Szablony” – `planCosts`: koszt z planu, okienko tylko na blokach szablonu;
   kreator bez napisu) i `HorizonBlock.cost` (`week.ts`, tylko z krzywą – „Tydzień”, „3 dni”): zaczęty – `begunCosts`, inny –
   `blockCosts(info)`. `Timeline.onCosts` / `BlockBox.onCosts` → `saveTileCosts`; „Szablony” – `patchBlock(id, { costs })` (wersja od
   daty zmian, bez pytania o serię). „Rutyny” i okno ✎ rutyny – `RoutineCostField` (`TileCost` z
-  `routineCostShown`: bez kosztu – koszt kategorii rodzaju „rutyna”), zapis `saveRoutine` (`tryUpdateRecord`, potem T1395); w ✎ okienko
+  `routineCostShown`: bez kosztu – koszt kategorii rodzaju „rutyna”), zapis `saveRoutineRecord` (`tryUpdateRecord`, sam rekord – T1430); w ✎ okienko
   zmienia formularz do „Zapisz” (T1397).
 - `TileCost` (napis + okienko w portalu): `edit` = `costEditable(fakt, dzień miniony, minięty)` – niezaczęty nieminięty, zaczęty do
   końca (także poza planem); skończony i dzień miniony – sam napis. Kliknięcia to zamiary (krok puli, „Jak podkategoria”) po kolei –

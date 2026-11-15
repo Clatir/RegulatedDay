@@ -6,7 +6,7 @@
  * its variant's and category's; none (null, no field in the file) – „jak podkategoria”.
  */
 import { poolCostsFrom } from './blockCosts'
-import type { Costs } from './categories'
+import type { CategoryRules, Costs } from './categories'
 
 export const ROUTINE_SCHEMA = 1
 
@@ -89,6 +89,14 @@ export function routineCostOf(map: RoutineCosts | undefined, id: string | null):
   const c = map[id]
   return c === 'unknown' ? undefined : (c ?? null)
 }
+
+/**
+ * Whether a routine's cost is a block's cost (T1371): only a block of a category of the kind „rutyna” in `categories` (own keys) has its
+ * routine's cost – one left on a block whose category changed costs nothing. The one rule of `blockInfos`, the engine's changes of a
+ * routine's cost (`costChangesOf`), the count of ✎ (`reaches`) and the field of „Rutyny” (`routineCostShown`).
+ */
+export const routineCostApplies = (categories: Readonly<Record<string, CategoryRules | undefined>>, categoryId: string): boolean =>
+  Object.hasOwn(categories, categoryId) && categories[categoryId]?.kind === 'routine'
 
 /** The time of a version: the sum of its steps (the worse days' version empty: the usual one). */
 export function routineMinutes(r: Routine, version: RoutineVersion = 'normal'): number {

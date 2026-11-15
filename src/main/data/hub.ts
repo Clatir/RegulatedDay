@@ -1010,7 +1010,7 @@ export class DataHub {
     })
     const out = await f.edit(clean)
     this.changed()
-    return out.map((o) => ({ status: o.status, ...(o.status === 'waiting' ? { why: o.why } : {}) }))
+    return out.map((o) => ({ status: o.status, ...(o.status === 'waiting' ? { why: o.why } : {}), ...(o.routineCostKept ? { routineCostKept: true as const } : {}) }))
   }
 
   async events(drafts: EventIn[]): Promise<void> {

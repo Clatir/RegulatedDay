@@ -9,7 +9,9 @@
  *    (`layerKept`: a session, a lecture, a class of a „zjazd” – none of them is the user's to change) and without a block of a template or
  *    a series changed for that day whose block is counted under the template or the series already;
  *  - a change of the cost only: not today's blocks already ended (their minutes stay counted by the old cost, D501) – a begun one counts
- *    (it changes from now on);
+ *    (it changes from now on) as the engine counts it now (`begunToday`: its start's category, variant and routine, its own cost and its
+ *    routine's from its start and their changes – T1434), not as its file says; any other change (a name, a colour, the steps) follows the
+ *    plan – today's begun blocks as their file says (T1443);
  *  - a later entry of the settings that writes the same key from a later date (`overriddenFrom`): nothing from that date on – no day, no
  *    version, no series starting then (the line of its composition says until when);
  *  - not counted: a day beyond `SCOPE_DAYS` and a day whose file cannot be read now (`unread` – said in the window).
@@ -18,11 +20,16 @@
  * and no variant with one; a variant's – none of their own and no such routine; a routine's – its blocks of the kind „rutyna” without a
  * cost of their own. Any other change reaches every block of the thing.
  */
-import type { CategoryRules } from '@shared/model/categories'
+import { blockInfos } from '@shared/engine/blocks'
+import { begunBasis, costChangesOf, routineOfStart, startRoutine } from '@shared/engine/costChange'
+import { routineCostsIn, type DayContext } from '@shared/engine/day'
+import type { DayFacts } from '@shared/engine/facts'
+import { idxOf } from '@shared/engine/grid'
+import type { CategoryRules, Costs } from '@shared/model/categories'
 import { variantHasCosts } from '@shared/model/categories'
 import { countLabel, plDate } from '@shared/format'
 import { dayFileFrom, layerKept, templateVersionOn, type DayFile, type PlanBlock, type Template } from '@shared/model/plan'
-import { NO_ROUTINE_COSTS, routineCostOf, type RoutineCosts } from '@shared/model/routines'
+import { NO_ROUTINE_COSTS, routineCostApplies, routineCostOf, type RoutineCosts } from '@shared/model/routines'
 import { seriesVersionOn, type SeriesPlan } from '@shared/model/series'
 import type { SettingsChange } from '@shared/model/settings'
 import { addDays } from '@shared/time/zone'
@@ -35,17 +42,23 @@ export type EditTarget = { kind: 'category'; id: string } | { kind: 'variant'; c
 /** What the edit changes: `costs` only the cost (blocks without their own), `all` anything else (every block of the thing). */
 export type EditWhat = 'costs' | 'all'
 
-type Counted = Pick<PlanBlock, 'categoryId' | 'variantId' | 'routine' | 'costs'>
+/**
+ * A block as the count looks at it: as planned, or – one begun today, for a change of the cost only (T1443) – as the engine counts it now
+ * (`begunToday`): `routineCosts` its routine's cost then (null – none), `routineApplies` whether a change of its routine's cost reaches it
+ * (its start's category of the kind „rutyna” in the day's snapshot).
+ */
+export type Counted = Pick<PlanBlock, 'categoryId' | 'variantId' | 'routine' | 'costs'> & { routineCosts?: Costs | null; routineApplies?: boolean }
 
 /**
  * Whether the edit reaches the block. `routines` – the routines' costs now (`routineCostsOf`): a block of the kind „rutyna” whose routine
- * has a cost of its own costs that before its variant's and subcategory's (D512) – a change of theirs does not reach it.
+ * has a cost of its own costs that before its variant's and subcategory's (D512) – a change of theirs does not reach it. A block begun
+ * today (`routineCosts` given) – by its routine's cost as the engine counts it, not by the routine's now (T1434).
  */
 export function reaches(b: Counted, t: EditTarget, what: EditWhat, categories: Readonly<Record<string, CategoryRules | undefined>>, routines: RoutineCosts = NO_ROUTINE_COSTS): boolean {
-  const ofRoutines = Object.hasOwn(categories, b.categoryId) && categories[b.categoryId]?.kind === 'routine'
+  const ofRoutines = b.routineApplies ?? routineCostApplies(categories, b.categoryId)
   if (t.kind === 'routine') return b.routine === t.id && (what === 'all' || (b.costs == null && ofRoutines))
   // The routine's cost before the variant's and the subcategory's (a routine not known now costs as none, T1372).
-  const routineFirst = ofRoutines && routineCostOf(routines, b.routine ?? null) != null
+  const routineFirst = (b.routineCosts !== undefined ? b.routineCosts : ofRoutines ? routineCostOf(routines, b.routine ?? null) : null) != null
   if (t.kind === 'variant') return b.categoryId === t.categoryId && b.variantId === t.id && (what === 'all' || (b.costs == null && !routineFirst))
   if (b.categoryId !== t.id) return false
   if (what === 'all') return true
@@ -84,6 +97,11 @@ export function countScope(o: {
   routineCosts?: RoutineCosts
   /** Today's blocks that have ended (from today's log) – a change of the cost only does not reach them (D501). */
   ended?: ReadonlySet<string>
+  /**
+   * Today's blocks begun and not ended, as the engine counts them now (`begunToday`) – for a change of the cost only counted so, not as
+   * today's file says (T1434); any other change follows the file (T1443).
+   */
+  begun?: ReadonlyMap<string, Counted>
   /** `overriddenFrom` – nothing is counted from this date on; left out – none. */
   until?: string | null
 }): ScopeCount {
@@ -118,9 +136,31 @@ export function countScope(o: {
     }
     if (!raw) continue
     const f: DayFile = dayFileFrom(raw, date)
-    days += f.blocks.filter((b) => !f.cancelled.includes(b.id) && !(b.id in f.movedTo) && !layerKept(b) && !countedElsewhere(b) && !gone(b, date) && hit(b)).length
+    const counted = (b: PlanBlock): Counted => (o.what === 'costs' && date === o.today ? (o.begun?.get(b.id) ?? b) : b)
+    days += f.blocks.filter((b) => !f.cancelled.includes(b.id) && !(b.id in f.movedTo) && !layerKept(b) && !countedElsewhere(b) && !gone(b, date) && hit(counted(b))).length
   }
   return { days, templates, series: ofSeries.size, total: days + templates + ofSeries.size, unread, until }
+}
+
+/**
+ * Today's blocks begun and not ended as the engine counts them at `at` (T1434): their start's category, variant and routine, their own cost
+ * and their routine's (`begunBasis` – the same as the tile and the energy: from the start and the changes of the day's log, `routine.cost`
+ * too). `ctx`, `facts` – today as read now (`plannedDay`).
+ */
+export function begunToday(ctx: DayContext, facts: DayFacts, at: number): Map<string, Counted> {
+  const out = new Map<string, Counted>()
+  const changes = costChangesOf(ctx, facts)
+  const k = idxOf(facts.grid, at)
+  const categories = ctx.snapshot.settings.categories
+  const plan = new Map(ctx.plan.map((b) => [b.id, b]))
+  for (const info of blockInfos(facts.grid, ctx.plan, facts, ctx.snapshot.settings, routineCostsIn(ctx))) {
+    const f = facts.blocks.get(info.id)
+    if (f?.startedAt == null || f.endedAt != null) continue
+    const p = plan.get(info.id)
+    const x = begunBasis(info, f.planned, changes.get(info.id), k)
+    out.set(info.id, { categoryId: x.cat, variantId: x.variant, routine: startRoutine(f, p), costs: x.own, routineCosts: x.routine, routineApplies: routineOfStart(f, p, categories) != null })
+  }
+  return out
 }
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
