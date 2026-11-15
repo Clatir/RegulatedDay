@@ -10,7 +10,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditEntry } from '@shared/api'
 import { costsOf } from '@shared/model/categories'
-import { OTHER_GROUP, groupOfCategory } from '@shared/model/categoryTree'
+import { OTHER_GROUP, groupOfCategory, updateGroupRaw } from '@shared/model/categoryTree'
 import { rdFrom } from '@shared/model/rd'
 import { settingsOn } from '@shared/model/settings'
 import { CategoriesSection } from '@renderer/features/settings/CategoriesSection'
@@ -153,19 +153,32 @@ describe('drzewo w Ustawieniach', () => {
     expect(all('category-row', group('g-wolne')).map((r) => r.dataset.category)).toContain('analiza')
   })
 
-  it('podkategoria zarchiwizowanej kategorii stoi w „Inne” i jej lista „Kategoria” mówi „Inne”; z archiwum – swoją kategorię (T1393)', async () => {
+  it('podkategoria zarchiwizowanej kategorii stoi w „Inne”, a jej lista „Kategoria” mówi, co jest w pliku: „Wolne (w archiwum)”; wybór „Inne” ją przenosi (T1423)', async () => {
     fake.file = { schema: 1, categoryGroups: [{ id: 'g-wolne', archived: true }] }
     useData.setState({ rd: rdFrom(fake.file) })
     await show()
     await click(q('category-more', category('projekty')))
-    expect(category('projekty').closest('[data-testid="group-row"]')!.getAttribute('data-group')).toBe(OTHER_GROUP)
+    const where = () => category('projekty').closest('[data-testid="group-row"]')!.getAttribute('data-group')
+    expect(where()).toBe(OTHER_GROUP)
     const select = () => q<HTMLSelectElement>('category-group', category('projekty'))!
-    expect(select().value).toBe(OTHER_GROUP)
-    expect(select().selectedOptions[0]!.textContent).toBe('Inne')
-    await click(q('categories-archive-toggle'))
-    expect(category('projekty').closest('[data-testid="group-row"]')!.getAttribute('data-group')).toBe('g-wolne')
     expect(select().value).toBe('g-wolne')
-    expect(select().selectedOptions[0]!.textContent).toBe('Wolne')
+    expect(select().selectedOptions[0]!.textContent).toBe('Wolne (w archiwum)')
+    expect([...select().options].map((o) => o.textContent)).toEqual(['Praca', 'Nauka', 'Dom i opieka', 'Inne', 'Wolne (w archiwum)'])
+    // With the archive: the row in its own category, the same list.
+    await click(q('categories-archive-toggle'))
+    expect(where()).toBe('g-wolne')
+    expect(select().value).toBe('g-wolne')
+    expect(select().selectedOptions[0]!.textContent).toBe('Wolne (w archiwum)')
+    await click(q('categories-archive-toggle'))
+    // „Inne” chosen: the move is written – „Wolne” brought back leaves it there.
+    choose(select(), OTHER_GROUP)
+    await act(async () => undefined)
+    expect(rdNow().categories.projekty?.group).toBe(OTHER_GROUP)
+    expect(select().value).toBe(OTHER_GROUP)
+    await click(q('categories-archive-toggle'))
+    await click(q('group-restore', group('g-wolne')))
+    expect(groupOfCategory(rdNow(), 'projekty')).toBe(OTHER_GROUP)
+    expect(where()).toBe(OTHER_GROUP)
   })
 })
 
@@ -273,6 +286,61 @@ describe('usunięcie kategorii', () => {
     expect(q('group-remove-dialog')).toBeNull()
     expect(groupOfCategory(rdNow(), 'projekty')).toBe(OTHER_GROUP)
     expect(rdNow().categoryGroups.some((g) => g.name === 'Trading')).toBe(true)
+  })
+
+  it('„Cofnij”, które spotkało zmianę z innego komputera, kończy się pytaniem: bez komunikatu o porażce i bez drugiego „Cofnij” (T1420)', async () => {
+    await show()
+    await click(q('group-remove', group('g-wolne')))
+    await click(q('group-remove-confirm'))
+    const undo = lastToast()
+    // Another computer renamed the category since: taking its entry off is a question, the rest goes back.
+    fake.file = updateGroupRaw(fake.file, 'g-wolne', { name: 'Free' })
+    act(() => useData.setState({ rd: rdFrom(fake.file) }))
+    await act(async () => void undo.action!.run())
+    await act(async () => undefined)
+    expect(groupOfCategory(rdNow(), 'projekty')).toBe('g-wolne')
+    const toasts = useUi.getState().toasts.filter((t) => t.id !== undo.id)
+    expect(toasts.map((t) => t.text).filter((t) => t.includes('Nie cofnięto'))).toEqual([])
+    expect(toasts.filter((t) => t.action?.label === 'Cofnij')).toEqual([])
+  })
+
+  it('kategoria bez podkategorii w czasie innego zapisu sekcji: komunikat „Trwa zapis”, kliknięcie nie przepada bez słowa (T1425)', async () => {
+    fake.file = { schema: 1, categoryGroups: [{ id: 'pusta', name: 'Pusta', order: 7 }] }
+    useData.setState({ rd: rdFrom(fake.file) })
+    await show()
+    let release = () => {}
+    fake.hold = new Promise<void>((r) => (release = r))
+    typeInto(q<HTMLInputElement>('group-new')!, 'Trading')
+    // Both clicks before the window draws again (the button is not disabled yet).
+    await act(async () => {
+      q('group-add')!.click()
+      q('group-remove', group('pusta'))!.click()
+    })
+    expect(lastToast().text).toBe('Trwa zapis poprzedniej zmiany – spróbuj za chwilę.')
+    expect(rdNow().categoryGroups.find((g) => g.id === 'pusta')!.archived).toBe(false)
+    fake.hold = null
+    await act(async () => release())
+    await click(q('group-remove', group('pusta')))
+    expect(rdNow().categoryGroups.find((g) => g.id === 'pusta')!.archived).toBe(true)
+    expect(rdNow().categoryGroups.some((g) => g.name === 'Trading')).toBe(true)
+  })
+
+  it('liczba w oknie z chwili otwarcia; nie ma już podkategorii w chwili potwierdzenia – usunięcie jak pustej kategorii (T1425)', async () => {
+    await show()
+    await click(q('group-remove', group('g-wolne')))
+    expect(q('group-remove-dialog')!.textContent).toContain('Ma 2 podkategorie.')
+    // Another computer moved both out meanwhile (an archived one stays in „Wolne”).
+    fake.file = { schema: 1, categories: { projekty: { name: 'Projekty', group: 'g-praca' }, regeneracja: { name: 'Regeneracja', group: 'g-praca' }, c1: { name: 'Stara', group: 'g-wolne', archived: true } } }
+    act(() => useData.setState({ rd: rdFrom(fake.file) }))
+    expect(q('group-remove-dialog')!.textContent).toContain('Ma 2 podkategorie.')
+    await click([...q('group-remove-dialog')!.querySelectorAll('[role="radio"]')].find((b) => b.textContent === 'Usuń też podkategorie')!)
+    await click(q('group-remove-confirm'))
+    expect(q('group-remove-dialog')).toBeNull()
+    expect(rdNow().categoryGroups.find((g) => g.id === 'g-wolne')!.archived).toBe(true)
+    expect(groupOfCategory(rdNow(), 'projekty')).toBe('g-praca')
+    // As a category without subcategories: the archived one goes to „Inne”.
+    expect(rdNow().categories.c1).toMatchObject({ group: OTHER_GROUP, archived: true })
+    expect(lastToast().text).toBe('Usunięto kategorię „Wolne”.')
   })
 
   it('kategoria bez podkategorii znika bez pytania (z „Cofnij”)', async () => {

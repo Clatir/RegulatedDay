@@ -8,7 +8,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditEntry } from '@shared/api'
 import { costsOf } from '@shared/model/categories'
-import { OTHER_GROUP, addGroupRaw, addVariant, changeVariant, groupOfCategory, removeGroupRaw, setCategoryGroupRaw } from '@shared/model/categoryTree'
+import { OTHER_GROUP, addGroupRaw, addVariant, changeVariant, groupOfCategory, removeGroupRaw, setCategoryGroupRaw, updateGroupRaw } from '@shared/model/categoryTree'
 import { rdFrom } from '@shared/model/rd'
 import { settingsOn } from '@shared/model/settings'
 import { saveTree, saveVariants, undoTree } from '@renderer/features/settings/categoryTreeEdits'
@@ -86,6 +86,15 @@ describe('saveTree / undoTree (rd.json, od razu)', () => {
     fake.file = setCategoryGroupRaw(fake.file, 'projekty', 'g-praca')
     expect(await undoTree(again)).toBe('changed')
     expect(groupOfCategory(rdFrom(fake.file), 'projekty')).toBe('g-praca')
+  })
+
+  it('„Cofnij”, które spotkało zmianę z innego komputera, to pytanie, nie porażka zapisu (T1420)', async () => {
+    const ids = Object.keys(rdFrom({}).categories)
+    const { entry } = await saveTree((raw) => removeGroupRaw(raw, 'g-praca', { to: OTHER_GROUP }, ids))
+    // Another computer renamed the category since: the rest goes back, taking its entry off is a question (T1390).
+    fake.file = updateGroupRaw(fake.file, 'g-praca', { name: 'Job' })
+    expect(await undoTree(entry!)).toBe('asked')
+    expect(groupOfCategory(rdFrom(fake.file), 'analiza')).toBe('g-praca')
   })
 })
 

@@ -366,4 +366,18 @@ describe('co jest zmianą drzewa dla starszej wersji (T1313, T1391)', () => {
     expect(treeEdit(edit((raw) => ({ ...raw, general: { waterEveryMin: 60 } })))).toBe(false)
     expect(treeEdit({ rel: 'days/2026/2026-11-14.json', edits: [{ path: ['categoryGroups'], base: undefined, value: [] }] })).toBe(false)
   })
+
+  it('cała lista zmian ustawień w jednym polu: liczą się tylko zmiany, które się różnią – starszy wpis z wariantami nie (T1424)', () => {
+    const variants = { id: 's0', from: '2026-11-01', at: null, made: 0, patch: variantsPatch('analiza', addVariant(RULES.analiza!.variants, { id: 'v', name: 'Przegląd' })!) }
+    const reserve = (id: string, n: number) => ({ id, from: '2026-11-10', at: null, made: 1, patch: { reserve: n } })
+    const withBoth = { ...base, settings: [variants, reserve('s1', 10)] }
+    // The order of the list changed: the field is the whole list (`diffRecords`), with the change of the variants on both sides.
+    const reordered = edit((raw) => ({ ...raw, settings: [reserve('s1', 10), variants, reserve('s2', 12)] }), withBoth)
+    expect(reordered.edits.map((f) => f.path)).toEqual([['settings']])
+    expect(treeEdit(reordered)).toBe(false)
+    // A change of the variants among those that differ – it is one.
+    const more = { ...variants, id: 's3', from: '2026-11-20' }
+    expect(treeEdit(edit((raw) => ({ ...raw, settings: [reserve('s1', 10), variants, more] }), withBoth))).toBe(true)
+    expect(treeEdit(edit((raw) => ({ ...raw, settings: [reserve('s1', 10)] }), withBoth))).toBe(true)
+  })
 })
