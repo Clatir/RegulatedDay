@@ -11,7 +11,7 @@ import { useRef, useState, type ReactNode } from 'react'
 import type { AllDayEvent } from '@shared/model/allDay'
 import { ALL_DAY_COLOR_HEX, PALETTE } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
-import { isMenuKey, menuPoint } from '../../components/ContextMenu'
+import { menuBind } from '../../components/ContextMenu'
 import { cx } from '../../components/ui'
 import type { SelectionApi } from '../../lib/useSelection'
 import { monthLabel } from '../allday/allDayText'
@@ -117,23 +117,7 @@ export function MonthGrid({
               data-testid={`day-${d}`}
               aria-pressed={sel}
               title={[c.title, ev?.title].filter(Boolean).join('\n') || undefined}
-              onContextMenu={
-                selection && onContext
-                  ? (e) => {
-                      e.preventDefault()
-                      onContext(selection.onItemContext(d), menuPoint(e, e.currentTarget))
-                    }
-                  : undefined
-              }
-              onKeyDown={
-                selection && onContext
-                  ? (e) => {
-                      if (!isMenuKey(e)) return
-                      e.preventDefault()
-                      onContext(selection.onItemContext(d), menuPoint(null, e.currentTarget))
-                    }
-                  : undefined
-              }
+              {...(selection && onContext ? menuBind((at) => onContext(selection.onItemContext(d), at)) : {})}
               onMouseDown={(e) => {
                 if (e.button !== 0) return
                 if (selection) {

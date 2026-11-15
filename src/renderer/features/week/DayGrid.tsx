@@ -17,7 +17,9 @@ import { stepsCounter } from '@shared/model/steps'
 import { SERIES_MARK } from '@shared/seriesText'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { weekday } from '@shared/time/zone'
+import { menuBind } from '../../components/ContextMenu'
 import { cx } from '../../components/ui'
+import { useDeleteSelected } from '../../lib/deleteKey'
 import { useData, type SaveAnswer } from '../../store/data'
 import { useMachine } from '../../store/machine'
 import { openDay, openPick, setBlockDraft, toast } from '../../store/ui'
@@ -39,6 +41,7 @@ import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, da
 import { DENIED_TEXT, dropOn, dropStart, dropStays, sameDrop, weekOnto, type BlockDrop } from './weekViews'
 import { inParallelZone, tileAt } from '../plan/parallelDrag'
 import { undoEditToast } from '../today/dayActions'
+import { useWeekGroup, type WeekGroup } from './weekSelect'
 
 const AXIS_PX = 48
 const TONE_CLASS: Record<Tone, string> = { ok: 'text-sea', bad: 'text-rose', muted: 'text-muted', plain: 'text-fg' }
@@ -125,6 +128,9 @@ export function DayGrid({
   const namesOf = useMemo(() => (date: string): Names => ({ rd, settings: settingsOn(rd.settings, date), routines, requests }), [rd, routines, requests])
   const cols = { gridTemplateColumns: `${AXIS_PX}px repeat(${days.length}, minmax(0, 1fr))` }
   const dates = useMemo(() => days.map((d) => d.date), [days])
+  // D527, D528: the selection of many blocks over the days (Ctrl+click, Shift+click, Shift+arrows, Ctrl+A, Esc, the menu of the right button); Del asks once for all.
+  const group = useWeekGroup({ days, scope: `${mode}|${dates[0]}`, today, energy: rd.general.modules.energy, namesOf })
+  useDeleteSelected(group.removeTarget)
   /** The rectangle a column has on the screen; null when it is not there. */
   const columnRect = (i: number): DOMRect | null => bodyRef.current?.querySelector(`[data-testid="week-col-${days[i]?.date}"]`)?.getBoundingClientRect() ?? null
   // The columns do not move while a drag goes on: their rectangles are read once, when the pointer first asks – with the
@@ -330,6 +336,11 @@ export function DayGrid({
       data-dragging={flight != null ? 'true' : undefined}
       data-copying={flight != null && copying ? 'true' : undefined}
     >
+      {group.summary && (
+        <div className="pb-1 text-[12px] text-muted" data-testid="week-selection">
+          {group.summary}
+        </div>
+      )}
       {/* The headings stay in view while the axis scrolls. */}
       {/* The strip of all-day events (D405) stays with them, in the same columns. */}
       <div className="sticky top-0 z-10 border-b border-line bg-bg pb-1">
@@ -376,6 +387,7 @@ export function DayGrid({
             grab={(b) => ({ down: grab(b, d.date, i), consumed: () => muted.current, dragging: flight === b.id && !copying })}
             drop={drop && drop.at.index === i ? { ...drop.at, durationMin: drop.durationMin } : null}
             tight={mode === 'week'}
+            group={group}
           />
         ))}
         {pick && (
@@ -399,6 +411,7 @@ export function DayGrid({
           />
         )}
       </div>
+      {group.overlay}
     </div>
   )
 }
@@ -466,7 +479,8 @@ function DayColumn({
   waiting,
   grab,
   drop,
-  tight
+  tight,
+  group
 }: {
   day: HorizonDay
   index: number
@@ -486,6 +500,8 @@ function DayColumn({
   drop: (BlockDrop & { durationMin: number }) | null
   /** The cost on a tile without spaces („3·1·1·0” – the week, D501, D524). */
   tight: boolean
+  /** The selection of many blocks (D527): the ring, Ctrl / Shift on a block, the menu. */
+  group: WeekGroup
 }) {
   const lanes = useMemo(() => laneLayout(day.blocks), [day.blocks])
   // D410: the attachments of each block (its own, the template's, the series') – 📎N on its tile.
@@ -524,7 +540,7 @@ function DayColumn({
       <EnergyStrip date={day.date} track={day.energy} lo={lo} ppm={ppm} height={height} />
       <div className="absolute inset-y-0 right-0" style={{ left: stripped ? STRIP_WIDTH + 1 : 0 }} data-testid={`week-blocks-${day.date}`}>
         {lanes.map(({ item, lane, lanes: n }) => (
-          <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} onCosts={(costs, ask) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs, { ask })} />
+          <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} marked={group.isMarked(day.date, item.id)} onPick={(e) => group.mark(day.date, item.id, e)} onContext={(at) => group.context(day.date, item.id, at)} onCosts={(costs, ask) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs, { ask })} />
         ))}
         {/* The place a new or a dragged block would take – where the blocks stand, right of the strip (T1288). */}
         {shown && <RangeBand range={shown} lo={lo} ppm={ppm} testId={held ? 'week-range' : 'week-range-waiting'} />}
@@ -555,7 +571,7 @@ function DropBand({ range, lo, ppm, denied, note }: { range: GridRange; lo: numb
 }
 
 /** A block on the axis: its colour as on the day's axis; not begun on a day gone by – dimmed; taken off – dimmed too. A click opens its day (D366). */
-export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, onCosts }: { block: HorizonBlock; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; onCosts?: (costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer> }) {
+export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, marked = false, onPick, onContext, onCosts }: { block: HorizonBlock; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; marked?: boolean; onPick?: (e: { ctrlKey: boolean; shiftKey: boolean }) => void; onContext?: (at: { x: number; y: number }) => void; onCosts?: (costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer> }) {
   const { top, height } = blockSpan(b, lo, ppm)
   const color = blockColor(b.categoryId, names)
   const dim = b.state === 'missed' || b.state === 'parked' || b.state === 'cancelled'
@@ -593,10 +609,16 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
   return (
     <button
       type="button"
-      onClick={() => {
+      onClick={(e) => {
+        if (grab?.consumed()) return
+        // D527: Ctrl and Shift select the block – the day stays closed (the selection is of the columns).
+        if (onPick && (e.ctrlKey || e.shiftKey)) return onPick(e)
         // D462: the click selects the block – its day opens with it selected (as in „Agenda”); Del there removes it. A block outside the plan only opens the day.
-        if (!grab?.consumed()) b.outsidePlan ? openDay(date) : openPick({ page: 'today', day: date }, { kind: 'block', id: b.id, date })
+        if (b.outsidePlan) openDay(date)
+        else openPick({ page: 'today', day: date }, { kind: 'block', id: b.id, date })
       }}
+      // D528: the right button and the menu key – the menu of the selection (this block is put into it first).
+      {...(onContext ? menuBind(onContext) : {})}
       onPointerDown={grab?.down}
       {...NO_GRID}
       title={title}
@@ -605,8 +627,9 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
       data-tile-date={date}
       data-state={b.state}
       data-outside={b.outsidePlan ? 'true' : undefined}
+      data-marked={marked ? 'true' : undefined}
       data-movable={grab ? 'true' : undefined}
-      className={cx('group absolute overflow-hidden rounded-[3px] border-l-[3px] px-1 text-left text-[11px] leading-tight', grab ? 'cursor-grab' : 'cursor-pointer', grab?.dragging && 'opacity-40', blockRinged(b.state) && 'ring-1 ring-lamp', blockDashed(b.state) && 'border-dashed', b.state === 'cancelled' && 'line-through')}
+      className={cx('group absolute overflow-hidden rounded-[3px] border-l-[3px] px-1 text-left text-[11px] leading-tight', grab ? 'cursor-grab' : 'cursor-pointer', grab?.dragging && 'opacity-40', blockRinged(b.state) && 'ring-1 ring-lamp', marked && 'ring-2 ring-lamp', blockDashed(b.state) && 'border-dashed', b.state === 'cancelled' && 'line-through')}
       // Dimmed by its fill and edge, never its text (as on the day's axis, A8-05).
       style={{
         top,

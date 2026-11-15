@@ -164,7 +164,8 @@ describe('„Dziś” prowadzi szkic przez pierwszy zapis (D461)', () => {
   it('Esc w panelu szkicu przez `escapeDraft` (T1080); Del i „Usuń” z jednego warunku; kroki i dzień w panelu (D462, T1067)', () => {
     expect(page).toContain('escapeDraft(firstSave.of(draft.id) != null, touchedNow(draft.id))')
     expect(page).toContain("{cancelWord ? 'Odwołaj na ten dzień' : 'Usuń'}")
-    expect(page).toContain("useDeleteResolver('block', (id) => (deleteTarget && block!.id === id ? deleteTarget : null))")
+    // D528: two or more selected – the group's question; else the one block's (the same `singleTarget` as before).
+    expect(page).toContain("useDeleteResolver('block', (id) => (group.removeTarget ? (group.sel.isSelected(id) ? group.removeTarget : null) : singleTarget && block!.id === id ? singleTarget : null))")
     // A list of the block's routine (D473) asks no series' scope (T1102).
     expect(page).toContain('removeAsks={() => stepsAskScope({ date, series, scope: stepsScope }, block, draft != null, routineList != null)}')
     expect(page).toMatch(/<BlockEditor\n\s*key=\{block\.id\}\n\s*day=\{date\}/)

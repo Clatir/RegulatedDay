@@ -14,6 +14,13 @@ paths:
   - "src/renderer/features/calendar/dayMenu.ts"
   - "src/renderer/store/dayUndo.ts"
   - "tests/web/day-undo.test.ts"
+  - "src/renderer/features/plan/groupMenu.ts"
+  - "src/renderer/features/plan/BlockGroupMenu.tsx"
+  - "src/renderer/features/plan/useAxisGroup.tsx"
+  - "src/renderer/features/week/weekSelect.tsx"
+  - "tests/web/axis-select.test.ts"
+  - "tests/web/week-select.test.ts"
+  - "tests/web/group-menu.test.ts"
   - "tests/web/calendar-selection.test.ts"
   - "tests/unit/selection.test.ts"
   - "tests/unit/group-summary.test.ts"
@@ -83,3 +90,22 @@ paths:
   (minione, dzisiejszy przy typie) w linii: „pominięto 2: miniony, dzisiejszy” – przy linii bez toastu o nich (toast tylko, gdy linii nie ma). Zaznaczenie po zmianie czyści się.
 - Pliki dni czytają się porcjami po 62 (`readDayFiles`, `dayFilesNow`; hub odpowiada najwyżej 62 dniami); jedno „Cofnij” zmian dni to `takeBackDays` (`store/dayUndo.ts`: „Tydzień”,
   „Wolne”, Kalendarz).
+
+## Bloki na osi i w kolumnach (Z4-B, Z5-B część 1 – zaznaczanie i menu, bez działań)
+- `Timeline`: `onSelect(id, { ctrl, shift })` (Ctrl z ruchem ≥ 4 px to dalej kopia D513 – klik po przeciągnięciu jest wyciszony, na kafelku nieprzeciągalnym też: `pressed`; Ctrl bez ruchu i klik klawiatury dochodzą jako klik), `marked(id)` – obwódka
+  każdego zaznaczonego (bez `marked` – tylko otwarty `selected`), `onContext(id, punkt)` – prawy przycisk i Shift+F10 na kafelku (na pustej osi nic), korzeń ma `data-axis`.
+- `plan/useAxisGroup` („Dziś” – scope dzień, „Szablony” – scope szablon|wersja, tylko własne bloki wersji): `useSelection({ order: kafelki po starcie, when: onAxis })` – Ctrl+A, Shift+strzałki i
+  Esc tylko z fokusem na osi albo bez fokusu, nigdy z panelu obok (`onAxis` = `closest('[data-axis]')`); `onSelect` odpowiada, czy klik ma też otworzyć blok (zwykły – tak),
+  `selectOnly(id)` – blok otwarty w panelu (też z Ctrl K, nowy blok) jest jedynym zaznaczonym (`TodayPage.setSelected`, `TemplatesPage.open`); **zaznaczenie jednego idzie za otwartym blokiem
+  (D462, T1611)**: zamknięcie panelu, szkic, usunięcie – `release()` zdejmuje je (dzięki temu brak obwódki bez Del i drugi Esc trafia do okna, jak dawniej); grupa ≥ 2 (Ctrl, Shift) zostaje.
+  Kafelki hooka to to, co oś rysuje (`axisItems.items` – także odsłonięty blok ukrytego kalendarza): jedna lista dla kolejności, napisu (`line`) i menu (`plan` + `stateOf`).
+  Napis „Zaznaczone: N · czas · energia …” (`blockSummary`: minuty kafelka, koszt/h z `TimelineItem.cost`) nad osią od 2; Del dla ≥ 2 – `removeBlocksTarget` („Usunąć 4 bloki?”)
+  ma pierwszeństwo przed celem jednego bloku (`useDeleteResolver('block')` – fokus musi być na zaznaczonym).
+- „Tydzień” / „3 dni”: `week/weekSelect.tsx` `useWeekGroup` w `DayGrid` (klucz bloku `blockKey(date, id)`; order `weekOrder` – dzień, potem start; `BlockBox`: `marked`, `onPick` – Ctrl/Shift
+  zaznacza bez otwierania dnia, zwykły klik otwiera jak dotąd; `DayGrid` ma klucz pierwszego dnia, więc inny tydzień, zakres 3 dni i tryb zaczynają bez zaznaczenia); napis `week-selection`.
+- Menu „Zmień N bloków” (`groupMenu.ts` – `blockMenu`, czyste: podkategoria i wariant z ✓/„—”, „Koszt…” → okno `GroupCostDialog`, rutyna tylko dla rodzaju „rutyna”, „Przesuń o…” → później /
+  wcześniej o 5, 15, 30, 60 i pole, „Przenieś na dzień…” → `GroupMoveDialog`, „Odwołaj”, „Zaparkuj”, „Usuń”; szablon bez trzech działań dnia; wyłączone z powodem wg `MenuBlock.state` (`open` / `begun` / `past` / `off`): wszystkie zaczęte –
+  „Żaden blok nie jest niezaczęty”, wszystkie minione, wszystkie zdjęte z planu (zaparkowane, odwołane), żaden nie ma godziny do przesunięcia, różne podkategorie dla wariantu; okno kosztu zaczyna od kosztu
+  pierwszego zaznaczonego). `BlockGroupMenu` składa menu i dwa okna dla ekranów. Prawy przycisk i klawisz menu na elemencie: `menuBind(open)` w `ContextMenu.tsx` (kafelek osi, `BlockBox`, wiersz Spraw, dzień Kalendarza).
+- **Zaślepka Z4-A:** każda zmiana idzie przez `runGroupAction(view, ids, akcja)` → `groupRunner.run` (akcje `GroupAction`: category, variant, cost, routine, shift (ze znakiem), moveTo, cancel, park, remove;
+  `ids` w „Tygodniu” to `blockKey(date, id)`). Domyślnie biegacz mówi toastem „…jeszcze nie jest podłączona”; Z4-A podmienia `groupRunner.run` i bierze wyłączenia z `judgeGroup`.

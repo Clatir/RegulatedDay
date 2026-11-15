@@ -33,6 +33,7 @@ import { GoalsPanel } from './GoalsPanel'
 import { THREE_DAYS_PPM, goalsMonthOfWeek } from './weekLayout'
 import { weekTitle } from './weekText'
 import { WeekPushLine } from './WeekPushLine'
+import { GroupLine } from '../../components/GroupLine'
 import { lastWeekMode, rememberWeekMode, shiftDay, threeDaysTitle, WEEK_MODES, type WeekMode } from './weekViews'
 
 export function WeekPage() {
@@ -115,6 +116,7 @@ export function WeekPage() {
         )}
       </div>
       <WeekPushLine />
+      <GroupLine view="week" />
       <AllDayLines page="week" />
       {mode === 'week' && <WeekBody week={week} today={today} openCard={waiting} onCardOpened={() => setCard(null)} />}
       {mode === '3days' && <ThreeDaysBody middle={middle} />}

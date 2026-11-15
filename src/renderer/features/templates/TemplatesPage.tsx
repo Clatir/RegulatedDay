@@ -35,7 +35,10 @@ import { removeTarget, useDeleteResolver, useDeleteSelected } from '../../lib/de
 import { takeFoundPick, useUi } from '../../store/ui'
 import { attachTransfer } from '../attachments/attachDrop'
 import { withAttachCounts } from '../attachments/attachView'
+import { GroupLine } from '../../components/GroupLine'
 import { BlockEditor } from '../plan/BlockEditor'
+import { menuCtxOf } from '../plan/groupMenu'
+import { useAxisGroup } from '../plan/useAxisGroup'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis } from '../plan/dayItems'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
@@ -192,7 +195,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   // The block the search picked (only one of the version shown – the one in force from tomorrow).
   useEffect(() => {
     if (!openBlock) return
-    setSelected(openBlock)
+    open(openBlock)
     onBlockOpened()
   }, [openBlock])
   const rel = paths.record('template', template.id)
@@ -278,6 +281,26 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     return withAttachCounts(own, (id) => blocks.get(id) ?? null, attachPlace, attachments)
   }, [axis, byPlanId, version.blocks, attachPlace, attachments])
   const block = version.blocks.find((b) => b.id === selected) ?? null
+  // D527, D528: the selection of many blocks of the version (Ctrl+click, Shift+click, Shift+arrows, Ctrl+A, the menu of the right button – without the
+  // day's actions); only the template's own blocks are selected (the sessions and lectures of the sample day are no blocks of it); scope: the version.
+  const menuCtx = useMemo(() => menuCtxOf(names, true), [names])
+  const own = useMemo(() => items.filter((i) => version.blocks.some((b) => b.id === i.id)), [items, version.blocks])
+  const group = useAxisGroup({
+    view: 'template',
+    tiles: own,
+    plan: version.blocks,
+    present: version.blocks.map((b) => b.id),
+    scope: `${template.id}|${from}`,
+    today,
+    energy: rd.general.modules.energy,
+    ctx: menuCtx
+  })
+  /** A block opened in the panel is the one selected (a plain click, a new block); the panel closed takes a selection of one with it (D527). */
+  const open = (id: string | null) => {
+    setSelected(id)
+    if (id != null) group.selectOnly(id)
+    else group.release()
+  }
   // The cursor in „Nazwa” once (T1027): forgotten when its panel has shown (or another block is picked) – coming back to it does not set it again.
   const shownId = block?.id ?? null
   useEffect(() => setFresh((f) => freshAfter(f, selected, shownId)), [selected, shownId])
@@ -299,9 +322,11 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   }
   // D462: Del on the selected template (its row of the list, clicked) or its selected block (a tile, or the panel open) removes it, as „Usuń” does.
   useDeleteResolver('template', (id) => (id === template.id ? removeTarget(template.name, remove) : null))
-  const removeBlockOf = (b: PlanBlock) => removeTemplateBlock(template.id, from, b, blockName(b, names)).then(() => setSelected(null))
-  useDeleteResolver('block', (id) => (block && block.id === id ? removeTarget(blockName(block, names), () => removeBlockOf(block)) : null))
-  useDeleteSelected(block ? removeTarget(blockName(block, names), () => removeBlockOf(block)) : null)
+  const removeBlockOf = (b: PlanBlock) => removeTemplateBlock(template.id, from, b, blockName(b, names)).then(() => open(null))
+  const singleTarget = block ? removeTarget(blockName(block, names), () => removeBlockOf(block)) : null
+  // D528: two or more selected – one question „Usunąć 4 bloki?” (the focused tile must be one of them).
+  useDeleteResolver('block', (id) => (group.removeTarget ? (group.sel.isSelected(id) ? group.removeTarget : null) : block && block.id === id ? singleTarget : null))
+  useDeleteSelected(group.removeTarget ?? singleTarget)
 
   return (
     <div className="flex min-h-0 flex-1" data-testid="template-editor">
@@ -378,15 +403,25 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
               </button>
             </div>
           )}
+          <GroupLine view="template" />
+          {group.line}
           <Timeline
             items={items}
+            marked={group.marked}
+            onContext={(id, at) => version.blocks.some((b) => b.id === id) && group.onContext(id, at)}
             onAttachDrop={(id, dt) => {
               const owner = ownerToAdd(version.blocks.find((b) => b.id === id) ?? null, attachPlace)
               if (owner) void attachTransfer(owner, dt)
             }}
             markers={axis.markers}
             selected={selected}
-            onSelect={(id) => setSelected(version.blocks.some((b) => b.id === id) ? id : null)}
+            onSelect={(id, mods) => {
+              const mine = version.blocks.some((b) => b.id === id)
+              // D527: Ctrl and Shift only select (the panel stays as it is); a plain click opens the block.
+              if (mine && !group.onSelect(id, mods)) return
+              if (!mine && (mods.ctrl || mods.shift)) return
+              open(mine ? id : null)
+            }}
             // D512: the window of a tile's cost – the template block's own cost, in the version from the date shown (no series).
             onCosts={(id, costs) => patchBlock(id, { costs })}
             onMove={(id, startMin) => {
@@ -429,7 +464,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
               void saveChange(templateAdd(model, b)).then((saved) => {
                 if (!saved) return
                 setFresh(b.id)
-                setSelected(b.id)
+                open(b.id)
               })
             }}
             from={axis.from}
@@ -438,6 +473,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           />
         </div>
       </div>
+      {group.overlay}
       {block && (
         <BlockEditor
           key={block.id}
@@ -453,7 +489,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           session={<SessionFields block={block} blocks={version.blocks} kind={settings.categories[block.categoryId]?.kind} weekdays={template.weekdays} onChange={(patch) => void patchBlock(block.id, patch)} />}
           // D440: the list without boxes – every day made from the template starts with none ticked.
           steps={<StepsEditor steps={block.steps} lengthMin={block.durationMin} ticks={false} onOp={async (op) => stepsAnswer(op, await changeTemplateSteps(template.id, from, block.id, op))} />}
-          onClose={() => setSelected(null)}
+          onClose={() => open(null)}
           actions={
             // D415: out of the version from the date shown, with its attachments when no later version keeps it; „Cofnij”.
             <button type="button" className="btn" onClick={() => void removeBlockOf(block)} data-testid="template-block-remove">

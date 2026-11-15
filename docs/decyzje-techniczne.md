@@ -458,3 +458,16 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1575 | Chip panelu ma znacznik Del tylko przy zaznaczeniu ≥ 2 – jedna sprawa nie przejmuje Del od zaznaczonego bloku osi |
 | T1576 | „Zaplanuj…” po kliknięciu czeka na dane wpisanego dnia; wpisana godzina zostaje przy zmianie dnia; pola – `DateField`/`TimeField` |
 | T1577 | Energia w linii planowania grupy – `lowestEnergyChange` (najniższa energia przed i po, jak „Ułóż pod energię”) |
+| T1610 | `Timeline.onSelect` niesie `{ctrl, shift}`; obwódkę każdego zaznaczonego daje `marked` |
+| T1611 | Zaznaczenie jednego bloku z kliku idzie za otwartym panelem (D462): zamknięcie panelu, szkic albo zniknięcie bloku je zdejmuje (`release`), Esc wraca wtedy do okna; grupa ≥ 2 zostaje po zamknięciu panelu. W „Tygodniu” (bez panelu) Ctrl+klik jednego bloku zostaje z obwódką do Esc |
+| T1612 | W „Tygodniu” i „3 dniach” id zaznaczenia to `blockKey(date, id)` |
+| T1613 | Ctrl+A, Shift+strzałki i Esc osi działają z fokusem na osi albo bez fokusu (`data-axis`), nie z panelu Spraw |
+| T1614 | Kontrakt `GroupAction` (category, variant, cost, routine, shift ze znakiem, moveTo, cancel, park, remove) i wykonawca `groupRunner` w `plan/groupMenu.ts` |
+| T1615 | Okna „Koszt…” (start od kosztu pierwszego zaznaczonego) i „Przenieś na dzień…” należą do menu grupy (`plan/BlockGroupMenu.tsx`) |
+| T1616 | Jedna linia zmian grupowych `view="week"` dla „Tygodnia” i „3 dni” (pod linią rozsuwania), `view="template"` nad osią szablonu |
+| T1617 | Del grupowy (≥ 2) ma pierwszeństwo przed Del jednego bloku; w „Tygodniu” działa przy fokusie poza polem |
+| T1618 | W „Szablonach” zaznaczalne są tylko własne bloki wersji; kafelki dnia próbnego (sesje, wykłady) ignorują Ctrl, Shift i prawy przycisk |
+| T1619 | Menu w „Tygodniu” bierze listy (podkategorie, warianty, rutyny) z ustawień pierwszego zaznaczonego dnia |
+| T1720 | `MenuBlock.state` (open, begun, past, off) zamiast `begun` – wyłączenia „Odwołaj”, „Zaparkuj”, „Przesuń”, „Przenieś” z powodem stanu |
+| T1721 | `menuBind(open)` w `ContextMenu.tsx` – jedyna para prawy przycisk + klawisz menu (oś, „Tydzień”, wiersz Spraw, dzień Kalendarza) |
+| T1722 | Klik oddalony od naciśnięcia o 4 px i więcej to koniec przeciągnięcia także na nieprzeciągalnym kafelku; klik z klawiatury działa zawsze |

@@ -7,8 +7,9 @@
  * then the menu), a press outside closes. The focus goes back to the element the menu was opened from. While it is open the pages'
  * own shortcuts wait (`onModal`, like a dialog).
  */
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import { createPortal } from 'react-dom'
+import { isEditable } from '../lib/deleteKey'
 import { handleEscape, onModal, useEscapeLayer } from '../lib/escape'
 import { useOutsidePointer } from '../lib/outside'
 import { cx } from './ui'
@@ -54,6 +55,29 @@ export function menuPoint(ev: { clientX?: number; clientY?: number } | null | un
   if (ev && ev.clientX !== undefined && ev.clientY !== undefined && (ev.clientX !== 0 || ev.clientY !== 0)) return { x: ev.clientX, y: ev.clientY }
   const r = from?.getBoundingClientRect()
   return r ? { x: r.left + 8, y: r.bottom } : { x: MARGIN, y: MARGIN }
+}
+
+/**
+ * The right button and the menu key on an element (D528) as the two handlers every screen puts on it (`{...menuBind(open)}`): `open` gets where the menu
+ * stands – the pointer, or the element's lower left for a key. A field inside the element keeps its own menu; the key counts on the element itself only
+ * (not on what is in it).
+ */
+export function menuBind(open: (at: { x: number; y: number }) => void): {
+  onContextMenu: (e: ReactMouseEvent<HTMLElement>) => void
+  onKeyDown: (e: ReactKeyboardEvent<HTMLElement>) => void
+} {
+  return {
+    onContextMenu: (e) => {
+      if (isEditable(e.target)) return
+      e.preventDefault()
+      open(menuPoint(e.nativeEvent, e.currentTarget))
+    },
+    onKeyDown: (e) => {
+      if (e.target !== e.currentTarget || !isMenuKey(e)) return
+      e.preventDefault()
+      open(menuPoint(null, e.currentTarget))
+    }
+  }
 }
 
 /** A menu of `size` opened at `at`, kept inside the window. */

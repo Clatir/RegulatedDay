@@ -50,7 +50,9 @@ import { occurrenceRuleText } from '../series/seriesForm'
 import { saveTileCosts } from '../plan/costSave'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis, daySummary } from '../plan/dayItems'
+import { menuCtxOf } from '../plan/groupMenu'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
+import { useAxisGroup } from '../plan/useAxisGroup'
 import { rememberNewBlockCategory } from '../plan/lastCategory'
 import { edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
@@ -137,6 +139,10 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const setSelected = (id: string | null) => {
     selectedNow.current = id
     setSelectedState(id)
+    // D527: the block opened is the one selected (a plain click, a new block, Ctrl K); the panel closed (a new draft, a removal) takes a selection of one
+    // with it, as the open block always was – a group of two or more stays.
+    if (id != null) group.selectOnly(id)
+    else group.release()
   }
   const plan = model.ctx.plan
   // D461: the new block not saved yet lives in the window's state (it stays when the exchange for it is not answered, A6-17); one
@@ -269,6 +275,24 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   // tile. Not counted as „ukryte”. The axis keeps the hours of all the blocks (`extent`), the pushing of blocks is counted from the day.
   const openId = block?.id ?? null
   const axisItems = useMemo(() => axisWithRevealed(items, seen.shown, openId, rd), [items, seen, openId, rd])
+  // D527, D528: the selection of many blocks of the axis – Ctrl+click, Shift+click, Shift+arrows, Ctrl+A, the menu of the right button; scope: the day. It
+  // selects what the axis draws (the checked calendars' blocks and the revealed one), in one list for the order, the line and the menu.
+  const menuCtx = useMemo(() => menuCtxOf(names), [names])
+  const group = useAxisGroup({
+    view: 'today',
+    tiles: axisItems.items,
+    plan,
+    present: items.map((i) => i.id),
+    scope: date,
+    today,
+    moveFrom: date,
+    energy: rd.general.modules.energy,
+    ctx: menuCtx,
+    stateOf: (id, tile) => {
+      const f = model.state.facts.blocks.get(id)
+      return f?.startedAt != null ? 'begun' : f?.parkedAt != null || f?.cancelledAt != null ? 'off' : tile.dim ? 'past' : 'open'
+    }
+  })
   // The scope picked for the steps of a block of a series holds while its panel stays open (T798): another block or none – asked again.
   const stepsScope = useRef<SeriesScope | null>(null)
   useEffect(() => {
@@ -378,13 +402,15 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   // D462: Del removes the selected block – asked first, then the very code of „Usuń” / „Odwołaj na ten dzień” (a block of a series asks
   // its scope itself). A tile focused but not selected is no target (the panel shows the selected one).
   const cancelWord = block != null && byCancel && !started && block.origin !== 'series'
-  const deleteTarget: DeleteTarget | null =
+  const singleTarget: DeleteTarget | null =
     block && !draft
       ? cancelWord
         ? { title: `Odwołać „${blockName(block, names)}” na ten dzień?`, yes: 'Odwołaj', run: () => removeBlock(block) }
         : removeTarget(blockName(block, names), () => removeBlock(block), seriesOfBlock(series, block, date) != null)
       : null
-  useDeleteResolver('block', (id) => (deleteTarget && block!.id === id ? deleteTarget : null))
+  // D528: two or more selected – one question „Usunąć 4 bloki?” (the focused tile must be one of them).
+  const deleteTarget = group.removeTarget ?? singleTarget
+  useDeleteResolver('block', (id) => (group.removeTarget ? (group.sel.isSelected(id) ? group.removeTarget : null) : singleTarget && block!.id === id ? singleTarget : null))
   useDeleteSelected(deleteTarget)
   /** A block of the plan that may be dragged (D305): what its drag to `span` changes and pushes apart (D367). */
   const movableChange = (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan): DayChange | null => (axis.items.find((i) => i.id === id)?.movable ? dragChange(model, id, span, edge, shown, pushes) : null)
@@ -644,6 +670,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               {hasEnergy(axis.energy) && <EnergyLegend reserve={axis.energy.reserve} />}
             </div>
             <GroupLine view="today" />
+            {group.line}
             {/* The all-day events of the day (D405), over the axis' column – the hours' column on the left stays empty. */}
             <AllDayBar key={date} dates={[date]} page="today" today={today} axisPx={46} endPx={hasEnergy(axis.energy) ? LANES_WIDTH : 0} />
             <Timeline
@@ -659,14 +686,18 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               markers={axis.markers}
               energy={axis.energy}
               selected={draft ? null : selected}
-              onSelect={(id) =>
+              marked={group.marked}
+              onContext={group.onContext}
+              onSelect={(id, mods) => {
+                // D527: Ctrl and Shift only select (the panel stays as it is); a plain click opens the block.
+                if (!group.onSelect(id, mods)) return
                 // A new block not saved yet is saved first (D461: another block opens in the panel).
                 void leaveDraft().then((left) => {
                   if (!left) return
                   setDraft(null)
                   setSelected(id)
                 })
-              }
+              }}
               onCreate={create}
               // D496: a bare click on the axis makes no draft – only a drag over it does.
               clickCreates={false}
@@ -836,6 +867,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
       {dialog === 'addType' && <TypeChangeDialog model={model} names={names} isToday onlyAdd onClose={() => setDialog(null)} />}
       {dialog === 'copy' && <CopyDayDialog model={model} today={today} onClose={() => setDialog(null)} />}
       {dialog && typeof dialog === 'object' && 'move' in dialog && <MoveDialog model={model} block={dialog.move} names={names} today={today} onClose={() => setDialog(null)} />}
+      {group.overlay}
     </div>
   )
 }

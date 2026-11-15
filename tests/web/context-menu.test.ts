@@ -7,7 +7,7 @@
 import { act, createElement, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ContextMenu, isMenuKey, menuPlace, menuPoint, moveIndex, submenuPlace, type MenuEntry } from '@renderer/components/ContextMenu'
+import { ContextMenu, isMenuKey, menuBind, menuPlace, menuPoint, moveIndex, submenuPlace, type MenuEntry } from '@renderer/components/ContextMenu'
 import { installEscape, modalOpen } from '@renderer/lib/escape'
 
 beforeAll(() => {
@@ -412,5 +412,44 @@ describe('zdarzenia menu nie bąbelkują do elementu otwarcia (portal – drzewo
     key(focused(), 'Escape')
     expect(menu()).toBeNull()
     expect(spy.key).not.toHaveBeenCalled()
+  })
+})
+
+describe('menuBind: prawy przycisk i klawisz menu na elemencie (D528)', () => {
+  const open = vi.fn()
+  function Host() {
+    return createElement(
+      'div',
+      { 'data-testid': 'row', tabIndex: 0, ...menuBind((at) => open(at)) },
+      createElement('input', { 'data-testid': 'inside-field' }),
+      createElement('span', { 'data-testid': 'inside-text' }, 'tekst')
+    )
+  }
+  beforeEach(() => {
+    open.mockClear()
+    act(() => root.render(createElement(Host)))
+  })
+
+  it('prawy przycisk na elemencie: bez menu systemowego, `open` z punktem wskaźnika; w polu wewnątrz – nic (pole ma swoje menu)', () => {
+    const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 60 })
+    act(() => void q('inside-text')!.dispatchEvent(ev))
+    expect(ev.defaultPrevented).toBe(true)
+    expect(open).toHaveBeenCalledWith({ x: 40, y: 60 })
+    open.mockClear()
+    const inField = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 })
+    act(() => void q('inside-field')!.dispatchEvent(inField))
+    expect(inField.defaultPrevented).toBe(false)
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it('Shift+F10 i klawisz menu tylko na samym elemencie (nie na tym, co w nim); punkt z jego dolnego lewego rogu', () => {
+    key(q('row')!, 'F10', { shiftKey: true })
+    key(q('row')!, 'ContextMenu')
+    expect(open).toHaveBeenCalledTimes(2)
+    open.mockClear()
+    key(q('inside-text')!, 'F10', { shiftKey: true })
+    key(q('inside-field')!, 'ContextMenu')
+    key(q('row')!, 'F10')
+    expect(open).not.toHaveBeenCalled()
   })
 })

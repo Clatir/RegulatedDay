@@ -20,6 +20,7 @@ import type { DueBadge } from '@shared/engine/caseDates'
 import type { Priority } from '@shared/model/requests'
 import { SERIES_MARK } from '@shared/seriesText'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
+import { menuBind } from '../../components/ContextMenu'
 import { cx } from '../../components/ui'
 import { attachable, hasFiles, textTarget } from '../attachments/attachDrop'
 import { attachBadge, attachBadgeTitle } from '../attachments/attachView'
@@ -267,6 +268,8 @@ export function Timeline({
   energy,
   selected,
   onSelect,
+  marked,
+  onContext,
   onCreate,
   clickCreates = true,
   onMove,
@@ -293,7 +296,14 @@ export function Timeline({
   markers: TimelineMarker[]
   energy?: EnergyTrack | null
   selected: string | null
-  onSelect: (id: string) => void
+  /** A click on a block; `mods` – Ctrl and Shift held (D527: they select without opening, the screen decides what a plain click does). */
+  onSelect: (id: string, mods: { ctrl: boolean; shift: boolean }) => void
+  /**
+   * The blocks of the selection of many (D527) – each is ringed. Left out: the ring is the open block's alone (`selected`), as before. The right
+   * button or Shift+F10 on a block asks the screen for its menu (`onContext`, D528) – nothing on an empty place of the axis.
+   */
+  marked?: (id: string) => boolean
+  onContext?: (id: string, at: { x: number; y: number }) => void
   /**
    * A new block from an empty place: a click gives its start (on the quarter, `durationMin` left out), a drag over it the
    * start and the length of the range (on the 5-min grid, D366).
@@ -375,6 +385,8 @@ export function Timeline({
   }
   // The click that ends a drag selects nothing.
   const dropped = useRef(false)
+  // Where the last press on a tile went down (a click that is far from it ends a drag – D527).
+  const pressed = useRef<{ x: number; y: number } | null>(null)
   // The tile a file or a link is dragged over (D410).
   const [dropOver, setDropOver] = useState<string | null>(null)
   // A dropped block stands at its new start until the day's items bring it there (the edit read back).
@@ -535,6 +547,8 @@ export function Timeline({
     const h = Math.max(MIN_H, (end - start) * PPM - 1)
     const tiny = h < 34
     const draggable = !!onMove && i.movable === true
+    // D527: the ring of the selection of many – or, without one, of the open block.
+    const ringed = marked ? marked(i.id) : selected === i.id
     // D365: a movable block has both edges; one that only runs on – the bottom one.
     const topEdge = !!onResize && i.movable === true
     const endEdge = !!onResize && (i.movable === true || i.resize === 'end')
@@ -556,6 +570,7 @@ export function Timeline({
         data-block-title={i.title}
         data-movable={draggable ? 'true' : undefined}
         data-selected={selected === i.id ? 'true' : undefined}
+        data-marked={marked?.(i.id) ? 'true' : undefined}
         // D462: Del on the focused tile removes the block (the screen says what – `useDeleteResolver('block')`).
         data-del={`block:${i.id}`}
         onClick={(e) => {
@@ -564,12 +579,20 @@ export function Timeline({
             dropped.current = false
             return
           }
-          onSelect(i.id)
+          // D527: a press that moved this far is a drag, not a click – also on a tile that cannot be dragged (it has no drag to say so); a click of the
+          // keyboard (no pointer) is always one.
+          const from = pressed.current
+          pressed.current = null
+          if (from && e.detail > 0 && Math.hypot(e.clientX - from.x, e.clientY - from.y) >= DRAG_FROM_PX) return
+          onSelect(i.id, { ctrl: e.ctrlKey, shift: e.shiftKey })
         }}
+        // D528: the right button and the menu key open the menu of the selection (the screen puts this block into it first).
+        {...(onContext ? menuBind((at) => onContext(i.id, at)) : {})}
         // D305: the left button drags a movable block from where it is shown; its start goes on the 5-min grid. D365: from
         // an edge's handle the edge goes (never both at once), a block with no handle under the pointer is moved as before.
         onPointerDown={(e) => {
           if (e.button !== 0) return
+          pressed.current = { x: e.clientX, y: e.clientY }
           const at = (e.target as HTMLElement).dataset.edge
           const edge: DragEdge | null = at === 'top' && topEdge ? 'top' : at === 'end' && endEdge ? 'end' : null
           if (edge == null && !draggable) return
@@ -641,7 +664,7 @@ export function Timeline({
         }}
         className={cx(
           'group absolute overflow-hidden rounded-[3px] border-l-[3px] px-1.5 text-left leading-tight transition-colors',
-          selected === i.id ? 'ring-1 ring-lamp' : 'hover:brightness-110',
+          ringed ? 'ring-1 ring-lamp' : 'hover:brightness-110',
           i.waits && 'border-dashed',
           draggable && !dragged && 'cursor-grab',
           dropOver === i.id && 'ring-2 ring-lamp',
@@ -724,7 +747,7 @@ export function Timeline({
   }
 
   return (
-    <div className={cx('flex select-none', copying && '[&_*]:cursor-copy!')} data-testid={rest['data-testid'] ?? 'timeline'} data-copying={copying ? 'true' : undefined}>
+    <div className={cx('flex select-none', copying && '[&_*]:cursor-copy!')} data-testid={rest['data-testid'] ?? 'timeline'} data-axis="true" data-copying={copying ? 'true' : undefined}>
       {/* Hours. */}
       <div className="relative w-[46px] shrink-0" style={{ height }} data-testid="timeline-hours" {...gridBind}>
         {hours.map((h) => (

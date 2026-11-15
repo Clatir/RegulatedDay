@@ -427,7 +427,7 @@ describe('okienko kosztu bloku', () => {
     click(q('block-a-cost')!)
     expect(q('cost-pop')).toBeNull()
     // The click is the tile's, as before.
-    expect(onSelect).toHaveBeenCalledWith('a')
+    expect(onSelect).toHaveBeenCalledWith('a', { ctrl: false, shift: false })
   })
 
   it('bez onCosts (Szablony, kreator) napis tylko mówi', async () => {

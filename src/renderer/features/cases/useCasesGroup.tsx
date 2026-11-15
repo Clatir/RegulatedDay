@@ -12,7 +12,7 @@ import type { CaseItem } from '@shared/engine/cases'
 import { caseSummaryItem } from '@shared/engine/casesGroup'
 import { groupSummary } from '@shared/groupSummary'
 import { settingsOn } from '@shared/model/settings'
-import { ContextMenu, isMenuKey, menuPoint } from '../../components/ContextMenu'
+import { ContextMenu, menuBind } from '../../components/ContextMenu'
 import { isEditable, type DeleteTarget } from '../../lib/deleteKey'
 import { useSelection, type SelectionApi } from '../../lib/useSelection'
 import { categoryCases, doneCases, estimateCases, moveCases, restoreCases, type GroupResult } from '../../store/casesGroup'
@@ -116,16 +116,7 @@ export function useCasesGroup(o: CasesGroupOptions): CasesGroup {
         // A click on the row gives it the focus (the row is where Del and the keys of the selection look for it).
         if (document.activeElement !== e.currentTarget) e.currentTarget.focus({ preventScroll: true })
       },
-      onContextMenu: (e) => {
-        if (isEditable(e.target)) return
-        e.preventDefault()
-        openMenu(id, menuPoint(e.nativeEvent, e.currentTarget))
-      },
-      onKeyDown: (e) => {
-        if (e.target !== e.currentTarget || !isMenuKey(e)) return
-        e.preventDefault()
-        openMenu(id, menuPoint(null, e.currentTarget))
-      },
+      ...menuBind((at) => openMenu(id, at)),
       'data-selected': sel.isSelected(id) ? 'true' : undefined
     }
   }
