@@ -2735,6 +2735,7 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Automatycznie:** `tests/unit/engine/cost-routine-change.test.ts`, `tests/web/edit-thing.test.ts`, `tests/web/edit-scope.test.ts`, `tests/web/routine-cost.test.ts`, `tests/e2e/cost-routine.spec.ts`.
 - **Jak sprawdzić:** zacznij blok rutyny bez własnego kosztu, po kilku minutach zmień koszt rutyny – raz w „Rutynach”, raz przez ✎.
 - **Oczekiwany efekt:** kafelek od razu pokazuje nowy koszt; pasy energii w „Dziś” zmieniają nachylenie od chwili zmiany, minione minuty zostają bez skoku.
+- **Też sprawdź:** usuń rutynę w trakcie jej bloku – blok liczy dalej swój koszt; blok skończony przed zmianą pokazuje koszt, z którym biegł.
 - **Nie przechodzi, gdy:** zmienia się energia w minionych minutach; zaczęty blok liczy dalej stary koszt.
 
 #### RE3 Własny koszt zaczętego bloku a „Jak rutyna” (D512)
