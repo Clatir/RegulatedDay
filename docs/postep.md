@@ -63,9 +63,9 @@ Autowznowienie po limicie: zadanie cron w sesji (co ok. 35 min) czyta ten wpis. 
 | --- | --- | --- |
 | Z0 | dokumenty gotowe | D527–D531, specyfikacja „Zaznaczanie wielu i zmiany grupowe”, plan „Ciąg Z” |
 | Z1 | w toku (15.11 22:50) | wspólna podstawa – `wykonawca-sonnet` w katalogu głównym |
-| Z2 | część A (logika) w toku | `wykonawca-sonnet`, drzewo `C:CC-ProjektyRD-z2`, gałąź `claude/z2-sprawy`; część B (interfejs) po Z1 |
+| Z2 | część A (logika) w toku | `wykonawca-sonnet`, drzewo `C:/CC-Projekty/RD-z2`, gałąź `claude/z2-sprawy`; część B (interfejs) po Z1 |
 | Z3 | czeka na Z1 | Kalendarz |
-| Z4 | część A (logika) w toku | `wykonawca-opus`, drzewo `C:CC-ProjektyRD-z4`, gałąź `claude/z4-bloki`; część B (oś) po Z1 |
+| Z4 | część A (logika) w toku | `wykonawca-opus`, drzewo `C:/CC-Projekty/RD-z4`, gałąź `claude/z4-bloki`; część B (oś) po Z1 |
 | Z5 | czeka na Z4 | wiele dni |
 | Z6 | czeka na Z4, Z5 | przeciąganie grupy |
 | Z7 | czeka | wersja, CHANGELOG, odbiór, Setup, PR, wydanie |

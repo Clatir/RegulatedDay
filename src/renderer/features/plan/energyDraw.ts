@@ -6,13 +6,13 @@
  */
 import type { EnergyTrack } from '@shared/engine/energyTrack'
 import { logicalClock } from '@shared/format'
-import type { Pool } from '@shared/model/categories'
+import { POOL_LETTER, type Pool } from '@shared/model/categories'
 
 export const POOLS: readonly Pool[] = ['head', 'emotions', 'senses', 'body']
 export const POOL_COLOR: Record<Pool, string> = { head: '#F2B66D', emotions: '#D49A97', senses: '#79AFAB', body: '#B49FCC' }
 export const POOL_NAME: Record<Pool, string> = { head: 'głowa', emotions: 'emocje', senses: 'bodźce', body: 'ciało' }
-/** The letter over a pool's lane and in the legend (D500, D520: G · E · B · C). */
-export const POOL_LETTER: Record<Pool, string> = { head: 'G', emotions: 'E', senses: 'B', body: 'C' }
+/** The letter over a pool's lane and in the legend (D500, D520: G · E · B · C) – shared with the texts (`@shared/model/categories`). */
+export { POOL_LETTER }
 /** The colour of the reserve's tick. */
 export const RESERVE_COLOR = '#D49A97'
 /** The scale every drawing of the energy names (D500). */
