@@ -83,14 +83,14 @@ describe('oryginał nigdy się nie zmienia (przegląd 2)', () => {
 
   it('podgląd: oryginał nie jest wśród przesuwanych', () => {
     const plan = [flex('a', '18:00', 60)]
-    const day = countDay(D1, { date: D1, dayFile: fileOf(D1, plan), nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [], lectures: [], series: [] }, AT, false)
+    const day = countDay(D1, { date: D1, dayFile: fileOf(D1, plan), nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [], lectures: [], series: [], routines: [] }, AT, false)
     expect(blockCopyModule.copyPreview(day, plan[0]!, lm('17:30'), true).pushed.map((p) => p.id)).toEqual([])
   })
 
   it('„Szablony”: kopia na 17:30 bloku A 18:00 – A zostaje 18:00 w wersji i nie ma go w podglądzie', () => {
     const t: Template = { id: 'zwykly', name: 'Dzień zwykły', dayType: 'zwykly', weekdays: [], archived: false, versions: [{ from: '2000-01-01', blocks: [planBlock({ id: 'a', categoryId: 'inne', startMin: lm('18:00'), durationMin: 60, origin: 'template' })], budgetMin: null, maxMin: null }] }
     const SUNDAY = '2026-11-15'
-    const day = countDay(SUNDAY, { date: SUNDAY, dayFile: { schema: 1, date: SUNDAY, dayType: 'zwykly' }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [t], lectures: [], series: [] }, placeLogical(SUNDAY, 4 * 60), false)
+    const day = countDay(SUNDAY, { date: SUNDAY, dayFile: { schema: 1, date: SUNDAY, dayType: 'zwykly' }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [t], lectures: [], series: [], routines: [] }, placeLogical(SUNDAY, 4 * 60), false)
     const c = templateCopy(day, t.versions[0]!.blocks[0]!, lm('17:30'), 'kopia')
     expect(c.pushed).toBe(0)
     expect(c.preview.has('a')).toBe(false)
@@ -103,7 +103,7 @@ describe('kopia sprawy z panelu (przegląd 3, 7)', () => {
     const task = newTask('t1', 1, TODAY, { title: 'Zadzwonić', list: 'today', estimateMin: 60 })!
     const plan = [flex('a', '18:00', 60)]
     const s = stub({ [D1]: fileOf(D1, plan) }, [task])
-    const model = countDay(D1, { date: D1, dayFile: s.files[D1]!, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [], lectures: [], series: [] }, AT, false)
+    const model = countDay(D1, { date: D1, dayFile: s.files[D1]!, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [], lectures: [], series: [], routines: [] }, AT, false)
     const r = await planOnAxis(model, TODAY, requestFrom(task)!, 'Zadzwonić', lm('18:00'), undefined, true)
     expect(r.saved).toBe(true)
     expect(r.moved).toBe(1)

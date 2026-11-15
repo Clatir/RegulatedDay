@@ -199,7 +199,7 @@ describe('D513 – „Dziś”: kopia na osi dnia', () => {
   it('kopia na zajęte miejsce dziś: kopia i przesunięcia jednym wpisem, pasek słyszy tylko o przesunięciu (bez własnej linii)', async () => {
     const plan = [flex('a', '18:00', 60), flex('b', '19:00', 60)]
     const s = stub({ [TODAY]: fileOf(TODAY, plan) })
-    const day = countDay(TODAY, { date: TODAY, dayFile: s.files[TODAY]!, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [], lectures: [], series: [] }, AT, false)
+    const day = countDay(TODAY, { date: TODAY, dayFile: s.files[TODAY]!, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [], lectures: [], series: [], routines: [] }, AT, false)
     // „a” copied onto 19:00: „b” goes on; „a” itself stays (a copy never changes it).
     const r = await copyBlockTo({ to: TODAY, today: TODAY, startMin: lm('19:00'), name: 'Inne', at: AT, read: async () => ({ block: plan[0]!, place: { scope: 'day', date: TODAY, templateId: null }, day, file: s.files[TODAY]! }) })
     expect(r).toMatchObject({ saved: true, pushed: 1 })
@@ -215,7 +215,7 @@ describe('D513 – „Dziś”: kopia na osi dnia', () => {
 describe('D513 – podgląd kopii w trakcie przeciągania', () => {
   it('kopia przed oryginałem: oryginał stoi (jak blok stały), inne elastyczne przeskakują go; miejsce kopii nigdy pod id oryginału (`COPY_SPAN_ID`)', () => {
     const plan = [flex('a', '18:00', 60), flex('b', '19:00', 60)]
-    const day = countDay(D1, { date: D1, dayFile: fileOf(D1, plan), nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [], lectures: [], series: [] }, AT, false)
+    const day = countDay(D1, { date: D1, dayFile: fileOf(D1, plan), nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [], lectures: [], series: [], routines: [] }, AT, false)
     // „b” copied to 18:00: „a” goes past „b”, which stays where it is.
     const c = copyPreview(day, plan[1]!, lm('18:00'), true)
     expect(c.pushed.map((p) => p.id)).toEqual(['a'])
@@ -237,7 +237,7 @@ describe('D513 – podgląd kopii w trakcie przeciągania', () => {
   it('„Szablony”: podgląd ma miejsce kopii pod `COPY_SPAN_ID`; oryginał stoi – nie ma go w podglądzie', () => {
     const t: Template = { id: 'zwykly', name: 'Dzień zwykły', dayType: 'zwykly', weekdays: [], archived: false, versions: [{ from: '2000-01-01', blocks: [planBlock({ id: 'a', categoryId: 'inne', startMin: lm('18:00'), durationMin: 60, origin: 'template' })], budgetMin: null, maxMin: null }] }
     const SUNDAY = '2026-11-15'
-    const day = countDay(SUNDAY, { date: SUNDAY, dayFile: { schema: 1, date: SUNDAY, dayType: 'zwykly' }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [t], lectures: [], series: [] }, placeLogical(SUNDAY, 4 * 60), false)
+    const day = countDay(SUNDAY, { date: SUNDAY, dayFile: { schema: 1, date: SUNDAY, dayType: 'zwykly' }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [t], lectures: [], series: [], routines: [] }, placeLogical(SUNDAY, 4 * 60), false)
     const preview = templateCopy(day, t.versions[0]!.blocks[0]!, lm('17:30'), COPY_SPAN_ID).preview
     expect(preview.get(COPY_SPAN_ID)).toEqual({ startMin: lm('17:30'), endMin: lm('18:30') })
     expect(preview.has('a')).toBe(false)
@@ -250,7 +250,7 @@ describe('D513 – „Szablony”: kopia bloku szablonu', () => {
     const raw = templateJson(t)
     const s = stub({}, [], { templates: [raw] })
     const SUNDAY = '2026-11-15'
-    const day = countDay(SUNDAY, { date: SUNDAY, dayFile: { schema: 1, date: SUNDAY, dayType: 'zwykly' }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [t], lectures: [], series: [] }, placeLogical(SUNDAY, 4 * 60), false)
+    const day = countDay(SUNDAY, { date: SUNDAY, dayFile: { schema: 1, date: SUNDAY, dayType: 'zwykly' }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: rdFrom(undefined).settings, templates: [t], lectures: [], series: [], routines: [] }, placeLogical(SUNDAY, 4 * 60), false)
     const r = await copyTemplateBlock({ templateId: 'zwykly', from: '2000-01-01', day, block: t.versions[0]!.blocks[0]!, startMin: lm('20:00'), name: 'Inne' })
     expect(r.saved).toBe(true)
     const after = templateFrom(s.recs.get(paths.record('template', 'zwykly')))!
