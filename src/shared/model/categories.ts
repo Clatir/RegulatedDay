@@ -16,17 +16,18 @@ export type Place = 'computer' | 'passive' | 'away'
  */
 export type CategoryKind = 'session' | 'lecture' | 'remoteClass' | 'commute' | 'meal' | 'routine' | 'request' | 'regen' | 'project' | 'other'
 
-/** Cost per hour for the cognitive, emotional and sensory pool, −5…5 (spec „Model energii”). */
+/** Cost per hour for the cognitive, emotional, sensory and physical pool, −5…5 (spec „Model energii”; `body` – D520). */
 export interface Costs {
   head: number
   emotions: number
   senses: number
+  body: number
 }
 
-/** The three pools (spec „Pule”): „głowa”, „emocje”, „bodźce”. */
+/** The four pools (spec „Pule”): „głowa”, „emocje”, „bodźce”, „ciało” (D520). */
 export type Pool = keyof Costs
-export const POOLS: readonly Pool[] = ['head', 'emotions', 'senses']
-/** A state of the three pools, 0–100. */
+export const POOLS: readonly Pool[] = ['head', 'emotions', 'senses', 'body']
+/** A state of the four pools, 0–100. */
 export type PoolValues = Record<Pool, number>
 
 export interface Variant {
@@ -71,7 +72,7 @@ export interface Category extends CategoryRules {
   archived: boolean
 }
 
-const c = (head: number, emotions: number, senses: number): Costs => ({ head, emotions, senses })
+const c = (head: number, emotions: number, senses: number, body: number): Costs => ({ head, emotions, senses, body })
 
 const base: Omit<CategoryRules, 'cls' | 'kind' | 'place' | 'costs'> = {
   background: false,
@@ -96,15 +97,15 @@ const cat = (id: string, name: string, rules: Partial<CategoryRules> & Pick<Cate
 
 /** The starting categories (spec tables „Kategorie startowe” and „Koszty startowe kategorii”). */
 export const DEFAULT_CATEGORIES: readonly Category[] = [
-  cat('sesja', 'Sesja tradingowa', { cls: 'work', kind: 'session', place: 'computer', background: true, noSleep: true, costs: c(2, 2, 2) }),
-  cat('analiza', 'Analiza', { cls: 'work', kind: 'other', place: 'computer', costs: c(3, 1, 1) }),
+  cat('sesja', 'Sesja tradingowa', { cls: 'work', kind: 'session', place: 'computer', background: true, noSleep: true, costs: c(2, 2, 2, 0) }),
+  cat('analiza', 'Analiza', { cls: 'work', kind: 'other', place: 'computer', costs: c(3, 1, 1, 0) }),
   cat('nauka', 'Nauka (NotebookLM)', {
     cls: 'work',
     kind: 'other',
     place: 'computer',
     afterWorkAsProject: true,
-    costs: c(3, 0, 1),
-    variants: [{ id: 'sluchanie', name: 'Nauka — słuchanie', place: 'passive', costs: c(2, 0, 0) }]
+    costs: c(3, 0, 1, 0),
+    variants: [{ id: 'sluchanie', name: 'Nauka — słuchanie', place: 'passive', costs: c(2, 0, 0, 0) }]
   }),
   cat('wyklad', 'Wykład online (nagrywanie)', {
     cls: 'work',
@@ -114,23 +115,23 @@ export const DEFAULT_CATEGORIES: readonly Category[] = [
     startsInBackground: true,
     noSleep: true,
     keepsRegen: true,
-    costs: c(1, 0, 1)
+    costs: c(1, 0, 1, 0)
   }),
-  cat('ogladanie', 'Oglądanie wykładu', { cls: 'work', kind: 'other', place: 'passive', afterWorkAsProject: true, costs: c(2, 0, 1) }),
-  cat('zajecia-zdalne', 'Zajęcia zdalne', { cls: 'work', kind: 'remoteClass', place: 'passive', contact: true, classMode: true, costs: c(2, 2, 2) }),
-  cat('inne', 'Inne obowiązki', { cls: 'work', kind: 'other', place: 'computer', costs: c(1, 1, 1) }),
-  cat('posilek', 'Posiłek', { cls: 'life', kind: 'meal', place: 'away', protected: true, costs: c(0, 1, 1) }),
-  cat('rutyny', 'Rutyny i opieka nad zwierzętami', { cls: 'life', kind: 'routine', place: 'away', protected: true, noMoveTomorrow: true, costs: c(1, 0, 1) }),
-  cat('prosby', 'Prośby domowe', { cls: 'life', kind: 'request', place: 'away', contact: true, costs: c(1, 3, 2) }),
+  cat('ogladanie', 'Oglądanie wykładu', { cls: 'work', kind: 'other', place: 'passive', afterWorkAsProject: true, costs: c(2, 0, 1, 0) }),
+  cat('zajecia-zdalne', 'Zajęcia zdalne', { cls: 'work', kind: 'remoteClass', place: 'passive', contact: true, classMode: true, costs: c(2, 2, 2, 0) }),
+  cat('inne', 'Inne obowiązki', { cls: 'work', kind: 'other', place: 'computer', costs: c(1, 1, 1, 1) }),
+  cat('posilek', 'Posiłek', { cls: 'life', kind: 'meal', place: 'away', protected: true, costs: c(0, 1, 1, 0) }),
+  cat('rutyny', 'Rutyny i opieka nad zwierzętami', { cls: 'life', kind: 'routine', place: 'away', protected: true, noMoveTomorrow: true, costs: c(1, 0, 1, 1) }),
+  cat('prosby', 'Prośby domowe', { cls: 'life', kind: 'request', place: 'away', contact: true, costs: c(1, 3, 2, 1) }),
   cat('dojazd', 'Dojazd, zajęcia stacjonarne', {
     cls: 'work',
     kind: 'commute',
     place: 'away',
     contact: true,
-    costs: c(2, 4, 4),
+    costs: c(2, 4, 4, 1),
     variants: [
-      { id: 'dojazd', name: 'Dojazd', costs: c(1, 2, 4) },
-      { id: 'zajecia', name: 'Zajęcia', costs: c(2, 4, 4) }
+      { id: 'dojazd', name: 'Dojazd', costs: c(1, 2, 4, 1) },
+      { id: 'zajecia', name: 'Zajęcia', costs: c(2, 4, 4, 1) }
     ]
   }),
   cat('regeneracja', 'Regeneracja', {
@@ -138,23 +139,23 @@ export const DEFAULT_CATEGORIES: readonly Category[] = [
     kind: 'regen',
     place: 'away',
     protected: true,
-    costs: c(-1, -2, -3),
+    costs: c(-1, -2, -3, -1),
     variants: [
-      { id: 'cisza', name: 'Cisza, koc obciążeniowy, ciepłe światło', costs: c(-1, -2, -3) },
-      { id: 'spacer', name: 'Samotny spacer', costs: c(-1, -3, -2) },
-      { id: 'prysznic', name: 'Gorący prysznic', costs: c(0, -1, -3) },
-      { id: 'drzemka', name: 'Leżenie, drzemka', costs: c(-3, -1, -2) },
-      { id: 'przerwa-od-ekranu', name: 'Przerwa od ekranu', costs: c(-1, 0, -2) },
-      { id: 'gra', name: 'Gra, film', place: 'computer', costs: c(-1, -1, 0) }
+      { id: 'cisza', name: 'Cisza, koc obciążeniowy, ciepłe światło', costs: c(-1, -2, -3, -1) },
+      { id: 'spacer', name: 'Samotny spacer', costs: c(-1, -3, -2, 1) },
+      { id: 'prysznic', name: 'Gorący prysznic', costs: c(0, -1, -3, -2) },
+      { id: 'drzemka', name: 'Leżenie, drzemka', costs: c(-3, -1, -2, -3) },
+      { id: 'przerwa-od-ekranu', name: 'Przerwa od ekranu', costs: c(-1, 0, -2, 0) },
+      { id: 'gra', name: 'Gra, film', place: 'computer', costs: c(-1, -1, 0, 0) }
     ]
   }),
-  cat('projekty', 'Projekty', { cls: 'free', kind: 'project', place: 'computer', costs: c(3, 0, 1) }),
-  cat('journaling', 'Journaling', { cls: 'work', kind: 'other', place: 'computer', afterWorkAsProject: true, costs: c(3, 1, 1) }),
+  cat('projekty', 'Projekty', { cls: 'free', kind: 'project', place: 'computer', costs: c(3, 0, 1, 0) }),
+  cat('journaling', 'Journaling', { cls: 'work', kind: 'other', place: 'computer', afterWorkAsProject: true, costs: c(3, 1, 1, 0) }),
   cat('sprawy', 'Sprawy domowe', {
     cls: 'life',
     kind: 'other',
     place: 'away',
-    costs: c(1, 1, 1),
+    costs: c(1, 1, 1, 1),
     variants: [{ id: 'przy-komputerze', name: 'Opłaty, zamówienia, wizyty', place: 'computer' }]
   })
 ]
