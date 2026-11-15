@@ -42,7 +42,10 @@ const BLOCK_FIELDS: Record<string, string> = {
   routine: 'rutyna',
   steps: 'kroki',
   movedFrom: 'przeniesiony z',
-  byVariant: 'zmieniony wariantem'
+  byVariant: 'zmieniony wariantem',
+  byType: 'miejsce ze zmiany typu',
+  // D511: a template's session.
+  session: 'sesja (według czasu, dni)'
 }
 
 const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok', title: 'tytuł', kind: 'rodzaj', categoryId: 'kategoria', list: 'lista', listDay: 'dzień na liście „Dziś”', doneAt: 'zrobione', dueDate: 'termin', doDate: 'wykonać', listSetDay: 'dzień przeniesienia na listę', priority: 'priorytet', steps: 'kroki', stepsDone: 'odhaczone kroki' }
@@ -136,7 +139,7 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames, va
     if (a === 'wakeMin') return 'pobudka dnia'
     if (a === 'cancelled') return b ? `${blockPart(b, undefined)}: odwołany` : 'odwołane bloki'
     if (a === 'movedTo') return b ? `${blockPart(b, undefined)}: przeniesiony na` : 'przeniesione bloki'
-    if (a === 'sessions') return 'odpowiedzi warstwy sesji'
+    if (a === 'sessions') return 'odpowiedzi o sesje'
     if (a === 'asked') return 'pytania tego dnia'
     if (a === 'classImport') return 'import zjazdów'
     if (a === 'stepsDone') return b ? `${blockPart(b, undefined)}: odhaczone kroki` : 'odhaczone kroki'
@@ -149,6 +152,7 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames, va
     if (a === 'weekdays') return 'dni tygodnia'
     if (a === 'dayType') return 'typ dnia'
     if (a === 'archived') return 'archiwum'
+    if (a === 'sessionsMoved') return 'przeniesienie sesji z Ustawień'
     if (a === 'versions') return b ? `wersja od ${plDate(b)}${rest[0] === 'blocks' ? `: ${blockPart(rest[1], rest[2])}` : rest[0] === 'budgetMin' ? ': budżet' : rest[0] === 'maxMin' ? ': maksimum' : ''}` : 'wersje'
     return 'inne pole szablonu'
   }

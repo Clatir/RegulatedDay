@@ -644,6 +644,53 @@ describe('szablon: usunięcie bloku i szablonu zdejmuje ich załączniki, „Cof
   })
 })
 
+describe('szablon z sesjami (D511): usunięcie wpisu i szablonu przeniesienia (T1412, T1418)', () => {
+  const fileAt = (rel: string) => (existsSync(join(dir, rel)) ? (JSON.parse(readFileSync(join(dir, rel), 'utf8')) as Record<string, unknown>) : null)
+  const link = (id: string, owner: AttachmentOwner) => write(attachmentRel(id), { schema: 1, id, kind: 'link', name: '', file: null, link: { url: 'https://example.org/', title: null, iconDataUrl: null, domain: 'example.org' }, owner, addedAt: 1, removedAt: null })
+  const removed = (id: string) => (recordOf(id)?.removedAt ?? null) as number | null
+  const ny = planBlock({ id: 'ny', categoryId: 'sesja', startMin: 14 * 60, durationMin: 180, fixed: true, origin: 'template', name: 'Sesja NY', session: { zone: 'America/New_York', markets: ['NYSE'], days: ['yes', 'yes', 'yes', 'yes', 'yes', 'yes', 'yes'] } })
+  const tpl = (id: string, dayType: string) => ({ schema: 1, id, name: id, dayType, weekdays: [], archived: false, sessionsMoved: '2026-01-01', versions: { '2026-01-01': { blocks: [ny], sessionsMoved: '2026-01-01' } } })
+  /** rd.json after the move: the template `sesje-zjazd-zdalny` made by it. */
+  const movedRd = () => ({ schema: 1, settings: [{ id: 'sesje-w-szablonach', from: '2026-01-01', at: null, made: 1, patch: { sessions: [], movedLayer: { from: '2026-01-01', sessions: [], grid: {}, templates: ['sesje-zjazd-zdalny', 'zw'], made: { 'sesje-zjazd-zdalny': 'zjazd-zdalny' } } } }], people: [] })
+
+  it('usunięcie szablonu zrobionego przez przeniesienie zapisuje w rd.json, że go nie ma – jego typ nie wraca do warstwy', async () => {
+    write(paths.settings, movedRd())
+    write(paths.record('template', 'sesje-zjazd-zdalny'), tpl('sesje-zjazd-zdalny', 'zjazd-zdalny'))
+    await reloadData()
+    expect(await (await templateActions()).removeTemplate('sesje-zjazd-zdalny', 'Zjazd zdalny')).toBe(true)
+    expect(fileAt(paths.record('template', 'sesje-zjazd-zdalny'))).toBeNull()
+    const changes = (fileAt(paths.settings)!.settings as Array<{ id: string; from: string; patch: unknown }>).map((c) => [c.id, c.from, c.patch])
+    expect(changes.at(-1)).toEqual(['sesje-usuniety-sesje-zjazd-zdalny', '2026-01-01', { movedLayer: { from: '2026-01-01', gone: { 'sesje-zjazd-zdalny': true } } }])
+    // A template of yours (not made by the move): rd.json untouched.
+    write(paths.record('template', 'zw'), tpl('zw', 'zwykly'))
+    await reloadData()
+    const before = readFileSync(join(dir, paths.settings), 'utf8')
+    expect(await (await templateActions()).removeTemplate('zw', 'zw')).toBe(true)
+    expect(readFileSync(join(dir, paths.settings), 'utf8')).toBe(before)
+  })
+
+  it('pliki dni nieczytelne przy „Usuń z szablonu” sesji: zmiana zapisana, załączniki dni zostają, problem w logu okna', async () => {
+    write(paths.record('template', 'zw'), tpl('zw', 'zwykly'))
+    const day = addDays(today(), 3)
+    link('t-ny', { scope: 'template', templateId: 'zw', blockId: 'ny' })
+    link('d-ny', own(derivedId(day, 'ses', 'ny'), day))
+    await reloadData()
+    const rd = (globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd
+    const real = rd.dayFiles
+    rd.dayFiles = () => Promise.reject(new Error('EIO'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      expect(await (await templateActions()).removeTemplateBlock('zw', addDays(today(), 1), ny, 'Sesja NY')).toBe(true)
+      expect(removed('t-ny')).toEqual(expect.any(Number))
+      expect(removed('d-ny')).toBeNull()
+      expect(warn.mock.calls.map((c) => String(c[0])).some((t) => t.includes('załączniki dni zostają'))).toBe(true)
+    } finally {
+      rd.dayFiles = real
+      warn.mockRestore()
+    }
+  })
+})
+
 describe('seria: „Cała seria” – plik dołączany w trakcie do kosza, po 30 dniach pliki znikają (D415, T806, T839)', () => {
   const fizjo = () => {
     const start = addDays(today(), -3)

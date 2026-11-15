@@ -21,6 +21,7 @@ import { useStepPicks } from '../lib/stepPicks'
 import { termHolds } from '../lib/viewTerms'
 import { useEscapeLayer } from '../lib/escape'
 import { useQuickToday } from './quickToday'
+import { pressFromMove, releasedUnheard, type GripState } from './barGrip'
 
 export type BarMode = 'main' | 'panel' | 'desktop'
 type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | 'quick' | 'parallel' | null
@@ -74,46 +75,113 @@ function BarButton({ mode, onAct, children, testId, pressed, accent, label }: { 
   )
 }
 
+/** A drag of the handle: held now (by which pointer), its frame's message waiting, and what the page last heard of the pointer. */
+interface Grip extends GripState {
+  held: boolean
+  pointer: number
+  frame: number
+}
+
+/** The grip let go – its end told to the main process (`why`, logged: the trace of a drag that never moved, E4b.12) or not. */
+function endGrip(g: Grip, why: 'up' | 'cancel' | 'lost' | null): void {
+  if (!g.held) return
+  g.held = false
+  cancelAnimationFrame(g.frame)
+  g.frame = 0
+  if (why) window.rd.barDrag('end', why)
+}
+
 /**
  * The handle the desktop bar is dragged by (D303), seen on hover, over the left padding of the bar's main part: the
- * main process moves the bar after the cursor – one message a frame – and remembers where it is let go.
+ * main process moves the bar after the cursor and remembers where it is let go. The drag begins at the press – or, when
+ * Windows never handed the page the press (T1500), at the first move over the handle with the button held; while it is
+ * held the whole page listens to the pointer that grabbed it: a move without the left button or a release anywhere ends it,
+ * and the release clicks nothing.
  */
 function DragHandle() {
-  const held = useRef(false)
-  const frame = useRef(0)
-  // Why it ended goes with it (the main process logs it: the trace of a drag that never moved, E4b.12).
-  const end = (why: 'up' | 'cancel' | 'lost') => {
-    if (!held.current) return
-    held.current = false
-    cancelAnimationFrame(frame.current)
-    frame.current = 0
-    window.rd.barDrag('end', why)
-  }
+  const ref = useRef<HTMLSpanElement>(null)
+  const grip = useRef<Grip>({ held: false, pointer: -1, frame: 0, prevButtons: null, prevOnHandle: false, pressHeard: false })
+  useEffect(() => {
+    const g = grip.current
+    // Held: only the pointer that grabbed it; else only the mouse – a pen or a touch never grabs the handle by a move.
+    const other = (e: PointerEvent) => (g.held ? e.pointerId !== g.pointer : e.pointerType !== 'mouse')
+    const down = (e: PointerEvent) => void (e.pointerType === 'mouse' && (g.pressHeard = true))
+    const move = (e: PointerEvent) => {
+      if (other(e)) return
+      const before: GripState = { prevButtons: g.prevButtons, prevOnHandle: g.prevOnHandle, pressHeard: g.pressHeard }
+      g.prevButtons = e.buttons
+      g.prevOnHandle = e.target instanceof Node && !!ref.current?.contains(e.target)
+      // No button: no press is held, heard or not (its release may have come where the page could not hear it).
+      if (releasedUnheard(e.buttons)) g.pressHeard = false
+      if (!g.held) {
+        if (pressFromMove(e.buttons, before)) {
+          Object.assign(g, { held: true, pointer: e.pointerId })
+          window.rd.barDrag('start', 'move')
+        }
+        return
+      }
+      if (releasedUnheard(e.buttons)) return endGrip(g, 'up')
+      if (g.frame) return
+      g.frame = requestAnimationFrame(() => {
+        g.frame = 0
+        if (g.held) window.rd.barDrag('move')
+      })
+    }
+    const up = (e: PointerEvent) => {
+      if (other(e)) return
+      g.pressHeard = false
+      g.prevButtons = e.buttons
+      if (!g.held) return
+      // Let go anywhere in the bar (it may lag behind the cursor): the drag's end – never the click of a button there.
+      e.stopPropagation()
+      endGrip(g, 'up')
+    }
+    const cancel = (e: PointerEvent) => {
+      if (other(e)) return
+      g.pressHeard = false
+      endGrip(g, 'cancel')
+    }
+    document.addEventListener('pointerdown', down, true)
+    document.addEventListener('pointermove', move, true)
+    document.addEventListener('pointerup', up, true)
+    document.addEventListener('pointercancel', cancel, true)
+    // The cursor left the window: its last move here says nothing of where the next one comes from (the button may be
+    // pressed outside and dragged in).
+    const left = () => void Object.assign(g, { prevButtons: null, prevOnHandle: false })
+    document.documentElement.addEventListener('pointerleave', left)
+    // The main process ended the drag by itself (the helper heard the release): the grip goes too, without a word back.
+    const over = window.rd.onBarDragOver(() => endGrip(g, null))
+    return () => {
+      over()
+      document.documentElement.removeEventListener('pointerleave', left)
+      document.removeEventListener('pointerdown', down, true)
+      document.removeEventListener('pointermove', move, true)
+      document.removeEventListener('pointerup', up, true)
+      document.removeEventListener('pointercancel', cancel, true)
+      endGrip(g, 'lost')
+    }
+  }, [])
   return (
     <span
+      ref={ref}
       aria-label="przeciągnij pasek"
       data-testid="bar-drag"
       className="absolute top-0 left-0 z-10 flex h-full w-3 cursor-grab items-center justify-center text-[12px] text-muted opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
       onPointerDown={(e) => {
         if (e.button !== 0) return
         e.stopPropagation()
-        e.currentTarget.setPointerCapture(e.pointerId)
-        held.current = true
-        window.rd.barDrag('start')
+        // The cursor's capture: a heard press gives the window the moves beyond it too.
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId)
+        } catch {
+          // No capture – the main process follows the cursor by itself.
+        }
+        Object.assign(grip.current, { held: true, pointer: e.pointerId })
+        window.rd.barDrag('start', 'press')
       }}
-      onPointerMove={() => {
-        if (!held.current || frame.current) return
-        frame.current = requestAnimationFrame(() => {
-          frame.current = 0
-          if (held.current) window.rd.barDrag('move')
-        })
-      }}
-      onPointerUp={(e) => {
-        e.stopPropagation()
-        end('up')
-      }}
-      onPointerCancel={() => end('cancel')}
-      onLostPointerCapture={() => end('lost')}
+      // A click on the handle is never a click of the bar.
+      onPointerUp={(e) => e.stopPropagation()}
+      onLostPointerCapture={() => endGrip(grip.current, 'lost')}
     >
       ⠿
     </span>

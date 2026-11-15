@@ -145,6 +145,57 @@ namespace RegulatedDay
             }
         }
 
+        static readonly object MouseGate = new object();
+        static Timer mouseWatch;
+        static long mouseDrag;
+
+        /// <summary>
+        /// The left mouse button held now – the logical one (swapped buttons: the physical right one; GetAsyncKeyState reads
+        /// the physical buttons).
+        /// </summary>
+        static bool LeftHeld()
+        {
+            int vk = Native.GetSystemMetrics(Native.SM_SWAPBUTTON) != 0 ? Native.VK_RBUTTON : Native.VK_LBUTTON;
+            return (Native.GetAsyncKeyState(vk) & 0x8000) != 0;
+        }
+
+        /// <summary>
+        /// A drag of the desktop bar (T1500): its window may never hear the release (no capture without a press it heard, the
+        /// bar under other windows) – every 15 ms the button's state, one event „mouse up” with the drag's number once it is
+        /// let go; a new watch replaces the old one.
+        /// </summary>
+        static void WatchMouse(long drag)
+        {
+            lock (MouseGate)
+            {
+                if (mouseWatch != null) mouseWatch.Dispose();
+                mouseDrag = drag;
+                mouseWatch = new Timer(delegate(object state) { MouseTick(drag); }, null, 15, 15);
+            }
+        }
+
+        static void MouseTick(long drag)
+        {
+            if (LeftHeld()) return;
+            lock (MouseGate)
+            {
+                if (mouseWatch == null || mouseDrag != drag) return;
+                mouseWatch.Dispose();
+                mouseWatch = null;
+            }
+            Send(new JObj().Set("type", "mouse").Set("event", "up").Set("drag", drag));
+        }
+
+        static void UnwatchMouse()
+        {
+            lock (MouseGate)
+            {
+                if (mouseWatch != null) mouseWatch.Dispose();
+                mouseWatch = null;
+                mouseDrag = 0;
+            }
+        }
+
         static IntPtr Hwnd(Dictionary<string, object> m)
         {
             long v;
@@ -182,6 +233,12 @@ namespace RegulatedDay
                     }
                 case "fullscreen.unwatch":
                     watcher.Post(delegate() { watcher.UnwatchFullscreen(); });
+                    return true;
+                case "mouse.watch":
+                    WatchMouse(Json.Long(m, "drag", 0));
+                    return true;
+                case "mouse.unwatch":
+                    UnwatchMouse();
                     return true;
                 case "notificationState":
                     {

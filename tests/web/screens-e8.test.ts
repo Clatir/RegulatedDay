@@ -99,12 +99,16 @@ describe('kreator: pusty wykład (A7-19)', () => {
 })
 
 describe('kreator bez drugiej zmiany (D467)', () => {
-  it('szkic nie ma kroku ani pola drugiej zmiany; „Zakończ” zapisuje dzień zwykły bez bloków i sobotę z analizą bez oznaczenia', () => {
+  it('szkic nie ma kroku ani pola drugiej zmiany; „Zakończ” zapisuje dzień zwykły tylko z sesjami (D511) i sobotę z analizą bez oznaczenia', () => {
     resetWizard()
     expect('secondShift' in useWizard.getState()).toBe(false)
     const templates = finishRecords(useWizard.getState(), 1000, 'pca').filter((r) => r.rel.startsWith('templates/'))
     const blocks = (rel: string) => Object.values((templates.find((t) => t.rel === rel)!.value as { versions: Record<string, { blocks: Array<Record<string, unknown>> }> }).versions).flatMap((v) => v.blocks)
-    expect(blocks('templates/zwykly.json')).toEqual([])
+    // D511: the ordinary day's only blocks are its sessions (no evening block of a second shift).
+    expect(blocks('templates/zwykly.json').map((b) => [b.id, b.categoryId, 'session' in b, 'tag' in b])).toEqual([
+      ['londyn', 'sesja', true, false],
+      ['ny', 'sesja', true, false]
+    ])
     expect(blocks('templates/sobota.json').map((b) => [b.categoryId, b.startMin, 'tag' in b, 'waitUntilMin' in b])).toEqual([['analiza', 9 * 60, false, false]])
   })
 })

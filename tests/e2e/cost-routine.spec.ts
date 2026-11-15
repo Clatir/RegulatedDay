@@ -131,7 +131,9 @@ test('koszt w „Szablonach” (D512): kafelek bloku szablonu ma koszt i okienko
       const box = (await hours.boundingBox())!
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
       await expect(page.getByTestId('block-editor')).toBeVisible({ timeout: 15_000 })
-      const label = timeline.locator('[data-cost-of^="tile:"][data-editable="true"]')
+      // The ordinary day's sessions are blocks of the template too (D511, T1461): their tiles have the window as well.
+      await expect(timeline.locator('[data-cost-of="tile:ny"][data-editable="true"]')).toHaveCount(1)
+      const label = timeline.locator('[data-cost-of^="tile:"][data-editable="true"]:not([data-cost-of="tile:ny"]):not([data-cost-of="tile:londyn"])')
       await expect(label).toHaveCount(1)
       await expect(label).toHaveText('1 · 1 · 1')
       await label.click()

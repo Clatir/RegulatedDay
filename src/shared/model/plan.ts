@@ -7,9 +7,90 @@
  */
 import { isIsoDate } from '../time/zone'
 import { NOTE_MAX } from './note'
-import { DAY_TYPES, RANGES, type DayTypeId } from './settings'
+import { DAY_TYPES, RANGES, isSessionMarket, isZone, type DayTypeId, type SessionChoice, type SessionMarket } from './settings'
 import { routineStepsEntries, type RoutineStepsEntry } from './routineSteps'
 import { doneSetFrom, stepsFrom, type Step } from './steps'
+
+/**
+ * A block of a template that is a session (D511, D515, `model/templateSessions.ts`): its hour is Polish time as usual (as the
+ * axis of „Szablony” shows it), kept „według czasu” of `zone` – New York, London or Poland – so it moves with that zone's
+ * clock; `markets` – whose holidays and early closes concern it; `days` – the answer of each weekday (Monday first): „tak” –
+ * the day has it, „pytaj” – the morning asks („pytaj rano”), „nie” – none (a weekday the template does not make – no
+ * meaning). `id` – the session's own id when the entry's block has another one (an ordinary block of the template has the
+ * session's, T1406); none – the block's. Only in templates: a day's block of it is a session of origin „session”
+ * (`sessionBlock`), without the field.
+ */
+export interface BlockSession {
+  zone: string
+  markets: SessionMarket[]
+  days: SessionChoice[]
+  id?: string
+}
+
+/** Every weekday „tak” – a session new in a template (T1404). */
+export const ALL_DAYS_YES: readonly SessionChoice[] = ['yes', 'yes', 'yes', 'yes', 'yes', 'yes', 'yes']
+
+const isChoice = (v: unknown): v is SessionChoice => v === 'yes' || v === 'no' || v === 'ask'
+
+/**
+ * The field „według czasu” of a block as read from a file: a zone the calendar knows, else none (an ordinary block). Its
+ * days: seven answers, a broken one „tak”; none at all – „tak” every day, or „pytaj” where the file has the „pytaj rano” of
+ * a working build before D515 (`ask`, T1400).
+ */
+export function blockSessionFrom(v: unknown): BlockSession | null {
+  if (!isPlain(v) || !isZone(v.zone)) return null
+  const fill: SessionChoice = v.ask === true ? 'ask' : 'yes'
+  const days = Array.isArray(v.days) && v.days.length === 7 ? v.days.map((x) => (isChoice(x) ? x : 'yes')) : ALL_DAYS_YES.map(() => fill)
+  const id = typeof v.id === 'string' && v.id ? { id: v.id } : {}
+  return { zone: v.zone, markets: Array.isArray(v.markets) ? [...new Set(v.markets.filter(isSessionMarket))] : [], days, ...id }
+}
+
+/** The session a template's block is (D511): its own id (`BlockSession.id`), else the block's. */
+export const sessionIdOf = (b: Pick<PlanBlock, 'id' | 'session'>): string => b.session?.id ?? b.id
+
+/** A template's block that is a session (`isSessionEntry`). */
+export type SessionEntry = PlanBlock & { session: BlockSession; startMin: number }
+
+/**
+ * The one rule of what a session of a template is (D511, T1416): a block with the field „według czasu” and its own hour –
+ * whatever its category (the field goes with a category of sessions in „Szablony”, `templateBlockPatch`; a category whose
+ * kind changed later keeps its sessions). The day, the move, the attachments, the markets and the axis of „Szablony” ask it.
+ */
+export const isSessionEntry = (b: PlanBlock): b is SessionEntry => !!b.session && b.startMin != null
+
+/**
+ * What a template's session gives its day's block (T1419): the fields `sessionBlock` reads – a session of a day's snapshot
+ * (`SessionDef.block`) carries nothing else of the entry (its hour, field, anchor …).
+ */
+export interface SessionBlockFields {
+  categoryId: string
+  variantId: string | null
+  background: boolean | null
+  costs: PlanBlock['costs']
+  bgCostPct: number | null
+  note: string
+  name: string | null
+  routine: string | null
+  steps: Step[]
+}
+
+export const sessionBlockFields = (b: PlanBlock): SessionBlockFields => ({ categoryId: b.categoryId, variantId: b.variantId, background: b.background, costs: b.costs, bgCostPct: b.bgCostPct, note: b.note, name: b.name, routine: b.routine, steps: b.steps })
+
+/** The fields of a session's block as read from a snapshot (a whole block an earlier build wrote reads the same), null – none. */
+export function sessionBlockFieldsFrom(v: unknown): SessionBlockFields | null {
+  if (!isPlain(v) || typeof v.categoryId !== 'string' || !v.categoryId) return null
+  return {
+    categoryId: v.categoryId,
+    variantId: typeof v.variantId === 'string' && v.variantId ? v.variantId : null,
+    background: typeof v.background === 'boolean' ? v.background : null,
+    costs: costsFrom(v.costs),
+    bgCostPct: intIn(v.bgCostPct, 0, 100),
+    note: str(v.note).slice(0, NOTE_MAX),
+    name: blockNameFrom(v.name),
+    routine: typeof v.routine === 'string' && v.routine ? v.routine : null,
+    steps: stepsFrom(v.steps)
+  }
+}
 
 export interface PlanBlock {
   id: string
@@ -71,6 +152,19 @@ export interface PlanBlock {
    * block there, one after another, and keeps the field in the file).
    */
   alongside: string | null
+  /**
+   * A template's session (D511, D515): „według czasu” and the answers of the weekdays – a block of a category of sessions
+   * with it is the day's session; null (or left out – a block made before D511, a day's block) – none. A version that does
+   * not know the field keeps it in the file and shows the block as an ordinary fixed block of its category on every day of
+   * its template (T1403).
+   */
+  session?: BlockSession | null
+  /**
+   * A session of a day whose place a change of the day's type set (T1451): the type whose template gave it – a later change
+   * of type moves it again or takes it out of the day's file (`typeChange.ts` `sessionMoves`); none – the morning's or yours.
+   * Only on such a block (no block else gets a new field in its file).
+   */
+  byType?: DayTypeId
 }
 
 export interface TemplateVersion {
@@ -80,6 +174,13 @@ export interface TemplateVersion {
   /** From this version on the template may override its type's budget and maximum. */
   budgetMin: number | null
   maxMin: number | null
+  /**
+   * A version made after the move of the layer of sessions (D511, T1413): the move's date – the move writes it into every
+   * version from its date, and a new version made from one that has it (a copy of the version in force) keeps it. A version
+   * of a moved template from the move's date on without it was made from a view before the move (a computer offline, a
+   * version before D511): the leader gives it its entries (`staleVersionFixes`), the day till then the layer (`daySettingsOf`).
+   */
+  sessionsMoved?: string
 }
 
 export interface Template {
@@ -90,6 +191,12 @@ export interface Template {
   weekdays: number[]
   versions: TemplateVersion[]
   archived: boolean
+  /**
+   * The template was written by the move of the layer of sessions (D511, `model/sessionMigration.ts`): its date. Only
+   * there; a day of a template the move wrote whose file lacks it (OneDrive brought rd.json first) is made as before the
+   * move (`daySettingsOf`, T1405).
+   */
+  sessionsMoved?: string
 }
 
 /** A series of the plan of lectures: cyclic fixed blocks (spec „Plan wykładów”). */
@@ -207,9 +314,14 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
     steps: stepsFrom(v.steps),
     movedFrom: isIsoDate(v.movedFrom) ? v.movedFrom : null,
     byVariant: v.byVariant === true,
-    alongside: typeof v.alongside === 'string' && v.alongside && v.alongside !== v.id ? v.alongside : null
+    alongside: typeof v.alongside === 'string' && v.alongside && v.alongside !== v.id ? v.alongside : null,
+    // Only a template's session has the field (D511): no block else gets a new field in its file.
+    ...withSession(blockSessionFrom(v.session)),
+    ...(isDayType(v.byType) ? { byType: v.byType } : {})
   }
 }
+
+const withSession = (session: BlockSession | null): { session?: BlockSession } => (session ? { session } : {})
 
 /** A block with the defaults filled in (for building plans and tests). */
 export function planBlock(p: Partial<PlanBlock> & Pick<PlanBlock, 'id' | 'categoryId' | 'durationMin'>): PlanBlock {
@@ -251,7 +363,8 @@ export function templateFrom(v: unknown): Template | null {
       from: x.from,
       blocks: blocksFrom(x.blocks, 'template'),
       budgetMin: intIn(x.budgetMin, 0, 16 * 60),
-      maxMin: intIn(x.maxMin, 12 * 60, 23 * 60 + 59)
+      maxMin: intIn(x.maxMin, 12 * 60, 23 * 60 + 59),
+      ...(isIsoDate(x.sessionsMoved) ? { sessionsMoved: x.sessionsMoved } : {})
     })
   }
   versions.sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0))
@@ -261,7 +374,8 @@ export function templateFrom(v: unknown): Template | null {
     dayType: v.dayType,
     weekdays: Array.isArray(v.weekdays) ? [...new Set(v.weekdays.filter((d): d is number => intIn(d, 1, 7) != null))].sort() : [],
     versions,
-    archived: v.archived === true
+    archived: v.archived === true,
+    ...(isIsoDate(v.sessionsMoved) ? { sessionsMoved: v.sessionsMoved } : {})
   }
 }
 

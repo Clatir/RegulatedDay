@@ -1,7 +1,7 @@
 /**
  * A data folder whose today is an ordinary day with the blocks given and no night's quiet in it (the bar's lines are
  * not there then – D346): the day's wake 04:00, tomorrow's 12:00 and the ordinary day's bedtime 03:59 of the night after.
- * No sessions (the ordinary template has no blocks): nothing else stands between the blocks. A test
+ * No sessions that day (answered „nie” – the ordinary template's sessions, D511): nothing else stands between the blocks. A test
  * that needs the bar's lines runs at any hour but the end of the logical day (it says how much of it it needs).
  */
 import { mkdirSync, writeFileSync } from 'node:fs'

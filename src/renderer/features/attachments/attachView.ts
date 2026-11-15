@@ -5,7 +5,8 @@
  */
 import { isExecutableName, THUMB_EXTS, type Attachment, type BlockPlace } from '@shared/model/attachment'
 import { attachmentsOfBlock } from '@shared/model/attachment'
-import type { PlanBlock } from '@shared/model/plan'
+import type { PlanBlock, Template } from '@shared/model/plan'
+import { sessionOwnersOf } from '@shared/model/templateSessions'
 
 export type FileKind = 'pdf' | 'doc' | 'sheet' | 'slides' | 'archive' | 'image' | 'media' | 'program' | 'other'
 
@@ -67,9 +68,16 @@ export const isOwnHere = (a: Pick<Attachment, 'owner'>, place: BlockPlace): bool
 
 /**
  * Where a day's block is shown, for its attachments (T831): the day, the template of its snapshot and every template there
- * is – a block left by a change of the day's type is found in its own template by its id.
+ * is – a block left by a change of the day's type is found in its own template by its id; a session – the entry of the
+ * template it comes from that day (D511, T1407: of the day's type now, else of the snapshot's template).
  */
-export const dayPlace = (date: string, templateId: string | null, templates: readonly { id: string }[]): BlockPlace => ({ scope: 'day', date, templateId, templateIds: templates.map((t) => t.id) })
+export const dayPlace = (date: string, templateId: string | null, templates: readonly Template[], dayType: string | null): BlockPlace => ({
+  scope: 'day',
+  date,
+  templateId,
+  templateIds: templates.map((t) => t.id),
+  sessions: sessionOwnersOf(templates, dayType, templateId, date)
+})
 
 export const MISSING_NOTE = 'Plik jeszcze nie dotarł z drugiego komputera (OneDrive).'
 export const PROGRAM_NOTE = 'Program – kliknięcie pokaże go w folderze.'

@@ -49,9 +49,14 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * (D512, `Routine.costs`, `planned.routineCosts`): a block of a routine with a cost of its own costs that before its variant's and
  * category's – an older version counts it without it (the descents it would register, the reward of the frozen day); it gives way to
  * this one as the leader. 14 too (the same release, T1430) – the routine's cost changed while its block runs reaches the block from that
- * minute on (`routine.cost`, the timer's: an older version installs the new one without the 24 h).
+ * minute on (`routine.cost`, the timer's: an older version installs the new one without the 24 h). 15 – sessions in the templates
+ * (D511, D515, `model/sessionMigration.ts`, T1419): the leader moves the layer of sessions into the templates once and makes the days
+ * with them (an hour earlier in the weeks of the shift, shortened by an early close, asked about on a weekday „pytaj”, none on a
+ * weekday „nie”) – an older version reads the entries as fixed blocks of their category at their Polish hour on every day of their
+ * template, „nie” too (no shift, no early close, no question, never twice: the layer is empty from the move, T1403); it gives way to
+ * this one as the leader and freezes no day.
  */
-export const RULES_VERSION = 14
+export const RULES_VERSION = 15
 
 /** The rules since which a block's start writes the cost of its routine (D512, `planned.routineCosts`): an earlier start had none. */
 export const ROUTINE_COSTS_FROM = 14

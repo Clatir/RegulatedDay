@@ -8,7 +8,7 @@ import { REQUEST_CATEGORY, type CategoryRules } from '../model/categories'
 import { newId } from '../model/ids'
 import { blockJson, dayBlocks, dayRaw, isRaw, moveRoutineSteps, putBlock, putRawBlock, setMovedTo, setRoutineSteps, setStepsDone, stepsDoneIn, takeBlock, type Raw } from '../data/dayEdits'
 import type { DaySnapshot } from '../model/events'
-import { dayFileFrom, layerKept, MAX_BLOCK_MIN, PLAN_MAX, PLAN_MIN, planBlock, type DayFile, type PlanBlock, type Template } from '../model/plan'
+import { dayFileFrom, layerKept, MAX_BLOCK_MIN, PLAN_MAX, PLAN_MIN, planBlock, sessionIdOf, type DayFile, type PlanBlock, type Template } from '../model/plan'
 import { freshSteps } from '../model/steps'
 import { logicalMinuteOf } from '../time/day'
 import { plannedSpan, type BlockInfo } from './blocks'
@@ -294,7 +294,15 @@ export function moveBetweenDays(fromRaw: Raw | null, toRaw: Raw | null, b: PlanB
  * the original's history (no moves, no day it came from, no variant's mark); its steps start again on the copy (D440: the
  * day's ticks are the original's, by its id). The note, the name, the costs and the rest stay.
  */
-const asCopy = (b: PlanBlock, id: string): PlanBlock => ({ ...b, id, origin: 'user', sourceId: null, moves: 0, movedFrom: null, steps: freshSteps(b.steps), byVariant: false })
+/**
+ * A block as a copy of `b` with its own id: none of its history; a template's session a session of its own (its session's id
+ * – `BlockSession.id` – not taken, T1461), a session's place set by a change of type – not its (`byType`).
+ */
+function asCopy(b: PlanBlock, id: string): PlanBlock {
+  const { byType: _t, session, ...rest } = b
+  const own = session ? (({ id: _id, ...field }) => ({ session: field }))(session) : {}
+  return { ...rest, ...own, id, origin: 'user', sourceId: null, moves: 0, movedFrom: null, steps: freshSteps(b.steps), byVariant: false }
+}
 
 /**
  * A day copied to another (spec „Skopiuj ten dzień do…”): your blocks and the template's, with new ids (anchors follow
@@ -335,11 +343,14 @@ export function copiedBlock(b: PlanBlock, startMin: number, o: { id?: string; or
 /**
  * A template copied (spec „kopiowanie … szablonu”): a new id, its versions with new ids of blocks (anchors follow). The
  * copy starts in the archive – it makes no day until you give it its weekdays and bring it back (a copy in use at once
- * would take the original's days: templates of one weekday are chosen by id).
+ * would take the original's days: templates of one weekday are chosen by id). A session's entry (D511) keeps its session's
+ * id in its field (T1406) – the copy's session is the same session (answers, typical length); the copy was not written by
+ * the move of the layer (no `sessionsMoved`).
  */
 export function copiedTemplate(t: Template, id: string, name: string): Template {
+  const { sessionsMoved: _moved, ...rest } = t
   return {
-    ...t,
+    ...rest,
     id,
     name,
     archived: true,
@@ -351,7 +362,8 @@ export function copiedTemplate(t: Template, id: string, name: string): Template 
           ...b,
           id: ids.get(b.id)!,
           anchor: b.anchor && !b.anchor.startsWith('session:') ? (ids.get(b.anchor) ?? null) : b.anchor,
-          alongside: b.alongside ? (ids.get(b.alongside) ?? null) : null
+          alongside: b.alongside ? (ids.get(b.alongside) ?? null) : null,
+          ...(b.session ? { session: { ...b.session, id: sessionIdOf(b) } } : {})
         }))
       }
     })

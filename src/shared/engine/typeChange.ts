@@ -10,10 +10,11 @@
  * added blocks all take effect at its confirmation (T-decision: the instant of the choice is the instant of the change,
  * so no minute of work falls between them to be classified again).
  */
+import { deepEqual } from '../data/merge'
 import { derivedId } from '../model/ids'
 import type { PoolValues } from '../model/categories'
 import { RULES_VERSION, type AnyEvent } from '../model/events'
-import type { PlanBlock } from '../model/plan'
+import type { DayFile, PlanBlock } from '../model/plan'
 import type { DayTypeId, RulesSettings } from '../model/settings'
 import { weekday } from '../time/zone'
 import { isBoundaryWork } from './blocks'
@@ -29,10 +30,15 @@ export interface TypeChangeInput {
   /** The pools now (shown with a switch to a later maximum), null when energy is unknown or off. */
   energyNow: PoolValues | null
   to: DayTypeId
-  /** The settings in force at the switch (with this day's changes „od dziś”). */
+  /**
+   * The settings in force at the switch (with this day's changes „od dziś”), with the sessions of the new type's template
+   * (`daySettings`, D511).
+   */
   settings: RulesSettings
   /** „Dodaj bloki typu …” later in the day: the missing blocks of the type, whatever its maximum. */
   withAdd?: boolean
+  /** The day's file (your changes of the day) – a session a change of type put there leaves it when the new type has none (T1415). */
+  dayFile?: DayFile | null
 }
 
 export interface AddCandidate {
@@ -76,6 +82,8 @@ export interface TypeChangeResult {
   events: Array<Record<string, unknown>>
   /** Blocks to put into the day's file. */
   blocks: PlanBlock[]
+  /** Blocks to take out of the day's file (a session of the type before the change, the new type without it – T1415). */
+  drop: string[]
   /** Sessions of the layer answered „tak” for the day. */
   sessionsYes: string[]
   /** Blocks whose requests go back to the queue (the block leaves the plan with them). */
@@ -100,22 +108,32 @@ function simPark(ctx: DayContext, at: number, ids: readonly string[], kind: 'blo
   return ids.map((block, i) => ({ id: `sim-${kind}-${i}`, c: '~sim', n: n0 + i, t: at, l: at, v: RULES_VERSION, day: ctx.date, dom: 'timer', k: kind, block, at, rule: 'type' }) as AnyEvent)
 }
 
+/** The block a session of `settings` makes on the day for `type` (its template's, the layer's by the type's answer), null – none. */
+function givenBlock(ctx: DayContext, settings: RulesSettings, type: string, sessionId: string): PlanBlock | null {
+  const def = settings.sessions.find((d) => d.id === sessionId)
+  if (!def) return null
+  const layer = settings.dayTypes[type as DayTypeId]?.sessions[weekday(ctx.date) - 1] ?? 'no'
+  if (!def.block && layer === 'no') return null
+  return sessionBlock(def, ctx.date, ctx.snapshot.holidays)
+}
+
 /** The blocks of the new type missing for the rest of the day (a switch to a later maximum). */
 function missingBlocks(inp: TypeChangeInput): Array<{ block: PlanBlock; session: string | null; ask: boolean }> {
   const { ctx, state, to, settings } = inp
   const date = ctx.date
   const out: Array<{ block: PlanBlock; session: string | null; ask: boolean }> = []
-  const inPlan = (id: string) => ctx.plan.some((b) => b.id === id) && notBegun(state, id)
   const nowMin = state.now
-  // Sessions of the layer of the new type on this weekday (asked ones unchecked).
+  // Sessions of the new type on this weekday – its template's (D511, „pytaj” unchecked) and the layer's (asked ones
+  // unchecked). One the plan has by its id is not missing (T1415): a change of type moves it to the new type's place by itself
+  // (`sessionMoves`).
   const layer = settings.dayTypes[to].sessions[weekday(date) - 1] ?? 'no'
-  if (layer !== 'no') {
-    for (const def of settings.sessions) {
-      const b = sessionBlock(def, date, ctx.snapshot.holidays)
-      if (!b || inPlan(b.id)) continue
-      if (idxOfLogical(state.grid, b.startMin! + b.durationMin) <= nowMin) continue
-      out.push({ block: b, session: def.id, ask: layer === 'ask' })
-    }
+  for (const def of settings.sessions) {
+    if (!def.block && layer === 'no') continue
+    const b = sessionBlock(def, date, ctx.snapshot.holidays)
+    if (!b || ctx.plan.some((x) => x.id === b.id)) continue
+    if (idxOfLogical(state.grid, b.startMin! + b.durationMin) <= nowMin) continue
+    // Into the day's file (when „tak” alone does not bring it) as placed by the type (T1451).
+    out.push({ block: { ...b, byType: to }, session: def.id, ask: def.ask ?? layer === 'ask' })
   }
   // Blocks parked today by an earlier switch: back as copies (the parked one stays parked in the log).
   for (const [id, f] of state.facts.blocks) {
@@ -174,6 +192,55 @@ function regenMinimum(inp: TypeChangeInput, before: number, parked: readonly str
   return Math.max(before, Math.min(settings.dayTypes.regeneracyjny.minRegenMin, collectible))
 }
 
+/**
+ * The sessions of the plan a change of type moves by itself (T1415): a future one, not begun and not cancelled now, that stands
+ * where its session is in the settings in force (hour, length and category – a session you moved stays yours; one an answer
+ * „tak” brought too, whatever the layer of the type says – T1459) follows the type:
+ * - the new type gives it elsewhere: there, into the day's file, with what you changed on it today (`placedAs`), marked as
+ *   placed by the type (`byType`, T1451) – unless that place is over already: then it stays (T1452, as `missingBlocks` skips
+ *   a session gone by);
+ * - the new type gives none: one the day's file holds by a change of type (`byType`) goes back – to the morning's place (its
+ *   snapshot's) with your changes of the day, out of the file when it is the morning's as it was, out of it when the morning
+ *   had none; the morning's place over – it stays. Your own block of a session (no mark) and the snapshot's stay (keep /
+ *   cancel as every fixed block).
+ */
+function sessionMoves(inp: TypeChangeInput, cancel: readonly string[]): { put: PlanBlock[]; drop: string[] } {
+  const { ctx, state, to, settings } = inp
+  const now = settingsAtMinute(ctx.snapshot, state.facts, state.now + 1)
+  const over = (b: PlanBlock) => b.startMin == null || idxOfLogical(state.grid, b.startMin + b.durationMin) <= state.now
+  const put: PlanBlock[] = []
+  const drop: string[] = []
+  for (const b of ctx.plan) {
+    if (b.origin !== 'session' || !b.sourceId || b.startMin == null || cancel.includes(b.id) || !notBegun(state, b.id) || over(b)) continue
+    const def = now.settings.sessions.find((d) => d.id === b.sourceId)
+    const was = def ? sessionBlock(def, ctx.date, ctx.snapshot.holidays) : null
+    if (!was || !samePlace(b, was)) continue
+    const next = givenBlock(ctx, settings, to, b.sourceId)
+    if (next) {
+      if (!samePlace(b, next) && !over(next)) put.push({ ...placedAs(b, next), byType: to })
+      continue
+    }
+    if (!inp.dayFile?.blocks.some((x) => x.id === b.id && x.byType)) continue
+    const morning = ctx.snapshot.blocks.find((x) => x.id === b.id)
+    if (!morning) {
+      drop.push(b.id)
+      continue
+    }
+    if (over(morning)) continue
+    const { byType: _t, ...back } = placedAs(b, morning)
+    if (deepEqual(back, morning)) drop.push(b.id)
+    else put.push(back)
+  }
+  return { put, drop }
+}
+
+/** The plan with `blocks` in place of its blocks of the same ids and without `drop` (the snapshot's of that id comes back). */
+function planWith(ctx: DayContext, blocks: readonly PlanBlock[], drop: readonly string[] = [], without: readonly string[] = []): PlanBlock[] {
+  const ids = new Set([...blocks.map((b) => b.id), ...drop, ...without])
+  const back = drop.map((id) => ctx.snapshot.blocks.find((b) => b.id === id)).filter((b): b is PlanBlock => !!b)
+  return [...ctx.plan.filter((b) => !ids.has(b.id)), ...back, ...blocks]
+}
+
 export function applyTypeChange(inp: TypeChangeInput, plan: TypeChangePlan, choice: TypeChangeChoice): TypeChangeResult {
   const { ctx, state, to, settings } = inp
   const g = state.grid
@@ -181,25 +248,35 @@ export function applyTypeChange(inp: TypeChangeInput, plan: TypeChangePlan, choi
   const day = ctx.date
   const buffer = settings.boundaryBufferMin
   const events: Array<Record<string, unknown>> = []
+  const added = plan.add.filter((a) => choice.add.includes(a.block.id))
+  // The sessions of the plan that follow the type move with it (T1415): put where the new type has them, or out of the file.
+  const moves = sessionMoves(inp, choice.cancel)
+  const blocks = [...added.filter((a) => !byAnswer(ctx, a)).map((a) => a.block), ...moves.put]
+  const sessionsYes = added.filter((a) => a.session).map((a) => a.session!)
+  const requestBlocks = plan.requests.filter((b) => choice.returnRequests.includes(b.id))
   const parked = plan.park.filter((b) => choice.park.includes(b.id)).map((b) => b.id)
   const cancelled = plan.fixed.filter((b) => choice.cancel.includes(b.id)).map((b) => b.id)
   for (const block of parked) events.push({ k: 'block.park', day, block, at, rule: 'type' })
   for (const block of cancelled) events.push({ k: 'block.cancel', day, block, at, rule: 'type' })
-  const added = plan.add.filter((a) => choice.add.includes(a.block.id))
-  const blocks = added.filter((a) => !a.session).map((a) => a.block)
-  const sessionsYes = added.filter((a) => a.session).map((a) => a.session!)
-  const requestBlocks = plan.requests.filter((b) => choice.returnRequests.includes(b.id))
 
   // The maximum from now: the new type's; on a switch to an earlier (or the same) one the running work block and the
-  // kept fixed work blocks move it to their end plus the buffer, never beyond the maximum before the switch.
+  // kept fixed work blocks move it to their end plus the buffer, never beyond the maximum before the switch – a session the
+  // switch moves at its new place (one out of the file at the snapshot's, if it has one).
   const oldMax = state.boundary.max
   let max = idxOfLogical(g, plan.newMaxMin)
   if (!plan.laterMax) {
+    const moved = new Map<string, PlanBlock | undefined>([...moves.put.map((b) => [b.id, b] as const), ...moves.drop.map((id) => [id, ctx.snapshot.blocks.find((b) => b.id === id)] as const)])
     let ext = Number.NEGATIVE_INFINITY
     for (const p of state.forecast) {
       if (!isBoundaryWork(p.block)) continue
       const kept = p.running || (p.block.fixed && !cancelled.includes(p.block.id) && notBegun(state, p.block.id) && p.from >= state.now)
-      if (kept) ext = Math.max(ext, p.to + buffer)
+      if (!kept) continue
+      if (!p.running && moved.has(p.block.id)) {
+        const b = moved.get(p.block.id)
+        if (b?.startMin != null) ext = Math.max(ext, idxOfLogical(g, b.startMin + b.durationMin) + buffer)
+        continue
+      }
+      ext = Math.max(ext, p.to + buffer)
     }
     max = Math.max(max, Math.min(oldMax, ext))
   }
@@ -216,7 +293,8 @@ export function applyTypeChange(inp: TypeChangeInput, plan: TypeChangePlan, choi
     if (!plan.laterMax) next = Math.max(state.now, Math.min(approved, max))
     else {
       const simEvents: AnyEvent[] = [...ctx.events, ...simPark(ctx, at, parked, 'block.park', 1), ...simPark(ctx, at, cancelled, 'block.cancel', 100), simSnapshot(ctx, at, to, settings, atOf(g, max), minRegen)]
-      const simPlan = [...ctx.plan.filter((b) => !requestBlocks.some((r) => r.id === b.id)), ...blocks]
+      // In place of the blocks of the same ids (T1415): a moved session is counted once.
+      const simPlan = planWith(ctx, blocks, moves.drop, requestBlocks.map((b) => b.id))
       const sim = computeDay({ ...ctx, plan: simPlan, events: simEvents, now: at + 60_000 })
       next = Math.max(state.now, sim.boundary.proposal ?? approved)
       const cap = morningBoundary(state, to, ctx.snapshot.dayType)
@@ -249,7 +327,7 @@ export function applyTypeChange(inp: TypeChangeInput, plan: TypeChangePlan, choi
       }
     }
   }
-  return { events, blocks, sessionsYes, requestBlocks, boundary }
+  return { events, blocks, drop: moves.drop, sessionsYes, requestBlocks, boundary }
 }
 
 /**
@@ -261,14 +339,14 @@ export function addTypeBlocks(inp: TypeChangeInput, plan: TypeChangePlan, add: r
   const g = state.grid
   const at = atOf(g, state.now)
   const added = plan.add.filter((a) => add.includes(a.block.id))
-  const blocks = added.filter((a) => !a.session).map((a) => a.block)
+  const blocks = added.filter((a) => !byAnswer(ctx, a)).map((a) => a.block)
   const sessionsYes = added.filter((a) => a.session).map((a) => a.session!)
   const events: Array<Record<string, unknown>> = []
   let boundary: TypeChangeResult['boundary'] = null
   const approved = state.boundary.approved
   if (approved != null && added.length) {
-    const sessions = added.filter((a) => a.session).map((a) => a.block)
-    const sim = computeDay({ ...ctx, plan: [...ctx.plan, ...blocks, ...sessions], now: at + 60_000 })
+    const sessions = added.filter((a) => byAnswer(ctx, a)).map((a) => a.block)
+    const sim = computeDay({ ...ctx, plan: planWith(ctx, [...blocks, ...sessions]), now: at + 60_000 })
     let next = Math.max(state.now, sim.boundary.proposal ?? approved)
     const cap = morningBoundary(state, inp.to, ctx.snapshot.dayType)
     if (cap != null) next = Math.min(next, cap)
@@ -277,7 +355,37 @@ export function addTypeBlocks(inp: TypeChangeInput, plan: TypeChangePlan, add: r
       boundary = { before: approved, after: next }
     }
   }
-  return { events, blocks, sessionsYes, requestBlocks: [], boundary }
+  return { events, blocks, drop: [], sessionsYes, requestBlocks: [], boundary }
+}
+
+/**
+ * A session the answer „tak” brings to the day by itself: one of the day's snapshot (`dayPlan`) that makes the very same
+ * block. One of the new type's template only, or kept there otherwise (D511 – another hour, category, name), goes into the
+ * day's file as a block, with its answer – the file's block wins over the snapshot's of the same id.
+ */
+function byAnswer(ctx: DayContext, a: AddCandidate): boolean {
+  if (a.session == null) return false
+  const def = ctx.snapshot.settings.sessions.find((d) => d.id === a.session)
+  const own = def ? sessionBlock(def, ctx.date, ctx.snapshot.holidays) : null
+  return own != null && sameBlock(own, a.block)
+}
+
+/** Two blocks of one session are the same block of the day: hour, length, category, variant, name and costs. */
+function sameBlock(a: PlanBlock, b: PlanBlock): boolean {
+  return samePlace(a, b) && a.variantId === b.variantId && a.name === b.name && JSON.stringify(a.costs) === JSON.stringify(b.costs)
+}
+
+/** Two blocks of one session at one place of the day (T1415): hour, length and category – what a type's template sets. */
+function samePlace(a: PlanBlock, b: PlanBlock): boolean {
+  return a.startMin === b.startMin && a.durationMin === b.durationMin && a.categoryId === b.categoryId
+}
+
+/**
+ * A session at the place the new type's template gives it (T1415): its hour, length and category from there (with the
+ * template's variant when the category changes), everything you changed on it today – name, note, costs, steps – as it is.
+ */
+function placedAs(b: PlanBlock, next: PlanBlock): PlanBlock {
+  return { ...b, startMin: next.startMin, durationMin: next.durationMin, categoryId: next.categoryId, variantId: next.categoryId === b.categoryId ? b.variantId : next.variantId }
 }
 
 /** The boundary approved before the first change of type, when the day was planned with `to` (the cap of a return to it). */

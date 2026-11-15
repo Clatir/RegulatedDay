@@ -119,8 +119,10 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   `onFullscreen`, zerowane przy zatrzymaniu pomocnika. Test tylko w CI z prawdziwym pomocnikiem (`bar-windows.spec.ts`).
 - Miejsce paska (D303, D304, T497): `BarPlacement.spot` – kotwica z makiety, liczona w `barRect` z bieżącą wysokością
   i skalą (margines 8 DIP zostaje); `spot: null` – własne przesunięcie złożonej części. Uchwyt `bar-drag` (nad lewym
-  odstępem głównej części – nie zasłania przycisków) wysyła `barDrag` start / move (raz na klatkę) / end; proces główny
-  przesuwa okno o drogę kursora (`getCursorScreenPoint`, od 4 px), przy końcu bierze kursor z tej chwili i zapisuje
+  odstępem głównej części – nie zasłania przycisków) wysyła `barDrag` start / move (raz na klatkę) / end; start także od ruchu
+  z lewym przyciskiem bez usłyszanego wciśnięcia (T1500, `barGrip.ts` – Windows nie zawsze daje stronie wciśnięcie), w trakcie słucha cały
+  dokument (puszczenie nic nie klika); proces główny co 16 ms sam przesuwa okno o drogę kursora (`followBarDrag`, od 4 px), puszczenie
+  przeciągania zaczętego ruchem mówi pomocnik (`mouse.watch`, koniec bez strony – `onBarDragOver`; bez pomocnika tylko strona), przy końcu bierze kursor z tej chwili i zapisuje
   `placementAfterDrag`; samo kliknięcie nic nie zapisuje. `layoutBar` w trakcie czeka (`dragHolds`, najwyżej 2 min, awaria widoku
   paska zeruje). Makieta: `barScreens()`, `placeBar(id, miejsce)`. E2E podstawia `getCursorScreenPoint`.
 - „Na wierzchu” pasek chowa się też przy oknie głównym na pierwszym planie (D302, `mainInFront`; focus, blur, hide,
