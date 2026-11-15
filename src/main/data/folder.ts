@@ -100,6 +100,8 @@ const USER_EVENTS: Record<string, Domain> = {
   // The cost of a begun block from a minute on (D501, T1300): the timer's on purpose – an older version, which counts the block by
   // its start, installs the new version without the 24 h (`unknownTimerEvents`); passive for this version's day engine (`PASSIVE`).
   'block.cost': 'timer',
+  // The cost of a begun block's routine from a minute on (D514, T1395): the timer's on purpose, as `block.cost`; passive (`PASSIVE`).
+  'block.routineCost': 'timer',
   // The tree of categories changed (D510, T1313): passive; the timer's on purpose – an older version, which shows no tree, installs at once.
   'tree.change': 'timer'
 }

@@ -15,11 +15,17 @@ import { BlockEditor } from '@renderer/features/plan/BlockEditor'
 import { saveCalendars } from '@renderer/features/settings/calendarEdits'
 import { saveSettingsFrom, useSettingsFrom } from '@renderer/features/settings/settingsStore'
 import { installEscape } from '@renderer/lib/escape'
-import { saveRd, updateRecord, useData } from '@renderer/store/data'
+import { saveRd, tryUpdateRecord, updateRecord, useData } from '@renderer/store/data'
 import { closeToast, useUi } from '@renderer/store/ui'
 import { Scenario } from '../unit/engine/dsl'
 
-vi.mock('@renderer/store/data', async (orig) => ({ ...(await orig<typeof import('@renderer/store/data')>()), saveRecord: vi.fn(async () => [{ status: 'applied' }]), saveRd: vi.fn(async () => [{ status: 'applied' }]), updateRecord: vi.fn(async () => [{ status: 'applied' }]) }))
+vi.mock('@renderer/store/data', async (orig) => ({
+  ...(await orig<typeof import('@renderer/store/data')>()),
+  saveRecord: vi.fn(async () => [{ status: 'applied' }]),
+  saveRd: vi.fn(async () => [{ status: 'applied' }]),
+  updateRecord: vi.fn(async () => [{ status: 'applied' }]),
+  tryUpdateRecord: vi.fn(async () => [{ status: 'applied' }])
+}))
 vi.mock('@renderer/features/settings/settingsStore', async (orig) => ({ ...(await orig<typeof import('@renderer/features/settings/settingsStore')>()), saveSettingsFrom: vi.fn(async () => true) }))
 vi.mock('@renderer/features/settings/calendarEdits', async (orig) => ({ ...(await orig<typeof import('@renderer/features/settings/calendarEdits')>()), saveCalendars: vi.fn(async () => ({ out: [{ status: 'applied' }], entry: null })) }))
 
@@ -51,6 +57,7 @@ beforeEach(() => {
 let root: Root | null = null
 let host: HTMLElement | null = null
 afterEach(() => {
+  vi.useRealTimers()
   act(() => root?.unmount())
   host?.remove()
   root = null
@@ -59,6 +66,7 @@ afterEach(() => {
   vi.mocked(saveSettingsFrom).mockClear()
   vi.mocked(saveRd).mockClear()
   vi.mocked(updateRecord).mockClear()
+  vi.mocked(tryUpdateRecord).mockClear()
   vi.mocked(saveCalendars).mockClear()
 })
 
@@ -422,12 +430,71 @@ describe('okno rutyny', () => {
     await flush()
     expect(q('edit-scope')!.textContent).toBe('Zmieni 1 blok od dziś')
     await save()
-    expect(updateRecord).toHaveBeenCalledTimes(1)
-    const [rel, fn] = vi.mocked(updateRecord).mock.calls[0]!
+    expect(tryUpdateRecord).toHaveBeenCalledTimes(1)
+    const [rel, fn] = vi.mocked(tryUpdateRecord).mock.calls[0]!
     expect(rel).toBe('routines/r1.json')
     const raw = { schema: 1, id: 'r1', name: 'Poranna', normal: [{ id: 's1', name: 'Woda', min: 5 }], worse: [], archived: false, cost: 'kept' }
     expect(fn(raw)).toEqual({ ...raw, name: 'Wieczorna' })
     expect(saveSettingsFrom).not.toHaveBeenCalled()
+    // Not the cost: no event for a begun block.
+    expect(window.rd.logEvents).not.toHaveBeenCalled()
     expect(q('edit-routine-window')).toBeNull()
+  })
+
+  it('„Koszt na godzinę” jak w „Rutynach” (D512): okienko kosztu zmienia pole; „Zapisz” – rekord rutyny i od tej chwili zaczęty dziś blok tej rutyny (T1395, T1397)', async () => {
+    const plan = [withRoutine, fileBlock('own', { categoryId: 'rutyny', routine: 'r1', costs: { head: 3, emotions: 3, senses: 3 } }), fileBlock('n', { categoryId: 'rutyny', routine: 'r1', startMin: 12 * 60 })]
+    files[TODAY] = { schema: 1, date: TODAY, blocks: plan }
+    const s = new Scenario({ date: TODAY, plan })
+    todayEvents = s.start('b3', '08:00').start('own', '08:00').events
+    // Today's 08:30: the begun blocks are read in today's log once the record is saved.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(s.at('08:30')))
+    await mount(withRoutine)
+    await click('edit-routine')
+    expect(q('routine-cost')!.textContent).toBe('1 · 0 · 1')
+    expect(q('routine-cost-from')!.textContent).toBe('jak podkategoria')
+    await click('routine-cost')
+    await click('cost-pop-head-plus')
+    await flush()
+    // In the window only, until „Zapisz”.
+    expect(q('routine-cost')!.textContent).toBe('2 · 0 · 1')
+    expect(q('routine-cost-from')!.textContent).toBe('własny koszt rutyny')
+    expect(tryUpdateRecord).not.toHaveBeenCalled()
+    // The cost only: the blocks of „Rutyny” with the routine and no cost of their own – the begun one too (it changes from now on).
+    expect(q('edit-scope')!.textContent).toBe('Zmieni 2 bloki od dziś')
+    await save()
+    await flush()
+    expect(tryUpdateRecord).toHaveBeenCalledTimes(1)
+    const [rel, fn] = vi.mocked(tryUpdateRecord).mock.calls[0]!
+    expect(rel).toBe('routines/r1.json')
+    const raw = { schema: 1, id: 'r1', name: 'Poranna', normal: [{ id: 's1', name: 'Woda', min: 5 }], worse: [], archived: false, future: 'kept' }
+    expect(fn(raw)).toEqual({ ...raw, costs: { head: 2, emotions: 0, senses: 1 } })
+    // Every begun block of the routine, its own cost too (its „Jak rutyna” goes back to the new cost); not the one not begun.
+    expect(window.rd.logEvents).toHaveBeenCalledTimes(1)
+    const events = vi.mocked(window.rd.logEvents).mock.calls[0]![0] as unknown as Array<{ block: string }>
+    expect([...events].sort((a, b) => a.block.localeCompare(b.block))).toEqual([
+      { k: 'block.routineCost', day: TODAY, block: 'b3', costs: { head: 2, emotions: 0, senses: 1 } },
+      { k: 'block.routineCost', day: TODAY, block: 'own', costs: { head: 2, emotions: 0, senses: 1 } }
+    ])
+    expect(q('edit-routine-window')).toBeNull()
+  })
+
+  it('koszt zmieniony w okienku, potem Esc albo „Anuluj” – nic się nie zapisuje', async () => {
+    await mount(withRoutine)
+    await click('edit-routine')
+    await click('routine-cost')
+    await click('cost-pop-head-plus')
+    // Esc closes the cost's window first, then the routine's.
+    await escape()
+    expect(q('edit-routine-window')).not.toBeNull()
+    await escape()
+    expect(q('edit-routine-window')).toBeNull()
+    await click('edit-routine')
+    await click('routine-cost')
+    await click('cost-pop-reset')
+    await click('new-thing-cancel')
+    expect(q('edit-routine-window')).toBeNull()
+    expect(tryUpdateRecord).not.toHaveBeenCalled()
+    expect(window.rd.logEvents).not.toHaveBeenCalled()
   })
 })

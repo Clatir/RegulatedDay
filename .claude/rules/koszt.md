@@ -8,6 +8,7 @@ paths:
   - "src/renderer/features/series/seriesScope.ts"
   - "src/shared/model/routines.ts"
   - "src/renderer/features/routines/RoutinesPage.tsx"
+  - "src/renderer/features/routines/routineCost.tsx"
   - "tests/web/tile-cost*.test.ts"
   - "tests/web/cost-save.test.ts"
   - "tests/unit/block-costs.test.ts"
@@ -22,7 +23,7 @@ paths:
 # Koszt na kafelku (D501) i koszt rutyny (D512)
 
 Źródło prawdy: specyfikacja „Koszt na kafelku (D501)” (Konwencje interfejsu), „Rutyna” (Bloki), decyzje T1270–T1279, T1300–T1306,
-T1360–T1374.
+T1360–T1374, T1395–T1399.
 
 ## Jedna reguła kosztu
 - Kolejność (D512): własny bloku → rutyny → wariantu → kategorii (podkategorii). `model/blockCosts.ts`: `baseCosts(kategorie,
@@ -44,22 +45,29 @@ T1360–T1374.
 - Start bloku zapisuje `planned.routineCosts` (`startPlanned`; nieznana rutyna – bez pola, T1372); zaczęty liczy koszt rutyny ze startu
   (`startCostOf`); start bez pola: `v` < `ROUTINE_COSTS_FROM` (14, starsza wersja) – `foldFacts` daje null (przeszłość jak policzona),
   tej wersji – koszt rutyny teraz; niezaczęty – rutyny teraz. `block.cost` null wraca do rutyny.
+- Zmiana kosztu rutyny przy zaczętym bloku (D514, T1395): okno po zapisanym rekordzie (`saveRoutine` w `routines/routineCost.tsx` – jedna
+  droga „Rutyn” i ✎) czyta dziś (`plannedDay`) i pisze `block.routineCost` (`block`, `at`, `costs` lub null; timer, `PASSIVE`, `USER_EVENTS`)
+  dla każdego z `routineCostTargets` (zaczęty, nieskończony; rutyna i kategoria rodzaju „rutyna” ze startu, bez pola – z planu; także z
+  własnym kosztem – „Jak rutyna” wraca do nowego). Dziś nieczytelne – toast `ROUTINE_BEGUN_KEPT_TEXT`, bez zdarzeń (T1399).
 - Blok zaczęty (reguła A, `engine/costChange.ts`): koszt ze startu (`startCostOf` – `block.start.planned`, bez pól – z planu),
   zmieniony od minuty zdarzeniem `block.cost` (`block`, `at`, `costs` lub null; dziedzina timera, w `PASSIVE` – bierne dla silnika
-  dnia; `energy.cost` pierwszych wersji 1.24 czytane tak samo, nie pisane). Liczy się tylko zmiana po starcie bloku w kolejności logu
+  dnia; `energy.cost` pierwszych wersji 1.24 czytane tak samo, nie pisane), koszt rutyny – `block.routineCost` (`CostChange.routine`:
+  `ownAt` je pomija, `routineAt` – koszt rutyny od minuty; w `costOf`, `begunCosts`, kluczach `costEvidence`). Liczy się tylko zmiana po starcie bloku w kolejności logu
   (`BlockFact.startOrder`) – zmiana cofniętego startu nie sięga następnego. `costChangesOf(zdarzenia, fakty)` – po minucie, potem
   `compareEvents` (ostatnia w minucie wygrywa); `ownAt(k)`. Minuty przed zmianą zostają, przeliczenie logu daje to samo. To samo w
   energii (`Kind.changes`), dowodach kalibracji (`costEvidence`, klucz raz na odcinek między zmianami) i na kafelku (`begunCosts`).
 - Starsza wersja (≤ 1.23): `block.cost` to nieznane zdarzenie timera – pomija je (blok po starcie), `unknownTimerEvents` → instalacja w
   nocy bez 24 h; `RULES_VERSION` 13 – ustępuje prowadzenia (zejścia, zamrożenie). Nic innego nie czyta nieznanych zdarzeń (T1300).
-  Koszt rutyny (≤ 1.24): pole `costs` rutyny i `planned.routineCosts` pomija (liczy bez nich); `RULES_VERSION` 14 – ustępuje prowadzenia.
+  Koszt rutyny (≤ 1.24): pole `costs` rutyny i `planned.routineCosts` pomija (liczy bez nich); `RULES_VERSION` 14 – ustępuje prowadzenia;
+  `block.routineCost` – nieznane zdarzenie timera (instalacja bez 24 h), `RULES_VERSION` bez zmian – to samo wydanie (T1396).
 
 ## Kafelek i zapis
 - `TimelineItem.cost` („Dziś” – `dayAxis` z `today`; „Szablony” – `planCosts`: koszt z planu, okienko tylko na blokach szablonu;
   kreator bez napisu) i `HorizonBlock.cost` (`week.ts`, tylko z krzywą – „Tydzień”, „3 dni”): zaczęty – `begunCosts`, inny –
   `blockCosts(info)`. `Timeline.onCosts` / `BlockBox.onCosts` → `saveTileCosts`; „Szablony” – `patchBlock(id, { costs })` (wersja od
-  daty zmian, bez pytania o serię). „Rutyny” – ten sam `TileCost` (`routineCostShown`: bez kosztu – koszt kategorii rodzaju
-  „rutyna”), zapis `costs` przez `tryUpdateRecord`.
+  daty zmian, bez pytania o serię). „Rutyny” i okno ✎ rutyny – `RoutineCostField` (`TileCost` z
+  `routineCostShown`: bez kosztu – koszt kategorii rodzaju „rutyna”), zapis `saveRoutine` (`tryUpdateRecord`, potem T1395); w ✎ okienko
+  zmienia formularz do „Zapisz” (T1397).
 - `TileCost` (napis + okienko w portalu): `edit` = `costEditable(fakt, dzień miniony, minięty)` – niezaczęty nieminięty, zaczęty do
   końca (także poza planem); skończony i dzień miniony – sam napis. Kliknięcia to zamiary (krok puli, „Jak podkategoria”) po kolei –
   pierwszy od razu, każdy nad tym, co zapisane, gdy przyjdzie jego kolej; żaden nie przepada, wyjątek = odmowa; okienko pokazuje

@@ -51,6 +51,68 @@ test('koszt rutyny (D512): zmiana w „Rutynach” zapisuje plik rutyny, kafelek
   }
 })
 
+test('koszt rutyny z ✎ (D514, T1395): zaczęty blok tej rutyny liczy nowy koszt od tej chwili – kafelek go mówi, log ma block.routineCost', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cost-routine-begun-'))
+  const { today } = seedAwake(dataDir, [{ id: 'rut', categoryId: 'rutyny', startMin: 26 * 60, durationMin: 60, fixed: false, origin: 'user', routine: 'poranek' }])
+  mkdirSync(join(dataDir, 'routines'), { recursive: true })
+  const file = join(dataDir, 'routines', 'poranek.json')
+  writeFileSync(file, JSON.stringify({ schema: 1, id: 'poranek', name: 'Poranek', archived: false, normal: [{ id: 'a', name: 'Prysznic', min: 10 }], worse: [], costs: { head: 4, emotions: 0, senses: 1 } }))
+  const costs = () => (JSON.parse(readFileSync(file, 'utf8')) as { costs?: unknown }).costs
+  /** The changes of the routine's cost in today's logs (every computer's file). */
+  const logged = () => {
+    const dir = join(dataDir, 'log', today.slice(0, 4), today)
+    let names: string[] = []
+    try {
+      names = readdirSync(dir).filter((n) => n.endsWith('.jsonl'))
+    } catch {
+      return []
+    }
+    return names.flatMap((n) =>
+      readFileSync(join(dir, n), 'utf8')
+        .split('\n')
+        .filter((l) => l.includes('"block.routineCost"'))
+        .map((l) => {
+          const e = JSON.parse(l) as { block: string; costs: unknown }
+          return { block: e.block, costs: e.costs }
+        })
+    )
+  }
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      const tile = page.getByTestId('block-rut-cost')
+      await expect(tile).toHaveText('4 · 0 · 1', { timeout: 30_000 })
+      await page.getByTestId('block-rut').click()
+      await page.getByTestId('block-timer-start').click()
+      await expect(page.getByTestId('block-timer-start')).toHaveCount(0, { timeout: 15_000 })
+      // Begun: the routine's cost of its start.
+      await expect(tile).toHaveText('4 · 0 · 1')
+      await page.getByTestId('edit-routine').click()
+      const dialog = page.getByTestId('edit-routine-window')
+      await expect(dialog.getByTestId('routine-cost')).toHaveText('4 · 0 · 1')
+      await dialog.getByTestId('routine-cost').click()
+      await page.getByTestId('cost-pop-head-plus').click()
+      await expect(dialog.getByTestId('routine-cost')).toHaveText('5 · 0 · 1')
+      // Esc closes the cost's window only; nothing saved before „Zapisz”.
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('cost-pop')).toHaveCount(0)
+      await expect(dialog).toBeVisible()
+      expect(costs()).toEqual({ head: 4, emotions: 0, senses: 1 })
+      await expect(page.getByTestId('edit-scope')).toHaveText('Zmieni 1 blok od dziś')
+      await page.getByTestId('new-thing-save').click()
+      await expect(dialog).toHaveCount(0)
+      await expect.poll(costs).toEqual({ head: 5, emotions: 0, senses: 1 })
+      // From now on: the begun block counts the new cost (its minutes gone by stay by the old one).
+      await expect.poll(logged, { timeout: 15_000 }).toEqual([{ block: 'rut', costs: { head: 5, emotions: 0, senses: 1 } }])
+      await expect(tile).toHaveText('5 · 0 · 1', { timeout: 15_000 })
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('koszt w „Szablonach” (D512): kafelek bloku szablonu ma koszt i okienko; zmiana to własny koszt bloku w wersji od daty zmian', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cost-template-'))
   seedAwake(dataDir, [])

@@ -18,7 +18,7 @@ import { baseCosts } from '../model/blockCosts'
 import { compareEvents, isKnown, type AnyEvent, type EnergyEvent } from '../model/events'
 import { DEFAULT_SETTINGS, type RulesSettings } from '../model/settings'
 import type { BlockInfo } from './blocks'
-import { costChangesOf, ownAt, startCostOf, type CostChange } from './costChange'
+import { costChangesOf, ownAt, routineAt, startCostOf, type CostChange } from './costChange'
 import { REST_FREE, settingsAtMinute, type DayContext, type DayState } from './day'
 import { compareOrder, type EventOrder, OPEN } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
@@ -102,7 +102,10 @@ interface Kind {
   own: Costs | null
   /** The cost of its routine (D512): from its start (`planned.routineCosts`), not begun – the routine's now; null – none. */
   routine: Costs | null
-  /** Its cost changed from a minute on (D501, `block.cost`), in the order they apply; null – none (the cost of its start all along). */
+  /**
+   * Its cost changed from a minute on (D501, `block.cost`) and its routine's (D514, `block.routineCost` – T1395), in the order they apply;
+   * null – none (the cost of its start all along).
+   */
   changes: readonly CostChange[] | null
   bgPct: number | null
   rules: CategoryRules
@@ -144,9 +147,13 @@ export function regenVariant(s: RulesSettings, id: string): Costs {
   return cat && v ? (v.costs ?? cat.costs) : costsOf(DEFAULT_SETTINGS.categories[REGEN_CATEGORY]!, id)
 }
 
-/** What a block costs an hour at minute k: its own (changed from a minute on, D501), else its routine's (D512), variant's or category's (`baseCosts`). */
+/**
+ * What a block costs an hour at minute k: its own (changed from a minute on, D501), else its routine's (D512; changed from a minute on, T1395),
+ * variant's or category's (`baseCosts`).
+ */
 function costOf(x: Kind, s: RulesSettings, k: number): Costs {
-  return (x.changes ? ownAt(x.changes, k, x.own) : x.own) ?? baseCosts(s.categories, x.cat, x.variant, x.rules, x.routine)
+  if (!x.changes) return x.own ?? baseCosts(s.categories, x.cat, x.variant, x.rules, x.routine)
+  return ownAt(x.changes, k, x.own) ?? baseCosts(s.categories, x.cat, x.variant, x.rules, routineAt(x.changes, k, x.routine))
 }
 
 /** Among blocks in the foreground at once (minute k): regeneration and a protected life block stay, then the class mode, the costlier, the earlier. */

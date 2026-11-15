@@ -13,13 +13,16 @@
  *  - a later entry of the settings that writes the same key from a later date (`overriddenFrom`): nothing from that date on – no day, no
  *    version, no series starting then (the line of its composition says until when);
  *  - not counted: a day beyond `SCOPE_DAYS` and a day whose file cannot be read now (`unread` – said in the window).
- * A change of cost reaches only the blocks that have none of their own (and – a subcategory's cost – no variant with a cost of its own);
- * any other change reaches every block of the thing.
+ * A change of cost reaches only the blocks whose cost it is – the order of a block's cost is its own → its routine's → its variant's → its
+ * subcategory's (D512, T1398): a subcategory's – none of their own, no routine with a cost of its own (a block of the kind „rutyna”, T1371)
+ * and no variant with one; a variant's – none of their own and no such routine; a routine's – its blocks of the kind „rutyna” without a
+ * cost of their own. Any other change reaches every block of the thing.
  */
 import type { CategoryRules } from '@shared/model/categories'
 import { variantHasCosts } from '@shared/model/categories'
 import { countLabel, plDate } from '@shared/format'
 import { dayFileFrom, layerKept, templateVersionOn, type DayFile, type PlanBlock, type Template } from '@shared/model/plan'
+import { NO_ROUTINE_COSTS, routineCostOf, type RoutineCosts } from '@shared/model/routines'
 import { seriesVersionOn, type SeriesPlan } from '@shared/model/series'
 import type { SettingsChange } from '@shared/model/settings'
 import { addDays } from '@shared/time/zone'
@@ -34,14 +37,20 @@ export type EditWhat = 'costs' | 'all'
 
 type Counted = Pick<PlanBlock, 'categoryId' | 'variantId' | 'routine' | 'costs'>
 
-/** Whether the edit reaches the block. */
-export function reaches(b: Counted, t: EditTarget, what: EditWhat, categories: Readonly<Record<string, CategoryRules | undefined>>): boolean {
-  if (t.kind === 'routine') return b.routine === t.id
-  if (t.kind === 'variant') return b.categoryId === t.categoryId && b.variantId === t.id && (what === 'all' || b.costs == null)
+/**
+ * Whether the edit reaches the block. `routines` – the routines' costs now (`routineCostsOf`): a block of the kind „rutyna” whose routine
+ * has a cost of its own costs that before its variant's and subcategory's (D512) – a change of theirs does not reach it.
+ */
+export function reaches(b: Counted, t: EditTarget, what: EditWhat, categories: Readonly<Record<string, CategoryRules | undefined>>, routines: RoutineCosts = NO_ROUTINE_COSTS): boolean {
+  const ofRoutines = Object.hasOwn(categories, b.categoryId) && categories[b.categoryId]?.kind === 'routine'
+  if (t.kind === 'routine') return b.routine === t.id && (what === 'all' || (b.costs == null && ofRoutines))
+  // The routine's cost before the variant's and the subcategory's (a routine not known now costs as none, T1372).
+  const routineFirst = ofRoutines && routineCostOf(routines, b.routine ?? null) != null
+  if (t.kind === 'variant') return b.categoryId === t.categoryId && b.variantId === t.id && (what === 'all' || (b.costs == null && !routineFirst))
   if (b.categoryId !== t.id) return false
   if (what === 'all') return true
   const rules = categories[t.id]
-  return b.costs == null && !(rules && variantHasCosts(rules, b.variantId))
+  return b.costs == null && !routineFirst && !(rules && variantHasCosts(rules, b.variantId))
 }
 
 export interface ScopeCount {
@@ -71,13 +80,15 @@ export function countScope(o: {
   target: EditTarget
   what: EditWhat
   categories: Readonly<Record<string, CategoryRules | undefined>>
+  /** The routines' costs now (`reaches`); left out – none. */
+  routineCosts?: RoutineCosts
   /** Today's blocks that have ended (from today's log) – a change of the cost only does not reach them (D501). */
   ended?: ReadonlySet<string>
   /** `overriddenFrom` – nothing is counted from this date on; left out – none. */
   until?: string | null
 }): ScopeCount {
   const until = o.until ?? null
-  const hit = (b: Counted) => reaches(b, o.target, o.what, o.categories)
+  const hit = (b: Counted) => reaches(b, o.target, o.what, o.categories, o.routineCosts)
   // The templates and the series first: a block of theirs changed for a day is counted with them, once.
   const ofTemplates = new Set<string>()
   let templates = 0

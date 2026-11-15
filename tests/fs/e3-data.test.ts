@@ -220,6 +220,21 @@ describe('folder danych dla okna głównego', () => {
     expect(await folder.unknownTimerEvents(placeLogical(DAY, 12 * 60))).toBe(true)
   })
 
+  it('zmiana kosztu rutyny zaczętego bloku z okna (D514, T1395): block.routineCost w dziedzinie timera, bierne; zły koszt – odmowa; ta wersja je zna', async () => {
+    const { folder } = await make()
+    await folder.userEvents([{ k: 'block.routineCost', day: DAY, block: 'x', costs: { head: -1, emotions: 2, senses: 3 } }])
+    await folder.userEvents([{ k: 'block.routineCost', day: DAY, block: 'x', costs: null }])
+    await expect(folder.userEvents([{ k: 'block.routineCost', day: DAY, block: 'x', costs: { head: 9, emotions: 0, senses: 0 } }])).rejects.toThrow(/costs/)
+    const events = readLogText(readFileSync(join(dataDir, paths.log(DAY, 'pca')), 'utf8')).events.filter((e) => e.k === 'block.routineCost')
+    expect(events).toEqual([
+      expect.objectContaining({ dom: 'timer', block: 'x', costs: { head: -1, emotions: 2, senses: 3 }, at: expect.any(Number) }),
+      expect.objectContaining({ dom: 'timer', block: 'x', costs: null })
+    ])
+    expect(isPassive(events[0]!)).toBe(true)
+    // An older version (1.24, `RULES_VERSION` 13) reads it as an unknown event of the timer – the night installation without the 24 h.
+    expect(await folder.unknownTimerEvents(placeLogical(DAY, 12 * 60))).toBe(false)
+  })
+
   it('zmiana drzewa kategorii z okna (D510, T1313): tree.change w dziedzinie timera, bierne; ta wersja je zna, starsza – nie (instalacja bez 24 h)', async () => {
     const { folder } = await make()
     await folder.userEvents([{ k: 'tree.change', day: DAY }])

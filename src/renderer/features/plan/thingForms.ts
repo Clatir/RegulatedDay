@@ -6,7 +6,8 @@
 import type { Costs } from '@shared/model/categories'
 import type { RoutineStep } from '@shared/model/routines'
 
-export type RoutineForm = { name: string; normal: RoutineStep[]; worse: RoutineStep[] }
+/** `costs` (D512, D514): the routine's own cost per hour, null – „jak podkategoria”; left out – not in the form (the window of a new routine). */
+export type RoutineForm = { name: string; normal: RoutineStep[]; worse: RoutineStep[]; costs?: Costs | null }
 
 /** The place: one of the three, or `VARIANT_PLACE_SAME` (`settings/categoryFields`) – „miejsce jak podkategoria”. */
 export type VariantForm = { name: string; same: boolean; costs: Costs; place: string }

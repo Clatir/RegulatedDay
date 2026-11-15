@@ -68,7 +68,8 @@ export function variantChange(was: VariantForm, now: VariantForm): VariantChange
 }
 
 export interface RoutineChange {
-  patch: { name?: string; normal?: RoutineForm['normal']; worse?: RoutineForm['worse'] } | null
+  /** The fields of the routine's record to write; `costs` (D512) – its own cost, null – „jak podkategoria”. */
+  patch: { name?: string; normal?: RoutineForm['normal']; worse?: RoutineForm['worse']; costs?: Costs | null } | null
   what: EditWhat | null
 }
 
@@ -79,5 +80,9 @@ export function routineChange(was: RoutineForm, now: RoutineForm): RoutineChange
   const [normal, worse] = [cleanSteps(now.normal), cleanSteps(now.worse)]
   if (!deepEqual(normal, was.normal)) patch.normal = normal
   if (!deepEqual(worse, was.worse)) patch.worse = worse
-  return { patch: Object.keys(patch).length ? patch : null, what: Object.keys(patch).length ? 'all' : null }
+  const other = Object.keys(patch).length > 0
+  const [a, b] = [was.costs ?? null, now.costs ?? null]
+  const costsChanged = (a == null) !== (b == null) || (a != null && b != null && !sameCosts(a, b))
+  if (costsChanged) patch.costs = b
+  return { patch: Object.keys(patch).length ? patch : null, what: other ? 'all' : costsChanged ? 'costs' : null }
 }

@@ -144,15 +144,20 @@ export function costEvidence(ctx: DayContext, state: DayState, energyOn: boolean
   const from = Math.min(...checkins)
   const now = Math.min(state.now, g.length)
   const fg: Array<string | null> = new Array(Math.max(0, now)).fill(null)
-  // D501: a begun block's cost changed from a minute on (`block.cost`) – a minute of its own cost is no evidence for its category.
-  // Its key is counted once for each stretch between its changes (from the start's cost, then each change from its minute).
+  // D501: a begun block's cost changed from a minute on (`block.cost`) – a minute of its own cost is no evidence for its category; nor is
+  // one of its routine's cost (D512), changed from a minute on too (`block.routineCost`, T1395). Its key is counted once for each stretch
+  // between its changes (from the start's cost, then each change from its minute, with the own and the routine's cost in force then).
   const changes = costChangesOf(ctx.events, state.facts)
   const runs: Array<{ from: number; to: number; keys: Array<{ from: number; key: string | null }> }> = []
   for (const f of state.facts.blocks.values()) {
     if (!f.planned) continue
     const planned = f.planned
     const keys = [{ from: Number.NEGATIVE_INFINITY, key: costKey(state.settings, planned) }]
-    for (const c of changes.get(f.id) ?? []) keys.push({ from: c.at, key: costKey(state.settings, { ...planned, costs: c.costs }) })
+    let held = { costs: planned.costs, routineCosts: planned.routineCosts }
+    for (const c of changes.get(f.id) ?? []) {
+      held = c.routine ? { ...held, routineCosts: c.costs } : { ...held, costs: c.costs }
+      keys.push({ from: c.at, key: costKey(state.settings, { ...planned, ...held }) })
+    }
     for (const r of f.runs) if (!r.bg) runs.push({ from: r.from, to: r.to === OPEN ? now : r.to, keys })
   }
   for (const r of runs.sort((a, b) => a.from - b.from)) {

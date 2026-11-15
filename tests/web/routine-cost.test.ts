@@ -8,11 +8,13 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DataView, RawRecord } from '@shared/api'
+import { planBlock } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import type { Routine } from '@shared/model/routines'
 import { installEscape } from '@renderer/lib/escape'
 import { RoutinesPage } from '@renderer/features/routines/RoutinesPage'
 import { tryUpdateRecord, useData } from '@renderer/store/data'
+import { Scenario } from '../unit/engine/dsl'
 
 /** The records as the folder has them; a change is applied to them as the queue would. */
 const records = new Map<string, RawRecord>()
@@ -35,7 +37,17 @@ beforeAll(() => {
   removeEscape = installEscape()
 })
 afterAll(() => removeEscape?.())
-beforeEach(() => vi.mocked(tryUpdateRecord).mockClear())
+beforeEach(() => {
+  vi.mocked(tryUpdateRecord).mockClear()
+  // Today's log without blocks: a change of the cost reaches no begun block.
+  ;(window as unknown as { rd: unknown }).rd = {
+    dayData: vi.fn(async (date: string) => ({ date, dayFile: null, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false })),
+    logEvents: vi.fn(async () => undefined),
+    dataView: vi.fn(async () => {
+      throw new Error('no view in the test')
+    })
+  }
+})
 afterEach(() => {
   act(() => root?.unmount())
   host?.remove()
@@ -84,6 +96,42 @@ describe('koszt rutyny w „Rutynach” (D512)', () => {
     await click(label)
     await click(q('cost-pop-reset'))
     expect(records.get('routines/r1.json')!.costs).toBeNull()
+  })
+
+  it('zaczęty dziś blok tej rutyny liczy nowy koszt od tej chwili: po zapisie rekordu – block.routineCost dla każdego zaczętego, nieskończonego (D514, T1395)', async () => {
+    const today = '2026-11-18'
+    const plan = [
+      planBlock({ id: 'run', categoryId: 'rutyny', routine: 'r1', startMin: 8 * 60, durationMin: 60, origin: 'user' }),
+      planBlock({ id: 'done', categoryId: 'rutyny', routine: 'r1', startMin: 7 * 60, durationMin: 30, origin: 'user' }),
+      planBlock({ id: 'later', categoryId: 'rutyny', routine: 'r1', startMin: 20 * 60, durationMin: 30, origin: 'user' }),
+      planBlock({ id: 'else', categoryId: 'rutyny', routine: 'r2', startMin: 8 * 60, durationMin: 30, origin: 'user' })
+    ]
+    const events = new Scenario({ date: today, plan }).ran('done', '07:00', '07:30').start('run', '08:00').start('else', '08:00').events
+    const logEvents = vi.fn(async () => undefined)
+    ;(window as unknown as { rd: unknown }).rd = {
+      dayData: vi.fn(async (date: string) => ({ date, dayFile: date === today ? { schema: 1, date, blocks: plan } : null, nextFile: null, prevFile: null, events: date === today ? events : [], complete: true, unknown: false, away: false })),
+      logEvents,
+      dataView: vi.fn(async () => {
+        throw new Error('no view in the test')
+      })
+    }
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(new Scenario({ date: today, plan }).at('08:30')))
+    try {
+      await open(routine(null))
+      await click(q('routine-cost'))
+      await click(q('cost-pop-head-plus'))
+      await act(async () => undefined)
+      expect(records.get('routines/r1.json')!.costs).toEqual({ head: 2, emotions: 0, senses: 1 })
+      expect(logEvents).toHaveBeenCalledTimes(1)
+      expect(logEvents.mock.calls[0]).toEqual([[{ k: 'block.routineCost', day: today, block: 'run', costs: { head: 2, emotions: 0, senses: 1 } }]])
+      // „Jak podkategoria”: the begun block goes back to its category's cost from now on too.
+      await click(q('cost-pop-reset'))
+      await act(async () => undefined)
+      expect(logEvents.mock.calls[1]).toEqual([[{ k: 'block.routineCost', day: today, block: 'run', costs: null }]])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('[−] przy −5 jest wyłączony – koszt zostaje w zakresie', async () => {
