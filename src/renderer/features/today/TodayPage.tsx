@@ -67,6 +67,9 @@ import { addChange, dragChange, parallelChange, parallelHint, pushedSpans, pushe
 import { placePatch } from '@shared/engine/parallel'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
 import { CasesPanel } from '../cases/CasesPanel'
+import { carriedBy, planGroupDrop } from '../cases/groupActions'
+import { groupBlockMinutes } from '@shared/engine/casesGroup'
+import { GroupLine } from '../../components/GroupLine'
 import { caseTitle } from '../cases/casesLogic'
 import { nextFreeStart } from '../cases/casesUi'
 import { planOnAxis } from '../cases/planOnAxis'
@@ -219,14 +222,23 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   // gone is history: no panel there (as no pushing, D367).
   const casesOn = date >= today
   // D513: Ctrl held at the drop – a copy of the sprawa is planned there, the original stays on its list.
-  const planCaseAt = (id: string, minute: number, copy = false) => {
+  const planCaseOne = (id: string, minute: number, copy = false) => {
     const r = requests.find((x) => x.id === id)
     if (r) void planOnAxis(model, today, r, caseTitle(r, rd), minute, undefined, copy)
   }
-  const planCaseNext = (x: CaseItem) => planCaseAt(x.record.id, nextPlace(x.estimateMin))
+  // The selection of the panel „Sprawy” (it tells at every change) – what a drag of one of its sprawy carries.
+  const panelSelected = useRef<readonly CaseItem[]>([])
+  // D530: a sprawa of a selection of the panel dragged carries all of it – one after another from the minute of the drop.
+  const planCaseAt = (id: string, minute: number, copy = false) => {
+    const group = carriedBy(panelSelected.current, id)
+    if (group) void planGroupDrop(model, today, group, minute, copy)
+    else planCaseOne(id, minute, copy)
+  }
+  const planCaseNext = (x: CaseItem) => planCaseOne(x.record.id, nextPlace(x.estimateMin))
   const { drag: caseDrag, grab: grabCase } = useCaseDrag(planCaseAt)
   const draggedCase = caseDrag?.target != null ? requests.find((x) => x.id === caseDrag.id) : undefined
-  const ghost: BlockSpan | null = draggedCase && caseDrag?.target != null ? { startMin: caseDrag.target, endMin: caseDrag.target + estimateOf(draggedCase) } : null
+  const draggedGroup = caseDrag ? carriedBy(panelSelected.current, caseDrag.id) : null
+  const ghost: BlockSpan | null = draggedCase && caseDrag?.target != null ? { startMin: caseDrag.target, endMin: caseDrag.target + (draggedGroup ? groupBlockMinutes(draggedGroup.map((x) => x.record)) : estimateOf(draggedCase)) } : null
 
   const raw = model.data.dayFile
   // What the search (Ctrl K) left here: the command „Nowy blok” (as Ctrl+N), or a block of this day – selected as a click on
@@ -631,6 +643,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               </span>
               {hasEnergy(axis.energy) && <EnergyLegend reserve={axis.energy.reserve} />}
             </div>
+            <GroupLine view="today" />
             {/* The all-day events of the day (D405), over the axis' column – the hours' column on the left stays empty. */}
             <AllDayBar key={date} dates={[date]} page="today" today={today} axisPx={46} endPx={hasEnergy(axis.energy) ? LANES_WIDTH : 0} />
             <Timeline
@@ -800,7 +813,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             }
           />
         ) : (
-          <SidePanel model={model} names={names} onSelect={setSelected} onMove={(b) => setDialog({ move: b })} cases={casesOn ? <CasesPanel drag={caseDrag} grab={grabCase} onPlan={planCaseNext} /> : undefined} />
+          <SidePanel model={model} names={names} onSelect={setSelected} onMove={(b) => setDialog({ move: b })} cases={casesOn ? <CasesPanel drag={caseDrag} grab={grabCase} onPlan={planCaseNext} onSelected={(s) => void (panelSelected.current = s)} /> : undefined} />
         )}
       </div>
       {exchange && (
