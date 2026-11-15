@@ -5,9 +5,11 @@ paths:
   - "src/shared/engine/caseDates.ts"
   - "src/shared/engine/casePriority.ts"
   - "src/shared/engine/caseRepeat.ts"
+  - "src/shared/engine/casesGroup.ts"
   - "src/shared/model/taskRepeat.ts"
   - "src/shared/quickDates.ts"
   - "src/renderer/store/cases.ts"
+  - "src/renderer/store/casesGroup.ts"
   - "src/main/windows/quickWindow.ts"
   - "src/renderer/widget/QuickApp.tsx"
   - "src/renderer/widget/quickToday.ts"
@@ -96,6 +98,7 @@ paths:
 - Kopia (D513, reguły `kopia.md`): Ctrl przy upuszczeniu z panelu – `planCase(…, { copy })` planuje nową sprawę (`copiedCase`, rekord
   za plikiem dnia – T923), oryginał nietknięty; kopia bloku zadania/próśb na osi – nowe sprawy w tej samej edycji (`blockCopy`).
 - „Powtarzaj” nie dotyczy bloku zadania ani próśb (D408): `blockNotSeries` (kod `task` / `requests`), w panelu bloku `RepeatNote`.
+- Zmiany grupowe (D527–D531, ciąg Z): `engine/casesGroup.ts` (czyste: `movedStep` / `doneStep` / `restoredStep` / `categoryStep` / `estimateStep` – krok albo `skip` z powodem z `SKIP` (D72), `planSkip`, `revertedRaw` – „Cofnij” pole po polu, `caseSummaryItem` – minuty i koszt na godzinę do napisu nad zaznaczeniem) i `store/casesGroup.ts` (`moveCases`, `doneCases`, `restoreCases`, `categoryCases`, `estimateCases`, `removeCases`, `planCases(ids, dzień, minuta, { push, seen, copy })` – sprawy jedna za drugą, plik dnia raz; `undoGroup` – jedno „Cofnij”; wynik `GroupResult { changed, skipped, nextIds }`); okno: `features/cases/groupPlan.ts` (`planGroupOnAxis`, `planningOfGroup` – rozsuwanie D367 po wszystkich nowych blokach, `groupFreeStart`). Pomijana tylko zrobiona (zaplanowana – planowana od nowa jak `planCase`; kopia Ctrl nic nie pomija; krok jednej sprawy nie odrzuca grupy, tylko ją pomija); wspólny kod z jedną sprawą: `changeOne` (przebieg kroku + następne zadanie) i `readPlanDays` (odczyt dni i przeniesień) w `store/cases.ts`. „Cofnij” zostawia sprawę, której pole zmiany ma już inną wartość, i sprawy dnia, którego plik się zmienił (`kept`, `daysKept`); następne zadanie tylko z cofnięciem właściciela. Testy: `tests/web/cases-group.test.ts`, `tests/unit/engine/cases-group.test.ts`, `tests/fs/cases-group.test.ts`.
 - Okienko „Do skrzynki” na wierzch tylko w `raise()` ze skrótu (`check-code` – `checkQuickWindow`); „+” paska pulpitu
   otwiera panel z polem (pasek nie przyjmuje klawiszy, T756). „+” jest w każdym trybie paska.
 

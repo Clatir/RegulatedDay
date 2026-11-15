@@ -30,7 +30,7 @@ import {
 import { dayWord, parseQuickDates } from '@shared/quickDates'
 import { newId } from '@shared/model/ids'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
-import { newRequest, newTask, requestFrom, type CaseList, type NewTask } from '@shared/model/requests'
+import { newRequest, newTask, requestFrom, type CaseList, type NewTask, type RequestRecord } from '@shared/model/requests'
 import { settingsOn } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { useNow } from '../lib/clock'
@@ -46,7 +46,7 @@ export const DAY_UNREADABLE = 'Pliku dnia nie da się teraz odczytać – nic ni
  * The days' files as this computer sees them now; a file not readable now – the one the window saw (`seen`), else
  * none of them (null: say `DAY_UNREADABLE`).
  */
-async function daysNow(dates: readonly string[], seen?: (date: string) => RawRecord | null | undefined): Promise<Record<string, RawRecord | null> | null> {
+export async function daysNow(dates: readonly string[], seen?: (date: string) => RawRecord | null | undefined): Promise<Record<string, RawRecord | null> | null> {
   const files = await window.rd.dayFiles([...new Set(dates)])
   const out: Record<string, RawRecord | null> = {}
   for (const d of dates) {
@@ -239,30 +239,48 @@ export function nextTaskText(raw: RawRecord, today: string): string {
   return `Następne: „${r?.title || 'zadanie'}”${date ? ` – ${r?.doDate ? 'wykonać' : 'termin'} ${dayWord(date, today)}` : ''}`
 }
 
+/** What `changeOne` can leave out or refuse: a step of a record, as a function of the file in its turn (the file is a copy it may change). */
+export type RecordStep = { raw: RawRecord } | { error: string } | { skip: string }
+
+/** The `put` of `change` – one file of the edit with its version before and after. */
+export type PutFile = Parameters<Parameters<typeof change>[0]>[0]
+
 /**
- * One record changed by `fn` from what it is in its turn (or refused with why); gone – „Tej sprawy już nie ma.”. A task that
- * repeats taken to „Zrobione” by it (D465) gets its next task in the same edit – unless the window has that one already (made
- * on another computer, or before a tick taken back by hand): the next one is never written twice; „Cofnij” then for both.
- * The next one goes with the tick (T923, `owner`): a tick that meets a change elsewhere keeps it waiting, „ich” takes it out –
- * never an open task and its next one side by side; its „Cofnij” removes the next one only after the task is back.
+ * One record `id` changed by `step` inside an edit made in its turn – the one way a change of one sprawa and of a group goes (T1564):
+ * the record as it is now (`gone` – none), `step` on a copy of it (`error` – refused with why, `skip` – nothing to write), the file
+ * put, and – a task that repeats taken to „Zrobione” (D465) – its next task put too (`owner` = the tick, T923), unless the window has
+ * that one already (made on another computer, or before a tick taken back by hand): never written twice. `next` – the next one made.
+ */
+export function changeOne(put: PutFile, id: string, at: number, step: (raw: RawRecord, at: number) => RecordStep): { gone: true } | { error: string } | { skip: string } | { next: RawRecord | null } {
+  const rel = relOf(id)
+  const before = rawRecord(rel)
+  if (!before) return { gone: true }
+  const s = step({ ...before }, at)
+  if ('error' in s || 'skip' in s) return s
+  put(rel, before, s.raw)
+  const n = nextTaskRaw(before, s.raw, at, marketDay)
+  if (n && !rawRecord(relOf(n.id))) {
+    put(relOf(n.id), null, n.raw, rel)
+    return { next: n.raw }
+  }
+  return { next: null }
+}
+
+/**
+ * One record changed by `fn` from what it is in its turn (or refused with why); gone – „Tej sprawy już nie ma.” (`changeOne`). A task that
+ * repeats taken to „Zrobione” by it (D465) gets its next task in the same edit – unless the window has that one already: the next one is
+ * never written twice; „Cofnij” then for both. The next one goes with the tick (T923, `owner`): a tick that meets a change elsewhere keeps
+ * it waiting, „ich” takes it out – never an open task and its next one side by side; its „Cofnij” removes the next one only after the task is back.
  */
 async function changeRecord(id: string, fn: (raw: RawRecord, at: number) => { raw: RawRecord } | { error: string }): Promise<CaseResult> {
   // The next task this change made (written in the callback – its last run counts).
   const made: { raw: RawRecord | null } = { raw: null }
   const r = await change((put) => {
     made.raw = null
-    const rel = relOf(id)
-    const before = rawRecord(rel)
-    if (!before) return 'Tej sprawy już nie ma.'
-    const at = Date.now()
-    const next = fn({ ...before }, at)
-    if ('error' in next) return next.error
-    put(rel, before, next.raw)
-    const n = nextTaskRaw(before, next.raw, at, marketDay)
-    if (n && !rawRecord(relOf(n.id))) {
-      put(relOf(n.id), null, n.raw, rel)
-      made.raw = n.raw
-    }
+    const o = changeOne(put, id, Date.now(), fn)
+    if ('gone' in o) return 'Tej sprawy już nie ma.'
+    if ('error' in o) return o.error
+    if ('next' in o) made.raw = o.next
     return null
   })
   const next = r.saved ? made.raw : null
@@ -302,7 +320,7 @@ export function removeCase(id: string): Promise<CaseResult> {
  * block gone from the day (the sprawa's old one, one removed on another computer, one the day no longer makes) is never
  * written back. The file after and how many starts changed.
  */
-function pushedInto(after: RawRecord, date: string, push: CasePush): { next: RawRecord; moved: number } {
+export function pushedInto(after: RawRecord, date: string, push: CasePush): { next: RawRecord; moved: number } {
   const plan = new Map(push.planOf(dayFileFrom(after, date)).map((b) => [b.id, b]))
   let next = after
   let moved = 0
@@ -328,6 +346,34 @@ export interface CasePushed {
 }
 
 /**
+ * The files of the days a planning of `rs` on `date` reads, with the logs' `begunOf` (T769): the day of the axis (the window's
+ * `seen` when it cannot be read now) and each sprawa's day of before, followed through `movedTo` to where its block stands
+ * (`caseDayToRead`). Null – a day it needs cannot be read now: nothing is written (`DAY_UNREADABLE`, never a second block in silence).
+ * One read for `planCase` and for a group (`planCases`).
+ */
+export async function readPlanDays(rs: readonly RequestRecord[], date: string, seen?: (date: string) => RawRecord | null | undefined): Promise<{ days: Record<string, RawRecord | null>; begunOf: (date: string, block: string) => boolean | undefined } | null> {
+  const read = await window.rd.caseDays([...new Set([date, ...rs.flatMap((r) => (r.day && r.day !== date ? [r.day] : []))])])
+  const days: Record<string, RawRecord | null> = { ...read.files }
+  const begunIn: Record<string, string[]> = { ...read.begun }
+  if (!(date in days)) {
+    const known = seen?.(date)
+    if (known === undefined) return null
+    days[date] = known
+  }
+  for (const r of rs) {
+    for (let more = caseDayToRead(r, days); more && !(more in days); more = caseDayToRead(r, days)) {
+      const next = await window.rd.caseDays([more])
+      // The day its old block stands on cannot be read now: it could stay beside the new one – nothing written (T769).
+      if (!(more in next.files)) return null
+      days[more] = next.files[more] ?? null
+      const begunHere = next.begun[more]
+      if (begunHere) begunIn[more] = begunHere
+    }
+  }
+  return { days, begunOf: (d, b) => (begunIn[d] ? begunIn[d].includes(b) : undefined) }
+}
+
+/**
  * A sprawa put on the axis of `date` at `startMin` (D384): a task – a flexible block of its category as long as its
  * estimate, the cost from the category; a request – a block of requests; the sprawa „zaplanowane” in it – one edit of
  * the day's file and the record. Its block of before leaves its day when that day is today or later and its log says it
@@ -350,25 +396,9 @@ export async function planCase(id: string, date: string, startMin: number, o: { 
     if (!before) return 'Tej sprawy już nie ma.'
     const r0 = requestFrom(before)
     if (!r0) return 'Tej sprawy już nie ma.'
-    // The day of the drop (or as the window knows it) and the day the sprawa is planned in, followed to where its block was
-    // moved (`movedTo`) – with their logs: whether the old block began (T769).
-    const read = await window.rd.caseDays([date, ...(r0.day && r0.day !== date ? [r0.day] : [])])
-    const days: Record<string, RawRecord | null> = { ...read.files }
-    const begunIn: Record<string, string[]> = { ...read.begun }
-    if (!(date in days)) {
-      const known = o.seen?.(date)
-      if (known === undefined) return DAY_UNREADABLE
-      days[date] = known
-    }
-    for (let more = caseDayToRead(r0, days); more && !(more in days); more = caseDayToRead(r0, days)) {
-      const next = await window.rd.caseDays([more])
-      // The day its old block stands on cannot be read now: it could stay beside the new one – nothing written (T769).
-      if (!(more in next.files)) return DAY_UNREADABLE
-      days[more] = next.files[more] ?? null
-      const begunHere = next.begun[more]
-      if (begunHere) begunIn[more] = begunHere
-    }
-    const begunOf = (d: string, b: string) => (begunIn[d] ? begunIn[d].includes(b) : undefined)
+    const read = await readPlanDays([r0], date, o.seen)
+    if (!read) return DAY_UNREADABLE
+    const { days, begunOf } = read
     // Now – in the turn of the write (a turn waiting over 04:00 counts with the day it runs in).
     const p = casePlan({ record: before, date, startMin, ...(o.durationMin != null ? { durationMin: o.durationMin } : {}), files: days, rules: settingsOn(useData.getState().rd.settings, date).categories, at: Date.now(), begun: begunOf })
     if (!p) return 'Tej sprawy już nie ma.'
