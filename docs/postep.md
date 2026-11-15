@@ -76,7 +76,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    **Uwagi na później (d7):** TextField po Enter miga starą wartością; TipTap getMarkdown nieliniowy przy tysiącach znaczników;
    proces po will-quit żyje pod obciążeniem do 170 s (czy nowa kopia startuje); QUIT_MS wydłuża też zawieszenie w teście;
    `screens.spec:67` raz 9/10 (Szablony, długość 1 h).
-11. **1.24.0 – czytelna energia i koszt na kafelku (w toku, 14.11; D500, D501, T1270–T1289):** gałąź paczki `claude/1.24.0`
+11. **1.24.0 – czytelna energia i koszt na kafelku (wydane 15.11 02:25, PR #91, run 43655274347; D500, D501, T1270–T1289):** gałąź paczki `claude/1.24.0`
    (od `main` po #90, drzewo `w124`; koordynator regulatedday-a8 – D, specyfikacja, CHANGELOG, wersja, scalanie, Setup.exe).
    1.24-A energia (D500: pasy G · E · B w „Dziś”, pasek najsłabszej puli w „Tygodniu” i „3 dniach”) – d7, gałąź
    `claude/1.24-energia` (drzewo `w124e`, T1280–T1289), przegląd high a8: 9 uwag poprawionych (c6d3f3a), scalone (ff6eba4).
