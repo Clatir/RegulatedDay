@@ -62,20 +62,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    (zlecenia 14.11 ok. 10:40, raporty do regulatedday-ab): 1.22-A kroki (D473, D474, D477) – od 14.11 11:20 przejęte przez regulatedday-ab (d7 stała, decyzja użytkownika; wykonawca-opus w `w122k`, drzewo przestawione na 1.21.0 a83ee79), gałąź
    `claude/1.22-kroki`, numery D479–D484, T1100–T1129; 1.22-B timer (D475, D478) – sesja regulatedday-a8, gałąź
    `claude/1.22-timer`, D485–D490, T1130–T1159. Ta sesja scala obie do `claude/1.21.0-intuicyjnosc`, przegląd xhigh, Setup.exe.
-10. **1.23.0 – bloki równoległe (D476, po 1.22.0):** przeciągnięcie bloku na inny = biegną razem, najwyżej N (Ustawienia, domyślnie 3),
-   pierwszy plan = ostatnio zaczęty, energia tylko z niego; widoki pokazują nakładające się bloki obok siebie. Szacunek 6–10 h.
-   1.23-A (plan, gest, widoki, ustawienie) – regulatedday-ab po 1.22-A (przejęte od d7 14.11), gałąź `claude/1.23-widoki`, D492–D495, T1160–T1189;
-   timer bloków równoległych – po 1.22-B. Potem jeden PR paczki do `main` z pełnym CI (D491).
-   **Stan 14.11 17:40:** w gałęzi paczki scalone 1.23-A (d7, e7367e1), 1.23-B (a8, 57e76b7), T1211 (a8), chwiejne testy
-   (d7, 2a3581c, T1220–T1231) i dokumenty (d7, ce4dbb6, T1240–T1242); wersja 1.23.0; D492–D499, T1160–T1242. Przegląd xhigh
-   runda 2 całego 1.23 (13beb59..5f26bcf): 15 uwag – a8 poprawia na `claude/1.23-poprawki2` (drzewo `w123q`, T1212–T1219,
-   T1250–T1269) – scalone (3f908ee, RULES_VERSION 12). Lokalnie `npm test` 3495/3495, build, lint, check-context ok;
-   Setup 1.23.0 w Pobranych 14.11 17:40. PR #90 scalony 14.11 (5f2d9ae); wydanie 1.23.0 opublikowane 14.11 21:12 (run 43626981099,
-   Linux E2E D492 niestabilny – poprawka 0f9919b w 1.24).
-   **Po 1.23 (decyzja 14.11):** szybki zapis „+” w chwili otwierania folderu czeka na folder i wtedy się zapisuje (dziś przepada).
-   **Uwagi na później (d7):** TextField po Enter miga starą wartością; TipTap getMarkdown nieliniowy przy tysiącach znaczników;
-   proces po will-quit żyje pod obciążeniem do 170 s (czy nowa kopia startuje); QUIT_MS wydłuża też zawieszenie w teście;
-   `screens.spec:67` raz 9/10 (Szablony, długość 1 h).
+10. **1.23.0 – bloki równoległe:** wydane 14.11 (PR #90); wpis i uwagi na później – `docs/archiwum/postep-1.2x.md`.
 11. **1.24.0 – czytelna energia i koszt na kafelku (wydane 15.11 02:25, PR #91, run 43655274347; D500, D501, T1270–T1289):** gałąź paczki `claude/1.24.0`
    (od `main` po #90, drzewo `w124`; koordynator regulatedday-a8 – D, specyfikacja, CHANGELOG, wersja, scalanie, Setup.exe).
    1.24-A energia (D500: pasy G · E · B w „Dziś”, pasek najsłabszej puli w „Tygodniu” i „3 dniach”) – d7, gałąź
@@ -150,6 +137,16 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
    pasek przykryty oknem po nieusłyszanym puszczeniu jedzie za kursorem, aż ten na niego wróci (najdłużej 2 min);
    E2E D303 raz padł lokalnie (miejsce paska po samym kliknięciu uchwytu ≠ start; ścieżka bez zmian, 6 kolejnych przebiegów
    zielonych).
+15. **1.27.0 – pula „ciało” i nazwy pul przy kosztach (uwaga 15.11, D520–D525, T1520–T1539, T1550–T1555):** gałąź
+   `claude/1.27-cialo` (drzewo `w127`), wykonawcy Opus (silnik, dane) i Sonnet (interfejs); przegląd xhigh dwie rundy (12 + 15
+   uwag; poprawione medium i błąd sprzed 1.27 – wariant „jak podkategoria” w migawce dnia, T1538). Testy: unit/fs/sim/scale 2607,
+   web 1364, zmienione E2E lokalnie. Setup 1.27.0 zbudowany lokalnie. PR do `main` po scaleniu #94 i bez biegnącego runu na `main`.
+   Uwagi na później: komputer z 1.26 obok 1.27 – `energy.relative`/`energy.reserve` z ciałem są dla 1.26 nieczytelne (`minuteGate`,
+   zamrożenie czekają), `block.start` z 1.26 bierze ciało startowe zamiast ciała planu, `bodiesBefore` z porannej migawki i inny niż
+   `startCostOf`, `sameOccurrence` przy ciele ustawionym w serii, klucz horyzontu bez ustawień dla dnia z 1.26, `DayContext.changes`
+   zamiast rozwiązania w `dayContextOf`; „Ułóż pod energię” – minimum czterech pul; ręcznie rozwinięta pętla w `energy.ts`; 8 kopii
+   nazw pul w rendererze; kolor pasa ciała = klasa „życie” (do decyzji przy odbiorze); podkategoria o id „constructor” wywraca
+   `settingsFrom` (stary błąd).
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
