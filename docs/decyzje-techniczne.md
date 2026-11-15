@@ -430,3 +430,11 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1553 | Menu zatrzymuje zdarzenia (klawisze, mysz, dwuklik, prawy przycisk) przed drzewem Reacta elementu otwarcia (portal) i samo obsługuje Esc przez `handleEscape` |
 | T1554 | Linia zmian grupowych nie znika w trakcie cofania; po nieudanym – zostaje do końca terminu albo dostaje nowe 15 min; koniec liczony `until − Date.now()` |
 | T1555 | Rola `status` tylko na tekście linii, więc „Cofnij” liczy się jako klik poza otwartym menu i okienkiem |
+| T1560 | Zmiany grupowe Spraw w osobnych plikach `engine/casesGroup.ts` i `store/casesGroup.ts`; działania jednej sprawy bez zmian |
+| T1561 | „Cofnij” grupy Spraw działa po polach rekordu: sprawa, której zmienione pole ma już inną wartość, zostaje cała (`kept`); plik dnia wraca w całości i tylko, gdy stoi tak, jak go zostawiła zmiana (`daysKept`) |
+| T1562 | „Przywróć” zrobionej sprawy odsyła do Skrzynki (zrobiona sprawa nie pamięta listy; inną listę daje „Przenieś na listę”); kopia z Ctrl nic nie pomija |
+| T1563 | Rozsuwanie (D367) dla grupy spraw liczone po kolei na dniu z nowymi blokami (`planningOfGroup`), zapis raz (`planCases`) |
+| T1564 | `changeOne` i `readPlanDays` w `store/cases.ts` – jedyna droga kroku i odczytu dni dla jednej sprawy i grupy |
+| T1565 | „Cofnij” grupy zostawia sprawy z dnia o zmienionym pliku i następne zadanie serii, gdy jego właściciel został |
+| T1566 | „Zaplanuj…” grupy pomija tylko zrobione; zaplanowane (także na dzień miniony) planuje od nowa, jak „Zaplanuj” jednej |
+| T1567 | Błąd kroku jednej sprawy (np. zadanie bez tytułu) to pominięcie „nie da się”; całość odrzuca tylko błędna wspólna wartość (szacunek spoza zakresu) |
