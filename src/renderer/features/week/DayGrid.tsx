@@ -461,7 +461,7 @@ function DayColumn({
   // D410: the attachments of each block (its own, the template's, the series') – 📎N on its tile.
   const attachments = useData((s) => s.attachments)
   const templates = useData((s) => s.templates)
-  const place = useMemo<BlockPlace>(() => dayPlace(day.date, day.templateId, templates), [day.date, day.templateId, templates])
+  const place = useMemo<BlockPlace>(() => dayPlace(day.date, day.templateId, templates, day.dayType), [day.date, day.templateId, templates, day.dayType])
   const attachCount = (b: HorizonBlock): number => (b.outsidePlan ? 0 : attachmentsOfBlock(attachments, { id: b.id, origin: b.named.origin ?? 'user', sourceId: b.named.sourceId ?? null }, place).length)
   const grid = useGridCreate({
     lo,

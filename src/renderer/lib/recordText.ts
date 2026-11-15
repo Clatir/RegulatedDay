@@ -43,7 +43,7 @@ const BLOCK_FIELDS: Record<string, string> = {
   movedFrom: 'przeniesiony z',
   byVariant: 'zmieniony wariantem',
   // D511: a template's session.
-  session: 'sesja (według czasu, pytaj rano)'
+  session: 'sesja (według czasu, dni)'
 }
 
 const REQUEST_FIELDS: Record<string, string> = { person: 'osoba', estimateMin: 'szacunek', note: 'notatka', state: 'stan', day: 'dzień', block: 'blok', title: 'tytuł', kind: 'rodzaj', categoryId: 'kategoria', list: 'lista', listDay: 'dzień na liście „Dziś”', doneAt: 'zrobione', dueDate: 'termin', doDate: 'wykonać', listSetDay: 'dzień przeniesienia na listę', priority: 'priorytet', steps: 'kroki', stepsDone: 'odhaczone kroki' }
@@ -148,6 +148,7 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames, va
     if (a === 'weekdays') return 'dni tygodnia'
     if (a === 'dayType') return 'typ dnia'
     if (a === 'archived') return 'archiwum'
+    if (a === 'sessionsMoved') return 'przeniesienie sesji z Ustawień'
     if (a === 'versions') return b ? `wersja od ${plDate(b)}${rest[0] === 'blocks' ? `: ${blockPart(rest[1], rest[2])}` : rest[0] === 'budgetMin' ? ': budżet' : rest[0] === 'maxMin' ? ': maksimum' : ''}` : 'wersje'
     return 'inne pole szablonu'
   }

@@ -7,27 +7,46 @@
  */
 import { isIsoDate } from '../time/zone'
 import { NOTE_MAX } from './note'
-import { DAY_TYPES, RANGES, isSessionMarket, isZone, type DayTypeId, type SessionMarket } from './settings'
+import { DAY_TYPES, RANGES, isSessionMarket, isZone, type DayTypeId, type SessionChoice, type SessionMarket } from './settings'
 import { routineStepsEntries, type RoutineStepsEntry } from './routineSteps'
 import { doneSetFrom, stepsFrom, type Step } from './steps'
 
 /**
- * A block of a template that is a session (D511, `model/templateSessions.ts`): its hour is Polish time as usual (as the axis
- * of „Szablony” shows it), kept „według czasu” of `zone` – New York, London or Poland – so it moves with that zone's clock;
- * `markets` – whose holidays and early closes concern it; `ask` – „pytaj rano”. Only in templates: a day's block of it is a
- * session of origin „session” (`sessionBlock`), without the field.
+ * A block of a template that is a session (D511, D515, `model/templateSessions.ts`): its hour is Polish time as usual (as the
+ * axis of „Szablony” shows it), kept „według czasu” of `zone` – New York, London or Poland – so it moves with that zone's
+ * clock; `markets` – whose holidays and early closes concern it; `days` – the answer of each weekday (Monday first): „tak” –
+ * the day has it, „pytaj” – the morning asks („pytaj rano”), „nie” – none (a weekday the template does not make – no
+ * meaning). `id` – the session's own id when the entry's block has another one (an ordinary block of the template has the
+ * session's, T1406); none – the block's. Only in templates: a day's block of it is a session of origin „session”
+ * (`sessionBlock`), without the field.
  */
 export interface BlockSession {
   zone: string
-  ask: boolean
   markets: SessionMarket[]
+  days: SessionChoice[]
+  id?: string
 }
 
-/** The field „według czasu” of a block as read from a file: a zone the calendar knows, else none (an ordinary block). */
+/** Every weekday „tak” – a session new in a template (T1404). */
+export const ALL_DAYS_YES: readonly SessionChoice[] = ['yes', 'yes', 'yes', 'yes', 'yes', 'yes', 'yes']
+
+const isChoice = (v: unknown): v is SessionChoice => v === 'yes' || v === 'no' || v === 'ask'
+
+/**
+ * The field „według czasu” of a block as read from a file: a zone the calendar knows, else none (an ordinary block). Its
+ * days: seven answers, a broken one „tak”; none at all – „tak” every day, or „pytaj” where the file has the „pytaj rano” of
+ * a working build before D515 (`ask`, T1400).
+ */
 export function blockSessionFrom(v: unknown): BlockSession | null {
   if (!isPlain(v) || !isZone(v.zone)) return null
-  return { zone: v.zone, ask: v.ask === true, markets: Array.isArray(v.markets) ? [...new Set(v.markets.filter(isSessionMarket))] : [] }
+  const fill: SessionChoice = v.ask === true ? 'ask' : 'yes'
+  const days = Array.isArray(v.days) && v.days.length === 7 ? v.days.map((x) => (isChoice(x) ? x : 'yes')) : ALL_DAYS_YES.map(() => fill)
+  const id = typeof v.id === 'string' && v.id ? { id: v.id } : {}
+  return { zone: v.zone, markets: Array.isArray(v.markets) ? [...new Set(v.markets.filter(isSessionMarket))] : [], days, ...id }
 }
+
+/** The session a template's block is (D511): its own id (`BlockSession.id`), else the block's. */
+export const sessionIdOf = (b: Pick<PlanBlock, 'id' | 'session'>): string => b.session?.id ?? b.id
 
 export interface PlanBlock {
   id: string
@@ -90,9 +109,10 @@ export interface PlanBlock {
    */
   alongside: string | null
   /**
-   * A template's session (D511): „według czasu” and „pytaj rano” – a block of a category of sessions with it is the day's
-   * session; null (or left out – a block made before D511, a day's block) – none. A version that does not know the field
-   * keeps it in the file and shows the block as an ordinary fixed block of its category.
+   * A template's session (D511, D515): „według czasu” and the answers of the weekdays – a block of a category of sessions
+   * with it is the day's session; null (or left out – a block made before D511, a day's block) – none. A version that does
+   * not know the field keeps it in the file and shows the block as an ordinary fixed block of its category on every day of
+   * its template (T1403).
    */
   session?: BlockSession | null
 }
@@ -114,6 +134,12 @@ export interface Template {
   weekdays: number[]
   versions: TemplateVersion[]
   archived: boolean
+  /**
+   * The template was written by the move of the layer of sessions (D511, `model/sessionMigration.ts`): its date. Only
+   * there; a day of a template the move wrote whose file lacks it (OneDrive brought rd.json first) is made as before the
+   * move (`daySettingsOf`, T1405).
+   */
+  sessionsMoved?: string
 }
 
 /** A series of the plan of lectures: cyclic fixed blocks (spec „Plan wykładów”). */
@@ -289,7 +315,8 @@ export function templateFrom(v: unknown): Template | null {
     dayType: v.dayType,
     weekdays: Array.isArray(v.weekdays) ? [...new Set(v.weekdays.filter((d): d is number => intIn(d, 1, 7) != null))].sort() : [],
     versions,
-    archived: v.archived === true
+    archived: v.archived === true,
+    ...(isIsoDate(v.sessionsMoved) ? { sessionsMoved: v.sessionsMoved } : {})
   }
 }
 

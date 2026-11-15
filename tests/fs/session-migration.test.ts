@@ -1,17 +1,19 @@
 /**
- * The move of the layer of sessions into the templates in the data folder (D511): the leader makes it once, before the day,
- * and the day comes from the templates; a second check, a second computer and a day later write nothing more; a day made
- * before the move keeps its sessions of the layer. A day from the move to come – of a copy of a split – has its file (and its
- * attachments) rewritten to the copy's ids an older version makes too; a copy keeps what its original's file holds; the
- * edit is made from one reading of the records; a day of the move waits for its templates (OneDrive may bring rd.json first).
+ * The move of the layer of sessions into the templates in the data folder (D511, D515): the leader makes it once, before the
+ * day, and the day comes from the templates; a second check, a second computer and a day later write nothing more; a day made
+ * before the move keeps its sessions of the layer; no day's file nor attachment is touched (the ids stay). The edit is made
+ * from one reading of the records and waits, with a line of the check, behind a queued edit of rd.json or a template. A
+ * computer that gets rd.json before the templates (OneDrive) makes the day at once with the sessions of the layer as it was,
+ * and once the templates come – the same sessions, never twice.
  */
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
+import { recordEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
-import { createDay, dayPlan, templateBlockId } from '@shared/engine/createDay'
+import { createDay, dayPlan, sessionBlockId, templateBlockId } from '@shared/engine/createDay'
 import { defaultTemplates, SETUP_FROM, templateJson } from '@shared/model/defaults'
 import { dayFileFrom, planBlock, templateFrom, type Template } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
@@ -20,7 +22,7 @@ import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs } from '../../src/main/data/fsio'
-import { MOVED, sessionMoveEdits } from '../../src/main/data/sessionMove'
+import { sessionMoveEdits } from '../../src/main/data/sessionMove'
 
 const DAY = '2026-10-21'
 let root: string
@@ -30,10 +32,11 @@ const write = (rel: string, value: unknown, dir = dataDir) => {
   writeFileSync(join(dir, rel), JSON.stringify(value, null, 2))
 }
 const read = (rel: string, dir = dataDir) => JSON.parse(readFileSync(join(dir, rel), 'utf8')) as Record<string, unknown>
+const text = (rel: string, dir = dataDir) => readFileSync(join(dir, rel), 'utf8')
 /** Every record of the folder as text (what a move would change). */
 const records = () => {
-  const out: Record<string, string> = { [paths.settings]: readFileSync(join(dataDir, paths.settings), 'utf8') }
-  for (const f of readdirSync(join(dataDir, 'templates'))) out[`templates/${f}`] = readFileSync(join(dataDir, 'templates', f), 'utf8')
+  const out: Record<string, string> = { [paths.settings]: text(paths.settings) }
+  for (const f of readdirSync(join(dataDir, 'templates'))) out[`templates/${f}`] = text(`templates/${f}`)
   return out
 }
 /** A folder of a version before D511: the wizard's change, the sessions in the layer of the settings, the default templates. */
@@ -61,17 +64,19 @@ async function computer(id: string, clock: { now: number }, dir = dataDir) {
     holidays: marketDay,
     oneDriveRunning: () => true
   })
-  // The leader's tasks run once it leads, settled (a few checks a minute apart).
+  // The leader's tasks run once it leads, settled (a few checks a minute apart); the lines of the last check.
   const settle = async (n = 6) => {
+    let problems: string[] = []
     for (let i = 0; i < n; i++) {
       clock.now += 60_000
-      await folder.check()
+      problems = (await folder.check()).problems
     }
+    return problems
   }
   return { folder, settle }
 }
 
-/** The ordinary day with an analysis 09:00 (its weekend goes to a copy of the move). */
+/** The ordinary day with an analysis 09:00. */
 function withAnalysis(extra: Record<string, unknown> = {}) {
   const t: Template = { ...defaultTemplates().find((x) => x.id === 'zwykly')!, versions: [{ from: SETUP_FROM, blocks: [planBlock({ id: 'an', categoryId: 'analiza', startMin: 9 * 60, durationMin: 60, origin: 'template' })], budgetMin: null, maxMin: null }] }
   write(paths.record('template', 'zwykly'), { ...templateJson(t), ...extra })
@@ -80,10 +85,10 @@ function withAnalysis(extra: Record<string, unknown> = {}) {
 const sessionsMade = async (f: DataFolder, day: string) => {
   const created = (await f.readDay(day)).events.find((e) => e.k === 'day.create')
   if (!created) return null
-  return (created as unknown as { snapshot: { blocks: Array<{ origin: string; sourceId: string }> } }).snapshot.blocks.filter((b) => b.origin === 'session').map((b) => b.sourceId)
+  return (created as unknown as { snapshot: { blocks: Array<{ id: string; origin: string; sourceId: string }> } }).snapshot.blocks.filter((b) => b.origin === 'session').map((b) => [b.id, b.sourceId])
 }
 
-describe('przeniesienie sesji do szablonów w folderze danych (D511)', () => {
+describe('przeniesienie sesji do szablonów w folderze danych (D511, D515)', () => {
   it('prowadzący przenosi raz, przed utworzeniem dnia; dzień ma sesje z szablonu; drugie sprawdzenie i dzień później – nic', async () => {
     const clock = { now: placeLogical(DAY, 5 * 60) }
     const a = await computer('pca', clock)
@@ -92,10 +97,13 @@ describe('przeniesienie sesji do szablonów w folderze danych (D511)', () => {
     expect(rd.settings.map((c) => c.id)).toEqual(['kreator', SESSIONS_CHANGE_ID])
     expect(rd.settings[1]!.from).toBe(DAY)
     const zwykly = templateFrom(read(paths.record('template', 'zwykly')))!
-    expect(zwykly.versions.map((v) => v.from)).toEqual([SETUP_FROM, DAY])
-    expect(zwykly.versions[1]!.blocks.filter((b) => b.session).map((b) => b.id)).toEqual(['londyn', 'ny'])
-    expect(existsSync(join(dataDir, paths.record('template', 'zwykly_67')))).toBe(true)
-    expect(existsSync(join(dataDir, paths.record('template', 'sesje-zjazd-zdalny')))).toBe(true)
+    expect([zwykly.versions.map((v) => v.from), zwykly.sessionsMoved]).toEqual([[SETUP_FROM, DAY], DAY])
+    expect(zwykly.versions[1]!.blocks.filter((b) => b.session).map((b) => [b.id, b.session!.days.join(' ')])).toEqual([
+      ['londyn', 'yes yes yes yes yes no no'],
+      ['ny', 'yes yes yes yes yes no no']
+    ])
+    // No copy: the templates there were and one for the remote „zjazd”, which had none.
+    expect(readdirSync(join(dataDir, 'templates')).sort()).toEqual(['sesje-zjazd-zdalny.json', 'sobota.json', 'zwykly.json'])
     expect(a.folder.queue.pending).toEqual([])
     // The day was made after the move: its sessions are the template's (named by it).
     const created = (await a.folder.readDay(DAY)).events.find((e) => e.k === 'day.create')!
@@ -126,7 +134,7 @@ describe('przeniesienie sesji do szablonów w folderze danych (D511)', () => {
       await b.folder.check()
     }
     const once = records()
-    expect(Object.keys(once).sort()).toEqual([paths.settings, 'templates/sesje-zjazd-zdalny.json', 'templates/sobota.json', 'templates/zwykly_67.json', 'templates/zwykly.json'].sort())
+    expect(Object.keys(once).sort()).toEqual([paths.settings, 'templates/sesje-zjazd-zdalny.json', 'templates/sobota.json', 'templates/zwykly.json'].sort())
     expect(rdFrom(read(paths.settings)).settings.filter((c) => c.id === SESSIONS_CHANGE_ID)).toHaveLength(1)
     // The other one leads (the first closed): the move is made – it writes nothing.
     await a.folder.close()
@@ -158,64 +166,61 @@ describe('przeniesienie sesji do szablonów w folderze danych (D511)', () => {
     expect((made[0] as unknown as { snapshot: unknown }).snapshot).toEqual(JSON.parse(JSON.stringify(snapshot)))
   })
 
-  it('dzień kopii po przeniesieniu: plik dnia i załącznik przepisane na identyfikatory kopii – starsza wersja liczy te same', async () => {
-    withAnalysis()
+  it('przyszły dzień i jego załącznik zostają nietknięte: te same identyfikatory bloków, Twoja zmiana dnia działa dalej', async () => {
+    withAnalysis({ nowePole: 'zostaje' })
     const sat = '2026-10-24'
-    const was = templateBlockId(sat, 'zwykly', 'an')
-    const now = templateBlockId(sat, 'zwykly_67', 'an')
-    write(paths.day(sat), { schema: 1, date: sat, dayType: 'zwykly', cancelled: { [was]: true } })
-    write(paths.record('attachment', 'z1'), { schema: 1, id: 'z1', owner: { scope: 'day', date: sat, blockId: was }, kind: 'link', name: 'notatki', link: { url: 'https://example.com' }, addedAt: 1, removedAt: null })
+    const an = templateBlockId(sat, 'zwykly', 'an')
+    write(paths.day(sat), { schema: 1, date: sat, dayType: 'zwykly', cancelled: { [an]: true } })
+    write(paths.record('attachment', 'z1'), { schema: 1, id: 'z1', owner: { scope: 'day', date: sat, blockId: an }, kind: 'link', name: 'notatki', link: { url: 'https://example.com' }, addedAt: 1, removedAt: null })
+    const dayText = text(paths.day(sat))
+    const attachmentText = text(paths.record('attachment', 'z1'))
     const a = await computer('pca', { now: placeLogical(DAY, 5 * 60) })
     await a.settle()
-    const file = read(paths.day(sat))
-    expect([file.cancelled, file[MOVED]]).toEqual([{ [now]: true }, DAY])
-    expect((read(paths.record('attachment', 'z1')).owner as { blockId: string }).blockId).toBe(now)
-    // This version: the block cancelled on its day; an older one (no field „według czasu”) – the same ids, the same day.
+    expect(rdFrom(read(paths.settings)).settings.some((c) => c.id === SESSIONS_CHANGE_ID)).toBe(true)
+    expect([text(paths.day(sat)), text(paths.record('attachment', 'z1'))]).toEqual([dayText, attachmentText])
+    // The template keeps what this version does not read.
+    expect(read(paths.record('template', 'zwykly')).nowePole).toBe('zostaje')
+    // The day made from the folder as it is now: its analysis is the same block, still cancelled.
     const changes = rdFrom(read(paths.settings)).settings
     const templates = readdirSync(join(dataDir, 'templates')).map((f) => templateFrom(read(`templates/${f}`))!)
-    const older = templates.map((t) => ({ ...t, versions: t.versions.map((v) => ({ ...v, blocks: v.blocks.map(({ session: _s, ...b }) => b) })) }))
-    for (const ts of [templates, older]) {
-      const snap = createDay({ date: sat, changes, templates: ts, lectures: [], series: [], dayFile: dayFileFrom(file, sat), holidays: marketDay, at: null })
-      expect(snap.blocks.some((b) => b.id === now)).toBe(true)
-      expect(dayPlan(snap, dayFileFrom(file, sat)).some((b) => b.id === now)).toBe(false)
-    }
+    const file = dayFileFrom(read(paths.day(sat)), sat)
+    const snap = createDay({ date: sat, changes, templates, lectures: [], series: [], dayFile: file, holidays: marketDay, at: null })
+    expect(snap.blocks.some((b) => b.id === an)).toBe(true)
+    expect(dayPlan(snap, file).some((b) => b.id === an)).toBe(false)
   })
 
-  it('kopia z podziału ma to, czego ta wersja nie czyta, z pliku oryginału (pola szablonu, wersji i bloku), od dnia przeniesienia', async () => {
-    withAnalysis({ nowePole: 'zostaje' })
-    const raw = read(paths.record('template', 'zwykly'))
-    const versions = raw.versions as Record<string, Record<string, unknown>>
-    versions[SETUP_FROM] = { ...versions[SETUP_FROM]!, poleWersji: 3, blocks: (versions[SETUP_FROM]!.blocks as Array<Record<string, unknown>>).map((b) => ({ ...b, poleBloku: 2 })) }
-    write(paths.record('template', 'zwykly'), raw)
-    const a = await computer('pca', { now: placeLogical(DAY, 5 * 60) })
-    await a.settle()
-    const copy = read(paths.record('template', 'zwykly_67'))
-    expect([copy.id, copy.nowePole, copy[MOVED]]).toEqual(['zwykly_67', 'zostaje', DAY])
-    const v = (copy.versions as Record<string, Record<string, unknown>>)[DAY]!
-    expect(v.poleWersji).toBe(3)
-    expect((v.blocks as Array<Record<string, unknown>>).find((b) => b.id === 'an')!.poleBloku).toBe(2)
-    // Only from the move's date: a day before it stays its original's.
-    expect(Object.keys(copy.versions as object)).toEqual([DAY])
-  })
-
-  it('zapis przeniesienia z jednego odczytu: każda zmiana pola ma za bazę odczytaną wartość, pól spoza przeniesienia nie dotyka', () => {
+  it('zapis przeniesienia z jednego odczytu: każda zmiana pola ma za bazę odczytaną wartość; tylko szablony i rd.json, rd.json ostatni', () => {
     withAnalysis()
     const rd = read(paths.settings)
     const zwykly = read(paths.record('template', 'zwykly'))
     const sobota = read(paths.record('template', 'sobota'))
-    const entries = sessionMoveEdits({ rd, templates: [zwykly, sobota], days: new Map(), attachments: [], today: DAY, todayMade: false })!
-    const edit = entries.find((e) => e.rel === paths.record('template', 'zwykly'))!
-    expect(edit.edits.every((e) => ['versions', MOVED].includes(e.path[0]!))).toBe(true)
+    const entries = sessionMoveEdits({ rd, templates: [zwykly, sobota], today: DAY })!
+    expect(entries.map((e) => e.rel)).toEqual([paths.record('template', 'zwykly'), paths.record('template', 'sesje-zjazd-zdalny'), paths.settings])
+    const edit = entries[0]!
+    expect(edit.edits.every((e) => ['versions', 'sessionsMoved'].includes(e.path[0]!))).toBe(true)
     const at = (path: readonly string[]) => path.reduce<unknown>((v, k) => (v && typeof v === 'object' ? (v as Record<string, unknown>)[k] : undefined), zwykly)
     for (const e of edit.edits) expect(e.base).toEqual(at(e.path))
-    // rd.json goes last, after every record of the move, with the list of what a day of the move waits for.
+    // rd.json goes last, after every record of the move; its change keeps the layer and the templates the move wrote.
     const last = entries.at(-1)!
-    expect(last.rel).toBe(paths.settings)
-    expect(last.after).toEqual(entries.slice(0, -1).map((_, i) => i))
-    expect(JSON.stringify(last.edits)).toContain('"expect":["templates/zwykly.json","templates/zwykly_67.json","templates/sesje-zjazd-zdalny.json"]')
+    expect(last.after).toEqual([0, 1])
+    expect(JSON.stringify(last.edits)).toContain('"templates":["sesje-zjazd-zdalny","zwykly"]')
   })
 
-  it('drugi komputer dostał rd.json po przeniesieniu, a szablony sprzed niego: dzień czeka na nie, potem ma sesje z szablonu; najwyżej 30 min', async () => {
+  it('edycja rd.json albo szablonu w kolejce (pytanie): przeniesienie czeka z linią sprawdzenia, nie zapisuje nic', async () => {
+    const a = await computer('pca', { now: placeLogical(DAY, 5 * 60) })
+    const rel = paths.record('template', 'zwykly')
+    const raw = read(rel)
+    // An edit made from a value changed meanwhile: a question of the queue.
+    await a.folder.edit([recordEdit(rel, { ...raw, name: 'Inna nazwa' }, { ...raw, name: 'Nowa nazwa' })!])
+    const problems = await a.settle()
+    expect(a.folder.queue.pending.length).toBeGreaterThan(0)
+    expect(problems).toContain('sesje w szablonach: przeniesienie czeka na zapis rd.json albo szablonu z kolejki')
+    expect(rdFrom(read(paths.settings)).settings.some((c) => c.id === SESSIONS_CHANGE_ID)).toBe(false)
+    // Till the move is laid the day comes from the layer: its sessions are there.
+    expect((await sessionsMade(a.folder, DAY))!.map(([, s]) => s)).toEqual(['londyn', 'ny'])
+  })
+
+  it('drugi komputer dostał rd.json po przeniesieniu przed szablonami: dzień od razu z sesjami, po dojściu szablonów – te same, nigdy podwójnie', async () => {
     // The first computer moves (its own folder); the second's folder gets that rd.json first (OneDrive), the templates later.
     const first = await computer('pca', { now: placeLogical(DAY, 5 * 60) })
     await first.settle()
@@ -226,20 +231,26 @@ describe('przeniesienie sesji do szablonów w folderze danych (D511)', () => {
     const clock = { now: placeLogical(DAY, 5 * 60) }
     const b = await computer('pcb', clock, second)
     await b.settle()
-    expect(await sessionsMade(b.folder, DAY)).toBeNull()
+    // No waiting: the day is made at once, with the sessions of the layer the move kept.
+    const ids = [
+      [sessionBlockId(DAY, 'londyn'), 'londyn'],
+      [sessionBlockId(DAY, 'ny'), 'ny']
+    ]
+    expect(await sessionsMade(b.folder, DAY)).toEqual(ids)
+    // The templates come: the day keeps them once; the next day – the same sessions from the templates.
     for (const f of readdirSync(join(dataDir, 'templates'))) writeFileSync(join(second, 'templates', f), readFileSync(join(dataDir, 'templates', f)))
     await b.settle(2)
-    expect(await sessionsMade(b.folder, DAY)).toEqual(['londyn', 'ny'])
+    const state = await b.folder.dayState(DAY)
+    expect(state.blocks.filter((x) => x.origin === 'session').map((x) => [x.id, x.sourceId])).toEqual(ids)
+    clock.now = placeLogical(addDays(DAY, 1), 5 * 60)
+    await b.settle()
+    const next = addDays(DAY, 1)
+    expect(await sessionsMade(b.folder, next)).toEqual([
+      [sessionBlockId(next, 'londyn'), 'londyn'],
+      [sessionBlockId(next, 'ny'), 'ny']
+    ])
+    // Nothing written by the second computer: the move was the first's.
+    expect(rdFrom(read(paths.settings, second)).settings.filter((c) => c.id === SESSIONS_CHANGE_ID)).toHaveLength(1)
     await b.folder.close()
-    // The templates never come (a file removed meanwhile): after 30 min the day is made as it is.
-    const third = join(root, 'trzeci')
-    before(third)
-    write(paths.settings, read(paths.settings), third)
-    const c = await computer('pcc', { now: placeLogical(DAY, 5 * 60) }, third)
-    await c.settle(20)
-    expect(await sessionsMade(c.folder, DAY)).toBeNull()
-    await c.settle(15)
-    expect(await sessionsMade(c.folder, DAY)).toEqual([])
-    await c.folder.close()
   })
 })

@@ -1,10 +1,11 @@
 /**
- * Sessions as entries of the templates of day types (D511): every example of „Sesje tradingowe” with the session taken
+ * Sessions as entries of the templates of day types (D511, D515): every example of „Sesje tradingowe” with the session taken
  * from the template – placed from its zone („według czasu”), an hour earlier in the weeks the clocks of the USA and Europe
  * disagree (the wake too), shortened by an early close, asked about a week before a holiday in the USA and in the morning
- * with „pytaj rano”, moving the maximum on a day without sessions, counted by its typical length, followed by „po sesji
- * NY”; a change of type brings the sessions of the new type's template. A day before the change keeps the layer of
- * sessions of the settings.
+ * on a weekday „pytaj”, none on a weekday „nie”, moving the maximum on a day without sessions, counted by its typical length,
+ * followed by „po sesji NY”; a change of type brings the sessions of the new type's template. A day before the change keeps
+ * the layer of sessions of the settings. The attachments of an entry: shown on the session of a day its template gives it,
+ * removed with it only on the days the template makes.
  */
 import { describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
@@ -14,14 +15,15 @@ import { computeDay } from '@shared/engine/day'
 import { holidayQuestions, sessionQuestions, shiftNotice, type MorningInputs } from '@shared/engine/morning'
 import { applyTypeChange, planTypeChange } from '@shared/engine/typeChange'
 import { derivedId } from '@shared/model/ids'
-import { dayFileFrom, emptyDayFile, planBlock, planBlockFrom, type DayFile, type PlanBlock, type Template } from '@shared/model/plan'
-import { DAY_TYPES, NY_ZONE, settingsOn, type SettingsChange } from '@shared/model/settings'
-import { daySettings, knownSessionDefs } from '@shared/model/templateSessions'
+import { dayFileFrom, emptyDayFile, planBlock, planBlockFrom, type BlockSession, type DayFile, type PlanBlock, type Template } from '@shared/model/plan'
+import { DAY_TYPES, NY_ZONE, settingsOn, type SessionChoice, type SettingsChange } from '@shared/model/settings'
+import { daySettings, knownSessionDefs, sessionOwnersOf } from '@shared/model/templateSessions'
+import { copiedTemplate } from '@shared/engine/planEdit'
 import { logicalMinuteOf, placeLogical } from '@shared/time/day'
 import { lm } from './dsl'
 import { blockName } from '@shared/blockName'
 import { sessionBlockId } from '@shared/engine/createDay'
-import { ownersOf, templateRemovalIds, type Attachment } from '@shared/model/attachment'
+import { ownersOf, sessionAttachmentDates, templateRemovalIds, type Attachment } from '@shared/model/attachment'
 import { rdFrom } from '@shared/model/rd'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
 
@@ -32,9 +34,13 @@ const migrated = (from = '2026-01-01'): SettingsChange => ({ id: 'sesje-w-szablo
 
 const entry = (id: string, at: string, min: number, session: PlanBlock['session'], name: string | null = null): PlanBlock =>
   planBlock({ id, categoryId: 'sesja', startMin: lm(at), durationMin: min, fixed: true, origin: 'template', name, session })
-const NY = entry('ny', '14:00', 180, { zone: NY_ZONE, ask: false, markets: ['NYSE', 'CME_FX'] }, 'Sesja NY')
-const LONDON = entry('londyn', '08:00', 180, { zone: NY_ZONE, ask: false, markets: ['UK'] }, 'Sesja Londyn')
-const asked = (b: PlanBlock): PlanBlock => ({ ...b, session: { ...b.session!, ask: true } })
+const YES7: SessionChoice[] = ['yes', 'yes', 'yes', 'yes', 'yes', 'yes', 'yes']
+const field = (zone: string, markets: BlockSession['markets'], days: SessionChoice[] = YES7): BlockSession => ({ zone, markets, days })
+const NY = entry('ny', '14:00', 180, field(NY_ZONE, ['NYSE', 'CME_FX']), 'Sesja NY')
+const LONDON = entry('londyn', '08:00', 180, field(NY_ZONE, ['UK']), 'Sesja Londyn')
+/** Every weekday „pytaj”. */
+const asked = (b: PlanBlock): PlanBlock => ({ ...b, session: { ...b.session!, days: YES7.map(() => 'ask' as const) } })
+const withDays = (b: PlanBlock, days: string): PlanBlock => ({ ...b, session: { ...b.session!, days: days.split(' ') as SessionChoice[] } })
 
 const template = (id: string, dayType: Template['dayType'], blocks: PlanBlock[], o: Partial<Template> = {}, from = '2026-01-01', maxMin: number | null = null): Template => ({
   id,
@@ -98,14 +104,14 @@ describe('sesje z szablonu typu dnia (D511) – „Sesje tradingowe”', () => {
   })
 
   it('„według czasu: Polska” – sesja zostaje o swojej godzinie także w tygodniu przesunięcia, pobudka bez zmiany', () => {
-    const gpw = entry('gpw', '09:00', 60, { zone: 'Europe/Warsaw', ask: false, markets: [] }, 'GPW')
+    const gpw = entry('gpw', '09:00', 60, field('Europe/Warsaw', []), 'GPW')
     const snap = createDay(inputs('2026-10-27', { templates: [template('zwykly', 'zwykly', [gpw])] }))
     expect(sessionsOf(snap)).toEqual({ gpw: lm('09:00') })
     expect(snap.wakeMin).toBe(6 * 60)
   })
 
   it('„według czasu: Londyn” – 14:00 czasu polskiego to 13:00 w Londynie, także po zmianie czasu w Europie', () => {
-    const lse = entry('lse', '14:00', 60, { zone: 'Europe/London', ask: false, markets: ['UK'] })
+    const lse = entry('lse', '14:00', 60, field('Europe/London', ['UK']))
     const t = [template('zwykly', 'zwykly', [lse])]
     expect(sessionsOf(createDay(inputs('2026-10-21', { templates: t })))).toEqual({ lse: lm('14:00') })
     expect(sessionsOf(createDay(inputs('2026-10-27', { templates: t })))).toEqual({ lse: lm('14:00') })
@@ -155,15 +161,34 @@ describe('sesje z szablonu typu dnia (D511) – „Sesje tradingowe”', () => {
     expect(holidayQuestions(morning('2026-11-20', undefined, { '2026-11-26': { ...emptyDayFile('2026-11-26'), asked: { holiday: 'done' } } }))).toEqual([])
   })
 
-  it('„pytaj rano”: plan poranny pyta tylko o sesje z tą opcją, odpowiedziana już nie; bez odpowiedzi sesja zostaje', () => {
+  it('„pytaj rano”: plan poranny pyta tylko o sesje z „pytaj” w tym dniu tygodnia, odpowiedziana już nie; bez odpowiedzi sesja zostaje', () => {
     const remoteDay = createDay(inputs('2026-10-21', { dayFile: dayFileFrom({ dayType: 'zjazd-zdalny' }, '2026-10-21') }))
     expect(sessionsOf(remoteDay)).toEqual({ londyn: lm('08:00'), ny: lm('14:00') })
     expect(sessionQuestions(remoteDay, null, '2026-10-21').map((s) => s.id)).toEqual(['londyn', 'ny'])
     expect(sessionQuestions(remoteDay, { ...emptyDayFile('2026-10-21'), sessions: { ny: 'yes' } }, '2026-10-21').map((s) => s.id)).toEqual(['londyn'])
     expect(sessionQuestions(createDay(inputs('2026-10-21')), null, '2026-10-21')).toEqual([])
-    // One entry with „pytaj rano”, the other without: only that one is asked.
+    // One entry with „pytaj” on the weekday, the other without: only that one is asked.
     const mixed = createDay(inputs('2026-10-21', { templates: [template('zwykly', 'zwykly', [LONDON, asked(NY)])] }))
     expect(sessionQuestions(mixed, null, '2026-10-21').map((s) => s.id)).toEqual(['ny'])
+  })
+
+  it('dni wpisu (D515): „pn tak, wt pytaj, sb nie” – w poniedziałek sesja bez pytania, we wtorek pytanie, w sobotę jej nie ma', () => {
+    const t = [template('zwykly', 'zwykly', [LONDON, withDays(NY, 'yes ask yes yes yes no no'), planBlock({ id: 'jrn', categoryId: 'journaling', anchor: 'ny', durationMin: 30, origin: 'template' })])]
+    const on = (date: string) => createDay(inputs(date, { templates: t, dayFile: dayFileFrom({ dayType: 'zwykly' }, date) }))
+    const mon = on('2026-10-19')
+    expect(sessionsOf(mon)).toEqual({ londyn: lm('08:00'), ny: lm('14:00') })
+    expect(sessionQuestions(mon, null, '2026-10-19')).toEqual([])
+    const tue = on('2026-10-20')
+    expect(sessionsOf(tue)).toEqual({ londyn: lm('08:00'), ny: lm('14:00') })
+    expect(sessionQuestions(tue, null, '2026-10-20').map((s) => s.id)).toEqual(['ny'])
+    // Saturday: no NY, no block after it; London stays (its own days).
+    const sat = on('2026-10-24')
+    expect(sessionsOf(sat)).toEqual({ londyn: lm('08:00') })
+    expect(sat.blocks.some((b) => b.sourceId === 'jrn')).toBe(false)
+    // Every entry „nie” on a weekday: the day is one without sessions (the rule of the maximum).
+    const none = [template('zwykly', 'zwykly', [withDays(LONDON, 'yes yes yes yes yes no no'), withDays(NY, 'yes yes yes yes yes no no')])]
+    const s = daySettings(settingsOn([migrated()], '2026-10-24'), none, 'zwykly', '2026-10-24')
+    expect([s.sessions, s.dayTypes.zwykly.sessions[5]]).toEqual([[], 'no'])
   })
 
   it('tydzień przesunięcia zapowiedziany tydzień wcześniej z sesjami szablonów', () => {
@@ -250,8 +275,12 @@ describe('sesje z szablonu typu dnia (D511) – „Sesje tradingowe”', () => {
 
   it('pole „według czasu” odczytane z pliku: nieznana strefa albo pole bez strefy – blok bez reguł sesji', () => {
     const raw = { id: 'x', categoryId: 'sesja', startMin: lm('14:00'), durationMin: 60, fixed: true }
-    expect(planBlockFrom({ ...raw, session: { zone: NY_ZONE, ask: true, markets: ['NYSE', 'XX'] } })!.session).toEqual({ zone: NY_ZONE, ask: true, markets: ['NYSE'] })
-    expect(planBlockFrom({ ...raw, session: { zone: 'Mars/Olympus', ask: false, markets: [] } })!.session).toBeUndefined()
+    expect(planBlockFrom({ ...raw, session: { zone: NY_ZONE, markets: ['NYSE', 'XX'], days: ['yes', 'ask', 'no', 'x', 'yes', 'no', 'no'] } })!.session).toEqual({ zone: NY_ZONE, markets: ['NYSE'], days: ['yes', 'ask', 'no', 'yes', 'yes', 'no', 'no'] })
+    // No days (or not seven) – „tak” every day; the „pytaj rano” of a working build before D515 – „pytaj” every day; the session's own id.
+    expect(planBlockFrom({ ...raw, session: { zone: NY_ZONE, markets: [], days: ['no'] } })!.session!.days).toEqual(YES7)
+    expect(planBlockFrom({ ...raw, session: { zone: NY_ZONE, ask: true, markets: [] } })!.session!.days).toEqual(YES7.map(() => 'ask'))
+    expect(planBlockFrom({ ...raw, session: { zone: NY_ZONE, markets: [], days: YES7, id: 'ny' } })!.session).toEqual({ zone: NY_ZONE, markets: [], days: YES7, id: 'ny' })
+    expect(planBlockFrom({ ...raw, session: { zone: 'Mars/Olympus', markets: [] } })!.session).toBeUndefined()
     expect(planBlockFrom({ ...raw, session: 'tak' })!.session).toBeUndefined()
     expect(planBlockFrom(raw)!).not.toHaveProperty('session')
     // A block with the field but not of a category of sessions is an ordinary block of the template.
@@ -277,20 +306,50 @@ describe('sesje z szablonu typu dnia (D511) – „Sesje tradingowe”', () => {
     expect(plan.find((b) => b.sourceId === 'ny')).toMatchObject({ startMin: lm('15:00'), name: 'Sesja NY zdalna' })
   })
 
-  it('załączniki wpisu sesji: blok sesji dnia je widzi; usunięcie wpisu zabiera załączniki jego dni, nie dni innego szablonu', () => {
+  it('załączniki wpisu sesji: blok sesji dnia widzi wpis szablonu, który daje mu sesję tego dnia – po zmianie typu nowego typu', () => {
     const date = '2026-10-21'
     const ny = createDay(inputs(date)).blocks.find((b) => b.sourceId === 'ny')!
-    expect(ownersOf(ny, { scope: 'day', date, templateId: 'zwykly', templateIds: ['zwykly', 'zdalny'] })).toEqual([
+    const place = (type: string | null) => ({ scope: 'day' as const, date, templateId: 'zwykly', templateIds: ['zwykly', 'zdalny'], sessions: sessionOwnersOf([ordinary, remote], type, 'zwykly', date) })
+    expect(ownersOf(ny, place('zwykly'))).toEqual([
       { scope: 'day', date, blockId: ny.id },
       { scope: 'template', templateId: 'zwykly', blockId: 'ny' }
     ])
-    // A Tuesday template's NY taken out from tomorrow: its Tuesday's attachment goes, a Thursday's (another template) stays.
-    const tuesday = template('wtorek', 'zwykly', [NY], { weekdays: [2] })
-    const without = { ...tuesday, versions: [...tuesday.versions, { from: '2026-10-22', budgetMin: null, maxMin: null, blocks: [] }] }
-    const tue = '2026-10-27'
-    const thu = '2026-10-29'
+    // The day changed to a remote „zjazd”: the remote template's entry (the same session, another template).
+    expect(ownersOf(ny, place('zjazd-zdalny'))[1]).toEqual({ scope: 'template', templateId: 'zdalny', blockId: 'ny' })
+    // A type whose template has no NY (the weekend has none): the entry of the snapshot's template.
+    expect(ownersOf(ny, place('weekend'))[1]).toEqual({ scope: 'template', templateId: 'zwykly', blockId: 'ny' })
+    // The entry „nie” on that weekday: not its session that day.
+    expect(sessionOwnersOf([template('zwykly', 'zwykly', [withDays(NY, 'yes yes no yes yes no no')])], 'zwykly', 'zwykly', date)).toEqual({})
+    // A session without an entry (of the layer): only its own.
+    expect(ownersOf(ny, { scope: 'day', date, templateId: 'zwykly' })).toEqual([{ scope: 'day', date, blockId: ny.id }])
+  })
+
+  it('usunięcie wpisu sesji zabiera załączniki dni tylko w dniach, które ten szablon robi (typ dnia) i w których daje sesję', () => {
+    // The ordinary day's default template, NY „nie” on Saturdays; taken out from 22.10.
+    const tpl = template('zwykly', 'zwykly', [withDays(NY, 'yes yes yes yes yes no no')])
+    const without = { ...tpl, versions: [...tpl.versions, { from: '2026-10-22', budgetMin: null, maxMin: null, blocks: [] }] }
     const own = (id: string, d: string) => ({ id, owner: { scope: 'day', date: d, blockId: sessionBlockId(d, 'ny') }, removedAt: null }) as unknown as Attachment
-    expect(templateRemovalIds([own('a1', tue), own('a2', thu)], 'wtorek', tuesday, without, '2026-10-22')).toEqual(['a1'])
+    // Thursday – an ordinary day; Friday – a remote „zjazd” by its file (another template); Saturday – ordinary by its file, „nie”.
+    const [thu, fri, sat] = ['2026-10-29', '2026-10-30', '2026-10-31']
+    const list = [own('a-thu', thu), own('a-fri', fri), own('a-sat', sat), own('a-past', '2026-10-20')]
+    expect(sessionAttachmentDates(list, tpl, '2026-10-22')).toEqual([thu, fri, sat])
+    // What the window says of each day from its file and `templateFor` (`templateActions.makesDays`).
+    const makes = (d: string) => d !== fri
+    expect(templateRemovalIds(list, 'zwykly', tpl, without, '2026-10-22', makes)).toEqual(['a-thu'])
+    expect(templateRemovalIds(list, 'zwykly', tpl, null, '2026-10-22', makes)).toEqual(['a-thu'])
+    // Days whose type is not known (a file not read): nothing goes.
+    expect(templateRemovalIds(list, 'zwykly', tpl, without, '2026-10-22')).toEqual([])
+  })
+
+  it('kopia szablonu: wpis z nowym id bloku zostaje tą samą sesją (jej id w polu), blok „po sesji” idzie za nią; kopia nie jest „przeniesiona”', () => {
+    const c = copiedTemplate({ ...ordinary, sessionsMoved: '2026-10-19' }, 'kopia', 'Kopia')
+    expect(c.sessionsMoved).toBeUndefined()
+    const entry = c.versions[0]!.blocks.find((b) => b.session?.id === 'ny')!
+    expect(entry.id).not.toBe('ny')
+    const date = '2026-10-21'
+    const snap = createDay(inputs(date, { templates: [{ ...c, archived: false }] }))
+    expect(sessionsOf(snap)).toEqual({ londyn: lm('08:00'), ny: lm('14:00') })
+    expect(snap.blocks.filter((b) => b.categoryId === 'journaling').map((b) => b.anchor).sort()).toEqual([sessionBlockId(date, 'londyn'), sessionBlockId(date, 'ny')].sort())
   })
 
   it('sesja dopisana do warstwy po przeniesieniu (starsza wersja) w dniu „nie”: dzień z sesjami szablonu dalej ma je „domyślnie” – maksimum się nie przesuwa', () => {

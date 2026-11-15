@@ -303,10 +303,14 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.getByTestId('template-item').first().click()
       await expect(page.getByTestId('template-editor')).toBeVisible()
       await expect(page.getByTestId('template-timeline')).not.toContainText('druga zmiana')
-      // D511: the ordinary day's sessions are its entries – „Według czasu” (New York) and „pytaj rano” in the block's panel.
+      // D511, D515: the ordinary day's sessions are its entries – „Według czasu” (New York) and the answers of the weekdays
+      // in the block's panel (the wizard's grid: Monday to Friday „tak”, the weekend „nie”); a click moves one on.
       await page.getByTestId('template-timeline').getByTestId('block-ny').click()
       await expect(page.getByTestId('block-session-zone')).toHaveValue('America/New_York')
-      await expect(page.getByTestId('block-session-ask')).toHaveAttribute('aria-checked', 'false')
+      await expect(page.getByTestId('block-session-day-0')).toHaveAttribute('aria-label', 'pn: tak')
+      await expect(page.getByTestId('block-session-day-5')).toHaveAttribute('aria-label', 'sb: nie')
+      await page.getByTestId('block-session-day-1').click()
+      await expect(page.getByTestId('block-session-day-1')).toHaveAttribute('aria-label', 'wt: pytaj rano')
       await page.getByTestId('block-editor-close').click()
       // D365: a block of the template with its own start (one added on a free place) – the bottom edge lengthens it by
       // the field's way (30 min, 33 px).

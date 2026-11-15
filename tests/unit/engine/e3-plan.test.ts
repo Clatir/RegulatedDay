@@ -520,8 +520,8 @@ describe('kreator pierwszego komputera', () => {
       1_800_000_000_000,
       'pca'
     )
-    // D511: the sessions go into the templates – the ordinary day's weekend in a copy without them, a remote „zjazd” in its own.
-    expect(records.map((r) => r.rel)).toEqual(['rd.json', 'templates/zwykly.json', 'templates/sobota.json', 'templates/zwykly_67.json', 'templates/sesje-zjazd-zdalny.json', 'days/2026/2026-10-31.json'])
+    // D511, D515: the sessions go into the templates – the ordinary day's with its weekend „nie”, a remote „zjazd” in its own.
+    expect(records.map((r) => r.rel)).toEqual(['rd.json', 'templates/zwykly.json', 'templates/sobota.json', 'templates/sesje-zjazd-zdalny.json', 'days/2026/2026-10-31.json'])
     const rd = rdFrom(records[0]!.value)
     expect(rd.people.map((p) => p.name)).toEqual(['Mama'])
     const templates = records.filter((r) => r.rel.startsWith('templates/')).map((r) => templateFrom(r.value)!)
@@ -532,7 +532,7 @@ describe('kreator pierwszego komputera', () => {
     expect(wed.blocks.filter((b) => b.origin === 'session').map((b) => b.sourceId)).toEqual(['londyn', 'ny'])
     const sat = createDay({ date: '2026-10-24', changes: rd.settings, templates, lectures: [], series: [], dayFile: null, holidays: marketDay, at: null })
     expect(sat.blocks.filter((b) => b.origin === 'template').map((b) => [b.categoryId, b.startMin, b.durationMin, b.fixed])).toEqual([['analiza', lm('09:00'), 60, false]])
-    const zjazd = createDay({ date: '2026-10-31', changes: rd.settings, templates, lectures: [], series: [], dayFile: dayFileFrom(records[5]!.value, '2026-10-31'), holidays: marketDay, at: null })
+    const zjazd = createDay({ date: '2026-10-31', changes: rd.settings, templates, lectures: [], series: [], dayFile: dayFileFrom(records[4]!.value, '2026-10-31'), holidays: marketDay, at: null })
     expect(zjazd.dayType).toBe('zjazd-stacjonarny')
   })
 })

@@ -1,14 +1,19 @@
 /**
- * „Według czasu” and „pytaj rano” of a block of a template of a category of sessions (D511) – a slot of its panel
- * (`BlockEditor.session`); other blocks have none. Every change saves at once, as the other fields of the panel.
+ * „Według czasu” and the answers of the weekdays of a block of a template of a category of sessions (D511, D515) – a slot of
+ * its panel (`BlockEditor.session`); other blocks have none. A weekday is a button: ✓ tak · ? pytaj rano · ✗ nie, a click
+ * gives the next one; a weekday the template does not make is dimmed (its answer means nothing there). Every change saves at
+ * once, as the other fields of the panel.
  */
+import { WEEKDAY_SHORT } from '@shared/format'
 import type { CategoryKind } from '@shared/model/categories'
 import type { PlanBlock } from '@shared/model/plan'
 import { Choice } from '../../components/fields'
-import { Field, Toggle } from '../../components/ui'
-import { NO_ZONE, zoneOptions, zonePatch } from './sessionChoices'
+import { Field, cx } from '../../components/ui'
+import { DAY_MARK, DAY_WORD, NO_ZONE, dayPatch, zoneOptions, zonePatch } from './sessionChoices'
 
-export function SessionFields({ block, kind, onChange }: { block: PlanBlock; kind: CategoryKind | undefined; onChange: (patch: Partial<PlanBlock>) => void }) {
+const LOOK = { yes: 'border-lamp/60 bg-lamp-soft text-lamp', ask: 'border-sea/60 bg-sea-soft text-sea', no: 'border-line text-muted' } as const
+
+export function SessionFields({ block, kind, weekdays, onChange }: { block: PlanBlock; kind: CategoryKind | undefined; weekdays: readonly number[]; onChange: (patch: Partial<PlanBlock>) => void }) {
   if (kind !== 'session') return null
   const s = block.session ?? null
   return (
@@ -17,8 +22,27 @@ export function SessionFields({ block, kind, onChange }: { block: PlanBlock; kin
         <Choice value={s?.zone ?? NO_ZONE} options={zoneOptions(s?.zone ?? null)} onChange={(zone) => onChange(zonePatch(block, zone))} aria-label="Według czasu" data-testid="block-session-zone" />
       </Field>
       {s && (
-        <Field label="Rano" labelWidth={92} hint="Plan poranny pyta, czy sesja dziś jest; bez odpowiedzi zostaje.">
-          <Toggle checked={s.ask} onChange={(ask) => onChange({ session: { ...s, ask } })} label="pytaj rano" data-testid="block-session-ask" />
+        <Field label="Dni" labelWidth={92} hint="✓ tak · ? pytaj rano – plan poranny pyta, bez odpowiedzi sesja zostaje · ✗ nie. Kliknięcie zmienia: tak → pytaj → nie.">
+          <div className="flex flex-wrap gap-1" role="group" aria-label="Dni sesji">
+            {WEEKDAY_SHORT.map((d, i) => {
+              const c = s.days[i] ?? 'yes'
+              const made = !weekdays.length || weekdays.includes(i + 1)
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  className={cx('h-[24px] min-w-[38px] rounded border px-1.5 text-[11px]', LOOK[c], !made && 'opacity-50')}
+                  title={made ? undefined : 'Ten szablon nie robi tego dnia'}
+                  aria-label={`${d}: ${DAY_WORD[c]}`}
+                  onClick={() => onChange(dayPatch(block, i))}
+                  data-testid={`block-session-day-${i}`}
+                  data-answer={c}
+                >
+                  {d} {DAY_MARK[c]}
+                </button>
+              )
+            })}
+          </div>
         </Field>
       )}
     </>

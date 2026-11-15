@@ -9,11 +9,11 @@
 import { derivedId } from '../model/ids'
 import { SESSION_CATEGORY } from '../model/categories'
 import type { DaySnapshot } from '../model/events'
-import { PLAN_MAX, PLAN_MIN, planBlock, planBlockFrom, type DayFile, type LectureSeries, type PlanBlock, type Template } from '../model/plan'
+import { PLAN_MAX, PLAN_MIN, planBlock, planBlockFrom, sessionIdOf, type DayFile, type LectureSeries, type PlanBlock, type Template } from '../model/plan'
 import type { SeriesPlan } from '../model/series'
 import { stepsFrom, withDone } from '../model/steps'
 import { DEFAULT_SETTINGS, settingsOn, type DayTypeId, type RulesSettings, type SessionDef, type SettingsChange } from '../model/settings'
-import { daySettingsOf, isSessionEntry, templateMarkets, usualDiffMin } from '../model/templateSessions'
+import { daySettingsOf, sessionEntries, templateMarkets, usualDiffMin } from '../model/templateSessions'
 import { dayEnd, dayStart, logicalMinuteOf, placeLogical } from '../time/day'
 import { MINUTE, PL_ZONE, addDays, offsetMin, placeWall, weekday } from '../time/zone'
 import { pushedBySeries, seriesBlocks } from './series'
@@ -123,8 +123,8 @@ export function lecturesOn(lectures: readonly LectureSeries[], date: string): Le
 }
 
 /**
- * Whether a session is kept on this day: your answer, else a template's always (D511 – „pytaj rano” without an answer keeps
- * it), a session of the layer by the layer („pytaj” without an answer keeps it).
+ * Whether a session is kept on this day: your answer, else a template's always (D511, D515 – `daySettingsOf` leaves out one
+ * with „nie” on the weekday; „pytaj” without an answer keeps it), a session of the layer by the layer („pytaj” too).
  */
 function sessionKept(settings: RulesSettings, type: DayTypeId, date: string, def: SessionDef, dayFile: DayFile | null): boolean {
   const answer = dayFile?.sessions[def.id]
@@ -179,13 +179,14 @@ export function createDay(inp: DayInputs): DaySnapshot {
   // is not on this day is not on it either (a cancelled session cancels the blocks anchored to it). The template's sessions
   // (D511) are the sessions above – a block anchored to one by its id follows it as „session:<id>” does.
   if (tpl) {
-    const entries = new Set(tpl.version.blocks.filter((b) => isSessionEntry(b, settings.categories)).map((b) => b.id))
+    // The template's entries (D511), whatever their answer of the day: block id → the session's id (`sessionIdOf`, T1406).
+    const entries = new Map(sessionEntries(tpl.version, settings.categories).map((b) => [b.id, sessionIdOf(b)]))
     const ids = new Map(tpl.version.blocks.map((b) => [b.id, templateBlockId(date, tpl.template.id, b.id)]))
     for (const b of tpl.version.blocks) {
       if (entries.has(b.id)) continue
       let anchor: string | null = null
       if (b.anchor) {
-        const session = b.anchor.startsWith(SESSION_ANCHOR) ? b.anchor.slice(SESSION_ANCHOR.length) : entries.has(b.anchor) ? b.anchor : null
+        const session = b.anchor.startsWith(SESSION_ANCHOR) ? b.anchor.slice(SESSION_ANCHOR.length) : (entries.get(b.anchor) ?? null)
         anchor = session != null ? (sessionIds.get(session) ?? null) : (ids.get(b.anchor) ?? null)
         if (!anchor) continue
       }

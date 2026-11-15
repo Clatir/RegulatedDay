@@ -22,11 +22,13 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `model/ids.ts` (losowe i wyliczane identyfikatory).
 - `engine/createDay.ts` – deterministyczna migawka dnia (szablon, ustawienia daty, wykłady, sesje ze strefy NY ze
   skróceniem, przesunięcie pobudki) i `dayPlan` (migawka + plik dnia).
-- Sesje w szablonach (D511, T1340–T1359): wpis = blok szablonu kategorii sesji z `PlanBlock.session` (godzina polska „jak zwykle”);
-  `model/templateSessions.ts` – `daySettingsOf` (sesje szablonu w `settings.sessions` migawki – jedno źródło dla `createDay`,
-  `addedSessions`, pytań, maksimum, zmiany typu; siatka dnia z szablonu), `entryDef`, `knownSessionDefs`, `templateMarkets`;
-  `model/sessionMigration.ts` – `moveSessions` (raz, daty warstwy od dnia, kopie `<id>_<dni>` od tego dnia z własnymi id,
-  `dayIdMap`/`withIds` – pliki dni przepisane, `idAfter`), zmiany `sesje-w-szablonach[-<data>]` z `movedSessions`. Dni sprzed – warstwa.
+- Sesje w szablonach (D511, D515, T1340–T1359, T1400–T1409): wpis = blok szablonu kategorii sesji z `PlanBlock.session`
+  (`zone`, `markets`, `days` – 7 odpowiedzi tak/nie/pytaj, `id` – sesji, gdy blok ma inne, `sessionIdOf`); godzina polska „jak
+  zwykle”. `model/templateSessions.ts` – `daySettingsOf` (wpisy szablonu dnia bez „nie” w dniu tygodnia w `settings.sessions`
+  migawki – jedno źródło dla `createDay`, `addedSessions`, pytań, maksimum, zmiany typu; szablon z listy przeniesienia bez
+  `Template.sessionsMoved` – dzień z `movedLayer`), `entryDef`, `knownSessionDefs`, `templateMarkets`, `sessionOwnersOf`
+  (załączniki); `model/sessionMigration.ts` – `moveSessions` (raz, bez kopii i nowych id dni, daty warstwy od dnia, `sesje-<typ>`
+  dla typu bez domyślnego), zmiany `sesje-w-szablonach[-<data>]` z `movedLayer` i `movedSessions` (suma). Dni sprzed – warstwa.
 - `engine/facts.ts` – log → fakty (przebiegi bloków, prośby, „Odcinam się”, zatwierdzenia, odcinki); `viewAt(f, m)`.
 - `engine/blocks.ts` – `BlockInfo` (klasa, czeka na „Zacznij” – tylko stała sesja, wykład/zjazd, oznaczenie „po pracy”).
   Oznaczeń bloku nie ma (D467): `PlanBlock` nie ma `tag` ani `waitUntilMin` – stare pola zostają w pliku nieczytane
@@ -65,7 +67,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `withoutZjazd`, `zjazdTypeRaw`, `classImport`, `sameDayFile`); bloki `origin: 'zjazd'` i zajęcia zdalne w dniu zjazdu
   (`blockInfos(…, typeAt)`, D359) są `lectureOrCommute`; `PlanBlock.name` – nowe pole bloku dopisz w `planBlock()`,
   `planBlockFrom` i literale w `blockInfos`. `RULES_VERSION` 7 od 1.4.0 (`block.shorten`, D365), 8 – serie w `day.create` (T716), 9 – bez drugiej
-  zmiany (D467), 10 – bloki bez komputera same, zamiana przy „Zacznij” (D475, D478) i grupy w prognozie (T1162), 11 – timer grupy (D493), 12 – przejęcie przodu grupy (T1259), 13 – koszt zaczętego bloku od minuty (`block.cost`, dziedzina timera, bierne – `PASSIVE`; D501), 14 – sesje w szablonach (D511).
+  zmiany (D467), 10 – bloki bez komputera same, zamiana przy „Zacznij” (D475, D478) i grupy w prognozie (T1162), 11 – timer grupy (D493), 12 – przejęcie przodu grupy (T1259), 13 – koszt zaczętego bloku od minuty (`block.cost`, dziedzina timera, bierne – `PASSIVE`; D501), 14 – sesje w szablonach (D511, D515).
 - Serie (OPS1, D381, D382, D401, D404, T700–T719): `model/series.ts` (rekord, `ruleFallsOn`, `seriesVersionOn`,
   `specialOutcome`, licznik `countedBefore`/`seriesLast`, `seriesPlans` – `SeriesPlan { series, last }`, `countDatesToRead`,
   `seriesOfBlock`, `currentSeries` – lista), `engine/series.ts` (`seriesBlocks` w `createDay`, `pushedBySeries` – rozsuwanie

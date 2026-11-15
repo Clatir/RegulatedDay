@@ -94,6 +94,8 @@ export function templateJson(t: Template, before?: RawRecord | null): RawRecord 
     dayType: t.dayType,
     weekdays: t.weekdays,
     archived: t.archived,
+    // D511: written by the move of the layer of sessions (only then – no template else gets the field).
+    ...(t.sessionsMoved ? { sessionsMoved: t.sessionsMoved } : {}),
     versions
   }
 }

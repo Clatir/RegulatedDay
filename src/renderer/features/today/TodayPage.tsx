@@ -116,7 +116,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   // D410: the attachments of the day's blocks – the 📎 on a tile, a drop of files on it, the panel's section.
   const attachments = useData((s) => s.attachments)
   const templates = useData((s) => s.templates)
-  const dayPlace = useMemo<BlockPlace>(() => placeOfDay(date, model.snapshot.templateId, templates), [date, model.snapshot.templateId, templates])
+  const dayPlace = useMemo<BlockPlace>(() => placeOfDay(date, model.snapshot.templateId, templates, model.state.dayType), [date, model.snapshot.templateId, templates, model.state.dayType])
   const items = useMemo(() => {
     const byId = new Map(model.ctx.plan.map((b) => [b.id, b]))
     return withAttachCounts(axis.items, (id) => byId.get(id) ?? null, dayPlace, attachments)

@@ -53,10 +53,19 @@ export interface SessionDef {
   endMin: number
   /** The markets whose holidays and early closes concern it (spec „kalendarz świąt”). */
   markets: SessionMarket[]
-  /** A template's session (D511): asked about in the morning; none – the layer's choice of the day decides. */
+  /** A template's session (D511, D515): its weekday's answer is „pytaj” – asked about in the morning; none – the layer's choice of the day decides. */
   ask?: boolean
   /** A template's session (D511): the template's block it is (its category, name, note, steps, costs …). */
   block?: unknown
+}
+
+/** The layer of sessions a move took (`RulesSettings.movedLayer`). */
+export interface MovedLayer {
+  sessions: SessionDef[]
+  /** The answers „tak / nie / pytaj” of every type (Monday first). */
+  grid: Record<DayTypeId, SessionChoice[]>
+  /** The templates the move gave entries (ids): a day of one whose file has no `sessionsMoved` yet is made from this layer. */
+  templates: string[]
 }
 
 export interface Reminders {
@@ -75,10 +84,16 @@ export interface RulesSettings {
   targetSleepMin: number
   sessions: SessionDef[]
   /**
-   * The sessions the move into templates (D511) took from the layer from that date – they name a day's block of the layer
-   * made before it (`blockName`); never a session of a day.
+   * The sessions the move into templates (D511) took from the layer up to that date, every date of the move together (T1408)
+   * – they name a day's block of the layer made before it (`blockName`); never a session of a day.
    */
   movedSessions: SessionDef[]
+  /**
+   * The layer of sessions as the move into templates (D511) found it on that date (T1405): a day of a template it wrote whose
+   * file has not come yet (OneDrive brought rd.json first) is made with it, as before the move (`daySettingsOf`); null – no
+   * move in force on that date.
+   */
+  movedLayer: MovedLayer | null
   categories: Record<string, CategoryRules>
   reserve: number
   backgroundCostPct: number
@@ -124,6 +139,7 @@ export const DEFAULT_SETTINGS: RulesSettings = {
   targetSleepMin: 8 * H,
   sessions: DEFAULT_SESSIONS,
   movedSessions: [],
+  movedLayer: null,
   categories: Object.fromEntries(DEFAULT_CATEGORIES.map((c) => [c.id, rulesOf(c)])),
   reserve: 15,
   backgroundCostPct: 50,
@@ -330,6 +346,19 @@ function sessionsFrom(v: unknown, fallback: SessionDef[]): SessionDef[] {
   return out
 }
 
+const NO_DAYS: SessionChoice[] = ['no', 'no', 'no', 'no', 'no', 'no', 'no']
+
+/** The layer a move took, as read: anything else than an object – the one before (none). */
+function movedLayerFrom(v: unknown, fallback: MovedLayer | null): MovedLayer | null {
+  if (!isPlain(v)) return fallback
+  const grid = isPlain(v.grid) ? v.grid : {}
+  return {
+    sessions: sessionsFrom(v.sessions, []),
+    grid: Object.fromEntries(DAY_TYPES.map((t) => [t, sessionChoices(grid[t], NO_DAYS)])) as Record<DayTypeId, SessionChoice[]>,
+    templates: Array.isArray(v.templates) ? [...new Set(v.templates.filter((x): x is string => typeof x === 'string' && !!x))] : []
+  }
+}
+
 /** Settings checked field by field: a wrong value falls back to `fallback`'s (never breaks the day). */
 export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SETTINGS): RulesSettings {
   const r = isPlain(raw) ? raw : {}
@@ -348,6 +377,7 @@ export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SET
     targetSleepMin: int(r.targetSleepMin, RANGES.targetSleepMin, fallback.targetSleepMin),
     sessions: sessionsFrom(r.sessions, fallback.sessions),
     movedSessions: sessionsFrom(r.movedSessions, fallback.movedSessions),
+    movedLayer: movedLayerFrom(r.movedLayer, fallback.movedLayer),
     categories,
     reserve: int(r.reserve, RANGES.reserve, fallback.reserve),
     backgroundCostPct: int(r.backgroundCostPct, RANGES.backgroundCostPct, fallback.backgroundCostPct),

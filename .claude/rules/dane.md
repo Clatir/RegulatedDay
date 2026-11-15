@@ -105,10 +105,10 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
   + `seriesDays` (`folder.seriesView`, hub przy błędzie – ostatnie znane). Zmiany: `main/data/series.ts` (hub `series*`) –
   rekordy z kolejką, jedna partia `edit`, typy dni nowego licznika czytane przed liczeniem (`ensureTypes`), dziś tylko
   niezaczęte; `folder.dayDatesFrom`. `searchDays` pomija wystąpienia. Testy: `tests/fs/series*.test.ts`.
-- Sesje w szablonach (D511, T1347, T1355, T1358): prowadzący w `check()` przed `day.create` – `sessionsStart` (raz; jeden odczyt szablonów,
-  dni od dziś i załączników z kolejką → `main/data/sessionMove.ts` `sessionMoveEdits`; wpis rd.json, szablonu, dnia albo załącznika w
-  kolejce – czeka; rd.json ostatni z `after` i `expect`); dzień przeniesienia (+2 dni) tworzy się dopiero, gdy pliki mają rekordy z
-  `expect` (pole `sessionsMoved`, `sessionsReady`, najwyżej 30 min); `day.snapshot` z okna – `daySettings`.
+- Sesje w szablonach (D511, D515, T1347, T1358, T1401, T1409): prowadzący w `check()` przed `day.create` – `sessionsStart` (raz;
+  jeden odczyt szablonów z kolejką → `main/data/sessionMove.ts` `sessionMoveEdits`: tylko szablony i rd.json ostatni z `after`;
+  wpis rd.json albo szablonu w kolejce – czeka z linią problemu). Plików dni i załączników nie dotyka; dzień nie czeka na
+  szablony (rd.json przed nimi – `movedLayer`, T1405); `day.snapshot` z okna – `daySettings`.
 - Folder bez korzenia (T515): `DataFolder.open` owija `fs` w `rootGuarded` – zapis nie tworzy samego folderu danych;
   `check()` bez korzenia zwraca od razu („nieustalony”). Testy, które otwierają folder, muszą go najpierw utworzyć.
 - Korzeń znika w trakcie (E8b.1, `isRootGone` = ENOROOT): `cachedJson` oddaje wersję znaną (zaufaną jak świeżo
