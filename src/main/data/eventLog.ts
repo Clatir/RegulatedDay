@@ -71,6 +71,8 @@ export class EventLog {
   /** What this computer last saw of its own file on OneDrive (an unexpected change means it was swapped). */
   private readonly ownStat = new Map<string, { size: number; mtimeMs: number }>()
   private writing: Promise<void> = Promise.resolve()
+  /** The journal has lines written without fsync (`syncLater`): the next `flush` waits for the disk with them (T1447). */
+  private unsynced = false
   /** When this run began (its computer's clock): what counts as written in it. */
   private readonly openedAt: number
 
@@ -138,19 +140,24 @@ export class EventLog {
 
   /**
    * A new event of this computer: stamped, written to the journal at once (fsync; `system`: at the end of the Windows
-   * session – one synchronous write without fsync), then queued for the log on OneDrive.
+   * session – one synchronous write without fsync; `syncLater`: the same write, its fsync at the next `flush` – the check,
+   * T1447), then queued for the log on OneDrive. The line is in the journal and the event in memory in the same turn either way.
    */
-  append(draft: EventDraft, opts: { system?: boolean } = {}): AnyEvent {
+  append(draft: EventDraft, opts: { system?: boolean; syncLater?: boolean } = {}): AnyEvent {
     const { t, l, n } = this.o.clock.stamp()
     const { id, ...fields } = draft
     const e = { ...fields, id: id ?? `${this.o.computer}-${n}`, c: this.o.computer, n, t, l, v: this.o.rulesVersion } as unknown as AnyEvent
     const line = eventLine(e)
-    if (opts.system) appendFileSync(this.journalPath, line)
-    else {
+    if (opts.system || opts.syncLater) {
+      appendFileSync(this.journalPath, line)
+      if (opts.syncLater) this.unsynced = true
+    } else {
       const fd = openSync(this.journalPath, 'a')
       try {
         writeSync(fd, line)
         fsyncSync(fd)
+        // The file's earlier lines too.
+        this.unsynced = false
       } finally {
         closeSync(fd)
       }
@@ -160,13 +167,33 @@ export class EventLog {
     return e
   }
 
+  /** The journal's lines written without fsync (`syncLater`) wait for the disk now; a failure – the next `flush` tries again. */
+  private syncJournal(): void {
+    if (!this.unsynced) return
+    try {
+      const fd = openSync(this.journalPath, 'a')
+      try {
+        fsyncSync(fd)
+        this.unsynced = false
+      } finally {
+        closeSync(fd)
+      }
+    } catch {
+      /* the disk refused it now: the next check tries again */
+    }
+  }
+
   /** Own events of a day (from the journal). */
   ownEvents(day: string): AnyEvent[] {
     return [...(this.own.get(day)?.values() ?? [])]
   }
 
-  /** Writes what is queued to OneDrive (one write at a time; a failure leaves it queued for the next check). */
+  /**
+   * Writes what is queued to OneDrive (one write at a time; a failure leaves it queued for the next check) – first the journal's lines
+   * written without fsync to the disk (T1447).
+   */
   flush(): Promise<void> {
+    this.syncJournal()
     return this.serial(async () => {
       for (const day of [...this.pending]) {
         try {

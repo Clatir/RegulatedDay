@@ -238,6 +238,22 @@ describe('zaczęty dziś blok liczony jak silnik (begunToday, T1434)', () => {
     const at = (id: string) => countScope({ today, files: changed, templates: [], series: [], target: { kind: 'routine', id }, what: 'costs', categories, begun: begun(s, {}, plan) }).days
     expect([at('r1'), at('r2')]).toEqual([2, 0])
   })
+
+  it('zmiana inna niż sam koszt (nazwa, kroki, kolor) idzie za planem: blok zaczęty z inną rutyną albo podkategorią liczy się według pliku dnia (T1443)', () => {
+    const s = new Scenario({ date: today, plan: [m, n] })
+    s.write([{ k: 'block.start', block: 'm', at: s.at('08:00'), bg: false, planned: { categoryId: 'rutyny', variantId: null, durationMin: 90, fixed: false, costs: null, bgCostPct: null, routine: 'r1', routineCosts: null }, confirmUntil: null, how: 'click' }], s.at('08:00'))
+    const plan = [{ ...m, routine: 'r2' }, n]
+    const changed = { ...nulls(), [today]: day(today, plan) }
+    const at = (target: Parameters<typeof countScope>[0]['target'], what: 'costs' | 'all', p = plan, files = changed) => countScope({ today, files, templates: [], series: [], target, what, categories, begun: begun(s, {}, p) }).days
+    // The routine's name or steps: the block of the plan's routine; its cost: the start's (as the engine counts it).
+    expect([at({ kind: 'routine', id: 'r1' }, 'all'), at({ kind: 'routine', id: 'r2' }, 'all')]).toEqual([1, 1])
+    expect([at({ kind: 'routine', id: 'r1' }, 'costs'), at({ kind: 'routine', id: 'r2' }, 'costs')]).toEqual([2, 0])
+    // The subcategory changed in the file after the start: its name follows the file, its cost – the start's subcategory.
+    const moved = [{ ...m, categoryId: 'projekty' }, n]
+    const movedFiles = { ...nulls(), [today]: day(today, moved) }
+    expect(at({ kind: 'category', id: 'projekty' }, 'all', moved, movedFiles)).toBe(1)
+    expect(at({ kind: 'category', id: 'projekty' }, 'costs', moved, movedFiles)).toBe(0)
+  })
 })
 
 describe('overriddenFrom (T1336)', () => {

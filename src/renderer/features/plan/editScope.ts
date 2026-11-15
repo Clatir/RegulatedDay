@@ -10,7 +10,8 @@
  *    a series changed for that day whose block is counted under the template or the series already;
  *  - a change of the cost only: not today's blocks already ended (their minutes stay counted by the old cost, D501) – a begun one counts
  *    (it changes from now on) as the engine counts it now (`begunToday`: its start's category, variant and routine, its own cost and its
- *    routine's from its start and their changes – T1434), not as its file says;
+ *    routine's from its start and their changes – T1434), not as its file says; any other change (a name, a colour, the steps) follows the
+ *    plan – today's begun blocks as their file says (T1443);
  *  - a later entry of the settings that writes the same key from a later date (`overriddenFrom`): nothing from that date on – no day, no
  *    version, no series starting then (the line of its composition says until when);
  *  - not counted: a day beyond `SCOPE_DAYS` and a day whose file cannot be read now (`unread` – said in the window).
@@ -20,7 +21,7 @@
  * cost of their own. Any other change reaches every block of the thing.
  */
 import { blockInfos } from '@shared/engine/blocks'
-import { begunBasis, costChangesOf, routineOfStart } from '@shared/engine/costChange'
+import { begunBasis, costChangesOf, routineOfStart, startRoutine } from '@shared/engine/costChange'
 import { routineCostsIn, type DayContext } from '@shared/engine/day'
 import type { DayFacts } from '@shared/engine/facts'
 import { idxOf } from '@shared/engine/grid'
@@ -42,9 +43,9 @@ export type EditTarget = { kind: 'category'; id: string } | { kind: 'variant'; c
 export type EditWhat = 'costs' | 'all'
 
 /**
- * A block as the count looks at it: as planned, or – one begun today – as the engine counts it now (`begunToday`): `routineCosts` its
- * routine's cost then (null – none), `routineApplies` whether a change of its routine's cost reaches it (its start's category of the kind
- * „rutyna” in the day's snapshot).
+ * A block as the count looks at it: as planned, or – one begun today, for a change of the cost only (T1443) – as the engine counts it now
+ * (`begunToday`): `routineCosts` its routine's cost then (null – none), `routineApplies` whether a change of its routine's cost reaches it
+ * (its start's category of the kind „rutyna” in the day's snapshot).
  */
 export type Counted = Pick<PlanBlock, 'categoryId' | 'variantId' | 'routine' | 'costs'> & { routineCosts?: Costs | null; routineApplies?: boolean }
 
@@ -96,7 +97,10 @@ export function countScope(o: {
   routineCosts?: RoutineCosts
   /** Today's blocks that have ended (from today's log) – a change of the cost only does not reach them (D501). */
   ended?: ReadonlySet<string>
-  /** Today's blocks begun and not ended, as the engine counts them now (`begunToday`) – counted so, not as today's file says (T1434). */
+  /**
+   * Today's blocks begun and not ended, as the engine counts them now (`begunToday`) – for a change of the cost only counted so, not as
+   * today's file says (T1434); any other change follows the file (T1443).
+   */
   begun?: ReadonlyMap<string, Counted>
   /** `overriddenFrom` – nothing is counted from this date on; left out – none. */
   until?: string | null
@@ -132,7 +136,7 @@ export function countScope(o: {
     }
     if (!raw) continue
     const f: DayFile = dayFileFrom(raw, date)
-    const counted = (b: PlanBlock): Counted => (date === o.today ? (o.begun?.get(b.id) ?? b) : b)
+    const counted = (b: PlanBlock): Counted => (o.what === 'costs' && date === o.today ? (o.begun?.get(b.id) ?? b) : b)
     days += f.blocks.filter((b) => !f.cancelled.includes(b.id) && !(b.id in f.movedTo) && !layerKept(b) && !countedElsewhere(b) && !gone(b, date) && hit(counted(b))).length
   }
   return { days, templates, series: ofSeries.size, total: days + templates + ofSeries.size, unread, until }
@@ -154,8 +158,7 @@ export function begunToday(ctx: DayContext, facts: DayFacts, at: number): Map<st
     if (f?.startedAt == null || f.endedAt != null) continue
     const p = plan.get(info.id)
     const x = begunBasis(info, f.planned, changes.get(info.id), k)
-    const routine = f.planned?.routine !== undefined ? f.planned.routine : (p?.routine ?? null)
-    out.set(info.id, { categoryId: x.cat, variantId: x.variant, routine, costs: x.own, routineCosts: x.routine, routineApplies: routineOfStart(f, p, categories) != null })
+    out.set(info.id, { categoryId: x.cat, variantId: x.variant, routine: startRoutine(f, p), costs: x.own, routineCosts: x.routine, routineApplies: routineOfStart(f, p, categories) != null })
   }
   return out
 }

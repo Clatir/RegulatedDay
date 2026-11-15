@@ -8,9 +8,10 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { readLogText } from '@shared/data/logText'
+import { recordEdit } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import { isPassive } from '@shared/engine/facts'
 import { placeLogical } from '@shared/time/day'
@@ -287,6 +288,34 @@ describe('folder danych dla okna głównego', () => {
       tick()
       await folder.queue.apply(folder.records)
       expect(await changes(folder)).toEqual([expect.objectContaining({ costs: C1, was: C0, at: placeLogical(DAY, 10 * 60) + 61_000 })])
+    })
+
+    it('usunięcie rutyny: bez zdarzenia – zaczęty blok liczy dalej koszt, z którym biegł (T1445); plik z powrotem („Cofnij”) – zdarzenie z kosztem z pliku', async () => {
+      write(rut, routine(C1))
+      const { folder } = await make()
+      expect((await folder.edit([{ rel: rut, edits: [], remove: true, base: routine(C1) }]))[0]!.status).toBe('applied')
+      expect(existsSync(join(dataDir, rut))).toBe(false)
+      expect(await changes(folder)).toEqual([])
+      // „Cofnij”: the record made again – a file with a cost where there was none (the begun block keeps the same cost).
+      expect((await folder.edit([recordEdit(rut, null, routine(C1))!]))[0]!.status).toBe('applied')
+      expect((await changes(folder)).map((x) => [x.costs, x.was])).toEqual([[C1, null]])
+    })
+
+    it('dziennik nie przyjął zdarzenia: rekord zapisany, odpowiedź zapisu mówi to oknu (routineCostKept, T1446) – tylko przy tym zapisie', async () => {
+      write(rut, routine(C0))
+      const { folder } = await make()
+      const append = vi.spyOn(folder.log, 'append').mockImplementationOnce(() => {
+        throw Object.assign(new Error('ENOSPC: brak miejsca'), { code: 'ENOSPC' })
+      })
+      const [out] = await folder.edit([{ rel: rut, edits: [{ path: ['costs'], base: C0, value: C1 }] }])
+      expect(out).toMatchObject({ status: 'applied', routineCostKept: true })
+      expect(read(rut).costs).toEqual(C1)
+      expect(await changes(folder)).toEqual([])
+      // The next save writes its event and says nothing more.
+      const [next] = await folder.edit([{ rel: rut, edits: [{ path: ['costs'], base: C1, value: C2 }] }])
+      expect(next).toEqual(expect.not.objectContaining({ routineCostKept: true }))
+      expect((await changes(folder)).map((x) => [x.costs, x.was])).toEqual([[C2, C1]])
+      append.mockRestore()
     })
 
     it('kopia konfliktowa rutyny połączona z odpowiedzią „ich”: zapis z kosztem kopii – zdarzenie', async () => {

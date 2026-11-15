@@ -465,7 +465,11 @@ export interface EditEntry {
   after?: number[]
 }
 
-export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting'; why?: string }
+/**
+ * What became of one entry of an edit; `routineCostKept` – a routine's record written with another cost whose `routine.cost` the journal
+ * did not take (T1446): today's begun blocks of it count the cost they had (the window says so).
+ */
+export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting'; why?: string; routineCostKept?: true }
 
 /**
  * A record chosen from a backup: what the queue did with it, `behindQuestion` – it waits for your answer to an earlier

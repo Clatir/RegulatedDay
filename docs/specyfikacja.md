@@ -824,8 +824,9 @@ Wszystko w aplikacji jest blokiem. Nie ma osobnej listy zadań, więc aplikacja 
   liczy koszt rutyny z chwili startu, a zmiana kosztu rutyny – w „Rutynach”, w oknie ✎ (D514), przywróceniem wersji z Historii albo
   kopii, odpowiedzią na pytanie o konflikt, także na drugim komputerze – liczy się w nim od chwili, w której trafiła do pliku rutyny,
   do końca – minione minuty po staremu (jak okienko kafelka, D501); jego własny koszt zostaje, a „Jak rutyna” wraca do nowego kosztu
-  rutyny. Blok zaczęty po takiej zmianie na komputerze, do którego nowy plik rutyny jeszcze nie dotarł, liczy nowy koszt od startu.
-  Blok zaczęty przez starszą wersję – bez kosztu rutyny do chwili takiej zmiany. Rutyna, której
+  rutyny. Blok zaczęty po takiej zmianie liczy koszt rutyny ze swojego startu – na komputerze, do którego nowy plik rutyny jeszcze
+  nie dotarł, dotychczasowy, do następnej zmiany. Usunięcie rutyny nie zmienia kosztu bloku już zaczętego, a blok skończony pokazuje
+  koszt, z którym biegł. Blok zaczęty przez starszą wersję – bez kosztu rutyny do chwili takiej zmiany. Rutyna, której
   pliku chwilowo nie da się odczytać, liczy się tak, jak ją ostatnio odczytano; nieodczytana od uruchomienia – bez kosztu, a blok
   zaczęty w tym czasie bierze jej koszt, gdy plik znów da się odczytać. Starsza wersja na innym komputerze czyta rutynę z kosztem (pole pomija i
   zachowuje przy zmianie rutyny) i liczy bez niego; nowa wersja przejmuje od niej prowadzenie.

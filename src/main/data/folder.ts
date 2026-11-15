@@ -359,6 +359,11 @@ export class DataFolder {
   private readonly listed = new Map<string, string[]>()
   private readonly rulesVersion: number
   private editSeq = 0
+  /**
+   * Routines' records written with another cost whose `routine.cost` the journal did not take (T1446): the answer of the window's save of
+   * that record says so (`routineCostKept`), once.
+   */
+  private readonly routineCostKept = new Set<string>()
   private lastCopyScan = 0
   /** Conflict copies with fields different on both sides (copy → the file and the fields). */
   readonly copyConflicts = new Map<string, { canonical: string; conflicts: MergeConflict[] }>()
@@ -499,11 +504,14 @@ export class DataFolder {
    * from now on today's begun blocks of the routine count the new cost. Every write of a record goes through `RecordStore`, so this is every
    * way a cost gets into the file on this computer: a save of „Rutyny” or ✎, an answer to a question of a conflict, „Przywróć”, a conflict
    * copy joined, an edit waiting for the folder laid on its return. A record written on another computer has its event in that computer's
-   * log of the day. The cost as the engine reads the file (`routineFrom`); a journal that cannot be written – logged, the record stays.
+   * log of the day. The cost as the engine reads the file (`routineFrom`). A routine removed – none (T1445): a begun block of it counts on
+   * the cost it ran with (made again – „Cofnij” – a file with its cost: an event as any write). The line goes to the journal without fsync,
+   * which the next write of the log does (`syncLater`, T1447). A journal that cannot be written – logged, the record stays, and the window's
+   * save of it says so (`routineCostKept`, T1446).
    */
   private routineWritten(rel: string, before: Record<string, unknown> | null, after: Record<string, unknown> | null): void {
     const c = classify(rel)
-    if (c?.kind !== 'routine' || c.conflict || !c.id) return
+    if (c?.kind !== 'routine' || c.conflict || !c.id || after === null) return
     const [then, now] = [routineFrom(before), routineFrom(after)]
     const was = then?.costs ?? null
     const costs = now?.costs ?? null
@@ -512,14 +520,15 @@ export class DataFolder {
     const routine = now?.id ?? then?.id ?? c.id
     const at = this.clock.now()
     try {
-      this.append({ day: logicalDayOf(at), dom: 'timer', k: 'routine.cost', routine, at, costs, was })
+      this.append({ day: logicalDayOf(at), dom: 'timer', k: 'routine.cost', routine, at, costs, was }, { syncLater: true })
     } catch (e) {
+      this.routineCostKept.add(rel)
       this.o.log?.('error', `koszt rutyny ${routine}: zdarzenie nie zapisane – zaczęty blok liczy dotychczasowy koszt (${String(e)})`)
     }
   }
 
-  /** A new event of this computer; the presence names its last event of the day. */
-  append(draft: EventDraft, opts: { system?: boolean } = {}): AnyEvent {
+  /** A new event of this computer; the presence names its last event of the day (`opts` – how the journal takes it, `EventLog.append`). */
+  append(draft: EventDraft, opts: { system?: boolean; syncLater?: boolean } = {}): AnyEvent {
     const e = this.log.append(draft, opts)
     this.presence.update({ lastEvents: { ...this.presence.own.lastEvents, [e.day]: e.n } })
     return e
@@ -945,7 +954,7 @@ export class DataFolder {
    * Your edits from the main window (spec „Edycje plików … trafiają najpierw do lokalnej trwałej kolejki”): each goes to
    * the queue on the disk first, then the queue is laid onto the folder; what met a change elsewhere stays a question.
    */
-  async edit(entries: ReadonlyArray<Omit<QueuedEdit, 'id' | 'at' | 'schema' | 'after'> & { schema?: number; after?: readonly number[] }>): Promise<Outcome[]> {
+  async edit(entries: ReadonlyArray<Omit<QueuedEdit, 'id' | 'at' | 'schema' | 'after'> & { schema?: number; after?: readonly number[] }>): Promise<Array<Outcome & { routineCostKept?: true }>> {
     // A new record only where there is none: a file that is there but cannot be read now (OneDrive still fetching it) or
     // that came meanwhile is never taken as missing – its every field would be a question about a change you never made.
     const fresh: string[] = []
@@ -987,9 +996,17 @@ export class DataFolder {
     this.queue.add(...queued)
     // A new record waiting for the folder is not there till then: shown from the queue, never „unknown” (the bar, lists).
     for (const rel of fresh) this.absent.add(rel)
+    // What an earlier write of these records left unsaid is not this save's (T1446).
+    for (const e of entries) this.routineCostKept.delete(e.rel)
     const outcomes = await this.queue.apply(this.records)
     // One outcome per entry, in their order: an entry a run chained before this one laid has its outcome in the queue.
-    return ids.map((id) => outcomes.find((o) => o.id === id) ?? this.queue.outcomeOf(id))
+    return ids.map((id, i) => {
+      const o = outcomes.find((x) => x.id === id) ?? this.queue.outcomeOf(id)
+      const rel = entries[i]!.rel
+      // Written, its routine's cost not followed by today's begun blocks (the journal did not take `routine.cost`): said once.
+      if (o.status !== 'applied' || !this.routineCostKept.delete(rel)) return o
+      return { ...o, routineCostKept: true as const }
+    })
   }
 
   /** What the engine counts a day from: the snapshot from the log, or – before the leader wrote it – the one this computer computes. */

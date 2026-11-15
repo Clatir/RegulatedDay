@@ -12,6 +12,7 @@ import { rdFrom } from '@shared/model/rd'
 import { routineFrom } from '@shared/model/routines'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
 import { BlockEditor } from '@renderer/features/plan/BlockEditor'
+import { begunToday } from '@renderer/features/plan/editScope'
 import { saveCalendars } from '@renderer/features/settings/calendarEdits'
 import { saveSettingsFrom, useSettingsFrom } from '@renderer/features/settings/settingsStore'
 import { installEscape } from '@renderer/lib/escape'
@@ -26,6 +27,11 @@ vi.mock('@renderer/store/data', async (orig) => ({
   updateRecord: vi.fn(async () => [{ status: 'applied' }]),
   tryUpdateRecord: vi.fn(async () => [{ status: 'applied' }])
 }))
+// The count of today's begun blocks as it is, unless a test makes it fail (T1444).
+vi.mock('@renderer/features/plan/editScope', async (orig) => {
+  const m = await orig<typeof import('@renderer/features/plan/editScope')>()
+  return { ...m, begunToday: vi.fn(m.begunToday) }
+})
 vi.mock('@renderer/features/settings/settingsStore', async (orig) => ({ ...(await orig<typeof import('@renderer/features/settings/settingsStore')>()), saveSettingsFrom: vi.fn(async () => true) }))
 vi.mock('@renderer/features/settings/calendarEdits', async (orig) => ({ ...(await orig<typeof import('@renderer/features/settings/calendarEdits')>()), saveCalendars: vi.fn(async () => ({ out: [{ status: 'applied' }], entry: null })) }))
 
@@ -283,6 +289,20 @@ describe('okno podkategorii', () => {
     // Not only the cost (a name): the block ended is the subcategory's too.
     await type('new-category-name', 'Moje projekty')
     await flush()
+    expect(q('edit-scope')!.textContent).toBe('Zmieni 2 bloki od dziś')
+  })
+
+  it('dzisiejszego dnia nie da się policzyć (wyjątek): liczba bez wiedzy o zaczętych i skończonych – linia nie zostaje na „Liczę bloki…” (T1444)', async () => {
+    files[TODAY] = { schema: 1, date: TODAY, blocks: [fileBlock('done', { startMin: 8 * 60 }), fileBlock('run', { startMin: 9 * 60 })] }
+    todayEvents = new Scenario({ date: TODAY, plan: [fileBlock('done', { startMin: 8 * 60 }), fileBlock('run', { startMin: 9 * 60 })] }).ran('done', '08:00', '08:30').start('run', '09:00').events
+    vi.mocked(begunToday).mockImplementationOnce(() => {
+      throw new Error('dzień nie do policzenia')
+    })
+    await mount(projekty)
+    await click('edit-category')
+    await type('new-cost-head', '4')
+    await flush()
+    // As a log not read whole (T1335): today's blocks as the file says – the ended one too.
     expect(q('edit-scope')!.textContent).toBe('Zmieni 2 bloki od dziś')
   })
 

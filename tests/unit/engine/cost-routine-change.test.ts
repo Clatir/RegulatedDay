@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { costEvidence } from '@shared/engine/calibration'
-import { begunCosts, costChangesOf } from '@shared/engine/costChange'
+import { begunCosts, costChangesOf, startRoutine } from '@shared/engine/costChange'
 import { computeDay } from '@shared/engine/day'
 import { computeEnergy, type EnergyState } from '@shared/engine/energy'
 import { isPassive } from '@shared/engine/facts'
@@ -21,6 +21,7 @@ import { block, lm, Scenario } from './dsl'
 const DATE = '2026-11-18'
 const R: Costs = { head: 5, emotions: 4, senses: -2 }
 const R2: Costs = { head: -1, emotions: 2, senses: 3 }
+const R3: Costs = { head: 3, emotions: 3, senses: 0 }
 const OWN: Costs = { head: 2, emotions: 2, senses: 2 }
 /** The category „Rutyny” (the kind „rutyna”): 1 · 0 · 1. */
 const RUTYNY: Costs = { head: 1, emotions: 0, senses: 1 }
@@ -39,6 +40,9 @@ const day = (plan: PlanBlock[], routineCosts: Record<string, Costs> | null = { p
 /** The routine's record written with another cost at `time` (`routine.cost` of the main process, the timer's domain). */
 const routineCost = (s: Scenario, time: string, costs: Costs | null, was: Costs | null = R, computer?: string, routine = 'poranna') =>
   s.write([{ k: 'routine.cost', routine, at: s.at(time), costs, was }], s.at(time), computer)
+/** A start of „m” (or `id`) at `time` as this version writes it, with the routine's cost `routineCosts` known then. */
+const startWith = (s: Scenario, time: string, routineCosts: Costs | null, id = 'm') =>
+  s.write([{ k: 'block.start', block: id, at: s.at(time), bg: false, planned: { categoryId: 'rutyny', variantId: null, durationMin: 90, fixed: false, costs: null, bgCostPct: null, routine: 'poranna', routineCosts }, confirmUntil: null, how: 'click' }], s.at(time))
 const ownCost = (s: Scenario, time: string, costs: Costs | null) => s.write([{ k: 'block.cost', block: 'm', at: s.at(time), costs }], s.at(time))
 const tile = (s: Scenario, time: string, id = 'm') => {
   const ctx = s.contextAt(s.at(time))
@@ -103,13 +107,29 @@ describe('zmiana kosztu rutyny przy zaczętym bloku (D514, T1430)', () => {
     expect(at(s.energy('11:00'), '08:45')).toEqual(then)
   })
 
-  it('blok skończony przed zmianą i niezaczęty – bez zmiany (niezaczęty bierze koszt rutyny teraz); zaczęty po niej – od startu nowy koszt', () => {
+  it('blok skończony przed zmianą i niezaczęty – bez zmiany (niezaczęty bierze koszt rutyny teraz); zaczęty po niej – koszt ze swojego startu (tu już nowy)', () => {
     const plan = [m({ durationMin: 15 }), m({ id: 'next', startMin: lm('09:00') })]
     const s = routineCost(day(plan).ran('m', '08:00', '08:15'), '08:30', R2)
     expect(curve(s.energy('08:50'))).toEqual(curve(day(plan).ran('m', '08:00', '08:15').energy('08:50')))
-    // Begun after the change by a start that wrote the old cost: the change counts from its start.
-    s.start('next', '09:00')
+    // Begun after the change on this computer: its start wrote the new cost (the file has it).
+    startWith(s, '09:00', R2, 'next')
     expect(tile(s, '09:10', 'next')).toEqual({ costs: R2, base: R2, own: false, baseFrom: 'routine' })
+  })
+
+  it('kafelek bloku skończonego: koszt, z którym biegł – zmiana po jego końcu go nie sięga (jak energia, tydzień i kalibracja); „Zacznij jeszcze raz” – od nowa tak', () => {
+    const s = routineCost(day([m({ durationMin: 15 })]).ran('m', '08:00', '08:15'), '08:30', R2)
+    expect(tile(s, '08:50')).toEqual({ costs: R, base: R, own: false, baseFrom: 'routine' })
+    // A change while it ran: the tile of the ended block says the cost of its last minute, not one of a change after its end.
+    const t = routineCost(day([m()]).start('m', '08:00'), '08:10', R2).end('m', '08:20')
+    routineCost(t, '08:30', null, R2)
+    expect(tile(t, '08:50')).toEqual({ costs: R2, base: R2, own: false, baseFrom: 'routine' })
+    // Paused, the change, then ended: its last minute ran before the change.
+    const p = day([m()]).start('m', '08:00').pause('m', '08:10')
+    routineCost(p, '08:20', R2).end('m', '08:30')
+    expect(tile(p, '08:40')).toEqual({ costs: R, base: R, own: false, baseFrom: 'routine' })
+    // Begun again (D207): the change counts in the new stretch from its minute (here before it – from the new stretch on).
+    t.write([{ k: 'block.restart', block: 'm', at: t.at('08:40') }], t.at('08:40'))
+    expect(tile(t, '08:50')).toEqual({ costs: RUTYNY, base: RUTYNY, own: false })
   })
 
   it('start bez kosztu rutyny w zdarzeniu (rutyna nieodczytana przy starcie, T1372): przeszłość stała – przed zmianą koszt sprzed niej (`was`), nie koszt rutyny teraz', () => {
@@ -139,21 +159,34 @@ describe('zmiana kosztu rutyny przy zaczętym bloku (D514, T1430)', () => {
     expect(curve(both.energy('09:00'))).toEqual(curve(here.energy('09:00')))
   })
 
-  it('dwa komputery: blok zaczęty tu ze starym kosztem, zanim przyszedł nowy plik rutyny, po zmianie z drugiego komputera liczy nowy od startu', () => {
-    // pcb changed the routine at 07:50; this computer still had R when it began the block at 08:00 (its start wrote R).
-    const s = routineCost(day([m()]), '07:50', R2, R, 'pcb').start('m', '08:00')
-    expect(tile(s, '08:10')).toEqual({ costs: R2, base: R2, own: false, baseFrom: 'routine' })
-    expect(curve(s.energy('09:00'))).toEqual(curve(day([m()], { poranna: R2 }).start('m', '08:00').energy('09:00')))
+  it('zmiana sprzed startu: start z kosztem rutyny liczy swój – także nowszy niż zmiana (plik dotarł przed logiem drugiego komputera, T1440); zmiana po starcie – zawsze', () => {
+    // pcb changed R → R2 at 07:50; this computer began at 08:00 with R3 – a newer file (a change of pcc whose log has not come yet).
+    const s = startWith(routineCost(day([m()]), '07:50', R2, R, 'pcb'), '08:00', R3)
+    expect(tile(s, '08:10')).toEqual({ costs: R3, base: R3, own: false, baseFrom: 'routine' })
+    expect(curve(s.energy('08:30'))).toEqual(curve(startWith(day([m()]), '08:00', R3).energy('08:30')))
+    // A change after the start reaches it from its minute, whichever computer wrote it.
+    routineCost(s, '08:20', R2, R3, 'pcb')
+    expect(tile(s, '08:30')).toEqual({ costs: R2, base: R2, own: false, baseFrom: 'routine' })
+    // Begun here with the old cost before the new file came: the cost of its start too (a known limit of two computers, T1440).
+    const old = routineCost(day([m()]), '07:50', R2, R, 'pcb').start('m', '08:00')
+    expect(tile(old, '08:10')).toEqual({ costs: R, base: R, own: false, baseFrom: 'routine' })
   })
 
-  it('start cofnięty i ponowny: zmiana kosztu rutyny jest zmianą rutyny – liczy się w każdym jej starcie od swojej chwili', () => {
+  it('zmiana sprzed startu bez kosztu rutyny w zdarzeniu (T1372): start jej nie zna – liczy się od startu', () => {
+    const s = routineCost(day([m()], null), '07:50', R2, R, 'pcb').start('m', '08:00')
+    expect(tile(s, '08:10')).toEqual({ costs: R2, base: R2, own: false, baseFrom: 'routine' })
+  })
+
+  it('start cofnięty i ponowny: ponowny liczy koszt rutyny swojego startu, zmiana po nim – od swojej chwili', () => {
     const s = day([m()])
     const t = s.at('08:00')
     s.write([{ id: 'first', k: 'block.start', block: 'm', at: t, bg: false, planned: { categoryId: 'rutyny', variantId: null, durationMin: 90, fixed: false, costs: null, bgCostPct: null, routine: 'poranna', routineCosts: R }, confirmUntil: null, how: 'click' }], t)
     routineCost(s, '08:10', R2)
     s.write([{ k: 'undo', at: s.at('08:20'), target: 'first' }], s.at('08:20'))
-    s.start('m', '08:30')
+    startWith(s, '08:30', R2)
     expect(tile(s, '08:40')).toEqual({ costs: R2, base: R2, own: false, baseFrom: 'routine' })
+    routineCost(s, '08:45', null, R2)
+    expect(tile(s, '08:50')).toEqual({ costs: RUTYNY, base: RUTYNY, own: false })
   })
 
   it('kalibracja: minuty z kosztem rutyny nie są dowodem; po zmianie rutyny na „jak podkategoria” – znów są', () => {
@@ -161,6 +194,17 @@ describe('zmiana kosztu rutyny przy zaczętym bloku (D514, T1430)', () => {
     routineCost(s, '08:40', null).end('m', '09:30')
     const ctx = s.contextAt(s.at('10:00'))
     expect(costEvidence(ctx, computeDay(ctx), true)!.minutes).toEqual({ rutyny: 50 })
+  })
+
+  it('kalibracja bierze koszt tak jak energia (startCostOf): start bez kosztu rutyny w zdarzeniu, bez zmiany tego dnia – koszt rutyny teraz, więc bez dowodu', () => {
+    const s = day([m()], null).ran('m', '08:00', '09:30')
+    const evidence = (routineCosts: Record<string, Costs>) => {
+      const ctx = s.contextAt(s.at('10:00'), { routineCosts })
+      return costEvidence(ctx, computeDay(ctx), true)!.minutes
+    }
+    // The routine has a cost now: the energy counts it (`startCostOf`) – no evidence for the subcategory; without one – evidence.
+    expect(evidence({ poranna: R })).toEqual({})
+    expect(evidence({})).toEqual({ rutyny: 90 })
   })
 
   it('zdarzenie: znane z polami routine, at, costs i was (−5…5 albo null); bierne dla silnika dnia', () => {
@@ -216,6 +260,14 @@ describe('które zaczęte bloki zmiana kosztu rutyny sięga (costChangesOf, T143
     routineCost(s, '08:30', R2)
     const changed = plan.map((b) => (b.id === 'm' ? { ...b, routine: 'wieczorna' } : b.id === 'own' ? { ...b, categoryId: 'rutyny' } : b))
     expect(reached(s, changed)).toEqual(['m'])
+  })
+
+  it('rutyna startu (startRoutine – jedna reguła silnika i liczby ✎): ze startu, także „bez rutyny”; start bez pola – z planu', () => {
+    const planned = { categoryId: 'rutyny', variantId: null, durationMin: 90, fixed: false }
+    expect(startRoutine({ planned: { ...planned, routine: 'poranna' } }, { routine: 'wieczorna' })).toBe('poranna')
+    expect(startRoutine({ planned: { ...planned, routine: null } }, { routine: 'wieczorna' })).toBeNull()
+    expect(startRoutine({ planned }, { routine: 'wieczorna' })).toBe('wieczorna')
+    expect(startRoutine({ planned }, undefined)).toBeNull()
   })
 
   it('start bez rutyny w zdarzeniu (starsza wersja) – rutyna i kategoria z planu', () => {

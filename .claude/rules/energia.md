@@ -37,7 +37,8 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
   `planned.routineCosts` (tylko kategoria rodzaju „rutyna”); start starszej wersji (`v` < 14) bez pola – bez kosztu rutyny, tej wersji
   bez pola – do pierwszej zmiany kosztu rutyny jej `was`, bez zmian – koszt rutyny teraz (`startCostOf`, `foldFacts`, T1432); kolejność
   own → rutyna → wariant → kategoria. Koszt zmieniony na kafelku zaczętego bloku (D501) – `block.cost` od swojej minuty, po starcie bloku;
-  koszt rutyny – `routine.cost` od swojej minuty, po czasie (T1431; `costChange.ts`, `costOf(x, s, k)`; reguły `koszt.md`).
+  koszt rutyny – `routine.cost` od swojej minuty; sprzed startu (w kolejności logu) tylko dla startu bez `routineCosts` (T1431, T1440;
+  `costChange.ts`, `costOf(x, s, k)`; reguły `koszt.md`). Kalibracja (`costEvidence`) bierze koszt startu tym samym `startCostOf` (T1442).
 - Grupa równoległa (D476, T1191, T1199): blok grupy w tle (`why: 'group'`) – 0, także w prognozie (`alongside`); nic z przodu –
   z przodu ostatnio zaczęty blok grupy (`groupAt`), pełny koszt.
 - Kilka bloków na pierwszym planie (`pickFront`): elastyczny pod innym pauzuje (bez kosztu, powrót = przełączenie),

@@ -41,12 +41,18 @@ const NONE: Today = { ended: new Set(), begun: new Map() }
 
 /**
  * Today's blocks from today's log (`plannedDay`): the ended ones (a change of the cost only does not reach them, D501) and the begun ones as
- * the engine counts them now (`begunToday`, T1434); a log not read whole, a file that cannot be read – none known.
+ * the engine counts them now (`begunToday`, T1434); a log not read whole, a file that cannot be read, a day that cannot be counted (an
+ * error, T1444) – none known: the count goes on without them, never stuck at „Liczę bloki…”.
  */
 async function todayOf(today: string, at = Date.now()): Promise<Today> {
-  const day = await plannedDay(today, at)
-  if (typeof day === 'string') return NONE
-  return { ended: new Set([...day.facts.blocks.values()].filter((f) => f.endedAt != null).map((f) => f.id)), begun: begunToday(day.ctx, day.facts, at) }
+  try {
+    const day = await plannedDay(today, at)
+    if (typeof day === 'string') return NONE
+    return { ended: new Set([...day.facts.blocks.values()].filter((f) => f.endedAt != null).map((f) => f.id)), begun: begunToday(day.ctx, day.facts, at) }
+  } catch (e) {
+    console.warn('liczba bloków ✎: dzisiejszego dnia nie dało się policzyć', e)
+    return NONE
+  }
 }
 
 /**

@@ -23,7 +23,7 @@ paths:
 # Koszt na kafelku (D501) i koszt rutyny (D512)
 
 Źródło prawdy: specyfikacja „Koszt na kafelku (D501)” (Konwencje interfejsu), „Rutyna” (Bloki), decyzje T1270–T1279, T1300–T1306,
-T1360–T1374, T1395–T1399, T1430–T1437.
+T1360–T1374, T1395–T1399, T1430–T1437, T1440–T1447.
 
 ## Jedna reguła kosztu
 - Kolejność (D512): własny bloku → rutyny → wariantu → kategorii (podkategorii). `model/blockCosts.ts`: `baseCosts(kategorie,
@@ -48,18 +48,21 @@ T1360–T1374, T1395–T1399, T1430–T1437.
   teraz. `block.cost` null wraca do rutyny. Rodzaj „rutyna” – jeden predykat `routineCostApplies` (`model/routines.ts`, T1435).
 - Zmiana kosztu rutyny przy zaczętym bloku (D514, T1430–T1433): `routine.cost` (`routine`, `at`, `costs`, `was`; timer, `PASSIVE`, nie w
   `USER_EVENTS`) pisze proces główny – `RecordStore` → `written(rel, { value, before })` → `folder.routineWritten` przy każdym zapisie
-  `routines/<id>.json` z innym kosztem (okno, odpowiedź na konflikt, „Przywróć”, kopia konfliktowa, kolejka po powrocie folderu,
-  usunięcie), od razu do dziennika (log folderu – przy sprawdzeniu). Okno tylko zapisuje rekord (`saveRoutineRecord`), dnia nie czyta.
-  Drugi komputer – zdarzenie w jego logu dnia. Silnik: `costChangesOf(ctx, fakty)` dopasowuje je do zaczętych bloków przez
-  `routineOfStart` (rutyna i kategoria ze startu, bez pola – z planu) po czasie, nie po starcie (T1431: zmiana sprzed startu – od startu).
+  `routines/<id>.json` z innym kosztem (okno, odpowiedź na konflikt, „Przywróć”, kopia konfliktowa, kolejka po powrocie folderu; usunięcie
+  pliku – bez zdarzenia, T1445), od razu do dziennika bez fsync (`syncLater` – fsync w najbliższym `flush`, T1447; log folderu – przy
+  sprawdzeniu); dziennik odmówił – `routineCostKept` w odpowiedzi `edit` → toast `ROUTINE_COST_KEPT_TEXT` (`editNotice`, T1446). Okno tylko
+  zapisuje rekord (`saveRoutineRecord`), dnia nie czyta. Drugi komputer – zdarzenie w jego logu dnia. Silnik: `costChangesOf(ctx, fakty)`
+  dopasowuje je do zaczętych bloków przez `routineOfStart` (rutyna ze startu – `startRoutine`, kategoria ze startu, bez pól – z planu): po
+  starcie w kolejności logu – zawsze, sprzed niego – tylko start bez `routineCosts` (T1431, T1440: start z polem liczy koszt, który znał).
 - Blok zaczęty (reguła A, `engine/costChange.ts`): koszt ze startu (`startCostOf` – `block.start.planned`, bez pól – z planu),
   zmieniony od minuty zdarzeniem `block.cost` (`block`, `at`, `costs` lub null; dziedzina timera, w `PASSIVE` – bierne dla silnika
   dnia; `energy.cost` pierwszych wersji 1.24 czytane tak samo, nie pisane), koszt rutyny – `routine.cost` (`CostChange.routine`:
   `ownAt` je pomija, `routineAt` – koszt rutyny od minuty; w `costOf`, `begunBasis`/`begunCosts`, kluczach `costEvidence`). `block.cost`
   liczy się tylko po starcie bloku w kolejności logu (`BlockFact.startOrder`) – zmiana cofniętego startu nie sięga następnego.
   `costChangesOf` – po minucie, potem `compareEvents` (ostatnia w minucie wygrywa); `ownAt(k)`. Minuty przed zmianą zostają, przeliczenie
-  logu daje to samo. To samo w energii (`Kind.changes`), dowodach kalibracji (`costEvidence`, klucz raz na odcinek między zmianami), na
-  kafelku (`begunCosts`) i w liczbie ✎ (`begunToday`, T1434).
+  logu daje to samo. To samo w energii (`Kind.changes`), dowodach kalibracji (`costEvidence`: koszt startu – `startCostOf`, T1442; klucz
+  raz na odcinek między zmianami), na kafelku (`begunCosts`; skończony – w swojej ostatniej minucie, `toldAt`, T1441) i w liczbie ✎
+  (`begunToday`, T1434 – tylko przy zmianie samego kosztu, inna idzie za planem, T1443; `todayOf` z błędem – jak dzień nieznany, T1444).
 - Starsza wersja (≤ 1.23): `block.cost` to nieznane zdarzenie timera – pomija je (blok po starcie), `unknownTimerEvents` → instalacja w
   nocy bez 24 h; `RULES_VERSION` 13 – ustępuje prowadzenia (zejścia, zamrożenie). Nic innego nie czyta nieznanych zdarzeń (T1300).
   Koszt rutyny (≤ 1.24): pole `costs` rutyny i `planned.routineCosts` pomija (liczy bez nich); `RULES_VERSION` 14 – ustępuje prowadzenia;
