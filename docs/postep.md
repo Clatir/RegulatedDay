@@ -63,9 +63,9 @@ Autowznowienie po limicie: zadanie cron w sesji (co ok. 35 min) czyta ten wpis. 
 | --- | --- | --- |
 | Z0 | dokumenty gotowe | D527–D531, specyfikacja „Zaznaczanie wielu i zmiany grupowe”, plan „Ciąg Z” |
 | Z1 | scalone 35b7148 (15.11 23:10) | przegląd high 9 uwag poprawionych, T1541–T1555; `installer-close.test.ts` pada lokalnie w obu drzewach (środowisko, PowerShell) – sprawdzi CI |
-| Z2 | część A – poprawki po przeglądzie high (10 uwag) | `wykonawca-sonnet`, drzewo `C:/CC-Projekty/RD-z2`, gałąź `claude/z2-sprawy`; część B (interfejs) po Z1 |
-| Z3 | w toku | `wykonawca-sonnet` (ten sam co Z1), katalog główny |
-| Z4 | część A (logika) w toku | `wykonawca-opus`, drzewo `C:/CC-Projekty/RD-z4`, gałąź `claude/z4-bloki`; część B (oś) po Z1 |
+| Z2 | A zatwierdzone (4857e23), B – poprawki po przeglądzie high (11 uwag) | `wykonawca-sonnet`, drzewo `C:/CC-Projekty/RD-z2`, gałąź `claude/z2-sprawy` |
+| Z3 | scalone a0a8042 (15.11 23:40) | przegląd high 10 uwag poprawionych, T1580–T1589; klik w dzień dalej go otwiera (zakres od Ctrl+klik) |
+| Z4 | A – poprawki po przeglądzie xhigh (15 uwag) | `wykonawca-opus`, drzewo `C:/CC-Projekty/RD-z4`, gałąź `claude/z4-bloki`; B (oś) – `wykonawca-sonnet` po scaleniu A |
 | Z5 | czeka na Z4 | wiele dni |
 | Z6 | czeka na Z4, Z5 | przeciąganie grupy |
 | Z7 | czeka | wersja, CHANGELOG, odbiór, Setup, PR, wydanie |
