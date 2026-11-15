@@ -96,6 +96,13 @@ describe('koszt na kafelku „Tygodnia” i „3 dni” (D501)', () => {
     expect(labelOf(TODAY, 'a')!.textContent).toBe('3 · 1 · 1 · 0')
   })
 
+  it('„3 dni”, kafelek obok innego (napis po najechaniu): skrót bez spacji „1·1·1·1” – więcej miejsca do chwytania (D526)', async () => {
+    await mount([day(TODAY, [block('x', 800, 860, { cost: cost(1, 1, 1, 1) }), block('y', 800, 860, { cost: cost(3, 1, 1, 0) }), block('solo', 600, 660, { cost: cost(3, 1, 1, 0) })]), day(DATES[1]!, [])], THREE_DAYS_PPM)
+    expect(labelOf(TODAY, 'x')!.getAttribute('data-place')).toBe('hover')
+    expect(labelOf(TODAY, 'x')!.textContent).toBe('1·1·1·1')
+    expect(labelOf(TODAY, 'solo')!.textContent).toBe('3 · 1 · 1 · 0')
+  })
+
   it('własny koszt bloku jest tym, co mówi napis; blok bez kosztu w danych (np. dawny widok) – bez napisu', async () => {
     await mount([day(TODAY, [block('a', 600, 660, { cost: cost(5, 0, -1, 0, { own: true }) }), block('n', 720, 780)]), day(DATES[1]!, [])])
     expect(labelOf(TODAY, 'a')!.textContent).toBe('5·0·−1·0')
