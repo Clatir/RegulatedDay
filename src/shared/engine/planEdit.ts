@@ -333,8 +333,6 @@ export function copiedTemplate(t: Template, id: string, name: string): Template 
     id,
     name,
     archived: true,
-    // Its blocks get new ids – its days' ids are its own (a copy of D511's move made with its original's).
-    blockIdsOf: null,
     versions: t.versions.map((v) => {
       const ids = new Map(v.blocks.map((b) => [b.id, newId(10)]))
       return {

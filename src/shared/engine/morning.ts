@@ -10,6 +10,7 @@ import type { DaySnapshot } from '../model/events'
 import type { DayFile, LectureSeries, PlanBlock, Template } from '../model/plan'
 import type { SeriesPlan } from '../model/series'
 import type { DayTypeId, SessionDef, SettingsChange } from '../model/settings'
+import { settingsOn } from '../model/settings'
 import { knownSessionDefs } from '../model/templateSessions'
 import { addDays, weekday } from '../time/zone'
 import type { DayState } from './day'
@@ -122,7 +123,7 @@ export interface ShiftNotice {
  */
 export function shiftNotice(inp: MorningInputs): ShiftNotice | null {
   // Every session known today – of the templates (D511) and of the layer – whatever type a day has.
-  const sessions = knownSessionDefs(inp.changes, inp.templates, inp.date)
+  const sessions = knownSessionDefs(settingsOn(inp.changes, inp.date), inp.templates, inp.date)
   const shifted = (date: string) => sessions.some((s) => {
     const w = sessionWindow(s, date)
     return w != null && sessionShiftMin(s, w.start) !== 0

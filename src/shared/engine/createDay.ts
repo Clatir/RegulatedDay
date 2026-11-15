@@ -9,11 +9,11 @@
 import { derivedId } from '../model/ids'
 import { SESSION_CATEGORY } from '../model/categories'
 import type { DaySnapshot } from '../model/events'
-import { PLAN_MAX, PLAN_MIN, planBlock, planBlockFrom, templateFor, type DayFile, type LectureSeries, type PlanBlock, type Template } from '../model/plan'
+import { PLAN_MAX, PLAN_MIN, planBlock, planBlockFrom, type DayFile, type LectureSeries, type PlanBlock, type Template } from '../model/plan'
 import type { SeriesPlan } from '../model/series'
 import { stepsFrom, withDone } from '../model/steps'
 import { DEFAULT_SETTINGS, settingsOn, type DayTypeId, type RulesSettings, type SessionDef, type SettingsChange } from '../model/settings'
-import { allTemplateSessions, daySettings, isSessionEntry } from '../model/templateSessions'
+import { daySettingsOf, isSessionEntry, templateMarkets, usualDiffMin } from '../model/templateSessions'
 import { dayEnd, dayStart, logicalMinuteOf, placeLogical } from '../time/day'
 import { MINUTE, PL_ZONE, addDays, offsetMin, placeWall, weekday } from '../time/zone'
 import { pushedBySeries, seriesBlocks } from './series'
@@ -48,7 +48,8 @@ export function defaultDayType(date: string, settings: Pick<RulesSettings, 'week
 /** Anchors in templates point at template blocks by their id, or at a session as „session:<id>”. */
 export const SESSION_ANCHOR = 'session:'
 
-const sessionBlockId = (date: string, sessionId: string) => derivedId(date, 'ses', sessionId)
+/** The id a session gets on a day (a day's file answers it by its session's id, an attachment of the day is its own by this). */
+export const sessionBlockId = (date: string, sessionId: string) => derivedId(date, 'ses', sessionId)
 /** The id a template block gets on a day (a day file cancels or changes it by this id). */
 export const templateBlockId = (date: string, templateId: string, blockId: string) => derivedId(date, 'tpl', templateId, blockId)
 const lectureBlockId = (date: string, seriesId: string) => derivedId(date, 'lec', seriesId)
@@ -70,11 +71,22 @@ export function sessionWindow(def: SessionDef, date: string): { start: number; e
  * the middle of January of that year, when both keep standard time.
  */
 export function sessionShiftMin(def: SessionDef, at: number): number {
-  const year = new Date(at).getUTCFullYear()
-  const ref = Date.UTC(year, 0, 15, 12)
-  const usual = offsetMin(PL_ZONE, ref) - offsetMin(def.zone, ref)
   const now = offsetMin(PL_ZONE, at) - offsetMin(def.zone, at)
-  return now - usual
+  return now - usualDiffMin(def.zone, new Date(at).getUTCFullYear())
+}
+
+const parsedBlocks = new WeakMap<object, PlanBlock | null>()
+
+/** The template's block of a session (D511), read once per object (a snapshot's session is raw, a template's read already). */
+function blockOfSession(def: SessionDef): PlanBlock | null {
+  const raw = def.block
+  if (!raw || typeof raw !== 'object') return null
+  let b = parsedBlocks.get(raw)
+  if (b === undefined) {
+    b = planBlockFrom(raw, 'template')
+    parsedBlocks.set(raw, b)
+  }
+  return b
 }
 
 /**
@@ -91,7 +103,7 @@ export function sessionBlock(def: SessionDef, date: string, holidays: DaySnapsho
     if (h?.earlyCloseAt != null) end = Math.min(end, h.earlyCloseAt)
   }
   if (end <= win.start) return null
-  const src = def.block ? planBlockFrom(def.block, 'template') : null
+  const src = blockOfSession(def)
   return planBlock({
     ...(src ? { variantId: src.variantId, background: src.background, costs: src.costs, bgCostPct: src.bgCostPct, note: src.note, name: src.name, routine: src.routine, steps: src.steps } : {}),
     id: sessionBlockId(date, def.id),
@@ -128,9 +140,8 @@ export function createDay(inp: DayInputs): DaySnapshot {
   const inForce = settingsOn(inp.changes, date, inp.at)
   const dayType = dayFile?.dayType ?? defaultDayType(date, inForce)
   // The day's sessions: its template's (D511) and what is left of the layer of sessions of the settings.
-  const settings = daySettings(inForce, inp.templates, dayType, date)
+  const { settings, tpl } = daySettingsOf(inForce, inp.templates, dayType, date)
   const params = settings.dayTypes[dayType]
-  const tpl = templateFor(inp.templates, dayType, weekday(date), date)
   const changes = inp.changes.filter((c) => c.from < date || (c.from === date && (c.at == null || (inp.at != null && c.at <= inp.at)))).map((c) => c.id).sort()
 
   const blocks: PlanBlock[] = []
@@ -162,16 +173,14 @@ export function createDay(inp: DayInputs): DaySnapshot {
   }
   // The markets of the sessions of every template (D511), as of every session of the layer: one a change of type brings from
   // another template ends at its early close.
-  for (const def of allTemplateSessions(inp.templates, settings.categories, date)) for (const m of def.markets) noteMarket(m)
+  for (const m of templateMarkets(inp.templates)) noteMarket(m)
 
   // The template's blocks; anchors to template blocks and sessions get the day's ids. A block anchored to a session that
   // is not on this day is not on it either (a cancelled session cancels the blocks anchored to it). The template's sessions
-  // (D511) are the sessions above – a block anchored to one by its id follows it as „session:<id>” does. A copy made by the
-  // move of sessions makes the ids of its original (`blockIdsOf`).
+  // (D511) are the sessions above – a block anchored to one by its id follows it as „session:<id>” does.
   if (tpl) {
     const entries = new Set(tpl.version.blocks.filter((b) => isSessionEntry(b, settings.categories)).map((b) => b.id))
-    const idsOf = tpl.template.blockIdsOf ?? tpl.template.id
-    const ids = new Map(tpl.version.blocks.map((b) => [b.id, templateBlockId(date, idsOf, b.id)]))
+    const ids = new Map(tpl.version.blocks.map((b) => [b.id, templateBlockId(date, tpl.template.id, b.id)]))
     for (const b of tpl.version.blocks) {
       if (entries.has(b.id)) continue
       let anchor: string | null = null

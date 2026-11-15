@@ -114,12 +114,6 @@ export interface Template {
   weekdays: number[]
   versions: TemplateVersion[]
   archived: boolean
-  /**
-   * A copy made by the move of sessions into templates (D511, `model/sessionMigration.ts`): the template whose ids the blocks
-   * of this one take on a day – the days it makes keep the ids they had (a day's file changes and cancels a block by it).
-   * Null or left out – its own id.
-   */
-  blockIdsOf?: string | null
 }
 
 /** A series of the plan of lectures: cyclic fixed blocks (spec „Plan wykładów”). */
@@ -295,8 +289,7 @@ export function templateFrom(v: unknown): Template | null {
     dayType: v.dayType,
     weekdays: Array.isArray(v.weekdays) ? [...new Set(v.weekdays.filter((d): d is number => intIn(d, 1, 7) != null))].sort() : [],
     versions,
-    archived: v.archived === true,
-    blockIdsOf: typeof v.blockIdsOf === 'string' && v.blockIdsOf && v.blockIdsOf !== v.id ? v.blockIdsOf : null
+    archived: v.archived === true
   }
 }
 

@@ -15,7 +15,7 @@ import { join } from 'node:path'
 import { writeFileAtomic } from '../datastore/atomic'
 import type { ComputerRow, SearchCorpus } from '@shared/api'
 import { EventClock, type ClockSources } from '@shared/data/clock'
-import { recordEdit, sameContentAs, setAt, type MergeConflict } from '@shared/data/merge'
+import { sameContentAs, setAt, type MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
 import { readLogText } from '@shared/data/logText'
 import { activityOf, type Activity } from '@shared/engine/activity'
@@ -59,8 +59,7 @@ import { routineFrom, type Routine } from '@shared/model/routines'
 import { countDatesToRead, ruleDates, seriesFrom, seriesLast, seriesPlans, typeOfDays, type Series, type SeriesPlan } from '@shared/model/series'
 import type { CsvDay } from '@shared/engine/csv'
 import { changeOrder, isDayTypeId, settingsOn, type DayTypeId, type SettingsChange } from '@shared/model/settings'
-import { templateJson } from '@shared/model/defaults'
-import { moveSessions, sessionsMoved } from '@shared/model/sessionMigration'
+import { SESSIONS_CHANGE_ID, sessionsMoved } from '@shared/model/sessionMigration'
 import { daySettings } from '@shared/model/templateSessions'
 import { decideLeader, minuteGate, SILENT_MS, soundComputer, type LeaderDecision, type Peer } from '@shared/sync/leader'
 import type { SyncState } from '@shared/sync/syncLines'
@@ -69,6 +68,7 @@ import { Settle, type SettleReason } from '@shared/sync/settle'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { EditQueue, type Outcome, type QueuedEdit } from './editQueue'
+import { MOVED, sessionMoveEdits } from './sessionMove'
 import { EventLog, type DayRead, type EventDraft } from './eventLog'
 import { isRootGone, rootGuarded, type DataFs } from './fsio'
 import { RecordHistory } from './history'
@@ -132,6 +132,8 @@ const OWN_COPY_DAYS = 4
 /** A day's files quiet this long before its freeze (spec „nie zmieniają się od 1 min po przeskanowaniu folderu”). */
 const QUIET_MS = 60_000
 const CALIBRATION_RECHECK_MS = 10 * 60_000
+/** D511: how long a day of the move waits for its records before it is made as it is. */
+const MOVE_WAIT_MS = 30 * 60_000
 /** The room's items this computer has seen unlocked, in its state folder. */
 const ROOM_FILE = 'room.json'
 /** The full-screen celebrations shown on this computer (its state folder, T510). */
@@ -352,6 +354,8 @@ export class DataFolder {
   private lastCompact = 0
   private readonly listed = new Map<string, string[]>()
   private readonly rulesVersion: number
+  /** D511: since when a day of the move of sessions waits for its records (`sessionsReady`). */
+  private moveWaitSince: number | null = null
   private editSeq = 0
   private lastCopyScan = 0
   /** Conflict copies with fields different on both sides (copy → the file and the fields). */
@@ -1064,9 +1068,12 @@ export class DataFolder {
       try {
         // D511: the layer of sessions into the templates, once – before the day is made, so it is made with them. Apart, so
         // a move that cannot be written now stops nothing else.
-        await this.sessionsStart(now).catch((e) => problems.push(`sesje w szablonach: ${String(e)}`))
-        // The day is made once, by the leader (a derived id: two leaders after a pause of sync write the same event).
-        if (!daySnapshotOf(read.events)) {
+        await this.sessionsStart(now, !!daySnapshotOf(read.events)).catch((e) => problems.push(`sesje w szablonach: ${String(e)}`))
+        // The day is made once, by the leader (a derived id: two leaders after a pause of sync write the same event) – after
+        // the move of sessions, once its records are here (D511).
+        const ready = daySnapshotOf(read.events) != null || (await this.sessionsReady(day, now))
+        if (!ready) problems.push('dzień czeka na szablony z sesjami (przeniesienie sesji, OneDrive)')
+        if (!daySnapshotOf(read.events) && ready) {
           const inp = await this.inputs()
           const snapshot = createDay({ date: day, ...inp, dayFile: await this.dayFile(day), holidays: this.o.holidays, at: now })
           this.append({ id: derivedId(day, 'day.create'), day, dom: 'timer', k: 'day.create', snapshot })
@@ -1186,35 +1193,48 @@ export class DataFolder {
 
   /**
    * D511: the leader moves the layer of sessions into the templates once, from today (`moveSessions` – deterministic: two
-   * leaders after a pause of sync write the same records), as this computer sees the folder with its queued edits; an edit
-   * of rd.json or of a template still in the queue (waiting, a question) – it waits, never written again. One edit: the
-   * templates first, rd.json's change after them (`after`) – till it is laid the days keep the layer, and an entry of a
-   * template and a session of the layer with one id are one session (`daySettings`).
+   * leaders after a pause of sync write the same records), from the records as this computer sees them with its queued
+   * edits, each read once (`sessionMoveEdits` – a change made meanwhile is a question, never written over). An edit of
+   * rd.json, a template, a day or an attachment still in the queue – it waits.
    */
-  private async sessionsStart(now: number): Promise<void> {
-    if (this.queue.pending.some((e) => e.rel === paths.settings || e.rel.startsWith(`${ID_COLLECTIONS.template}/`))) return
+  private async sessionsStart(now: number, todayMade: boolean): Promise<void> {
+    const busy = (rel: string) => rel === paths.settings || rel.startsWith('days/') || rel.startsWith(`${ID_COLLECTIONS.template}/`) || rel.startsWith(`${ID_COLLECTIONS.attachment}/`)
+    if (this.queue.pending.some((e) => busy(e.rel))) return
     const rd = await this.recordView(paths.settings)
     // No wizard yet, or the move made (the change in rd.json): nothing to read further.
     if (!rd || sessionsMoved(rdFrom(rd).settings)) return
-    const inp = await this.inputs(true)
-    const move = moveSessions(inp.changes, inp.templates, logicalDayOf(now))
-    if (!move) return
-    const entries: Array<NonNullable<ReturnType<typeof recordEdit>>> = []
-    for (const t of move.changed) {
-      const rel = paths.record('template', t.id)
-      const before = await this.recordView(rel)
-      if (!before) throw new Error(`szablon ${t.id} jest teraz nieczytelny`)
-      const e = recordEdit(rel, before, templateJson(t, before))
-      if (e) entries.push(e)
+    const today = logicalDayOf(now)
+    const templates = (await this.cachedDir(ID_COLLECTIONS.template, (v) => v, false, true)) as Array<Record<string, unknown>>
+    const days = new Map<string, Record<string, unknown>>()
+    for (const date of await this.dayDatesFrom(today)) {
+      const raw = await this.recordView(paths.day(date))
+      if (raw) days.set(date, raw)
     }
-    for (const t of move.made) {
-      const e = recordEdit(paths.record('template', t.id), null, templateJson(t))
-      if (e) entries.push(e)
+    const attachments = (await this.cachedDir(ID_COLLECTIONS.attachment, (v) => v, false, true)) as Array<Record<string, unknown>>
+    const entries = sessionMoveEdits({ rd, templates, days, attachments, today, todayMade })
+    if (entries?.length) await this.edit(entries)
+  }
+
+  /**
+   * D511: a day from the move of sessions (its date and the two after it) is made only once this folder holds the records
+   * the move wrote – the templates and the day's own file (`expect`, each with `MOVED`): OneDrive may bring rd.json before
+   * them, and a day made then would have no session of the layer nor of the templates. Not there for `MOVE_WAIT_MS` (a
+   * record removed since, a file lost) – the day is made as it is.
+   */
+  private async sessionsReady(day: string, now: number): Promise<boolean> {
+    const rd = await this.shared(paths.settings).catch(() => undefined)
+    const move = (Array.isArray(rd?.settings) ? rd.settings : []).find((c): c is Record<string, unknown> => !!c && typeof c === 'object' && (c as Record<string, unknown>).id === SESSIONS_CHANGE_ID)
+    if (!move || !isIsoDate(move.from) || !Array.isArray(move.expect) || day < move.from || day > addDays(move.from, 2)) return true
+    for (const rel of move.expect) {
+      if (typeof rel !== 'string') continue
+      const kind = classify(rel)?.kind
+      if (kind !== 'template' && !(kind === 'day' && rel === paths.day(day))) continue
+      const raw = await this.shared(rel).catch(() => undefined)
+      if (raw?.[MOVED] === move.from) continue
+      this.moveWaitSince ??= now
+      return now - this.moveWaitSince >= MOVE_WAIT_MS
     }
-    const list = Array.isArray(rd.settings) ? rd.settings : []
-    const settings = recordEdit(paths.settings, rd, { ...rd, settings: [...list, move.change] })
-    if (settings) entries.push({ ...settings, after: entries.map((_, i) => i) })
-    if (entries.length) await this.edit(entries)
+    return true
   }
 
   /**

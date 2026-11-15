@@ -9,8 +9,8 @@
 import type { EditEntry, RawRecord } from '../api'
 import { recordEdit } from '../data/merge'
 import { classify, paths } from '../data/paths'
-import { isIsoDate } from '../time/zone'
-import { templateBlockId } from '../engine/createDay'
+import { isIsoDate, weekday } from '../time/zone'
+import { sessionBlockId, templateBlockId } from '../engine/createDay'
 import { derivedId, isId } from './ids'
 import { templateBlockAlive, templateBlockOn, type PlanBlock, type Template } from './plan'
 
@@ -154,10 +154,9 @@ export function sameOwner(a: AttachmentOwner, b: AttachmentOwner): boolean {
 export type BlockPlace =
   /**
    * `templateId` – the template of the day's snapshot; `templateIds` – the templates there are (a block of another one,
-   * left in the day's file by a change of the day's type, is found by its id – T831); `idsOf` – a copy of D511's move of
-   * sessions → the template whose ids its days' blocks take (`Template.blockIdsOf`).
+   * left in the day's file by a change of the day's type, is found by its id – T831).
    */
-  | { scope: 'day'; date: string; templateId: string | null; templateIds?: readonly string[]; idsOf?: Readonly<Record<string, string>> }
+  | { scope: 'day'; date: string; templateId: string | null; templateIds?: readonly string[] }
   | { scope: 'template'; templateId: string }
   | { scope: 'series'; root: string }
 
@@ -166,12 +165,12 @@ export type BlockPlace =
  * and the template's block (`templateBlockId`), so the one whose derived id is the block's own; none – null (its
  * template's attachments are not shown rather than another template's, whose blocks may share ids – T800).
  */
-export function templateOfDayBlock(block: Pick<PlanBlock, 'id' | 'sourceId'>, date: string, candidates: ReadonlyArray<string | null | undefined>, idsOf?: Readonly<Record<string, string>>): string | null {
+export function templateOfDayBlock(block: Pick<PlanBlock, 'id' | 'sourceId'>, date: string, candidates: ReadonlyArray<string | null | undefined>): string | null {
   if (!block.sourceId) return null
   for (const t of candidates) {
     if (!t) continue
     // A block brought back by a change of the day's type is a copy of the parked one: `derivedId(date, 'back', id)`.
-    let id = templateBlockId(date, idsOf?.[t] ?? t, block.sourceId)
+    let id = templateBlockId(date, t, block.sourceId)
     for (let back = 0; back <= BACK_DEPTH; back++, id = derivedId(date, 'back', id)) if (id === block.id) return t
   }
   return null
@@ -190,11 +189,10 @@ export function ownersOf(block: Pick<PlanBlock, 'id' | 'origin' | 'sourceId'> | 
   if (!block) return []
   if (place.scope === 'template') return [{ scope: 'template', templateId: place.templateId, blockId: block.id }]
   const out: AttachmentOwner[] = [{ scope: 'day', date: place.date, blockId: block.id }]
-  const tpl = block.origin === 'template' ? templateOfDayBlock(block, place.date, [place.templateId, ...(place.templateIds ?? [])], place.idsOf) : null
+  const tpl = block.origin === 'template' ? templateOfDayBlock(block, place.date, [place.templateId, ...(place.templateIds ?? [])]) : null
   if (tpl && block.sourceId) out.push({ scope: 'template', templateId: tpl, blockId: block.sourceId })
-  // A copy of D511's move (its days' blocks with its original's ids) shows its original's too – they were the block's before the split.
-  const original = tpl ? place.idsOf?.[tpl] : undefined
-  if (original && block.sourceId) out.push({ scope: 'template', templateId: original, blockId: block.sourceId })
+  // A session of the day's template (D511): its entry's – the session's id is the entry's id in the template.
+  if (block.origin === 'session' && block.sourceId && place.templateId) out.push({ scope: 'template', templateId: place.templateId, blockId: block.sourceId })
   if (block.origin === 'series' && block.sourceId) out.push({ scope: 'series', root: block.sourceId })
   return out
 }
@@ -278,10 +276,11 @@ export function templateRemovalIds(list: readonly Attachment[], templateId: stri
   const daysOf = (t: Template | null, id: string) => starts.map((d) => (t && templateBlockOn(t, id, d) ? 1 : 0)).join('')
   const blocks = new Set<string>()
   for (const v of before?.versions ?? []) for (const b of v.blocks) if (!after || daysOf(before, b.id) !== daysOf(after, b.id)) blocks.add(b.id)
+  // A session of the template (D511): its days' block has the session's id (`sessionBlockId`, the same in every template with
+  // that session) – a day of it is the template's only on its weekdays.
+  const sessions = new Set((before?.versions ?? []).flatMap((v) => v.blocks.filter((b) => b.session).map((b) => b.id)))
+  const onItsDay = (date: string) => !before?.weekdays.length || before.weekdays.includes(weekday(date))
   if (!after) for (const a of list) if (a.owner.scope === 'template' && a.owner.templateId === templateId) blocks.add(a.owner.blockId)
-  // A copy of D511's move: its days' blocks have its original's ids.
-  const original = before?.blockIdsOf ?? after?.blockIdsOf
-  const idsOf = original ? { [templateId]: original } : undefined
   const goes = (blockId: string, date: string | null): boolean => {
     if (!after) return true
     if (!before) return false
@@ -293,7 +292,10 @@ export function templateRemovalIds(list: readonly Attachment[], templateId: stri
       const o = a.owner
       if (o.scope === 'template') return o.templateId === templateId && goes(o.blockId, null)
       if (o.scope !== 'day' || o.date < tomorrow) return false
-      for (const b of blocks) if (templateOfDayBlock({ id: o.blockId, sourceId: b }, o.date, [templateId], idsOf) === templateId) return goes(b, o.date)
+      for (const b of blocks) {
+        if (templateOfDayBlock({ id: o.blockId, sourceId: b }, o.date, [templateId]) === templateId) return goes(b, o.date)
+        if (sessions.has(b) && o.blockId === sessionBlockId(o.date, b) && onItsDay(o.date)) return goes(b, o.date)
+      }
       return false
     })
     .map((a) => a.id)

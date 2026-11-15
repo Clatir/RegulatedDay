@@ -74,6 +74,11 @@ export interface RulesSettings {
   weekTypes: DayTypeId[]
   targetSleepMin: number
   sessions: SessionDef[]
+  /**
+   * The sessions the move into templates (D511) took from the layer from that date – they name a day's block of the layer
+   * made before it (`blockName`); never a session of a day.
+   */
+  movedSessions: SessionDef[]
   categories: Record<string, CategoryRules>
   reserve: number
   backgroundCostPct: number
@@ -118,6 +123,7 @@ export const DEFAULT_SETTINGS: RulesSettings = {
   weekTypes: DEFAULT_WEEK_TYPES,
   targetSleepMin: 8 * H,
   sessions: DEFAULT_SESSIONS,
+  movedSessions: [],
   categories: Object.fromEntries(DEFAULT_CATEGORIES.map((c) => [c.id, rulesOf(c)])),
   reserve: 15,
   backgroundCostPct: 50,
@@ -285,15 +291,22 @@ export function sessionWithEnd(s: SessionDef, clockMin: number): SessionDef {
 
 export const isSessionMarket = (m: unknown): m is SessionMarket => m === 'NYSE' || m === 'CME_FX' || m === 'UK'
 
-/** A time zone the calendar knows (`Intl`). */
+const zones = new Map<string, boolean>()
+
+/** A time zone the calendar knows (`Intl`), remembered per name – every block and session read asks. */
 export function isZone(zone: unknown): zone is string {
   if (typeof zone !== 'string' || !zone) return false
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: zone })
-    return true
-  } catch {
-    return false
+  let known = zones.get(zone)
+  if (known === undefined) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: zone })
+      known = true
+    } catch {
+      known = false
+    }
+    zones.set(zone, known)
   }
+  return known
 }
 
 function sessionsFrom(v: unknown, fallback: SessionDef[]): SessionDef[] {
@@ -334,6 +347,7 @@ export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SET
     weekTypes: weekTypesFrom(r.weekTypes, fallback.weekTypes),
     targetSleepMin: int(r.targetSleepMin, RANGES.targetSleepMin, fallback.targetSleepMin),
     sessions: sessionsFrom(r.sessions, fallback.sessions),
+    movedSessions: sessionsFrom(r.movedSessions, fallback.movedSessions),
     categories,
     reserve: int(r.reserve, RANGES.reserve, fallback.reserve),
     backgroundCostPct: int(r.backgroundCostPct, RANGES.backgroundCostPct, fallback.backgroundCostPct),

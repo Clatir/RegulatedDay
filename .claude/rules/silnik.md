@@ -22,10 +22,11 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `model/ids.ts` (losowe i wyliczane identyfikatory).
 - `engine/createDay.ts` – deterministyczna migawka dnia (szablon, ustawienia daty, wykłady, sesje ze strefy NY ze
   skróceniem, przesunięcie pobudki) i `dayPlan` (migawka + plik dnia).
-- Sesje w szablonach (D511, T1340–T1353): wpis = blok szablonu kategorii sesji z `PlanBlock.session` (godzina polska „jak zwykle”);
-  `model/templateSessions.ts` – `daySettings` (sesje szablonu w `settings.sessions` migawki – jedno źródło dla `createDay`,
-  `addedSessions`, pytań, maksimum, zmiany typu), `entryDef`, `knownSessionDefs`, `templateBlockPatch`; `model/sessionMigration.ts`
-  – `moveSessions` (raz, od dnia, kopie `<id>_<dni>` z `Template.blockIdsOf`, zmiana `sesje-w-szablonach`). Dni sprzed niej – warstwa.
+- Sesje w szablonach (D511, T1340–T1359): wpis = blok szablonu kategorii sesji z `PlanBlock.session` (godzina polska „jak zwykle”);
+  `model/templateSessions.ts` – `daySettingsOf` (sesje szablonu w `settings.sessions` migawki – jedno źródło dla `createDay`,
+  `addedSessions`, pytań, maksimum, zmiany typu; siatka dnia z szablonu), `entryDef`, `knownSessionDefs`, `templateMarkets`;
+  `model/sessionMigration.ts` – `moveSessions` (raz, daty warstwy od dnia, kopie `<id>_<dni>` od tego dnia z własnymi id,
+  `dayIdMap`/`withIds` – pliki dni przepisane, `idAfter`), zmiany `sesje-w-szablonach[-<data>]` z `movedSessions`. Dni sprzed – warstwa.
 - `engine/facts.ts` – log → fakty (przebiegi bloków, prośby, „Odcinam się”, zatwierdzenia, odcinki); `viewAt(f, m)`.
 - `engine/blocks.ts` – `BlockInfo` (klasa, czeka na „Zacznij” – tylko stała sesja, wykład/zjazd, oznaczenie „po pracy”).
   Oznaczeń bloku nie ma (D467): `PlanBlock` nie ma `tag` ani `waitUntilMin` – stare pola zostają w pliku nieczytane

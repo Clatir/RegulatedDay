@@ -154,15 +154,19 @@ Każda funkcja korzysta z tych samych definicji dnia i czasu; nie ma drugiego sp
   i ostrzeżenie o nim, znacznik wariantów oraz koszt dodania i przedłużenia liczą się dalej z okna (D219).
 - Przeniesienie warstwy sesji do szablonów (D511): pierwsza wersja z sesjami w szablonach raz – na komputerze, który
   prowadzi – przenosi dawną warstwę sesji (tak / nie / pytaj dla typu dnia i dnia tygodnia oraz sesje z Ustawień) do
-  szablonów od dziś: „tak” to sesja, „pytaj” – sesja z „pytaj rano”, „nie” – bez sesji. Szablon, którego dni tygodnia
-  mają różne odpowiedzi, dzieli się na kopie: zostaje z odpowiedzią większości swoich dni (przy remisie – pierwszego z
-  nich), a każda inna odpowiedź dostaje kopię dla swoich dni („Dzień zwykły (sb, nd)”); typ i dzień tygodnia z sesjami
-  bez szablonu dostaje szablon z samymi sesjami („Zjazd zdalny”). Dni minione i ich migawki się nie zmieniają, zmiany
-  przyszłych dni zostają (kopia daje blokom te same identyfikatory co szablon, z którego powstała), a „po sesji NY” idzie
-  za sesją z szablonu. Dwa komputery naraz zapisują te same rekordy; drugi raz nic się nie przenosi. Kreator pierwszego
-  komputera zapisuje sesje do szablonów tak samo. Starsza wersja na drugim komputerze pokazuje sesje jako stałe bloki
-  ich kategorii o godzinie polskiej (bez przesunięcia, skrócenia i pytań, nigdy podwójnie), ustępuje nowej prowadzenia i
-  nie zamraża dni.
+  szablonów od dziś: „tak” to sesja, „pytaj” – sesja z „pytaj rano”, „nie” – bez sesji. Zmiana warstwy zapisana wcześniej
+  na późniejszą datę („od jutra”) przechodzi do szablonów od swojej daty. Szablon, którego dni tygodnia mają różne
+  odpowiedzi, dzieli się na kopie: zostaje z odpowiedzią większości swoich dni (przy remisie – pierwszego z nich), a każda
+  inna odpowiedź dostaje kopię dla swoich dni („Dzień zwykły (sb, nd)”) – od dziś, z tym, co oryginał miał od dziś; typ i
+  dzień tygodnia z sesjami bez szablonu dostaje szablon z samymi sesjami („Zjazd zdalny”). Twój szablon dnia tygodnia
+  albo domyślny, który zaczyna się później, od swojej daty wygrywa z kopią i z szablonem przeniesienia. Zwykły blok
+  szablonu z identyfikatorem sesji dostaje inny, żeby sesja zachowała swój. Dni minione i ich migawki się nie zmieniają;
+  przyszłe dni kopii i ich załączniki przechodzą na bloki kopii, więc Twoje zmiany tych dni zostają, także dla starszej
+  wersji; „po sesji NY” idzie za sesją z szablonu. Dwa komputery naraz zapisują te same rekordy; drugi raz nic się nie
+  przenosi. Komputer, który dostał rd.json przed szablonami (OneDrive), tworzy dzień przeniesienia dopiero z nimi –
+  czeka najwyżej 30 min. Kreator pierwszego komputera zapisuje sesje do szablonów tak samo. Starsza wersja na drugim
+  komputerze pokazuje sesje jako stałe bloki ich kategorii o godzinie polskiej (bez przesunięcia, skrócenia i pytań,
+  nigdy podwójnie), ustępuje nowej prowadzenia i nie zamraża dni.
 
 **Zmiana typu w trakcie dnia**
 

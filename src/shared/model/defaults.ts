@@ -94,8 +94,6 @@ export function templateJson(t: Template, before?: RawRecord | null): RawRecord 
     dayType: t.dayType,
     weekdays: t.weekdays,
     archived: t.archived,
-    // A copy of D511's move of sessions keeps the days' ids of its original (`Template.blockIdsOf`).
-    ...(t.blockIdsOf ? { blockIdsOf: t.blockIdsOf } : {}),
     versions
   }
 }
@@ -126,7 +124,7 @@ export function firstComputerRecords(s: FirstSetup, at: number, computer: string
   const templates = move ? movedTemplates(s.templates, move) : s.templates
   const rd: RawRecord = {
     schema: RD_SCHEMA,
-    settings: move ? [setup, move.change] : [setup],
+    settings: move ? [setup, ...move.changes] : [setup],
     general: s.general,
     categories: s.categories,
     people: s.people,

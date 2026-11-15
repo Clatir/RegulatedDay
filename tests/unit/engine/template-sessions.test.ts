@@ -19,6 +19,11 @@ import { DAY_TYPES, NY_ZONE, settingsOn, type SettingsChange } from '@shared/mod
 import { daySettings, knownSessionDefs } from '@shared/model/templateSessions'
 import { logicalMinuteOf, placeLogical } from '@shared/time/day'
 import { lm } from './dsl'
+import { blockName } from '@shared/blockName'
+import { sessionBlockId } from '@shared/engine/createDay'
+import { ownersOf, templateRemovalIds, type Attachment } from '@shared/model/attachment'
+import { rdFrom } from '@shared/model/rd'
+import { DEFAULT_SETTINGS } from '@shared/model/settings'
 
 const holidays = (m: Parameters<typeof marketDay>[0], d: string) => marketDay(m, d)
 const NO7 = ['no', 'no', 'no', 'no', 'no', 'no', 'no']
@@ -169,7 +174,7 @@ describe('sesje z szablonu typu dnia (D511) – „Sesje tradingowe”', () => {
       { name: 'NY', at: '13:00' }
     ])
     expect(shiftNotice(morning('2026-10-26'))).toBeNull()
-    expect(knownSessionDefs([migrated()], [ordinary, remote], '2026-10-19').map((d) => d.id)).toEqual(['londyn', 'ny'])
+    expect(knownSessionDefs(settingsOn([migrated()], '2026-10-19'), [ordinary, remote], '2026-10-19').map((d) => d.id)).toEqual(['londyn', 'ny'])
   })
 
   const contextOf = (date: string, templates: Template[], dayFile: DayFile | null, at: number, events: Parameters<typeof dayContextOf>[1]['events'] = []) =>
@@ -252,5 +257,59 @@ describe('sesje z szablonu typu dnia (D511) – „Sesje tradingowe”', () => {
     // A block with the field but not of a category of sessions is an ordinary block of the template.
     const odd = createDay(inputs('2026-10-21', { templates: [template('zwykly', 'zwykly', [{ ...NY, categoryId: 'analiza' }])] }))
     expect(odd.blocks.map((b) => [b.origin, b.categoryId])).toEqual([['template', 'analiza']])
+  })
+  it('zmiana typu na szablon, w którym sesja o tym samym id stoi o innej godzinie albo z inną nazwą: sesja z nowego szablonu', () => {
+    const date = '2026-10-21'
+    const at = placeLogical(date, 9 * 60)
+    const ny15 = { ...asked(NY), startMin: lm('15:00'), name: 'Sesja NY zdalna' }
+    const remote15 = template('zdalny', 'zjazd-zdalny', [asked(LONDON), ny15])
+    const ctx = contextOf(date, [ordinary, remote15], null, at)
+    const state = computeDay(ctx)
+    const settings = daySettings(settingsOn([migrated()], date, at), [ordinary, remote15], 'zjazd-zdalny', date)
+    const p = planTypeChange({ ctx, state, energyNow: null, to: 'zjazd-zdalny', settings, withAdd: true })
+    // London is the very same block – it stays; NY of the new template is another block (15:00, its name).
+    expect(p.add.map((a) => [a.session, a.block.startMin, a.block.name])).toEqual([['ny', lm('15:00'), 'Sesja NY zdalna']])
+    const r = applyTypeChange({ ctx, state, energyNow: null, to: 'zjazd-zdalny', settings }, p, { park: [], cancel: [sessionBlockId(date, 'ny')], returnRequests: [], add: p.add.map((a) => a.block.id) })
+    // Into the day's file (the old snapshot would bring the old NY back by „tak”), never cancelled by the old one's „Odwołaj”.
+    expect(r.blocks.map((b) => [b.id, b.startMin])).toEqual([[sessionBlockId(date, 'ny'), lm('15:00')]])
+    expect(r.events.some((e) => e.k === 'block.cancel')).toBe(false)
+    const plan = dayPlan(ctx.snapshot, { ...emptyDayFile(date), sessions: { ny: 'yes' }, blocks: r.blocks })
+    expect(plan.find((b) => b.sourceId === 'ny')).toMatchObject({ startMin: lm('15:00'), name: 'Sesja NY zdalna' })
+  })
+
+  it('załączniki wpisu sesji: blok sesji dnia je widzi; usunięcie wpisu zabiera załączniki jego dni, nie dni innego szablonu', () => {
+    const date = '2026-10-21'
+    const ny = createDay(inputs(date)).blocks.find((b) => b.sourceId === 'ny')!
+    expect(ownersOf(ny, { scope: 'day', date, templateId: 'zwykly', templateIds: ['zwykly', 'zdalny'] })).toEqual([
+      { scope: 'day', date, blockId: ny.id },
+      { scope: 'template', templateId: 'zwykly', blockId: 'ny' }
+    ])
+    // A Tuesday template's NY taken out from tomorrow: its Tuesday's attachment goes, a Thursday's (another template) stays.
+    const tuesday = template('wtorek', 'zwykly', [NY], { weekdays: [2] })
+    const without = { ...tuesday, versions: [...tuesday.versions, { from: '2026-10-22', budgetMin: null, maxMin: null, blocks: [] }] }
+    const tue = '2026-10-27'
+    const thu = '2026-10-29'
+    const own = (id: string, d: string) => ({ id, owner: { scope: 'day', date: d, blockId: sessionBlockId(d, 'ny') }, removedAt: null }) as unknown as Attachment
+    expect(templateRemovalIds([own('a1', tue), own('a2', thu)], 'wtorek', tuesday, without, '2026-10-22')).toEqual(['a1'])
+  })
+
+  it('sesja dopisana do warstwy po przeniesieniu (starsza wersja) w dniu „nie”: dzień z sesjami szablonu dalej ma je „domyślnie” – maksimum się nie przesuwa', () => {
+    const extra = { id: 'x', name: 'X', zone: NY_ZONE, startMin: 600, endMin: 660, markets: ['NYSE' as const] }
+    const changes = [migrated(), { id: 'starsza', from: '2026-10-20', at: null, made: 9, patch: { sessions: [extra] } }]
+    const capped = template('zwykly', 'zwykly', [LONDON, NY], {}, '2026-01-01', 15 * 60)
+    const s = daySettings(settingsOn(changes, '2026-10-21'), [capped], 'zwykly', '2026-10-21')
+    expect(s.dayTypes.zwykly.sessions[2]).toBe('yes')
+    expect(s.sessions.map((d) => d.id)).toEqual(['londyn', 'ny'])
+    const ctx = dayContextOf({ changes, templates: [capped], lectures: [], series: [] }, { date: '2026-10-21', events: [], dayFile: null, nextFile: null }, holidays, placeLogical('2026-10-21', 7 * 60))
+    const st = computeDay(ctx)
+    expect(logicalMinuteOf('2026-10-21', st.grid.start + st.boundary.max * 60_000)).toBe(15 * 60)
+  })
+
+  it('w dniu przeniesienia sesja warstwy ustawień (migawka sprzed zmiany) nazywa się dalej „Sesja NY” w każdym widoku', () => {
+    const change = { ...migrated('2026-10-21'), patch: { ...migrated().patch, movedSessions: DEFAULT_SETTINGS.sessions } }
+    const names = { rd: rdFrom(undefined), settings: settingsOn([change], '2026-10-21'), routines: [], requests: [] }
+    expect(names.settings.sessions).toEqual([])
+    const old = planBlock({ id: sessionBlockId('2026-10-21', 'ny'), categoryId: 'sesja', startMin: lm('14:00'), durationMin: 180, fixed: true, origin: 'session', sourceId: 'ny' })
+    expect(blockName(old, names)).toBe('Sesja NY')
   })
 })

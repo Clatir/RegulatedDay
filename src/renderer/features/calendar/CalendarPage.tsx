@@ -101,7 +101,7 @@ export function CalendarPage() {
     const holidays = holidayMarks(d)
     marks.push(...holidays.marks)
     // Every session known that day – of the templates (D511) and of the layer.
-    if (knownSessionDefs(rd.settings, templates, d).some((x) => {
+    if (knownSessionDefs(s, templates, d).some((x) => {
       const w = sessionWindow(x, d)
       return w != null && sessionShiftMin(x, w.start) !== 0
     }))

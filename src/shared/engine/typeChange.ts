@@ -108,15 +108,17 @@ function missingBlocks(inp: TypeChangeInput): Array<{ block: PlanBlock; session:
   const { ctx, state, to, settings } = inp
   const date = ctx.date
   const out: Array<{ block: PlanBlock; session: string | null; ask: boolean }> = []
-  const inPlan = (id: string) => ctx.plan.some((b) => b.id === id) && notBegun(state, id)
   const nowMin = state.now
   // Sessions of the new type on this weekday – its template's (D511, „pytaj rano” unchecked) and the layer's (asked ones
-  // unchecked).
+  // unchecked). One of the same id the plan has already is skipped only as it is there (not begun, the same block): the new
+  // type's template may keep it at another hour, of another category or name – then it is the new type's session.
   const layer = settings.dayTypes[to].sessions[weekday(date) - 1] ?? 'no'
   for (const def of settings.sessions) {
     if (!def.block && layer === 'no') continue
     const b = sessionBlock(def, date, ctx.snapshot.holidays)
-    if (!b || inPlan(b.id)) continue
+    if (!b) continue
+    const there = ctx.plan.find((x) => x.id === b.id)
+    if (there && (!notBegun(state, b.id) || sameSession(there, b))) continue
     if (idxOfLogical(state.grid, b.startMin! + b.durationMin) <= nowMin) continue
     out.push({ block: b, session: def.id, ask: def.ask ?? layer === 'ask' })
   }
@@ -184,14 +186,16 @@ export function applyTypeChange(inp: TypeChangeInput, plan: TypeChangePlan, choi
   const day = ctx.date
   const buffer = settings.boundaryBufferMin
   const events: Array<Record<string, unknown>> = []
-  const parked = plan.park.filter((b) => choice.park.includes(b.id)).map((b) => b.id)
-  const cancelled = plan.fixed.filter((b) => choice.cancel.includes(b.id)).map((b) => b.id)
-  for (const block of parked) events.push({ k: 'block.park', day, block, at, rule: 'type' })
-  for (const block of cancelled) events.push({ k: 'block.cancel', day, block, at, rule: 'type' })
   const added = plan.add.filter((a) => choice.add.includes(a.block.id))
   const blocks = added.filter((a) => !byAnswer(ctx, a)).map((a) => a.block)
   const sessionsYes = added.filter((a) => a.session).map((a) => a.session!)
   const requestBlocks = plan.requests.filter((b) => choice.returnRequests.includes(b.id))
+  // A session of the new type replacing the old one of the same id (D511): never cancelled by the old one's „Odwołaj”.
+  const replaced = new Set(blocks.map((b) => b.id))
+  const parked = plan.park.filter((b) => choice.park.includes(b.id)).map((b) => b.id)
+  const cancelled = plan.fixed.filter((b) => choice.cancel.includes(b.id) && !replaced.has(b.id)).map((b) => b.id)
+  for (const block of parked) events.push({ k: 'block.park', day, block, at, rule: 'type' })
+  for (const block of cancelled) events.push({ k: 'block.cancel', day, block, at, rule: 'type' })
 
   // The maximum from now: the new type's; on a switch to an earlier (or the same) one the running work block and the
   // kept fixed work blocks move it to their end plus the buffer, never beyond the maximum before the switch.
@@ -284,11 +288,20 @@ export function addTypeBlocks(inp: TypeChangeInput, plan: TypeChangePlan, add: r
 }
 
 /**
- * A session the answer „tak” brings to the day by itself: one of the day's snapshot (`dayPlan`). One of the new type's
- * template only (D511) – not in it – goes into the day's file as a block, with its answer.
+ * A session the answer „tak” brings to the day by itself: one of the day's snapshot (`dayPlan`) that makes the very same
+ * block. One of the new type's template only, or kept there otherwise (D511 – another hour, category, name), goes into the
+ * day's file as a block, with its answer – the file's block wins over the snapshot's of the same id.
  */
 function byAnswer(ctx: DayContext, a: AddCandidate): boolean {
-  return a.session != null && ctx.snapshot.settings.sessions.some((d) => d.id === a.session)
+  if (a.session == null) return false
+  const def = ctx.snapshot.settings.sessions.find((d) => d.id === a.session)
+  const own = def ? sessionBlock(def, ctx.date, ctx.snapshot.holidays) : null
+  return own != null && sameSession(own, a.block)
+}
+
+/** Two blocks of one session are the same block of the day: hour, length, category, variant, name and costs. */
+function sameSession(a: PlanBlock, b: PlanBlock): boolean {
+  return a.startMin === b.startMin && a.durationMin === b.durationMin && a.categoryId === b.categoryId && a.variantId === b.variantId && a.name === b.name && JSON.stringify(a.costs) === JSON.stringify(b.costs)
 }
 
 /** The boundary approved before the first change of type, when the day was planned with `to` (the cap of a return to it). */

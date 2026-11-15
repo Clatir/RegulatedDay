@@ -9,7 +9,7 @@
  */
 import { SESSION_CATEGORY, type CategoryRules } from './categories'
 import { templateFor, templateVersionOn, type BlockSession, type PlanBlock, type Template, type TemplateVersion } from './plan'
-import { NY_ZONE, settingsOn, type DayTypeId, type RulesSettings, type SessionDef, type SessionMarket, type SettingsChange } from './settings'
+import { NY_ZONE, type DayTypeId, type RulesSettings, type SessionDef, type SessionMarket } from './settings'
 import { PL_ZONE, offsetMin, weekday } from '../time/zone'
 
 export const LONDON_ZONE = 'Europe/London'
@@ -60,41 +60,40 @@ export function templateSessionDefs(version: TemplateVersion, categories: Readon
 const yearOf = (date: string) => Number(date.slice(0, 4))
 
 /**
- * The settings of a day (`createDay`, a change of type, a snapshot „od dziś”): the settings in force with the sessions of its
- * template laid in – the template's first, then what is left of the layer of sessions of the settings (empty since the move,
- * D511; an id of the template's wins). With no other session of the layer the choice of the layer for the type and weekday
- * says what the template does: „tak”, „pytaj” when every one is asked about – so a version before D511 reading the snapshot,
- * and the rule of the maximum („domyślnie bez sesji”), see the day as it is. A template without sessions – the settings as
- * they are.
+ * The settings of a day (`createDay`, a change of type, a snapshot „od dziś”) and the template it is made from (looked up
+ * once): the settings in force with the sessions of its template laid in – the template's first, then a session left in the
+ * layer (one a version before D511 added after the move) by the layer's own choice of the day (never twice: an id of the
+ * template's wins; „nie” – none). With the template's sessions the choice of the layer for the type and weekday says what the
+ * day has: „tak”, „pytaj” when every one is asked about – the rule of the maximum („domyślnie bez sesji”) and a version
+ * before D511 reading the snapshot see the day as it is. A template without sessions – the settings as they are.
  */
-export function daySettings(settings: RulesSettings, templates: readonly Template[], dayType: DayTypeId, date: string): RulesSettings {
+export function daySettingsOf(settings: RulesSettings, templates: readonly Template[], dayType: DayTypeId, date: string): { settings: RulesSettings; tpl: ReturnType<typeof templateFor> } {
   const tpl = templateFor(templates, dayType, weekday(date), date)
   const defs = tpl ? templateSessionDefs(tpl.version, settings.categories, yearOf(date)) : []
-  if (!defs.length) return settings
-  const ids = new Set(defs.map((d) => d.id))
-  const layer = settings.sessions.filter((d) => !ids.has(d.id))
-  const sessions = [...defs, ...layer]
-  if (layer.length) return { ...settings, sessions }
+  if (!defs.length) return { settings, tpl }
   const wd = weekday(date) - 1
-  const choice = defs.every((d) => d.ask) ? 'ask' : 'yes'
   const params = settings.dayTypes[dayType]
-  return { ...settings, sessions, dayTypes: { ...settings.dayTypes, [dayType]: { ...params, sessions: params.sessions.map((c, i) => (i === wd ? choice : c)) } } }
+  const layerChoice = params.sessions[wd] ?? 'no'
+  const ids = new Set(defs.map((d) => d.id))
+  const layer = layerChoice === 'no' ? [] : settings.sessions.filter((d) => !ids.has(d.id)).map((d) => ({ ...d, ask: layerChoice === 'ask' }))
+  const sessions = [...defs, ...layer]
+  const choice = sessions.every((d) => d.ask) ? 'ask' : 'yes'
+  return { settings: { ...settings, sessions, dayTypes: { ...settings.dayTypes, [dayType]: { ...params, sessions: params.sessions.map((c, i) => (i === wd ? choice : c)) } } }, tpl }
 }
+
+/** `daySettingsOf` without the template. */
+export const daySettings = (settings: RulesSettings, templates: readonly Template[], dayType: DayTypeId, date: string): RulesSettings => daySettingsOf(settings, templates, dayType, date).settings
 
 /**
  * Every session known on a date, of any type (the announcement of the week of the shift, the calendar's mark „sesje −1 h”):
- * the layer of the settings and the entries of every template in force then, each id once.
+ * the entries of every template in force then and the layer of the settings of that date, each id once.
  */
-export function knownSessionDefs(changes: readonly SettingsChange[], templates: readonly Template[], date: string): SessionDef[] {
-  const settings = settingsOn(changes, date)
+export function knownSessionDefs(settings: RulesSettings, templates: readonly Template[], date: string): SessionDef[] {
   const own = allTemplateSessions(templates, settings.categories, date)
   return [...own, ...settings.sessions.filter((d) => !own.some((x) => x.id === d.id))]
 }
 
-/**
- * The sessions of every template in force on a date, of any type (by the templates' ids, each id once): their markets are
- * in every day's snapshot, as the markets of the layer were – a session a change of type brings ends at its early close too.
- */
+/** The sessions of every template in force on a date, of any type (by the templates' ids, each id once). */
 export function allTemplateSessions(templates: readonly Template[], categories: Readonly<Record<string, CategoryRules>>, date: string): SessionDef[] {
   const out: SessionDef[] = []
   for (const t of [...templates].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
@@ -102,6 +101,25 @@ export function allTemplateSessions(templates: readonly Template[], categories: 
     const v = templateVersionOn(t, date)
     if (v) for (const d of templateSessionDefs(v, categories, yearOf(date))) if (!out.some((x) => x.id === d.id)) out.push(d)
   }
+  return out
+}
+
+const marketsMemo = new WeakMap<readonly Template[], SessionMarket[]>()
+
+/**
+ * The markets of the sessions of every template (any version, in the templates' order by id), once per list of templates:
+ * they are in every day's snapshot, as the markets of every session of the layer were – a session a change of type brings
+ * from another template ends at its early close too.
+ */
+export function templateMarkets(templates: readonly Template[]): SessionMarket[] {
+  let out = marketsMemo.get(templates)
+  if (out) return out
+  out = []
+  for (const t of [...templates].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    if (t.archived) continue
+    for (const v of t.versions) for (const b of v.blocks) for (const m of b.session?.markets ?? []) if (!out.includes(m)) out.push(m)
+  }
+  marketsMemo.set(templates, out)
   return out
 }
 
