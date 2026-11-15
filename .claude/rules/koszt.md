@@ -27,7 +27,8 @@ T1360–T1374.
 ## Jedna reguła kosztu
 - Kolejność (D512): własny bloku → rutyny → wariantu → kategorii (podkategorii). `model/blockCosts.ts`: `baseCosts(kategorie,
   kategoria, wariant, rezerwa, rutyna)` = `rutyna ?? costsOf(…)` – koszt bez własnego; `blockCosts(b)` = `own ?? base` (+ `base` –
-  do niego wraca „Jak kategoria”, `own`; `b.routineCosts` wymagane); zakres puli tylko z `RANGES.cost` (`COST_MIN`/`COST_MAX`,
+  do niego wraca przycisk okienka, `own`, `baseFrom` z `baseFromOf`: 'routine' – „Jak rutyna (…)”, 'variant' – „Jak wariant (…)”,
+  brak – „Jak podkategoria (…)”, `TileCost.resetLabel`, D510; `b.routineCosts` wymagane); zakres puli tylko z `RANGES.cost` (`COST_MIN`/`COST_MAX`,
   `isPoolCost`, `poolCostsFrom` – rutyna i start; `costsFrom` w `plan.ts`, `block.cost`, krok okienka, kalibracja). Silnik
   (`energy.ts` `costOf`) liczy `own ?? baseCosts(…, routine)` bez obiektów w pętlach minut. Kopie: `energyOrder.ts`, `variants.ts`
   (`blockCosts`), `calibration.ts` `costKey` (blok z kosztem rutyny – bez dowodu, jak własny) – nowe miejsce liczące koszt bloku
@@ -60,7 +61,7 @@ T1360–T1374.
   daty zmian, bez pytania o serię). „Rutyny” – ten sam `TileCost` (`routineCostShown`: bez kosztu – koszt kategorii rodzaju
   „rutyna”), zapis `costs` przez `tryUpdateRecord`.
 - `TileCost` (napis + okienko w portalu): `edit` = `costEditable(fakt, dzień miniony, minięty)` – niezaczęty nieminięty, zaczęty do
-  końca (także poza planem); skończony i dzień miniony – sam napis. Kliknięcia to zamiary (krok puli, „Jak kategoria”) po kolei –
+  końca (także poza planem); skończony i dzień miniony – sam napis. Kliknięcia to zamiary (krok puli, „Jak podkategoria”) po kolei –
   pierwszy od razu, każdy nad tym, co zapisane, gdy przyjdzie jego kolej; żaden nie przepada, wyjątek = odmowa; okienko pokazuje
   zapisane + czekające; ponowne otwarcie – liczby z kafelka i nowa pamięć zakresu (`CostAsk`). Otwarte pytanie o zakres serii
   (`useScopeAsked`, z dowolnego miejsca) chowa okienko na czas pytania. Uchwyty krawędzi (`z-30`) nad napisem (`z-20`); miejsce w

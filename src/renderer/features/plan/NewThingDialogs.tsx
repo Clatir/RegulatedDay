@@ -1,8 +1,9 @@
 /**
- * „+ Nowa…” in the lists of a block's panel (D463): „Rutyna”, „Wariant” and „Kategoria” each open a window in the middle of the
+ * „+ Nowa…” in the lists of a block's panel (D463): „Rutyna”, „Wariant” and „Podkategoria” each open a window in the middle of the
  * screen with all the fields of that thing – a routine's name and its usual and worse steps with their times (`RoutineSteps`, the
- * very editor of „Rutyny”), a variant's name and costs (as „Sposoby regeneracji”), a category's class, costs, place, colour,
- * calendar and the properties the rules read (as „Kategorie”). „Zapisz” makes it through the same path as those screens and hands it
+ * very editor of „Rutyny”), a variant's name and its cost (three numbers or „jak podkategoria”, as in „Kategorie”), a subcategory's
+ * category (that of the block's subcategory by default, D510), class, costs, place, colour, calendar and the properties the rules
+ * read (as „Kategorie”). „Zapisz” makes it through the same path as those screens and hands it
  * to the panel, which chooses it in the block; „Anuluj” and Esc leave everything as it was. A variant and a category are new
  * for every day – they are saved from today on („od dziś”), whatever the screen of the settings has chosen (nothing earlier
  * can use them; the panel of a day gone by does not offer them). They are handed to the panel once its data have them (`has`):
@@ -12,9 +13,9 @@ import { useEffect, useRef, useState } from 'react'
 import { paths } from '@shared/data/paths'
 import { newId } from '@shared/model/ids'
 import { calendarOfCategory, DEFAULT_CALENDAR_ID, setCategoryCalendarRaw } from '@shared/model/calendars'
-import type { Costs, Variant } from '@shared/model/categories'
+import type { Costs } from '@shared/model/categories'
+import { addVariant, OTHER_GROUP, VARIANT_NAME_MAX } from '@shared/model/categoryTree'
 import { ROUTINE_SCHEMA, routineFrom, type Routine, type RoutineStep, type RoutineVersion } from '@shared/model/routines'
-import { settingsOn } from '@shared/model/settings'
 import { Choice, TextField } from '../../components/fields'
 import { Dialog } from '../../components/Dialog'
 import { Field, Toggle } from '../../components/ui'
@@ -24,6 +25,7 @@ import { isSaved, saveRecord, useData } from '../../store/data'
 import { saveCalendars } from '../settings/calendarEdits'
 import { ColorSwatches, CostNumbers, createCategory, FLAGS, NEW_CATEGORY_COSTS, PLACE_OPTIONS } from '../settings/categoryFields'
 import { saveSettingsFrom } from '../settings/settingsStore'
+import { saveVariants } from '../settings/categoryTreeEdits'
 import { RoutineSteps } from '../routines/RoutineSteps'
 import { CLASS_NAMES } from './blockView'
 
@@ -117,12 +119,12 @@ export function NewRoutineDialog({ onCreated, onClose }: { onCreated: (r: Routin
 }
 
 /**
- * A new variant of a category: its name and the cost of each pool an hour (as „Sposoby regeneracji”, a variant has no other
- * fields). `has` – whether the panel's data have the variant made (it is handed on then).
+ * A new variant of a subcategory: its name and its cost – „jak podkategoria” (the subcategory's, also after it changes) or three numbers an
+ * hour of its own (D510; a variant has no other fields here). `has` – whether the panel's data have the variant made (it is handed on then).
  */
 export function NewVariantDialog({ categoryId, costs, onCreated, has, onClose }: { categoryId: string; costs: Costs; onCreated: (variantId: string) => void; has: (variantId: string) => boolean; onClose: () => void }) {
   const today = useData((s) => s.view?.today ?? '')
-  const [form, set, ref] = useForm<{ name: string; costs: Costs }>({ name: '', costs })
+  const [form, set, ref] = useForm<{ name: string; same: boolean; costs: Costs }>({ name: '', same: true, costs })
   const [busy, run] = useBusy()
   const handOn = useHandOn(onCreated, has)
   const save = () =>
@@ -131,19 +133,18 @@ export function NewVariantDialog({ categoryId, costs, onCreated, has, onClose }:
       const d = ref.current
       const name = d.name.trim()
       if (!name || !today) return
-      const at = Date.now()
-      // The list is whole in a change: the variants in force now, and the new one after them.
-      const now = settingsOn(useData.getState().rd.settings, today, at).categories[categoryId]?.variants ?? []
-      const variant: Variant = { id: newId(10), name, costs: d.costs }
-      if (!(await saveSettingsFrom({ categories: { [categoryId]: { variants: [...now, variant] } } }, { from: today, at }))) return
-      await handOn(variant.id)
+      const id = newId(10)
+      // „Od dziś”; the list is whole in a change – made in the turn of the save from the variants in force then, the new one after them.
+      if (!(await saveVariants(categoryId, (now) => addVariant(now, { id, name, ...(d.same ? {} : { costs: d.costs }) }), { from: today, at: Date.now() }))) return
+      await handOn(id)
     })
   return (
     <Dialog title="Nowy wariant" onClose={onClose} centered data-testid="new-variant" actions={<SaveButtons busy={busy} ok={form.name.trim() !== ''} onSave={() => void save()} onClose={onClose} />}>
       <Field label="Nazwa" labelWidth={70}>
-        <TextField value={form.name} onCommit={(name) => set({ name })} onEnter={() => void save()} max={80} autoFocus errorPlacement="below" aria-label="Nazwa wariantu" data-testid="new-variant-name" />
+        <TextField value={form.name} onCommit={(name) => set({ name })} onEnter={() => void save()} max={VARIANT_NAME_MAX} autoFocus errorPlacement="below" aria-label="Nazwa wariantu" data-testid="new-variant-name" />
       </Field>
-      <CostFields costs={form.costs} onChange={(c) => set((now) => ({ costs: { ...now.costs, ...c } }))} />
+      <Toggle checked={form.same} onChange={(same) => set({ same })} label="koszt jak podkategoria" data-testid="new-variant-same" />
+      {!form.same && <CostFields costs={form.costs} onChange={(c) => set((now) => ({ costs: { ...now.costs, ...c } }))} />}
     </Dialog>
   )
 }
@@ -161,6 +162,8 @@ function CostFields({ costs, onChange }: { costs: Costs; onChange: (c: Partial<C
 
 type CategoryForm = {
   name: string
+  /** Its category of the tree (D510). */
+  group: string
   cls: 'work' | 'life' | 'free'
   place: 'computer' | 'passive' | 'away'
   color: string | null
@@ -170,13 +173,15 @@ type CategoryForm = {
 }
 
 /**
- * A new category: the fields of its row in „Kategorie” (name, class, costs, place, colour, calendar, the properties). `has` –
- * whether the panel's data have the category made (it is handed on then).
+ * A new subcategory (D510): the fields of its row in „Kategorie” (name, its category – `defaultGroup`, that of the block's subcategory, unless
+ * it is gone or archived –, class, costs, place, colour, calendar, the properties). `has` – whether the panel's data have the subcategory made
+ * (it is handed on then).
  */
-export function NewCategoryDialog({ onCreated, has, onClose }: { onCreated: (categoryId: string) => void; has: (categoryId: string) => boolean; onClose: () => void }) {
+export function NewCategoryDialog({ defaultGroup, onCreated, has, onClose }: { defaultGroup: string; onCreated: (categoryId: string) => void; has: (categoryId: string) => boolean; onClose: () => void }) {
   const today = useData((s) => s.view?.today ?? '')
   const rd = useData((s) => s.rd)
-  const [form, set, ref] = useForm<CategoryForm>({ name: '', cls: 'work', place: 'computer', color: null, calendar: DEFAULT_CALENDAR_ID, costs: NEW_CATEGORY_COSTS, flags: {} })
+  const groups = rd.categoryGroups.filter((g) => !g.archived)
+  const [form, set, ref] = useForm<CategoryForm>({ name: '', group: groups.some((g) => g.id === defaultGroup) ? defaultGroup : OTHER_GROUP, cls: 'work', place: 'computer', color: null, calendar: DEFAULT_CALENDAR_ID, costs: NEW_CATEGORY_COSTS, flags: {} })
   const [busy, run] = useBusy()
   const handOn = useHandOn(onCreated, has)
   const save = () =>
@@ -187,15 +192,18 @@ export function NewCategoryDialog({ onCreated, has, onClose }: { onCreated: (cat
       if (!name || !today) return
       const id = newId(10)
       const rules = { cls: d.cls, kind: 'other', place: d.place, costs: d.costs, ...Object.fromEntries(FLAGS.map(([k]) => [k, d.flags[k] === true])) }
-      // As „Kategorie” makes one (its rules first), from today on.
-      if (!(await createCategory((patch) => saveSettingsFrom(patch, { from: today, at: Date.now() }), id, rules, { name, color: d.color }))) return
+      // As „Kategorie” makes one (its rules first, then its name and category), from today on.
+      if (!(await createCategory((patch) => saveSettingsFrom(patch, { from: today, at: Date.now() }), id, rules, { name, color: d.color, group: d.group }))) return
       if (d.calendar !== DEFAULT_CALENDAR_ID && calendarOfCategory(useData.getState().rd, id) !== d.calendar) await saveCalendars((raw) => setCategoryCalendarRaw(raw, id, d.calendar))
       await handOn(id)
     })
   return (
-    <Dialog title="Nowa kategoria" onClose={onClose} wide centered data-testid="new-category" actions={<SaveButtons busy={busy} ok={form.name.trim() !== ''} onSave={() => void save()} onClose={onClose} />}>
+    <Dialog title="Nowa podkategoria" onClose={onClose} wide centered data-testid="new-category" actions={<SaveButtons busy={busy} ok={form.name.trim() !== ''} onSave={() => void save()} onClose={onClose} />}>
       <Field label="Nazwa" labelWidth={90}>
-        <TextField value={form.name} onCommit={(name) => set({ name })} onEnter={() => void save()} max={60} autoFocus errorPlacement="below" aria-label="Nazwa kategorii" data-testid="new-category-name" />
+        <TextField value={form.name} onCommit={(name) => set({ name })} onEnter={() => void save()} max={60} autoFocus errorPlacement="below" aria-label="Nazwa podkategorii" data-testid="new-category-name" />
+      </Field>
+      <Field label="Kategoria" labelWidth={90}>
+        <Choice value={form.group} options={groups.map((g) => ({ value: g.id, label: g.name }))} onChange={(group) => set({ group })} className="w-[200px]" aria-label="Kategoria podkategorii" data-testid="new-category-group" />
       </Field>
       <Field label="Klasa" labelWidth={90}>
         <Choice value={form.cls} options={(['work', 'life', 'free'] as const).map((v) => ({ value: v, label: CLASS_NAMES[v] }))} onChange={(cls) => set({ cls })} className="w-[160px]" aria-label="Klasa" data-testid="new-category-class" />
@@ -213,7 +221,7 @@ export function NewCategoryDialog({ onCreated, has, onClose }: { onCreated: (cat
       </Field>
       {rd.calendars.length > 1 && (
         <Field label="Kalendarz" labelWidth={90}>
-          <Choice value={form.calendar} options={rd.calendars.map((c) => ({ value: c.id, label: c.name }))} onChange={(calendar) => set({ calendar })} className="w-[200px]" aria-label="Kalendarz kategorii" />
+          <Choice value={form.calendar} options={rd.calendars.map((c) => ({ value: c.id, label: c.name }))} onChange={(calendar) => set({ calendar })} className="w-[200px]" aria-label="Kalendarz podkategorii" />
         </Field>
       )}
       <div className="grid grid-cols-2 gap-1.5">

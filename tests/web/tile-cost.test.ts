@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
  * D501: the cost per hour on a block's tile of „Dziś” – the three numbers in the colours of the pools (the block's own, else its variant's,
- * else its category's), and the small window of the tile: [−] and [+] of the three pools between −5 and 5, „Jak kategoria (3·1·1)”. A
+ * else its category's), and the small window of the tile: [−] and [+] of the three pools between −5 and 5, „Jak podkategoria (3·1·1)” (with a
+ * variant's own cost „Jak wariant (…)”, D510). A
  * click on the label neither drags the block nor selects it; Esc and a press elsewhere close the window; a tile that may not be changed
  * only tells. The axis items (`dayAxis`) carry the cost and whether it may be changed.
  */
@@ -46,6 +47,17 @@ describe('koszt na kafelku osi (D501)', () => {
     expect(m.get('sleep')!.cost!.costs).toEqual({ head: -3, emotions: -1, senses: -2 })
   })
 
+  it('D510: koszt bazowy z własnego kosztu wariantu ma `baseFrom: variant` („Jak wariant”); wariant bez kosztu i brak wariantu – podkategorii', () => {
+    const more = [...plan, block({ id: 'home', cat: 'sprawy', variant: 'przy-komputerze', at: '15:00', min: 30 })]
+    const m = axis(new Scenario({ date: DATE, plan: more }), null)
+    expect(m.get('sleep')!.cost).toMatchObject({ base: { head: -3, emotions: -1, senses: -2 }, baseFrom: 'variant' })
+    expect(m.get('a')!.cost).not.toHaveProperty('baseFrom')
+    expect(m.get('home')!.cost).not.toHaveProperty('baseFrom')
+    // Begun: the same from the start's variant.
+    const s = new Scenario({ date: DATE, plan: more }).start('sleep', '13:00')
+    expect(axis(s, '13:10').get('sleep')!.cost).toMatchObject({ baseFrom: 'variant' })
+  })
+
   it('oś kreatora (bez dnia okna) nie ma kosztu; oś Szablonów (D512) – koszt z planu każdego bloku, z okienkiem', () => {
     const m = axis(new Scenario({ date: DATE, plan }), null, null)
     expect(m.get('a')!.cost).toBeUndefined()
@@ -60,7 +72,7 @@ describe('koszt na kafelku osi (D501)', () => {
     const R = { head: 4, emotions: -1, senses: 2 }
     const routinePlan = [{ ...block({ id: 'm', cat: 'rutyny', at: '07:00', min: 30 }), routine: 'poranna' }, { ...block({ id: 'o', cat: 'rutyny', at: '09:00', min: 30 }), routine: 'poranna', costs: { head: 0, emotions: 0, senses: 0 } }]
     for (const m of [axis(new Scenario({ date: DATE, plan: routinePlan, routineCosts: { poranna: R } }), null), axis(new Scenario({ date: DATE, plan: routinePlan, routineCosts: { poranna: R } }), null, null, true)]) {
-      expect(m.get('m')!.cost).toMatchObject({ costs: R, base: R, own: false })
+      expect(m.get('m')!.cost).toMatchObject({ costs: R, base: R, own: false, baseFrom: 'routine' })
       expect(m.get('o')!.cost).toMatchObject({ costs: { head: 0, emotions: 0, senses: 0 }, base: R, own: true })
     }
   })
@@ -189,15 +201,25 @@ describe('okienko kosztu bloku', () => {
     return spies
   }
 
-  it('klik w napis otwiera okienko z trzema wierszami i przyciskiem „Jak kategoria (3·1·1)” – nie otwiera panelu bloku', async () => {
+  it('klik w napis otwiera okienko z trzema wierszami i przyciskiem „Jak podkategoria (3·1·1)” – nie otwiera panelu bloku', async () => {
     const { onSelect } = await open()
     expect(q('cost-pop')).not.toBeNull()
     expect(q('cost-pop')!.textContent).toContain('głowa')
     expect(q('cost-pop')!.textContent).toContain('emocje')
     expect(q('cost-pop')!.textContent).toContain('bodźce')
     expect(q('cost-pop-head-value')!.textContent).toBe('3')
-    expect(q('cost-pop-reset')!.textContent).toBe('Jak kategoria (3·1·1)')
+    expect(q('cost-pop-reset')!.textContent).toBe('Jak podkategoria (3·1·1)')
     expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('wariant z własnym kosztem (D510): przycisk „Jak wariant (−1·−2·−3)” z kosztem wariantu', async () => {
+    await open(cost({ head: 2, emotions: 0, senses: 0 }, { own: true, base: { head: -1, emotions: -2, senses: -3 }, baseFrom: 'variant' }))
+    expect(q('cost-pop-reset')!.textContent).toBe('Jak wariant (−1·−2·−3)')
+  })
+
+  it('koszt z rutyny (D512, T1370): przycisk „Jak rutyna (4·−1·2)”, także przy wariancie z własnym kosztem', async () => {
+    await open(cost({ head: 2, emotions: 0, senses: 0 }, { own: true, base: { head: 4, emotions: -1, senses: 2 }, baseFrom: 'routine' }))
+    expect(q('cost-pop-reset')!.textContent).toBe('Jak rutyna (4·−1·2)')
   })
 
   it('[+] i [−] zapisują własny koszt całego bloku (nowe trzy liczby)', async () => {
@@ -335,7 +357,7 @@ describe('okienko kosztu bloku', () => {
     expect(q('cost-pop-emotions-value')!.textContent).toBe('−5')
   })
 
-  it('„Jak kategoria” ustawia costs: null; bez własnego kosztu nic nie zapisuje', async () => {
+  it('„Jak podkategoria” ustawia costs: null; bez własnego kosztu nic nie zapisuje', async () => {
     const { onCosts } = await open(cost({ head: 5, emotions: 0, senses: -1 }, { own: true }))
     click(q('cost-pop-reset')!)
     expect(onCosts).toHaveBeenCalledTimes(1)

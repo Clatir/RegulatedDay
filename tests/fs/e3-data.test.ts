@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { readLogText } from '@shared/data/logText'
 import { paths } from '@shared/data/paths'
+import { isPassive } from '@shared/engine/facts'
 import { placeLogical } from '@shared/time/day'
 import { createUpdateBackup, readBackupEntry } from '../../src/main/data/backup'
 import { DataFolder } from '../../src/main/data/folder'
@@ -217,6 +218,17 @@ describe('folder danych dla okna głównego', () => {
     writeFileSync(join(dataDir, paths.log(DAY, 'pcb')), `${JSON.stringify(later)}
 `)
     expect(await folder.unknownTimerEvents(placeLogical(DAY, 12 * 60))).toBe(true)
+  })
+
+  it('zmiana drzewa kategorii z okna (D510, T1313): tree.change w dziedzinie timera, bierne; ta wersja je zna, starsza – nie (instalacja bez 24 h)', async () => {
+    const { folder } = await make()
+    await folder.userEvents([{ k: 'tree.change', day: DAY }])
+    const events = readLogText(readFileSync(join(dataDir, paths.log(DAY, 'pca')), 'utf8')).events
+    const tree = events.filter((e) => e.k === 'tree.change')
+    expect(tree).toEqual([expect.objectContaining({ dom: 'timer', at: expect.any(Number) })])
+    expect(isPassive(tree[0]!)).toBe(true)
+    // This version knows it: no „unknown events of the timer” here (one before 1.25 reads it as unknown – `block.later` above).
+    expect(await folder.unknownTimerEvents(placeLogical(DAY, 12 * 60))).toBe(false)
   })
 
   it('kopia konfliktowa rd.json: różnice tylko z jednej strony się łączą, po obu stronach – pytanie; odpowiedź zamyka kopię', async () => {

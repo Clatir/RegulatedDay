@@ -16,7 +16,7 @@ export interface SearchRecord {
   id: string
   /** A block's day. */
   date?: string
-  /** A template block's template. */
+  /** A template block's template; a variant's subcategory (D510). */
   parent?: string
   title: string
   /** A note, the steps of a routine …: searched, shown as a fragment with the phrase marked. */

@@ -164,6 +164,12 @@ export type TimerEvent =
    * an unknown event of the timer, counts the block by its start and installs the new version without the 24 h.
    */
   | (EventBase & { k: 'block.cost'; block: string; at: number; costs: Costs | null })
+  /**
+   * The tree of categories changed in the window (D510, T1313): a group added, renamed, removed, a subcategory moved, a variant changed.
+   * Nothing reads it – passive (`PASSIVE`); the timer's domain on purpose, as `block.cost` (T1300): an older version, which knows no tree,
+   * keeps it as an unknown event of the timer and installs the new version without the 24 h (`unknownTimerEvents`).
+   */
+  | (EventBase & { k: 'tree.change'; at: number })
   /** `place` (ms, D478): where the paused block stands – the place of the block whose start swapped with it. */
   | (EventBase & { k: 'block.pause'; block: string; at: number; place?: number })
   | (EventBase & { k: 'block.resume'; block: string; at: number; confirmUntil: number | null })
@@ -393,7 +399,8 @@ const NEEDS: Record<string, Record<string, (v: unknown) => boolean>> = {
   'energy.reserve': { at: isNum, pool: isPool },
   'energy.module': { at: isNum, on: (v) => typeof v === 'boolean', was: (v) => v === undefined || typeof v === 'boolean' },
   'energy.cost': { block: isStr, at: isNum, costs: (v) => v === null || isCosts(v) },
-  'block.cost': { block: isStr, at: isNum, costs: (v) => v === null || isCosts(v) }
+  'block.cost': { block: isStr, at: isNum, costs: (v) => v === null || isCosts(v) },
+  'tree.change': { at: isNum }
 }
 
 export const KNOWN_KINDS: ReadonlySet<string> = new Set(Object.keys(NEEDS))

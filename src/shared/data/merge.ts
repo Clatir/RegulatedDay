@@ -216,6 +216,13 @@ export function setAt(root: unknown, path: Path, value: unknown, listKey?: strin
     // Every other list (blocks of a day, of a template, of a series) is laid as it always was.
     const listed = listKey !== undefined && ITEM_LIST_KEYS.has(listKey)
     if (listed && i < 0 && value === undefined) return [...arr]
+    // Its id taken away: an item left without its id would end the merge by items of the whole list (T970). With nothing else in it the
+    // item goes; with other fields (written elsewhere) it stays as it is – they are never lost with the id (T1390). „Cofnij” of the
+    // item's first edits takes it off as a whole item instead, after its other fields (`inverseEdit`).
+    if (listed && i >= 0 && value === undefined && rest.length === 1 && rest[0] === 'id') {
+      const item = arr[i] as Record<string, unknown>
+      return Object.keys(item).every((k) => k === 'id') ? arr.filter((_, j) => j !== i) : [...arr]
+    }
     const next = setAt(i >= 0 ? arr[i] : listed ? { id } : undefined, rest, value)
     const out = [...arr]
     if (next === undefined) {
@@ -277,12 +284,12 @@ function entryEdits(keys: ReadonlySet<string> | undefined, before: Record<string
 export const LEAF_MAPS: Partial<Record<FileKind, ReadonlySet<string>>> = { day: new Set(['stepsDone']), request: new Set(['stepsDone']) }
 
 /**
- * Lists of records with ids written item by item and field by field (T944, D419): rd.json's `calendars`. The first item of a
+ * Lists of records with ids written item by item and field by field (T944, D419): rd.json's `calendars` and `categoryGroups` (D510, T1310). The first item of a
  * list the file does not have yet (an old folder), a new item, and the first change of an item the file does not have
  * (the default calendar) are edits of their fields – the `id` first, so the item exists for the ones after it – never one edit of
  * the whole list or item. Two computers adding the first calendar, or changing two fields of one, so meet in no question.
  */
-export const ITEM_LISTS: Partial<Record<FileKind, ReadonlySet<string>>> = { settings: new Set(['calendars']) }
+export const ITEM_LISTS: Partial<Record<FileKind, ReadonlySet<string>>> = { settings: new Set(['calendars', 'categoryGroups']) }
 /** The keys of those lists (`setAt` knows only the key of the array it is in). */
 const ITEM_LIST_KEYS: ReadonlySet<string> = new Set(Object.values(ITEM_LISTS).flatMap((keys) => [...keys]))
 /**
@@ -321,10 +328,17 @@ function leafEdits(maps: ReadonlySet<string> | undefined, path: Path, base: unkn
  * The edit that takes an edit of the window or the bar back (T502, D400): each field to its value before, with its value
  * after as the base – a field changed since is a question, not overwritten; a file the edit created goes only while it is as
  * it made it (`made`; null – not taken). `now` – the file as it is.
+ * An item of `ITEM_LISTS` the edit made (its `id` from none – the first edits of a default group or a new calendar, T1316) is taken off
+ * as the whole item after its other fields, with the base `{ id }`: it goes only while nothing but its id is left – a field written in
+ * it since (another computer renamed it) is a question about the item, never lost with it (T1390).
  */
 export function inverseEdit(e: EditEntry, now: Record<string, unknown> | null, made: Record<string, unknown> | null): EditEntry | null {
   if (e.create) return now && sameContentAs(now, made) ? { rel: e.rel, remove: true, edits: [], base: made } : null
-  return { rel: e.rel, edits: e.edits.map((x) => ({ path: x.path, base: x.value, value: x.base })) }
+  const lists = ITEM_LISTS[classify(e.rel)?.kind ?? 'settings']
+  const madeItem = (x: EditEntry['edits'][number]) => x.path.length === 3 && lists?.has(x.path[0]!) === true && x.path[1]!.startsWith('#') && x.path[2] === 'id' && x.base === undefined && x.value !== undefined
+  const fields = e.edits.filter((x) => !madeItem(x)).map((x) => ({ path: x.path, base: x.value, value: x.base }))
+  const items = e.edits.filter(madeItem).map((x) => ({ path: x.path.slice(0, 2), base: { id: x.value }, value: undefined }))
+  return { rel: e.rel, edits: [...fields, ...items] }
 }
 
 /**

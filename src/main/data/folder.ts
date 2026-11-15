@@ -99,7 +99,9 @@ const USER_EVENTS: Record<string, Domain> = {
   'plan.freed': 'timer',
   // The cost of a begun block from a minute on (D501, T1300): the timer's on purpose – an older version, which counts the block by
   // its start, installs the new version without the 24 h (`unknownTimerEvents`); passive for this version's day engine (`PASSIVE`).
-  'block.cost': 'timer'
+  'block.cost': 'timer',
+  // The tree of categories changed (D510, T1313): passive; the timer's on purpose – an older version, which shows no tree, installs at once.
+  'tree.change': 'timer'
 }
 /** The journal keeps own events of this many days back (spec: until the day's freeze plus 7 days – freezing is E6). */
 export const JOURNAL_KEEP_DAYS = 14

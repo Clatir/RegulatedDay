@@ -6,6 +6,7 @@
  * day count neither way).
  */
 import { create } from 'zustand'
+import type { RawRecord } from '@shared/api'
 import { newId } from '@shared/model/ids'
 import { DEFAULT_GENERAL, type ModuleId } from '@shared/model/rd'
 import type { DayTypeId } from '@shared/model/settings'
@@ -50,8 +51,14 @@ export async function saveSettings(patch: Record<string, unknown>): Promise<bool
   return saveSettingsFrom(patch, changeFrom(today))
 }
 
+/**
+ * A change's patch: made before, or made in the turn of the save from rd.json as it is then (T517 – a list written whole, as a subcategory's
+ * variants, made from the record of that moment; null – nothing to change, nothing saved).
+ */
+export type SettingsPatch = Record<string, unknown> | ((raw: RawRecord) => Record<string, unknown> | null)
+
 /** As `saveSettings`, from a date (and instant) chosen before – e.g. the „Cofnij” of a change made from that date. */
-export async function saveSettingsFrom(patch: Record<string, unknown>, f: { from: string; at: number | null }): Promise<boolean> {
+export async function saveSettingsFrom(patch: SettingsPatch, f: { from: string; at: number | null }): Promise<boolean> {
   const today = useData.getState().view?.today
   if (!today) return false
   const { from, at } = f
@@ -83,13 +90,17 @@ async function todayTypeNow(today: string): Promise<DayTypeId | null> {
  * A change of the dated shared settings from `from` (with `at` – „od dziś”, from that instant): true once saved. „Od
  * dziś” also writes today's snapshot – only after the change itself was saved.
  */
-export async function saveSettingsChange(patch: Record<string, unknown>, todayType: DayTypeId, today: string, from: string, at: number | null): Promise<boolean> {
+export async function saveSettingsChange(patch: SettingsPatch, todayType: DayTypeId, today: string, from: string, at: number | null): Promise<boolean> {
   const made = Date.now()
+  let changed = false
   const out = await trySaveRd((raw) => {
+    const p = typeof patch === 'function' ? patch(raw) : patch
+    if (!p) return raw
+    changed = true
     const list = Array.isArray(raw.settings) ? raw.settings : []
-    return { ...raw, settings: [...list, { id: newId(), from, at, made, patch }] }
+    return { ...raw, settings: [...list, { id: newId(), from, at, made, patch: p }] }
   })
-  if (!isSaved(out)) return false
+  if (!changed || !isSaved(out)) return false
   // „Od dziś”: the rest of today counts by the new settings (the main process fills them in at the instant).
   return at == null || (await logEvents([{ k: 'day.snapshot', day: today, at, dayType: todayType, reason: 'today' }]))
 }

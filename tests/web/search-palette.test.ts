@@ -197,6 +197,23 @@ describe('Enter na wyniku (T653)', () => {
     expect(ui().day).toBeNull()
   })
 
+  it('drzewo kategorii (D510): rekordy kategorii, podkategorii i wariantów; sekcji „Sposoby regeneracji” nie ma', () => {
+    const rs = searchRecords(input()).filter((r) => r.kind === 'category')
+    const by = (id: string, parent?: string) => rs.find((r) => r.id === id && r.parent === parent)!
+    expect(by('group:g-wolne')).toMatchObject({ title: 'Wolne', hint: 'kategoria w ustawieniach' })
+    expect(by('regeneracja')).toMatchObject({ title: 'Regeneracja', hint: 'podkategoria · Wolne' })
+    expect(by('sluchanie', 'nauka')).toMatchObject({ title: 'Nauka — słuchanie', hint: 'wariant · Nauka (NotebookLM)' })
+    expect(searchRecords(input()).some((r) => r.id === 'settings-regen-ways')).toBe(false)
+    // A variant of a subcategory without its name in rd.json: never its id (T1393).
+    const rules = { cls: 'work', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1 }, variants: [{ id: 'v9', name: 'Wariant bez nazwy' }] }
+    const orphan = { ...rd, settings: [{ id: 's9', from: '2026-01-01', at: null, made: 1, patch: { categories: { c9: rules } } }] }
+    const v9 = searchRecords({ ...input(), rd: orphan }).find((r) => r.id === 'v9' && r.parent === 'c9')!
+    expect(v9.hint).toBe('wariant · kategoria usunięta')
+    // Found by name like everything else: a way of regeneration is a variant of „Regeneracja”.
+    const regenVariant = rs.find((r) => r.parent === 'regeneracja')!
+    expect(search(rs, regenVariant.title, TODAY).flatMap((g) => g.hits).map((h) => h.record.id)).toContain(regenVariant.id)
+  })
+
   it('szablon, blok szablonu, prośba, rutyna, kategoria i ustawienie – swój ekran i wybór', () => {
     const go = (r: SearchRecord) => {
       choose(r, TODAY)
@@ -207,6 +224,9 @@ describe('Enter na wyniku (T653)', () => {
     expect(go(rec('request', 'r1'))).toEqual(['requests', { kind: 'request', id: 'r1' }])
     expect(go(rec('routine', 'rano'))).toEqual(['routines', { kind: 'routine', id: 'rano' }])
     expect(go(rec('category', 'analiza'))).toEqual(['settings', { kind: 'category', id: 'analiza' }])
+    // The tree of „Kategorie” (D510): a category (`group:` id) and a variant (its subcategory is the parent) lead to the same screen.
+    expect(go(rec('category', 'group:g-wolne'))).toEqual(['settings', { kind: 'category', id: 'group:g-wolne' }])
+    expect(go(rec('category', 'sluchanie', { parent: 'nauka' }))).toEqual(['settings', { kind: 'category', id: 'sluchanie', parent: 'nauka' }])
     expect(go(rec('setting', 'settings-data'))).toEqual(['settings', { kind: 'setting', id: 'settings-data' }])
   })
 
