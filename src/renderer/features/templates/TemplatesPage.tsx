@@ -19,17 +19,15 @@ import { durationLabel, logicalClock, plDate, WEEKDAY_SHORT } from '@shared/form
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { templateJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
-import { planBlock, templateFrom, templateVersionOn, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
+import { planBlock, templateFrom, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { currentSeries } from '@shared/model/series'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn } from '@shared/model/settings'
 import { SERIES_MARK, seriesText } from '@shared/seriesText'
-import { placeLogical } from '@shared/time/day'
-import { addDays, weekday } from '@shared/time/zone'
+import { addDays } from '@shared/time/zone'
 import { UNDO_LINE_MS } from '@shared/widget'
 import { DateField, TextField } from '../../components/fields'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
 import { isSaved, saveRecord, storedAnswer, tryUpdateRecord, updateRecord, useData, type SaveAnswer, type SendState } from '../../store/data'
-import { countDay } from '../../store/day'
 import { useNewShortcut } from '../../lib/escape'
 import { removeTarget, useDeleteResolver, useDeleteSelected } from '../../lib/deleteKey'
 import { takeFoundPick, useUi } from '../../store/ui'
@@ -50,7 +48,8 @@ import { stepsAnswer } from '../steps/stepsUi'
 import { changeTemplateSteps } from '../../store/steps'
 import { SettingNumber } from '../settings/SettingNumber'
 import { templateBlockPatch } from '@shared/model/templateSessions'
-import { axisSources, axisVersion, previewChanges } from './sessionChoices'
+import { axisSources } from './sessionChoices'
+import { sampleDay, templateDayOf, versionFrom } from './templateDay'
 import { SessionFields } from './SessionFields'
 import { templateAdd, templateCopy, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
 import { copyTemplateBlock } from '../plan/blockCopy'
@@ -200,10 +199,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   }, [openBlock])
   const rel = paths.record('template', template.id)
   // The same objects while nothing they come from changes: the day, its axis and the memo of the drag's preview stay.
-  const version = useMemo(() => {
-    const inForce = templateVersionOn(template, from)
-    return template.versions.find((v) => v.from === from) ?? (inForce ? { ...inForce, from } : { from, blocks: [], budgetMin: null, maxMin: null })
-  }, [template, from])
+  const version = useMemo(() => versionFrom(template, from), [template, from])
   const settings = useMemo(() => settingsOn(rd.settings, from), [rd.settings, from])
   const names: Names = useMemo(() => ({ rd, settings, routines, requests }), [rd, settings, routines, requests])
 
@@ -254,19 +250,10 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   }
 
   // The day this version would make: the first date from the chosen one with its weekday, counted by the engine.
-  const sample = useMemo(() => {
-    for (let i = 0; i < 7; i++) {
-      const d = addDays(from, i)
-      if (!template.weekdays.length || template.weekdays.includes(weekday(d))) return d
-    }
-    return from
-  }, [from, template.weekdays])
-  const model = useMemo(() => {
-    // D515, T1455: every session of the version on the axis, whole, whatever the sample's weekday and early closes; the shift
-    // of the clocks moves it and the wake (D372) – `axisVersion`. The template as written (T1450 – `previewChanges`).
-    const t: Template = { ...template, versions: [{ ...axisVersion(version, sample), from: '2000-01-01' }] }
-    return countDay(sample, { date: sample, dayFile: { schema: 1, date: sample, dayType: template.dayType }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: previewChanges(rd.settings), templates: [t], lectures, series: [], routines }, placeLogical(sample, 4 * 60), false)
-  }, [template, version, sample, rd.settings, lectures, routines])
+  const sample = useMemo(() => sampleDay(template, from), [from, template])
+  // D515, T1455: every session of the version on the axis, whole, whatever the sample's weekday and early closes; the shift of the
+  // clocks moves it and the wake (D372). The template as written (T1450) – one rule with a change counted in its turn (`templateDay.ts`).
+  const model = useMemo(() => templateDayOf(template, version, sample, { changes: rd.settings, lectures, routines }), [template, version, sample, rd.settings, lectures, routines])
   // D512: the cost on every tile (`planCosts`), its window only on the template's own blocks.
   const axis = useMemo(() => dayAxis(model, names, null, null, true), [model, names])
   // Template blocks have the day's derived ids: the block of the version is found by its source (a session by its entry, D511).

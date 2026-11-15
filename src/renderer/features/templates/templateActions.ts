@@ -55,7 +55,7 @@ async function makesDays(templateId: string, dates: readonly string[]): Promise<
  * template the move of sessions made (D511, T1412): rd.json says it is gone (`movedLayer.gone`), with the template's edit
  * too – its type's days are never made from the layer as „not come yet”.
  */
-async function withAttachments(edit: EditEntry, templateId: string, before: Template | null, after: Template | null): Promise<{ entries: EditEntry[]; undo: AttachmentUndo | null }> {
+export async function withAttachments(edit: EditEntry, templateId: string, before: Template | null, after: Template | null): Promise<{ entries: EditEntry[]; undo: AttachmentUndo | null }> {
   const tomorrow = tomorrowOf()
   const makes = await makesDays(templateId, sessionAttachmentDates(useData.getState().attachments, before, tomorrow))
   const { view, attachments } = useData.getState()

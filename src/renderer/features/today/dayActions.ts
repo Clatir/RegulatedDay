@@ -6,7 +6,7 @@
  * version (`seen`) only stands in for a file that cannot be read now.
  */
 import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult } from '@shared/api'
-import { blockJson, dayRaw, putBlock, setAsked, setCancelled, setDayField, takeBlock } from '@shared/data/dayEdits'
+import { blockJson, blockNow, dayRaw, patchedBlock, putBlock, setAsked, setCancelled, setDayField, takeBlock } from '@shared/data/dayEdits'
 import { editStands, inverseEdit } from '@shared/data/merge'
 import { pushedStarts, type ParallelChange } from './dayPush'
 import { pushedText } from '@shared/engine/pushApart'
@@ -60,15 +60,8 @@ export function newBlocksToast(added: ReadonlyArray<{ date: string; id: string }
   undoToast(n === 1 ? 'Dodano blok' : `Dodano ${n} ${plural(n, 'blok', 'bloki', 'bloków')}`, () => void Promise.all(added.map((a) => saveDay(a.date, null, (raw) => takeBlock(raw, a.id)))))
 }
 
-/** A block as the day's file holds it now (a change of it made before), or as the window knows it. */
-export function blockNow(raw: RawRecord, date: string, b: PlanBlock): PlanBlock {
-  return dayFileFrom(raw, date).blocks.find((x) => x.id === b.id) ?? b
-}
-
-/** The day's file with fields of a block changed over the block as the file holds it then (a change made a moment before stays, A6-01). */
-export function patchedBlock(raw: RawRecord, date: string, b: PlanBlock, patch: Partial<PlanBlock>): RawRecord {
-  return putBlock(raw, { ...blockNow(raw, date, b), ...patch })
-}
+// The block as the day's file holds it, and its fields changed over it – pure, in `dayEdits` (the group's changes use them too, D528).
+export { blockNow, patchedBlock }
 
 /**
  * Fields of a block changed (the panel of a block): over the block as the file holds it in its turn, so a change made a

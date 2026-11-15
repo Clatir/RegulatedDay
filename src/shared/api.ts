@@ -13,6 +13,7 @@ import type { GoalsPatch } from './model/goals'
 import type { RitualValue, RitualView } from './engine/ritual'
 import type { CasesRitual } from './engine/cases'
 import type { ResultCode } from './engine/timer'
+import type { GroupSkip } from './engine/groupEdit'
 import type { CloseHow } from './model/events'
 import type { DayTypeId } from './model/settings'
 import type { ZjazdDay, ZjazdWarning } from './import/zjazdy'
@@ -78,6 +79,8 @@ export const CH = {
   ritualAnswer: 'rd:ritualAnswer',
   closeDay: 'rd:closeDay',
   undoClose: 'rd:undoClose',
+  groupLog: 'rd:groupLog',
+  undoGroupLog: 'rd:undoGroupLog',
   unclosedDays: 'rd:unclosedDays',
   computerList: 'rd:computerList',
   exportCsv: 'rd:exportCsv',
@@ -535,6 +538,25 @@ export interface CloseResult extends TimerResult {
   written: string[]
 }
 
+/**
+ * „Odwołaj” / „Zaparkuj” of a group of blocks (D528): `written` – the ids of its events (for „Cofnij”), `taken` – the blocks it took,
+ * `skipped` – the blocks left out and why (D529, `SkipWhy`); nothing when refused.
+ */
+export interface GroupLogResult extends TimerResult {
+  written: string[]
+  taken: string[]
+  skipped: GroupSkip[]
+}
+
+/**
+ * „Cofnij” of a group's „Odwołaj” / „Zaparkuj” (D529): `restored` – the blocks whose events it undid now, `kept` – the blocks begun since,
+ * left as they are (D313).
+ */
+export interface GroupLogUndone extends TimerResult {
+  restored: string[]
+  kept: string[]
+}
+
 export interface FolderProbe {
   path: string
   exists: boolean
@@ -818,6 +840,10 @@ export interface RdApi {
   closeDay(day: string, how: CloseHow): Promise<CloseResult>
   /** „Cofnij” of a close (D468): the events of that close (`ids` from `closeDay`) undone – the day is not closed again. */
   undoClose(day: string, ids: string[]): Promise<TimerResult>
+  /** „Odwołaj” / „Zaparkuj” of a group of today's blocks (D528): judged on the day as the bar shows it, as each block's alone. */
+  groupLog(day: string, kind: 'cancel' | 'park', ids: string[]): Promise<GroupLogResult>
+  /** „Cofnij” of `groupLog` (D529): its events (`ids` from `groupLog`) undone – a block begun since stays. */
+  undoGroupLog(day: string, ids: string[]): Promise<GroupLogUndone>
   /** The days the morning shows to close (D318, spec „Rano aplikacja pokazuje wszystkie niezamknięte dni naraz”). */
   unclosedDays(): Promise<UnclosedDay[]>
   /** The computers of the folder for the settings (A3-13, „Zapomnij komputer”): this one first. */
