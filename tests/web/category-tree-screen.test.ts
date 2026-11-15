@@ -18,7 +18,8 @@ import { resetSettingsFrom } from '@renderer/features/settings/settingsStore'
 import { useData } from '@renderer/store/data'
 import { closeToast, openPick, useUi } from '@renderer/store/ui'
 
-const fake = vi.hoisted(() => ({ file: { schema: 1 } as Record<string, unknown> }))
+// `hold` – a save in progress: the queue answers only once it is released.
+const fake = vi.hoisted(() => ({ file: { schema: 1 } as Record<string, unknown>, hold: null as Promise<void> | null }))
 vi.mock('@renderer/store/data', async (orig) => {
   const real = await orig<typeof import('@renderer/store/data')>()
   const { deepEqual, setAt, valueAt } = await import('@shared/data/merge')
@@ -26,6 +27,7 @@ vi.mock('@renderer/store/data', async (orig) => {
   const trySaveWith = async (make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>) => {
     const list = (await make()).filter((e): e is EditEntry => !!e)
     if (!list.length) return []
+    if (fake.hold) await fake.hold
     const statuses = list.map((e) => {
       let ok = true
       let value: unknown = fake.file
@@ -55,24 +57,21 @@ const TODAY = '2026-11-14'
 const TOMORROW = '2026-11-15'
 let root: Root | null = null
 let host: HTMLElement | null = null
-const logged: unknown[][] = []
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 })
 const rdNow = () => useData.getState().rd
 beforeEach(() => {
   fake.file = { schema: 1 }
-  logged.length = 0
+  fake.hold = null
   resetSettingsFrom()
   useData.setState({ rd: rdFrom(fake.file), view: { today: TODAY } as never })
-  ;(window as unknown as { rd: unknown }).rd = { logEvents: vi.fn(async (events: unknown[]) => void logged.push(events)) }
   for (const t of useUi.getState().toasts) closeToast(t.id)
 })
 afterEach(() => {
   act(() => root?.unmount())
   host?.remove()
   root = host = null
-  delete (window as unknown as { rd?: unknown }).rd
 })
 
 async function show() {
@@ -83,7 +82,7 @@ async function show() {
 }
 const all = (id: string, within: ParentNode = document) => [...within.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`)]
 const q = <T extends HTMLElement = HTMLElement>(id: string, within: ParentNode = document) => (all(id, within)[0] as T | undefined) ?? null
-const group = (id: string) => document.querySelector<HTMLElement>(`[data-testid="group-row"][data-group="${id}"]`)!
+const group = (id: string) => document.querySelector<HTMLElement>(`[data-testid="group-row"][data-group="${CSS.escape(id)}"]`)!
 const category = (id: string) => document.querySelector<HTMLElement>(`[data-testid="category-row"][data-category="${id}"]`)!
 const click = (el: Element | null) => act(async () => (el as HTMLElement).click())
 const typeInto = (input: HTMLInputElement, value: string) =>
@@ -105,7 +104,6 @@ const choose = (el: HTMLSelectElement, value: string) =>
     el.dispatchEvent(new Event('change', { bubbles: true }))
   })
 const settingsFrom = (d: string) => settingsOn(rdNow().settings, d)
-const tree = { k: 'tree.change', day: TODAY }
 const lastToast = () => useUi.getState().toasts.at(-1)!
 
 describe('drzewo w Ustawieniach', () => {
@@ -118,14 +116,13 @@ describe('drzewo w Ustawieniach', () => {
     expect(q('group-remove', group('g-wolne'))).not.toBeNull()
   })
 
-  it('„+ Kategoria”: nowa kategoria stoi przed „Inne”, wpis w rd.json i tree.change; nazwę można zmienić', async () => {
+  it('„+ Kategoria”: nowa kategoria stoi przed „Inne”, wpis w rd.json; nazwę można zmienić', async () => {
     await show()
     typeInto(q<HTMLInputElement>('group-new')!, 'Trading')
     await click(q('group-add'))
     const added = rdNow().categoryGroups.find((g) => g.name === 'Trading')!
     expect(added).toBeDefined()
     expect(all('group-row').map((g) => g.dataset.group)).toEqual(['g-praca', 'g-nauka', 'g-dom', 'g-wolne', added.id, 'g-inne'])
-    expect(logged).toEqual([[tree]])
     expect(q<HTMLInputElement>('group-new')!.value).toBe('')
     commitText(q<HTMLInputElement>('group-name', group(added.id))!, 'Trading 2')
     await act(async () => undefined)
@@ -154,7 +151,21 @@ describe('drzewo w Ustawieniach', () => {
     await act(async () => undefined)
     expect(groupOfCategory(rdNow(), 'analiza')).toBe('g-wolne')
     expect(all('category-row', group('g-wolne')).map((r) => r.dataset.category)).toContain('analiza')
-    expect(logged).toEqual([[tree]])
+  })
+
+  it('podkategoria zarchiwizowanej kategorii stoi w „Inne” i jej lista „Kategoria” mówi „Inne”; z archiwum – swoją kategorię (T1393)', async () => {
+    fake.file = { schema: 1, categoryGroups: [{ id: 'g-wolne', archived: true }] }
+    useData.setState({ rd: rdFrom(fake.file) })
+    await show()
+    await click(q('category-more', category('projekty')))
+    expect(category('projekty').closest('[data-testid="group-row"]')!.getAttribute('data-group')).toBe(OTHER_GROUP)
+    const select = () => q<HTMLSelectElement>('category-group', category('projekty'))!
+    expect(select().value).toBe(OTHER_GROUP)
+    expect(select().selectedOptions[0]!.textContent).toBe('Inne')
+    await click(q('categories-archive-toggle'))
+    expect(category('projekty').closest('[data-testid="group-row"]')!.getAttribute('data-group')).toBe('g-wolne')
+    expect(select().value).toBe('g-wolne')
+    expect(select().selectedOptions[0]!.textContent).toBe('Wolne')
   })
 })
 
@@ -211,7 +222,6 @@ describe('usunięcie kategorii', () => {
     await click(q('group-remove-cancel'))
     expect(q('group-remove-dialog')).toBeNull()
     expect(rdNow().categoryGroups.find((g) => g.id === 'g-wolne')!.archived).toBe(false)
-    expect(logged).toEqual([])
     await click(q('group-remove', group('g-wolne')))
     await click(q('group-remove-confirm'))
     const undo = lastToast().action!.run
@@ -221,6 +231,48 @@ describe('usunięcie kategorii', () => {
     await act(async () => void undo())
     expect(groupOfCategory(rdNow(), 'projekty')).toBe('g-praca')
     expect(useUi.getState().toasts.at(-1)!.text).toContain('zmieniły się')
+  })
+
+  it('liczba podkategorii z tego samego zbioru, który usunięcie przenosi: pyta o podkategorię spoza widoku, komunikat liczy w chwili zapisu (T1392)', async () => {
+    // „Ogród” is in „Trading” (rd.json) but has no rules on the screen's date: the removal moves it, so it asks.
+    fake.file = { schema: 1, categoryGroups: [{ id: 'trd', name: 'Trading', order: 5 }], categories: { c1: { name: 'Ogród', group: 'trd' } } }
+    useData.setState({ rd: rdFrom(fake.file) })
+    await show()
+    expect(all('category-row', group('trd'))).toEqual([])
+    await click(q('group-remove', group('trd')))
+    expect(q('group-remove-dialog')!.textContent).toContain('1 podkategorię')
+    await click(q('group-remove-confirm'))
+    expect(groupOfCategory(rdNow(), 'c1')).toBe(OTHER_GROUP)
+    expect(lastToast().text).toContain('przeniesiono 1 podkategorię')
+    // Another computer put one more in „Wolne” after the window asked: the toast says what the removal took then.
+    fake.file = { schema: 1 }
+    act(() => useData.setState({ rd: rdFrom(fake.file) }))
+    await click(q('group-remove', group('g-wolne')))
+    expect(q('group-remove-dialog')!.textContent).toContain('2 podkategorie')
+    fake.file = { schema: 1, categories: { analiza: { name: 'Analiza', group: 'g-wolne' } } }
+    await click(q('group-remove-confirm'))
+    expect(groupOfCategory(rdNow(), 'analiza')).toBe(OTHER_GROUP)
+    expect(lastToast().text).toContain('przeniesiono 3 podkategorie')
+  })
+
+  it('potwierdzenie w czasie innego zapisu: okno zostaje z komunikatem, usunięcie nie przepada; po zapisie idzie (T1392)', async () => {
+    await show()
+    await click(q('group-remove', group('g-wolne')))
+    // A new category is being saved meanwhile (the section saves one thing at a time).
+    let release = () => {}
+    fake.hold = new Promise<void>((r) => (release = r))
+    typeInto(q<HTMLInputElement>('group-new')!, 'Trading')
+    await click(q('group-add'))
+    await click(q('group-remove-confirm'))
+    expect(q('group-remove-dialog')).not.toBeNull()
+    expect(lastToast().text).toContain('Trwa zapis')
+    expect(groupOfCategory(rdNow(), 'projekty')).toBe('g-wolne')
+    fake.hold = null
+    await act(async () => release())
+    await click(q('group-remove-confirm'))
+    expect(q('group-remove-dialog')).toBeNull()
+    expect(groupOfCategory(rdNow(), 'projekty')).toBe(OTHER_GROUP)
+    expect(rdNow().categoryGroups.some((g) => g.name === 'Trading')).toBe(true)
   })
 
   it('kategoria bez podkategorii znika bez pytania (z „Cofnij”)', async () => {
@@ -243,6 +295,9 @@ describe('usunięcie kategorii', () => {
     await click(q('group-remove', group(id)))
     await click(q('categories-archive-toggle'))
     expect(q('group-restore', group(id))).not.toBeNull()
+    // An archived category takes no new subcategory (T1393); a live one does.
+    expect(q('subcategory-new', group(id))).toBeNull()
+    expect(q('subcategory-new', group('g-dom'))).not.toBeNull()
     await click(q('group-restore', group(id)))
     expect(rdNow().categoryGroups.find((g) => g.id === id)!.archived).toBe(false)
   })
@@ -261,7 +316,7 @@ describe('warianty podkategorii', () => {
     expect(q('variant-name', rows[0]!)).not.toBeNull()
   })
 
-  it('„+ Wariant”: nowy jest „jak podkategoria” (bez kosztu i miejsca), od jutra, z tree.change', async () => {
+  it('„+ Wariant”: nowy jest „jak podkategoria” (bez kosztu i miejsca), od jutra', async () => {
     await show()
     await open('analiza')
     typeInto(q<HTMLInputElement>('variant-new', category('analiza'))!, 'Przegląd')
@@ -271,7 +326,6 @@ describe('warianty podkategorii', () => {
     expect(added.costs).toBeUndefined()
     expect(costsOf(settingsFrom(TOMORROW).categories.analiza!, added.id)).toEqual(settingsFrom(TOMORROW).categories.analiza!.costs)
     expect(settingsFrom(TODAY).categories.analiza!.variants.some((v) => v.id === added.id)).toBe(false)
-    expect(logged).toEqual([[tree]])
     expect(q('variant-row', category('analiza'))).not.toBeNull()
   })
 
@@ -344,6 +398,15 @@ describe('Ctrl K prowadzi do drzewa', () => {
     act(() => openPick({ page: 'settings' }, { kind: 'category', id: 'group:g-wolne' }))
     await act(async () => undefined)
     expect(scroll).toHaveBeenCalledTimes(3)
+  })
+
+  it('id z cudzysłowem albo ukośnikiem: przewija do kategorii, ekran nie pada (T1393)', async () => {
+    fake.file = { schema: 1, categoryGroups: [{ id: 'g"x\\y', name: 'Dziwna', order: 9 }] }
+    useData.setState({ rd: rdFrom(fake.file) })
+    openPick({ page: 'settings' }, { kind: 'category', id: 'group:g"x\\y' })
+    await show()
+    expect(scroll).toHaveBeenCalledTimes(1)
+    expect(scroll.mock.contexts[0]).toBe(group('g"x\\y'))
   })
 
   it('wariant w archiwum odkrywa archiwum; element, którego nie ma, kończy się komunikatem', async () => {

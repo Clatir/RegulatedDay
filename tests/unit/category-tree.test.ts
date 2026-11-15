@@ -24,6 +24,7 @@ import {
   pickTree,
   removeGroupRaw,
   setCategoryGroupRaw,
+  treeEdit,
   updateGroupRaw,
   variantsPatch
 } from '@shared/model/categoryTree'
@@ -238,6 +239,32 @@ describe('dwa komputery i starsza wersja', () => {
     expect(rdFrom(second.file).categoryGroups.find((g) => g.id === 'g-praca')).toMatchObject({ name: 'Robota', archived: true })
   })
 
+  it('„Cofnij” usunięcia grupy domyślnej po zmianie jej nazwy na drugim komputerze: nazwa zostaje, wpis nie znika bez pytania (T1390)', () => {
+    const base: Raw = { schema: 1 }
+    // A removes „Praca”: its first entry `{ id, archived }` (the id first), the subcategories moved to „Inne”.
+    const removal = recordEdit('rd.json', base, removeGroupRaw({ ...base }, 'g-praca', { to: OTHER_GROUP }, IDS))!
+    const removed = lay(base, removal).file
+    // B renames it meanwhile: a field the removal did not write.
+    const renamed = write(removed, (raw) => updateGroupRaw(raw, 'g-praca', { name: 'Job' }))
+    expect(renamed.conflicts).toEqual([])
+    // A's „Cofnij”: every field it set still holds, so the edit is turned over.
+    expect(editStands(removal, renamed.file, null)).toBe(true)
+    const back = lay(renamed.file, inverseEdit(removal, renamed.file, null))
+    // B's name stays (the entry is never taken whole with it): a question about the entry, not a quiet loss.
+    expect(back.file.categoryGroups).toEqual([{ id: 'g-praca', name: 'Job' }])
+    expect(back.conflicts).toEqual(['categoryGroups.#g-praca'])
+    expect(rdFrom(back.file).categoryGroups.find((g) => g.id === 'g-praca')).toMatchObject({ name: 'Job', archived: false })
+    for (const id of ['sesja', 'analiza']) expect(groupOf(back.file, id)).toBe('g-praca')
+    // Nothing else in the entry: it goes whole, as before.
+    expect(lay(removed, inverseEdit(removal, removed, null))).toEqual({ file: { schema: 1, categories: expect.any(Object), categoryGroups: [] }, conflicts: [] })
+  })
+
+  it('`setAt` nie zdejmuje samego `id` z wpisu listy, w którym jest coś jeszcze – wpis zostaje (T1390)', () => {
+    const file = { categoryGroups: [{ id: 'g-praca', name: 'Job' }, { id: 'g-dom' }] }
+    expect(setAt(file, ['categoryGroups', '#g-praca', 'id'], undefined)).toEqual(file)
+    expect(setAt(file, ['categoryGroups', '#g-dom', 'id'], undefined)).toEqual({ categoryGroups: [{ id: 'g-praca', name: 'Job' }] })
+  })
+
   it('zapis starszej wersji (pole po polu: nazwa, kolor, archiwum, kalendarz, zmiana ustawień) nie gubi grup', () => {
     const g = newGroup(rdFrom({}).categoryGroups, 'Trading')!
     const file = setCategoryGroupRaw(addGroupRaw({ schema: 1, categories: { analiza: { name: 'Analiza', color: null, archived: false } } }, g), 'analiza', g.id)
@@ -307,5 +334,36 @@ describe('warianty dowolnej podkategorii (ustawienia z datą)', () => {
   it('domyślne grupy są stałe (te same id w każdej wersji)', () => {
     expect(DEFAULT_GROUPS.map((g) => g.id)).toEqual(['g-praca', 'g-nauka', 'g-dom', 'g-wolne', 'g-inne'])
     expect(categoryGroupsFrom(undefined)).toEqual(categoryGroupsFrom([]))
+  })
+})
+
+describe('co jest zmianą drzewa dla starszej wersji (T1313, T1391)', () => {
+  const base: Raw = { schema: 1, categories: { analiza: { name: 'Analiza', color: null, archived: false } } }
+  const edit = (fn: (raw: Raw) => Raw, from: Raw = base) => recordEdit('rd.json', from, fn({ ...from }))!
+
+  it('kategoria drzewa, kategoria podkategorii (także nowej), wariant – tak', () => {
+    const g = newGroup(rdFrom({}).categoryGroups, 'Trading')!
+    expect(treeEdit(edit((raw) => addGroupRaw(raw, g)))).toBe(true)
+    expect(treeEdit(edit((raw) => updateGroupRaw(raw, 'g-praca', { name: 'Robota' })))).toBe(true)
+    expect(treeEdit(edit((raw) => setCategoryGroupRaw(raw, 'analiza', 'g-dom')))).toBe(true)
+    // A new subcategory in a group – its entry by fields, also in a file without `categories`.
+    expect(treeEdit(edit((raw) => ({ ...raw, categories: { ...(raw.categories as Raw), c1: { name: 'Ogród', group: 'g-dom' } } })))).toBe(true)
+    expect(treeEdit(edit((raw) => ({ ...raw, categories: { c1: { name: 'Ogród', group: 'g-dom' } } }), { schema: 1 }))).toBe(true)
+    // „Cofnij” of a removal: the same fields turned over.
+    const removal = edit((raw) => removeGroupRaw(raw, 'g-wolne', { to: OTHER_GROUP }, IDS))
+    expect(treeEdit(inverseEdit(removal, lay(base, removal).file, null)!)).toBe(true)
+    // Variants: the first change of the settings (the whole list) and one more.
+    const change = (id: string) => ({ id, from: '2026-11-15', at: null, made: 1, patch: variantsPatch('analiza', addVariant(RULES.analiza!.variants, { id: 'v', name: 'Przegląd' })!) })
+    expect(treeEdit(edit((raw) => ({ ...raw, settings: [change('s1')] })))).toBe(true)
+    const withOne = { ...base, settings: [{ id: 's0', from: '2026-11-01', at: null, made: 0, patch: { reserve: 10 } }] }
+    expect(treeEdit(edit((raw) => ({ ...raw, settings: [...(raw.settings as unknown[]), change('s1')] }), withOne))).toBe(true)
+  })
+
+  it('nazwa, kolor, kalendarz i archiwum podkategorii, inne ustawienia, inne pliki – nie', () => {
+    const cats = (raw: Raw) => raw.categories as Record<string, Raw>
+    expect(treeEdit(edit((raw) => ({ ...raw, categories: { analiza: { ...cats(raw).analiza, name: 'Analiza 2', color: '#79AFAB', archived: true, calendar: 'k' } } })))).toBe(false)
+    expect(treeEdit(edit((raw) => ({ ...raw, settings: [{ id: 's1', from: '2026-11-15', at: null, made: 1, patch: { categories: { analiza: { costs: { head: 2 } } } } }] })))).toBe(false)
+    expect(treeEdit(edit((raw) => ({ ...raw, general: { waterEveryMin: 60 } })))).toBe(false)
+    expect(treeEdit({ rel: 'days/2026/2026-11-14.json', edits: [{ path: ['categoryGroups'], base: undefined, value: [] }] })).toBe(false)
   })
 })

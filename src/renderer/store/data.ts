@@ -10,6 +10,7 @@ import { marketDay } from '@shared/calendar/holidays'
 import { recordEdit } from '@shared/data/merge'
 import { allDayFrom, type AllDayEvent } from '@shared/model/allDay'
 import { attachmentFrom, type Attachment } from '@shared/model/attachment'
+import { treeEdit } from '@shared/model/categoryTree'
 import type { GoalsPatch } from '@shared/model/goals'
 import { newId } from '@shared/model/ids'
 import { lectureFrom, templateFrom, type LectureSeries, type Template } from '@shared/model/plan'
@@ -195,7 +196,29 @@ export function withOwner(owner: EditEntry | null, deps: readonly EditEntry[]): 
   return owner ? [owner, ...deps.map((e) => ({ ...e, after: [0] }))] : [...deps]
 }
 
-/** Sends edits made by `make` (in its turn); null when nothing could be sent – the toast said why. */
+/** The day `tree.change` went to the log from this window (T1391): one a day is all an older version needs. */
+let treeNoted: string | null = null
+
+/**
+ * `tree.change` in today's log (T1313, T1391), at most once a day: an older version on another computer, which shows no tree, takes it for an
+ * unknown event of the timer (`unknownTimerEvents` reads today's log of every computer) and installs the new version without the 24 h. Only
+ * that hint: a failure is never said (the change itself is saved) and the next change of the tree tries again.
+ */
+async function noteTreeChange(): Promise<void> {
+  const today = useData.getState().view?.today
+  if (!today || treeNoted === today) return
+  try {
+    await window.rd.logEvents([{ k: 'tree.change', day: today }])
+    treeNoted = today
+  } catch {
+    /* only a hint for an older version */
+  }
+}
+
+/**
+ * Sends edits made by `make` (in its turn); null when nothing could be sent – the toast said why. Every save of the window goes here, so a
+ * change of the tree of categories written (or waiting for the folder) writes `tree.change` here – whichever way it was made (`treeEdit`).
+ */
 async function send(make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>, state?: SendState): Promise<EditOutcome[] | null> {
   try {
     const list = sentEntries(await make())
@@ -206,6 +229,8 @@ async function send(make: () => Promise<ReadonlyArray<EditEntry | null>> | Reado
     await reloadData()
     const notice = editNotice(out)
     if (notice) toast(notice.text, notice.kind, 8000)
+    // After the view is read again: the hint for an older version never holds the change back on the screen.
+    if (list.some((e, i) => treeEdit(e) && isSaved(out[i] ? [out[i]] : null))) await noteTreeChange()
     return out
   } catch (e) {
     toast(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)

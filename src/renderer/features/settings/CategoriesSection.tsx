@@ -9,11 +9,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { EditEntry } from '@shared/api'
 import { countLabel } from '@shared/format'
-import { GROUP_NAME_MAX, OTHER_GROUP, categoryGroupsFrom, categoryTree, newGroup, addGroupRaw, removeGroupRaw, updateGroupRaw, type CategoryGroup, type GroupRemoval } from '@shared/model/categoryTree'
+import { GROUP_NAME_MAX, OTHER_GROUP, activeOfGroupRaw, categoryGroupsFrom, categoryTree, newGroup, addGroupRaw, removeGroupRaw, updateGroupRaw, type CategoryGroup, type GroupRemoval } from '@shared/model/categoryTree'
 import { newId } from '@shared/model/ids'
+import type { RdFile } from '@shared/model/rd'
+import type { RulesSettings } from '@shared/model/settings'
 import { TextField } from '../../components/fields'
 import { Section, cx } from '../../components/ui'
-import { saveAnswer, storedAnswer, useData, type SendState } from '../../store/data'
+import { rawRecord, saveAnswer, storedAnswer, useData, type SendState } from '../../store/data'
 import { useBusy } from '../../lib/busy'
 import { takeFoundPick, toast, undoToast, useUi } from '../../store/ui'
 import { GROUP_PICK } from '../search/records'
@@ -33,6 +35,15 @@ async function undoRemoval(entry: EditEntry): Promise<void> {
 }
 
 const subcategories = (n: number) => countLabel(n, 'podkategorię', 'podkategorie', 'podkategorii')
+
+/** The subcategories a removal of `groupId` takes with it now (not archived) – the set `removeGroupRaw` moves (T1392); rd.json unreadable – none. */
+const takenWith = (groupId: string, ids: readonly string[]): number => {
+  const raw = rawRecord('rd.json')
+  return raw ? activeOfGroupRaw(raw, groupId, ids).length : 0
+}
+
+/** A CSS selector of the element whose `data-<name>` is `value` – any id, also one with `"` or `\` (T1393). */
+const byData = (name: string, value: string) => `[data-${name}="${CSS.escape(value)}"]`
 
 export function CategoriesSection() {
   const { s, save } = useShared()
@@ -55,15 +66,15 @@ export function CategoriesSection() {
     if (p.id.startsWith(GROUP_PICK)) {
       const id = p.id.slice(GROUP_PICK.length)
       if (rd.categoryGroups.find((g) => g.id === id)?.archived) setShowArchived(true)
-      setBrought(`[data-group="${id}"]`)
+      setBrought(byData('group', id))
     } else if (p.parent) {
       setOpen(p.parent)
       if (rd.categories[p.parent]?.archived || s.categories[p.parent]?.variants.find((v) => v.id === p.id)?.archived) setShowArchived(true)
-      setBrought(`[data-category="${p.parent}"] [data-variant="${p.id}"]`)
+      setBrought(`${byData('category', p.parent)} ${byData('variant', p.id)}`)
     } else {
       setOpen(p.id)
       if (rd.categories[p.id]?.archived) setShowArchived(true)
-      setBrought(`[data-category="${p.id}"]`)
+      setBrought(byData('category', p.id))
     }
   }, [pick, s.categories, rd.categories, rd.categoryGroups])
   useEffect(() => {
@@ -73,6 +84,7 @@ export function CategoriesSection() {
   }, [brought])
   const tree = useMemo(() => categoryTree(rd, s.categories, { archived: showArchived }), [rd, s.categories, showArchived])
   const live = useMemo(() => rd.categoryGroups.filter((g) => !g.archived), [rd.categoryGroups])
+  const ids = useMemo(() => Object.keys(s.categories), [s.categories])
   const [busy, run] = useBusy()
 
   // The name is taken at once: a second click (or Enter and a click) while it saves adds no second category. It comes back to the field only
@@ -92,35 +104,45 @@ export function CategoriesSection() {
       if (!made || storedAnswer(out, state) === false) setName(n)
     })
 
-  // A category with subcategories asks first; one without – gone at once (its archived subcategories, if any, go to „Inne”).
-  const askRemove = (g: CategoryGroup, count: number) => (count > 0 ? setRemoving(g) : void remove(g, { to: OTHER_GROUP }, 0))
-  const remove = (g: CategoryGroup, how: GroupRemoval, count: number) =>
-    run(async () => {
-      const { out, entry } = await saveTree((raw) => removeGroupRaw(raw, g.id, how, Object.keys(s.categories)))
-      if (!entry || saveAnswer(out) !== true) return
+  // A category with subcategories asks first; one without – gone at once (its archived subcategories, if any, go to „Inne”). Both count the
+  // subcategories the removal takes (`takenWith`); the toast says how many it took in the turn of the save.
+  const askRemove = (g: CategoryGroup) => (takenWith(g.id, ids) > 0 ? setRemoving(g) : void remove(g, { to: OTHER_GROUP }))
+  // `accepted` – the removal runs (no other save of the section is running): the window closes only then (T1392). False – another one runs.
+  const remove = async (g: CategoryGroup, how: GroupRemoval, accepted?: () => void): Promise<boolean> =>
+    (await run(async () => {
+      accepted?.()
+      let taken = 0
+      const { out, entry } = await saveTree((raw) => {
+        taken = activeOfGroupRaw(raw, g.id, ids).length
+        return removeGroupRaw(raw, g.id, how, ids)
+      })
+      if (!entry || saveAnswer(out) !== true) return true
       const to = 'to' in how ? (rd.categoryGroups.find((x) => x.id === how.to)?.name ?? 'Inne') : null
-      const what = count === 0 ? '' : to != null ? ` – przeniesiono ${subcategories(count)} do „${to}”` : ` – usunięto też ${subcategories(count)}`
+      const what = taken === 0 ? '' : to != null ? ` – przeniesiono ${subcategories(taken)} do „${to}”` : ` – usunięto też ${subcategories(taken)}`
       undoToast(`Usunięto kategorię „${g.name}”${what}.`, () => void undoRemoval(entry))
-    })
+      return true
+    })) === true
 
   const anyArchived = Object.values(rd.categories).some((m) => m.archived) || rd.categoryGroups.some((g) => g.archived) || Object.values(s.categories).some((c) => c.variants.some((v) => v.archived))
-  const activeIn = (ids: readonly string[]) => ids.filter((id) => !rd.categories[id]?.archived).length
   return (
     <Section title="Kategorie" data-testid="settings-categories">
       <p className="text-[12px] text-muted">
         Kategoria zbiera podkategorie, podkategoria ma koszt i właściwości, a wariant – własny koszt i miejsce albo „jak podkategoria”. Wariantów podkategorii „Regeneracja” używasz jako sposobów regeneracji. Usunięcie niczego nie kasuje – zostaje w historii.
       </p>
-      {tree.map(({ group: g, categories: ids }) => (
+      {tree.map(({ group: g, categories: groupIds }) => (
         <GroupBox
           key={g.id}
           group={g}
-          ids={ids}
+          ids={groupIds}
           groups={live}
+          rd={rd}
+          s={s}
+          save={save}
           open={open}
           onOpen={(id) => setOpen(open === id ? null : id)}
           showArchived={showArchived}
           busy={busy}
-          onRemove={() => askRemove(g, activeIn(ids))}
+          onRemove={() => askRemove(g)}
         />
       ))}
       <div className="flex items-center gap-2">
@@ -137,13 +159,12 @@ export function CategoriesSection() {
       {removing && (
         <GroupRemoveDialog
           group={removing}
-          count={activeIn(tree.find((t) => t.group.id === removing.id)?.categories ?? [])}
+          count={takenWith(removing.id, ids)}
           targets={live.filter((g) => g.id !== removing.id)}
           onClose={() => setRemoving(null)}
           onConfirm={async (how) => {
-            const count = activeIn(tree.find((t) => t.group.id === removing.id)?.categories ?? [])
-            setRemoving(null)
-            await remove(removing, how, count)
+            // Another save of the section still runs: the window stays, nothing is lost without a word.
+            if (!(await remove(removing, how, () => setRemoving(null)))) toast('Trwa zapis poprzedniej zmiany – spróbuj za chwilę.', 'info', 4000)
           }}
         />
       )}
@@ -151,10 +172,32 @@ export function CategoriesSection() {
   )
 }
 
-/** A category of the tree: its name, „Usuń” (not „Inne”), its subcategories and „+ Podkategoria”. */
-function GroupBox({ group: g, ids, groups, open, onOpen, showArchived, busy, onRemove }: { group: CategoryGroup; ids: readonly string[]; groups: readonly CategoryGroup[]; open: string | null; onOpen: (id: string) => void; showArchived: boolean; busy: boolean; onRemove: () => void }) {
-  const { s, save } = useShared()
-  const rd = useData((x) => x.rd)
+/** A category of the tree: its name, „Usuń” (not „Inne”), its subcategories and „+ Podkategoria” (not in an archived one – T1393). */
+function GroupBox({
+  group: g,
+  ids,
+  groups,
+  rd,
+  s,
+  save,
+  open,
+  onOpen,
+  showArchived,
+  busy,
+  onRemove
+}: {
+  group: CategoryGroup
+  ids: readonly string[]
+  groups: readonly CategoryGroup[]
+  rd: RdFile
+  s: RulesSettings
+  save: (patch: Record<string, unknown>) => Promise<boolean>
+  open: string | null
+  onOpen: (id: string) => void
+  showArchived: boolean
+  busy: boolean
+  onRemove: () => void
+}) {
   const [name, setName] = useState('')
   const [adding, run] = useBusy()
   // As a category made in a block's list: its rules first (from the date of the screen), then its name and where it stands.
@@ -191,12 +234,14 @@ function GroupBox({ group: g, ids, groups, open, onOpen, showArchived, busy, onR
         const c = s.categories[id]
         return c ? <CategoryRow key={id} id={id} rules={c} rd={rd} settings={s} groups={groups} open={open === id} onToggle={() => onOpen(id)} save={save} showArchived={showArchived} /> : null
       })}
-      <div className="flex items-center gap-2">
-        <input className="input w-[220px]" value={name} maxLength={60} placeholder="+ Podkategoria" onChange={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} data-testid="subcategory-new" />
-        <button type="button" className="btn" disabled={!name.trim() || adding} onClick={() => void add()} data-testid="subcategory-add">
-          Dodaj
-        </button>
-      </div>
+      {!g.archived && (
+        <div className="flex items-center gap-2">
+          <input className="input w-[220px]" value={name} maxLength={60} placeholder="+ Podkategoria" onChange={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} data-testid="subcategory-new" />
+          <button type="button" className="btn" disabled={!name.trim() || adding} onClick={() => void add()} data-testid="subcategory-add">
+            Dodaj
+          </button>
+        </div>
+      )}
     </div>
   )
 }

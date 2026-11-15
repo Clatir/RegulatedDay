@@ -255,6 +255,15 @@ export function categoriesOfGroupRaw(raw: Raw, groupId: string, categoryIds: rea
   return [...ids].filter((id) => groupOf(id) === groupId)
 }
 
+/**
+ * The subcategories a removal of the group takes with it that are not archived – of the same set `removeGroupRaw` moves or archives (T1392):
+ * the window asks about them and says how many went (an archived one moves too, without a word).
+ */
+export function activeOfGroupRaw(raw: Raw, groupId: string, categoryIds: readonly string[]): string[] {
+  const cats = metas(raw)
+  return categoriesOfGroupRaw(raw, groupId, categoryIds).filter((id) => !(isPlain(cats[id]) && cats[id].archived === true))
+}
+
 /** How a group with subcategories goes (D510): they move to another group (by default „Inne”), or they are archived with it. */
 export type GroupRemoval = { to: string } | { archive: true }
 
@@ -365,4 +374,35 @@ export function archiveVariant(variants: ReadonlyArray<Variant | VariantEntry>, 
 /** The patch of the dated settings that writes a subcategory's variants. */
 export function variantsPatch(categoryId: string, list: readonly VariantEntry[]): Record<string, unknown> {
   return { categories: { [categoryId]: { variants: list } } }
+}
+
+// What an older version cannot show (T1313, T1391).
+
+const groupIn = (v: unknown): boolean => isPlain(v) && v.group !== undefined
+/** A change of the dated settings that writes variants (`variantsPatch`). */
+const variantsIn = (v: unknown): boolean => isPlain(v) && isPlain(v.patch) && isPlain(v.patch.categories) && Object.values(v.patch.categories).some((c) => isPlain(c) && c.variants !== undefined)
+
+/**
+ * Whether an edit changes the tree as a version without it cannot show it (T1391): rd.json's categories of the tree (`categoryGroups`), the
+ * category of a subcategory (`categories.<id>.group`) or a subcategory's variants (a change of the dated settings with `variants` – a cost
+ * „jak podkategoria” reads there as the one before, T1315). The name, colour, calendar and archive of a subcategory are not: an older version
+ * shows them as they are. Each edit as the window sends it (`recordEdit`: a new entry by its fields, a first list whole).
+ */
+export function treeEdit(e: { rel: string; edits: ReadonlyArray<{ path: readonly string[]; base: unknown; value: unknown }> }): boolean {
+  if (e.rel !== 'rd.json') return false
+  return e.edits.some(({ path, base, value }) => {
+    const [a, b, c] = path
+    if (a === 'categoryGroups') return true
+    if (a === 'categories') {
+      if (c !== undefined) return c === 'group'
+      const entries = (v: unknown) => (b !== undefined ? [v] : isPlain(v) ? Object.values(v) : [])
+      return [...entries(base), ...entries(value)].some(groupIn)
+    }
+    if (a === 'settings') {
+      if (path.includes('variants')) return true
+      const changes = (v: unknown) => (b !== undefined ? [v] : Array.isArray(v) ? v : [])
+      return [...changes(base), ...changes(value)].some(variantsIn)
+    }
+    return false
+  })
 }

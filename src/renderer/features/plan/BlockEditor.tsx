@@ -24,7 +24,7 @@ import { SESSION_ANCHOR } from '@shared/engine/createDay'
 import { olderComputers } from '@shared/model/note'
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { forecastEndText } from '@shared/blockEnd'
-import { Choice, DurationField, EndField, GroupedChoice, TextField, TimeField } from '../../components/fields'
+import { Choice, DurationField, EndField, TextField, TimeField } from '../../components/fields'
 import { Field, Segmented } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
 import { useData, type SaveAnswer } from '../../store/data'
@@ -147,10 +147,10 @@ export function BlockEditor({
         />
       </Field>
       <Field label="Podkategoria" labelWidth={92}>
-        <GroupedChoice
+        <Choice
           value={block.categoryId}
           groups={groupedCategoryOptions(names, block.categoryId)}
-          tail={newOption(true)}
+          options={newOption(true)}
           onChange={(categoryId) => (categoryId === NEW_THING ? setMaking('category') : set({ categoryId, variantId: null }))}
           aria-label="Podkategoria"
           data-testid="block-category"

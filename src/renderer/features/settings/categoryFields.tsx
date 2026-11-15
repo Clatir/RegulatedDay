@@ -10,9 +10,8 @@ import { CATEGORY_COLORS } from '@shared/model/rd'
 import { RANGES } from '@shared/model/settings'
 import { blockFill } from '@shared/theme'
 import { cx } from '../../components/ui'
-import { isSaved, saveRd } from '../../store/data'
+import { saveRd } from '../../store/data'
 import { useMachine } from '../../store/machine'
-import { logTreeChange } from './categoryTreeEdits'
 import { SettingNumber } from './SettingNumber'
 
 export const FLAGS: Array<[keyof CategoryRules, string]> = [
@@ -50,14 +49,13 @@ export const setMeta = (id: string, patch: Record<string, unknown>) =>
 
 /**
  * A new category `id` (a subcategory of the tree, D510): its rules by `save` (the settings' change – dated as the caller says), then its
- * name, colour and – `group` – the category of the tree it is in (none, or „Inne”: no field, it is in „Inne”; a group named writes
- * `tree.change`, T1313). False – the rules were refused: nothing else is written.
+ * name, colour and – `group` – the category of the tree it is in (none, or „Inne”: no field, it is in „Inne”; a group named is a change of
+ * the tree – the save writes `tree.change`, T1391). False – the rules were refused: nothing else is written.
  */
 export async function createCategory(save: (patch: Record<string, unknown>) => Promise<boolean>, id: string, rules: Record<string, unknown>, meta: { name: string; color: string | null; group?: string }): Promise<boolean> {
   if (!(await save({ categories: { [id]: rules } }))) return false
   const group = meta.group && meta.group !== OTHER_GROUP ? meta.group : null
-  const out = await setMeta(id, { name: meta.name.slice(0, 60), color: meta.color, archived: false, ...(group ? { group } : {}) })
-  if (group && isSaved(out)) await logTreeChange()
+  await setMeta(id, { name: meta.name.slice(0, 60), color: meta.color, archived: false, ...(group ? { group } : {}) })
   return true
 }
 

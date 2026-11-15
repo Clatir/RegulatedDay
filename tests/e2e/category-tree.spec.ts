@@ -46,7 +46,9 @@ test('drzewo kategorii: nowa kategoria, przeniesienie podkategorii, usunięcie z
       await page.getByTestId('group-new').fill('Trading')
       await page.getByTestId('group-add').click()
       await expect(groups).toHaveCount(6)
-      const trading = groups.filter({ hasText: 'Trading' })
+      // By its name field: the text „Trading” is also an option of every open row's „Kategoria” (the row of „Analiza” in „Praca” before
+      // the move is drawn).
+      const trading = groups.filter({ has: page.locator('[data-testid="group-name"][value="Trading"]') })
       const analiza = page.locator('[data-testid="category-row"][data-category="analiza"]')
       await analiza.getByTestId('category-more').click()
       await analiza.getByTestId('category-group').selectOption({ label: 'Trading' })

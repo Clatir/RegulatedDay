@@ -43,7 +43,8 @@ export function CategoryRow({
   const brightness = useMachine((x) => x.prefs.brightness)
   const meta = rd.categories[id]
   const color = blockColor(id, { rd, settings })
-  const groupId = groupOfCategory(rd, id, { archived: true })
+  // Its category as the tree places the row: without the archive a group in the archive is „Inne” (the row stands there).
+  const groupId = groupOfCategory(rd, id, { archived: showArchived })
   // Its own category stays in the list also when it is in the archive (the archive view).
   const own = rd.categoryGroups.find((g) => g.id === groupId)
   const choices = own && !groups.some((g) => g.id === groupId) ? [...groups, own] : groups

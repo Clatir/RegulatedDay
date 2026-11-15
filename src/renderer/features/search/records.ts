@@ -12,7 +12,7 @@ import { compareAllDay, rangeText, type AllDayEvent } from '@shared/model/allDay
 import { FIELD_GROUP_NAMES } from '@shared/model/fields'
 import { templateVersionOn, type Template } from '@shared/model/plan'
 import { groupOfCategory } from '@shared/model/categoryTree'
-import { personName, type RdFile } from '@shared/model/rd'
+import { categoryName, personName, type RdFile } from '@shared/model/rd'
 import { CASE_LIST_NAMES, CASE_LISTS, PRIORITY_NAMES, type RequestRecord } from '@shared/model/requests'
 import { isDone, listOf } from '@shared/engine/cases'
 import { shortDay } from '@shared/quickDates'
@@ -92,13 +92,14 @@ export function searchRecords(i: RecordsInput): SearchRecord[] {
     const where = groupName.get(groupOfCategory(i.rd, id, { archived: true })) ?? 'Inne'
     out.push({ kind: 'category', id, title: meta.name, hint: meta.archived ? `podkategoria w archiwum · ${where}` : `podkategoria · ${where}` })
   }
-  const rules = settingsOn(i.rd.settings, addDays(i.today, 1)).categories
-  for (const [id, r] of Object.entries(rules)) {
-    for (const v of r.variants) out.push({ kind: 'category', id: v.id, parent: id, title: v.name, hint: `${v.archived ? 'wariant w archiwum' : 'wariant'} · ${i.rd.categories[id]?.name ?? id}` })
+  // The settings in force from tomorrow: the variants here, the names of the template blocks below.
+  const tomorrow = settingsOn(i.rd.settings, addDays(i.today, 1))
+  for (const [id, r] of Object.entries(tomorrow.categories)) {
+    for (const v of r.variants) out.push({ kind: 'category', id: v.id, parent: id, title: v.name, hint: `${v.archived ? 'wariant w archiwum' : 'wariant'} · ${categoryName(i.rd, id)}` })
   }
 
   // A template block is named as the template's editor shows it (the version in force from tomorrow).
-  const names: Names = { rd: i.rd, settings: settingsOn(i.rd.settings, addDays(i.today, 1)), routines: i.routines, requests: i.requests }
+  const names: Names = { rd: i.rd, settings: tomorrow, routines: i.routines, requests: i.requests }
   for (const t of [...i.templates].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
     const hint = t.archived ? 'w archiwum' : undefined
     out.push({ kind: 'template', id: t.id, title: t.name, ...(hint ? { hint } : {}) })

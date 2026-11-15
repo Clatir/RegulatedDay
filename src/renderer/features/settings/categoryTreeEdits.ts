@@ -6,9 +6,8 @@
  * `addVariant`, `changeVariant`, `archiveVariant`): the list is made in the turn of the save from the settings in force from the change's
  * date – „od kiedy” of the screen, or the date given (the quick edits: from today, D514).
  *
- * Every change saved also writes `tree.change` to today's log (T1313): an older version on another computer, which shows no tree, takes it
- * for an unknown event of the timer and installs the new version without the 24 h. The event is only that hint – a failure to write it is
- * not said (the change itself is saved).
+ * `tree.change` for an older version (T1313) is not written here: the window's one way of saving (`store/data.ts`) writes it, once a day,
+ * after any save that wrote a change of the tree (T1391).
  */
 import type { EditEntry, EditOutcome, RawRecord } from '@shared/api'
 import { editStands, inverseEdit } from '@shared/data/merge'
@@ -20,26 +19,12 @@ import { isSaved, rawRecord, trySaveWith, useData, type SendState } from '../../
 import { saveCalendars } from './calendarEdits'
 import { changeFrom, saveSettingsFrom } from './settingsStore'
 
-/** `tree.change` in today's log (T1313); false – no day known now, or the log refused it (never said: only a hint for an older version). */
-export async function logTreeChange(): Promise<boolean> {
-  const today = useData.getState().view?.today
-  if (!today) return false
-  try {
-    await window.rd.logEvents([{ k: 'tree.change', day: today }])
-    return true
-  } catch {
-    return false
-  }
-}
-
 /**
  * rd.json changed by a function of the tree, in its turn (`saveCalendars`: an unreadable rd.json sends nothing and says so); `entry` – what
- * was sent (for „Cofnij”), null when nothing changed or nothing was sent. A change saved writes `tree.change`.
+ * was sent (for „Cofnij”), null when nothing changed or nothing was sent.
  */
-export async function saveTree(fn: (raw: RawRecord) => RawRecord, state?: SendState): Promise<{ out: EditOutcome[] | null; entry: EditEntry | null }> {
-  const r = await saveCalendars(fn, state)
-  if (r.entry && isSaved(r.out)) await logTreeChange()
-  return r
+export function saveTree(fn: (raw: RawRecord) => RawRecord, state?: SendState): Promise<{ out: EditOutcome[] | null; entry: EditEntry | null }> {
+  return saveCalendars(fn, state)
 }
 
 /** How a „Cofnij” went: done, the file changed since (it stays as it is), rd.json unreadable now, or the save failed. */
@@ -59,9 +44,7 @@ export async function undoTree(entry: EditEntry): Promise<TreeUndo> {
     return problem || !now ? [] : [inverseEdit(entry, now, null)]
   })
   if (problem) return problem
-  if (!isSaved(out)) return 'failed'
-  await logTreeChange()
-  return 'undone'
+  return isSaved(out) ? 'undone' : 'failed'
 }
 
 /**
@@ -73,11 +56,9 @@ export async function saveVariants(categoryId: string, change: (now: readonly Va
   const today = useData.getState().view?.today
   if (!today) return false
   const when = f ?? changeFrom(today)
-  const ok = await saveSettingsFrom((raw) => {
+  return saveSettingsFrom((raw) => {
     const rules = settingsOn(rdFrom(raw).settings, when.from, when.at).categories[categoryId]
     const list = rules ? change(rules.variants) : null
     return list ? variantsPatch(categoryId, list) : null
   }, when)
-  if (ok) await logTreeChange()
-  return ok
 }
