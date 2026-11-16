@@ -62,7 +62,7 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * from the cost before it (T1534; a file – the starting body, T1520), a routine's cost loses its body to the starting routines' (T1520); a
  * day or a change of the day's settings it writes – the body of your dated settings (T1532).
  */
-export const RULES_VERSION = 16
+export const RULES_VERSION = 17
 
 /** The rules since which a block's start writes the cost of its routine (D512, `planned.routineCosts`): an earlier start had none. */
 export const ROUTINE_COSTS_FROM = 14

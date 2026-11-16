@@ -51,6 +51,7 @@ const END_RULE: Record<string, string> = {
   lastInput: 'koniec przy ostatnim wejściu',
   fixedNoReaction: 'koniec według planu',
   awayPlan: 'koniec według planu',
+  awayChain: 'koniec według planu (jednym ciągiem)',
   groupPlan: 'koniec według planu'
 }
 const EXPLAIN: Record<string, string> = { work: 'praca', project: 'projekt', rest: 'odpoczynek' }

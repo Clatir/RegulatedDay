@@ -21,7 +21,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
   każdy otwiera się (7–10 plików) – E3.12; `backups\daily\2026-10-27.zip` (9 plików) – E6b.2 do sprawdzenia po
   następnym dniu z aplikacją po 12:00; `main.log` – „kreator zakończony” 27.10 (E3.1), aktualizacje 0.7.0→0.10.1 czyste
   (E6b.1–E7b.1; 0.2.0–0.6.0 przeskoczone, więc E5.1 i E6a.1 tylko „dane całe”).
-- Rejestry decyzji (D308, T535, T840, T857, T935): `docs/decyzje.md` – D; `docs/decyzje-techniczne.md` – T1000 i nowsze, `docs/decyzje-techniczne-T700-T999.md` – T700–T999 (T1210),
+- Rejestry decyzji (D308, T535, T840, T857, T935): `docs/decyzje.md` – D; `docs/decyzje-techniczne.md` – T1100 i nowsze, `docs/decyzje-techniczne-T1000-T1099.md` – T1000–T1099 (T1967), `docs/decyzje-techniczne-T700-T999.md` – T700–T999 (T1210),
   `docs/decyzje-techniczne-T1-T399.md` – T1–T399, `docs/decyzje-techniczne-T400-T499.md` – T400–T499, `docs/decyzje-techniczne-T500-T599.md` – T500–T599,
   `docs/decyzje-techniczne-T600-T699.md` – T600–T699; zastąpione w całości w `docs/archiwum/decyzje-zastapione.md`. D188
   cofnięta przez T303, ale cytowana w D150 i specyfikacji – zostaje w rejestrze.
@@ -73,6 +73,21 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
      podwójne `takeIn` w `judgeApply`/`applyTemplate`; `settleOwed` przyjmuje `read.away` (fakty przy niepełnym logu);
      `docs/decyzje-techniczne.md` 196/200 KB – przenieść T1000–T1099 do osobnego pliku; `screens.spec.ts:67` („bar-place-1-bottom-left”)
      pada lokalnie przy obecnym układzie monitorów.
+11. **1.30.0 – bloki poza komputerem jednym ciągiem (D553–D556, T1962–T1967, sesja 16.11 wieczór):** zgłoszenie: ciąg bloków
+   poza komputerem (posiłek, spacer…) ma iść jednym ciągiem – bez pytania o start, koniec o planowanym czasie. Pytania zadane
+   przed nieobecnością użytkownika (~10 h), wszystkie odpowiedzi = rekomendacje. Ustawienie `awayChain` (wspólne, z datą,
+   domyślnie wyłączone; „Pytania w ciągu dnia”); silnik `auto.ts` (`awayEnd` – reguła `awayChain`, `awayKnownAt`, sprawdzanie
+   końców), „Cofnij” – `awayChainUndo` w `timer.ts`. Testy `tests/unit/engine/away-chain.test.ts`, krok w `tests/e2e/screens.spec.ts`.
+   Gałąź `claude/1.30-ciag-poza`, commit bb0433b; odbiór JC1–JC3. T1000–T1099 wydzielone (T1967).
+   - Przegląd 1 (xhigh, 15 uwag) → T1968: ustawienie z chwili startu bloku, start „od razu” tylko po końcu ciągu (pierwszy
+     blok, poranek i dojazd – 10 min), Twoje „Cofnij” na stałe, odmowa „Cofnij” przy bloku stałym w czasie ciągu, sprawdzanie
+     startu czeka na otwartą przerwę, CSV, `RULES_VERSION` 17, prowadzący sprawdza od razu po zapisie (`nextCheckAt`).
+   - Przyjęte bez pytania (rekomendacje, użytkownik: „Podejmuj decyzje w oparciu o rekomendacje”): D553–D556 jak w pytaniach;
+     przełącznik w sekcji „Pytania w ciągu dnia” (tak nazywa się grupa `timer`); koniec ciągu bez wiersza w rytuale; „Cofnij”
+     cofa też kolejne bloki ciągu; dojazd poza zmianą startu; bloki ciągu poza trafnym szacowaniem i kalibracją (koniec automatyczny).
+   - Uwagi na później: jeden rejestr reguł końca (fin, pytanie, rytuał, CSV, sprawdzanie – dziś 6 list); wspólny pomocnik gałęzi
+     dojazdu i ciągu w `awayEnd`; bez ustawienia cofnięte pierwsze użycie zwraca w kółko ten sam koniec (przed 1.30); brak testu
+     regeneracji z `fixedHeld` w ciągu; prowadzący po uśpieniu – starty i końce ciągu po kolei co ~1 s.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;

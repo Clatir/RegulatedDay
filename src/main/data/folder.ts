@@ -19,7 +19,7 @@ import { inverseEdit, sameContentAs, setAt, type MergeConflict } from '@shared/d
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
 import { readLogText } from '@shared/data/logText'
 import { activityOf, type Activity } from '@shared/engine/activity'
-import { answerEvents, autoActions, closedSince, fixedStartPausesClosed, nextDeadline, questionsOf, runFromOf, shutdownActions, type AutoEvent, type Question } from '@shared/engine/auto'
+import { answerEvents, autoActions, closedSince, fixedStartPausesClosed, nextCheckAt, nextDeadline, questionsOf, runFromOf, shutdownActions, type AutoEvent, type Question } from '@shared/engine/auto'
 import { simEvents } from '@shared/engine/sim'
 import { groupLogDrafts, groupLogUndo, type GroupSkip } from '@shared/engine/groupEdit'
 import { foregroundRuns, templateDoneDrafts, templateDoneUndo, type DayRun, type DoneSkipWhy } from '@shared/engine/templateApply'
@@ -2155,7 +2155,7 @@ export class DataFolder {
       this.append({ ...e, day, dom: 'timer' })
       written++
     }
-    return { written, nextAt: nextDeadline(state) }
+    return { written, nextAt: nextCheckAt(written, now, nextDeadline(state)) }
   }
 
   /**
@@ -2350,7 +2350,9 @@ export class DataFolder {
       const { day: _d, probe, ...act } = click
       void _d
       // Requests („zrobione teraz”, urgent, after the fact, „Koniec”) and the rest of the timer.
-      const r = act.a === 'requestNow' || act.a === 'requestEnd' || act.a === 'requestAfter' ? requestAction(state, act as RequestAction, now) : timerAction(ctx, state, act as TimerAction, now)
+      // „Cofnij” of an end by the chain judges your return (T1968): the leader's activity, this computer's observation too.
+      const activity = act.a === 'undo' ? await this.activityFor(day, read, now) : undefined
+      const r = act.a === 'requestNow' || act.a === 'requestEnd' || act.a === 'requestAfter' ? requestAction(state, act as RequestAction, now) : timerAction(ctx, state, act as TimerAction, now, activity)
       if (r.ok && r.events.length && !probe) await this.writeOn(day, laid, r.events, chosen.before)
       return r
     }

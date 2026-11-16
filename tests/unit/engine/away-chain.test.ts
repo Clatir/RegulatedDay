@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { activityOf } from '@shared/engine/activity'
-import { autoActions, awayKnownAt, questionsOf, type AutoEvent } from '@shared/engine/auto'
+import { autoActions, awayKnownAt, nextCheckAt, questionsOf, type AutoEvent } from '@shared/engine/auto'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
 import { ritualRows } from '@shared/engine/ritual'
 import { autoText, engineView } from '@shared/engineView'
@@ -21,7 +21,9 @@ const used = (plan: ReturnType<typeof block>[], away: string, back: string | nul
 
 function click(s: Scenario, time: string, act: TimerAction) {
   const t = s.at(time)
-  const r = timerAction(s.contextAt(t), s.stateAt(t), act, t)
+  const ctx = s.contextAt(t)
+  const state = s.stateAt(t)
+  const r = timerAction(ctx, state, act, t, activityOf(ctx.events, state.grid.start, t, 'pca'))
   if (r.ok) s.write(r.events, t)
   return r
 }
@@ -75,9 +77,9 @@ describe('ustawienie „jednym ciągiem” (D553)', () => {
     expect(settingsFrom({ awayChain: 'tak' }).awayChain).toBe(false)
   })
 
-  it('wyłączone – jak dotąd: posiłek trwa do limitu, spacer się nie zaczyna', () => {
+  it('wyłączone – jak dotąd: posiłek trwa do limitu, spacer zaczyna się od niego i kończy przy powrocie, z pytaniem', () => {
     const s = used([meal(), walk()], '11:50', '14:00', false)
-    expect(run(s, '11:55', '14:01')).toEqual(['awayStart m 12:00', 'limit m 13:00'])
+    expect(run(s, '11:55', '14:05')).toEqual(['awayStart m 12:00', 'limit m 13:00', 'awayStart w 13:00', 'firstUse w 14:00'])
   })
 })
 
@@ -108,9 +110,9 @@ describe('ciąg bloków poza komputerem (D553, D554)', () => {
     const st = on.state('14:02')
     expect(ritualRows(st, activityOf(on.contextAt(on.at('14:02')).events, st.grid.start, on.at('14:02'))).filter((r) => r.kind === 'away')).toEqual([])
     const off = used([meal(), walk()], '11:50', '14:00', false)
-    run(off, '11:55', '14:01')
-    const so = off.state('14:02')
-    expect(ritualRows(so, activityOf(off.contextAt(off.at('14:02')).events, so.grid.start, off.at('14:02'))).filter((r) => r.kind === 'away')).toHaveLength(1)
+    run(off, '11:55', '14:05')
+    const so = off.state('14:06')
+    expect(ritualRows(so, activityOf(off.contextAt(off.at('14:06')).events, so.grid.start, off.at('14:06'))).filter((r) => r.kind === 'away')).toHaveLength(1)
   })
 
   it('sprawy domowe, rutyna i prośby domowe też idą ciągiem', () => {
@@ -192,5 +194,83 @@ describe('„Cofnij” końca według planu (D555, T1964)', () => {
     const end = s.state('14:05').facts.autos.find((a) => a.rule === 'awayChain' && a.block === 'm')!
     expect(click(s, '14:05', { a: 'undo', target: end.id }).ok).toBe(true)
     expect(s.state('14:06').facts.blocks.get('x')?.startedAt).not.toBeNull()
+  })
+})
+
+describe('poprawki po przeglądzie (T1968)', () => {
+  /** „Od dziś” at `time`: the day's settings with the chain switched to `on`. */
+  const switchAt = (s: Scenario, time: string, on: boolean) =>
+    s.raw({ k: 'day.snapshot', at: s.at(time), dayType: 'zwykly', settings: { ...s.settings, awayChain: on }, reason: 'today', max: null, minRegen: null }, time)
+
+  it('wyłączenie „od dziś” nie przepisuje bloków zaczętych przy włączonym', () => {
+    const s = used([meal(), walk()], '11:50', '14:00')
+    run(s, '11:55', '14:01')
+    switchAt(s, '15:00', false)
+    expect(run(s, '15:01', '15:05')).toEqual([])
+    expect(s.state('15:06').facts.blocks.get('m')?.endRule).toBe('awayChain')
+  })
+
+  it('włączenie „od dziś” nie przepisuje końców sprzed niego', () => {
+    const s = used([meal(), walk()], '11:50', '14:00', false)
+    run(s, '11:55', '14:05')
+    switchAt(s, '15:00', true)
+    expect(run(s, '15:01', '15:05')).toEqual([])
+    expect(s.state('15:06').facts.blocks.get('m')?.endRule).toBe('limit')
+  })
+
+  it('pierwszy blok ciągu czeka swoje 10 min (bez odejścia „od razu” – także rano przed pierwszym użyciem)', () => {
+    const s = used([meal(), walk()], '11:50', '14:00')
+    // Known only at 12:10 (T1138), as without the setting.
+    expect(run(s, '11:55', '12:09')).toEqual([])
+    const morning = day([block({ id: 'r', cat: 'rutyny', at: '07:00', min: 30 })]).observe('07:05', null)
+    expect(run(morning, '06:55', '07:06')).toEqual([])
+  })
+
+  it('dojazd w ciągu – start po swoich 10 min (D553: dojazd bez zmian)', () => {
+    const s = used([meal(), block({ id: 'd', cat: 'dojazd', variant: 'dojazd', at: '12:30', min: 30 })], '11:50', '12:35')
+    expect(run(s, '11:55', '12:36')).toEqual(['awayStart m 12:00', 'awayChain m 12:30'])
+  })
+
+  it('późniejszy log dzieli otwartą przerwę: start ciągu czeka, aż przerwa ma 10 min', () => {
+    const s = used([meal(), walk()], '11:50', '14:00')
+    run(s, '11:55', '12:32')
+    s.observe('12:24', '12:25', 'pcb').using('12:24', '12:25', 'pcb')
+    // The meal ends at the use 12:24 (earlier), the walk's start (12:30) stays – the stretch from 12:25 is 10 min long at 12:35.
+    const out = run(s, '12:33', '12:40')
+    expect(out).toEqual(['revalidate - 12:33', 'firstUse m 12:24'])
+    expect(s.state('12:41').facts.blocks.get('w')?.startedAt).not.toBeNull()
+  })
+
+  it('„Cofnij” końca przy pierwszym użyciu: blok kończy się dalej najpóźniej o planowanym końcu', () => {
+    const s = used([meal(), walk()], '11:50', '13:00')
+    run(s, '11:55', '13:02')
+    s.gap('13:03', null)
+    const end = s.state('13:05').facts.autos.find((a) => a.rule === 'firstUse' && a.block === 'w')!
+    expect(click(s, '13:05', { a: 'undo', target: end.id }).ok).toBe(true)
+    expect(run(s, '13:06', '13:31')).toEqual(['awayChain w 13:30'])
+  })
+
+  it('„Cofnij” końca odmawia, gdy w czasie ciągu zaczął się blok stały', () => {
+    const s = used([meal(), block({ id: 'f', cat: 'regeneracja', at: '12:30', min: 30, fixed: true })], '11:50', '14:00')
+    run(s, '11:55', '14:01')
+    const end = s.state('14:05').facts.autos.find((a) => a.rule === 'awayChain' && a.block === 'm')!
+    expect(click(s, '14:05', { a: 'undo', target: end.id })).toMatchObject({ ok: false })
+    const list = autoList(s, '14:05')
+    expect([...list.groups.flatMap((g) => g.items), ...list.items].find((x) => x.id === end.id)?.undo).toBe(false)
+  })
+
+  it('„Cofnij” z innego końca nie zmienia ciągu, a jego „Cofnij” trzyma się po zmianie pory snu', () => {
+    const s = used([meal(), walk()], '11:50', '14:00')
+    run(s, '11:55', '14:01')
+    const end = s.state('14:05').facts.autos.find((a) => a.rule === 'awayChain' && a.block === 'm')!
+    click(s, '14:05', { a: 'undo', target: end.id })
+    // Taken back by you: the usual rules for good – no end by the chain again.
+    expect(run(s, '14:06', '14:10').some((x) => x.startsWith('awayChain'))).toBe(false)
+  })
+
+  it('prowadzący sprawdza od razu po przebiegu, który coś zapisał', () => {
+    expect(nextCheckAt(2, 1000, 5000)).toBe(1000)
+    expect(nextCheckAt(0, 1000, 5000)).toBe(5000)
+    expect(nextCheckAt(0, 1000, null)).toBeNull()
   })
 })

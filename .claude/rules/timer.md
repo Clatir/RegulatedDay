@@ -65,7 +65,9 @@ paths:
   tylko póki blok ruszała sama aplikacja) cofa jego automatyczny koniec. „Tydzień” (`week.ts`) rysuje zamieniony jak oś.
 - Jednym ciągiem (D553–D556, T1962–T1966): `settings.awayChain` – `awayEnd` kończy blok „poza komputerem” (poza dojazdem) najpóźniej o
   planowanym końcu regułą `awayChain` (`fin`, bez pytania i wiersza w rytuale), `awayKnownAt` – start następnego od razu; „Cofnij” –
-  `awayChainUndo` (starty od końca do powrotu); sprawdzanie końców pisze nowy koniec w tym samym przebiegu.
+  `awayChainUndo` (starty od końca do powrotu; odmowa przy innym biegu z przodu); sprawdzanie końców pisze nowy koniec w tym samym
+  przebiegu. Ustawienie z chwili startu bloku (`chainOn`), start od razu tylko po końcu ciągu (`freeSince`), Twoje „Cofnij” –
+  `chainTakenBack` (T1968).
 - Grupa równoległa (D476, D493, D494, D499, T1190–T1199): `block.start.group` (`BlockFact.group`) – start grupy
   `groupStarts` (`groupOf` z `parallel.ts`, 1.23-A), z przodu `groupFront` (to samo w `energy.ts`), `front` (pasek „+K w
   tle”), `groupStart`/`groupPlan` w `auto.ts`; blok spoza grupy (także stały sam, „Odcinam się”) pauzuje całą grupę, „Dalej” w

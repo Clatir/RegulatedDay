@@ -2946,7 +2946,7 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - [ ] Odebrane
 - **Automatycznie:** `tests/unit/engine/away-chain.test.ts`. Ty: na prawdziwym dniu.
 - **Jak sprawdzić:** Ustawienia → „Pytania w ciągu dnia” → włącz „Bloki poza komputerem jednym ciągiem” (od dziś). Zaplanuj np. posiłek 30 min i zaraz po nim spacer (regeneracja) albo sprawy domowe. Odejdź od komputera co najmniej 10 min przed posiłkiem i wróć po planowanym końcu ostatniego bloku.
-- **Oczekiwany efekt:** na osi posiłek i spacer stoją dokładnie w planowanych godzinach, oba skończone; po powrocie pasek nie pyta „trwał do teraz”; w „zrobione automatycznie” – „… zaczęty o … (bez komputera, według planu)” i „… skończony o … (według planu, jednym ciągiem)”, każdy z „Cofnij”. Bez ustawienia (wyłączone) – jak dotąd: posiłek trwa do powrotu albo limitu, spacer się nie zaczyna.
+- **Oczekiwany efekt:** na osi posiłek i spacer stoją dokładnie w planowanych godzinach, oba skończone; po powrocie pasek nie pyta „trwał do teraz”; w „zrobione automatycznie” – „… zaczęty o … (bez komputera, według planu)” i „… skończony o … (według planu, jednym ciągiem)”, każdy z „Cofnij”. Bez ustawienia (wyłączone) – jak dotąd: posiłek trwa do limitu (planowany koniec + 30 min), spacer od niego do powrotu, z pytaniem.
 - **Nie przechodzi, gdy:** spacer się nie zaczyna albo zaczyna później niż koniec posiłku; po powrocie jest pytanie o ostatni blok; blok liczy się jako niezrobiony; przełącznik nie zapisuje się albo na drugim komputerze ma inną wartość.
 
 #### JC2 Powrót w trakcie bloku (D554)
@@ -2961,7 +2961,7 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Automatycznie:** `tests/unit/engine/away-chain.test.ts` („Cofnij” końca według planu).
 - **Jak sprawdzić:** po JC1 w „zrobione automatycznie” kliknij „Cofnij” przy „Posiłek skończony o … (według planu, jednym ciągiem)”.
 - **Oczekiwany efekt:** spacer znika z faktów (niezaczęty, nie zaczyna się już sam), posiłek kończy się według zwykłych reguł (przy powrocie albo planowany koniec + 30 min).
-- **Nie przechodzi, gdy:** posiłek i spacer biegną naraz; posiłek zostaje otwarty bez końca.
+- **Nie przechodzi, gdy:** posiłek i spacer biegną naraz; posiłek zostaje otwarty bez końca; „Cofnij” jest przy końcu, po którym zaczął się blok stały.
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
 #### CI1 Nazwy pul przy polach kosztu (D525)

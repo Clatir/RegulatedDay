@@ -17,7 +17,7 @@ import { isBoundaryWork, ownHourBlock, plannedSpan, setsWorkEndBlock, startPlann
 import type { DayContext, DayState } from './day'
 import { workedUntilOf } from './explain'
 import { OPEN, compareOrder, endShiftOf, type EventOrder, isRunning, type AutoAction, isRunningRequest, lastRunEnd, ranMinutes, resumedWith, runShift, workSince, type BlockFact } from './facts'
-import { activityOf, firstUseAfter } from './activity'
+import { activityOf, firstUseAfter, type Activity } from './activity'
 import { atOf, idxOf } from './grid'
 import { groupOf } from './parallel'
 
@@ -358,21 +358,31 @@ export function untouched(state: DayState, block: string): boolean {
  * „Jednym ciągiem” (D555, T1964): what goes back with a block's end by the plan (`awayChain`, `a`) – every block the app
  * began by itself from that end up to your return (`awayStart`, with the rest of its group and its automatic end, the next
  * ones of the chain too): the block goes on to the return or its limit, so they would run beside it. Null – one of them
- * changed since its start (the chain stays as it is).
+ * changed since its start, or another block ran in front then (a fixed one, a click – T1968): the chain stays as it is.
+ * `activity` – the one the caller judges with (the bar's, the leader's).
  */
-export function awayChainUndo(ctx: Pick<DayContext, 'events'>, state: DayState, a: AutoAction, now: number): AutoAction[] | null {
+export function awayChainUndo(state: DayState, activity: Activity, a: AutoAction): AutoAction[] | null {
   const f = a.block ? state.facts.blocks.get(a.block) : undefined
   if (a.rule !== 'awayChain' || a.k !== 'block.end' || !f || f.startedAt == null) return []
   // The return the block's usual end counts (`awayEnd`: the first use after 2 min without input from its start or last run).
   const from = atOf(state.grid, f.group != null ? (f.runs.at(-1)?.from ?? f.startedAt) : f.startedAt)
-  const back = firstUseAfter(activityOf(ctx.events, state.grid.start, now), from)
+  const back = firstUseAfter(activity, from)
+  const before = (idx: number) => idx >= a.at && (!back || atOf(state.grid, idx) < back.use)
   const out: AutoAction[] = []
+  const going = new Set<string>()
   for (const x of state.facts.autos) {
-    if (x.k !== 'block.start' || x.rule !== 'awayStart' || !x.block || x.block === a.block || x.at < a.at || state.facts.undone.has(x.id)) continue
-    if (back && atOf(state.grid, x.at) >= back.use) continue
+    if (x.k !== 'block.start' || x.rule !== 'awayStart' || !x.block || x.block === a.block || !before(x.at) || state.facts.undone.has(x.id)) continue
     if (!untouched(state, x.block)) return null
     const end = state.facts.blocks.get(x.block)?.endId
-    out.push(x, ...state.facts.autos.filter((y) => y.id === end), ...groupStartsWith(state, x))
+    const mates = groupStartsWith(state, x)
+    out.push(x, ...state.facts.autos.filter((y) => y.id === end), ...mates)
+    going.add(x.block)
+    for (const m of mates) if (m.block) going.add(m.block)
+  }
+  // Any other run in front from that end to the return stays – so does the end (the block would run beside it).
+  for (const [id, g] of state.facts.blocks) {
+    if (id === a.block || going.has(id)) continue
+    if (g.runs.some((r) => !r.bg && before(r.from))) return null
   }
   return out
 }
@@ -683,7 +693,7 @@ export function startCost(state: DayState, info: BlockInfo, at: number): ActionC
 }
 
 /** One click of the timer at `at` (ms): the events to write, or why it does nothing, or the cost of a second click. */
-export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, at: number): ActionResult {
+export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, at: number, activity?: Activity): ActionResult {
   const t = timerNow(state)
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
   const no = (why: string, confirm: ActionCost | null = null, code?: ResultCode): ActionResult => ({ ok: false, why, confirm, ...(code ? { code } : {}) })
@@ -893,7 +903,8 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       }
       // „Jednym ciągiem” (D555): an end by the plan goes back with the blocks the app began after it before your return.
       if (a.rule === 'awayChain' && a.k === 'block.end') {
-        const chained = awayChainUndo(ctx, state, a, at)
+        // The caller's activity (this computer's own observation too); without it – from the day's log alone.
+        const chained = awayChainUndo(state, activity ?? activityOf(ctx.events, state.grid.start, at), a)
         if (chained == null) return no('tego już nie cofniesz – kolejny blok zmienił się po starcie')
         pair = chained
       }
