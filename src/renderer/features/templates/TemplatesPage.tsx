@@ -333,8 +333,6 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           <div className="flex flex-wrap items-center gap-2">
             <TextField value={template.name} onCommit={(name) => void saveTemplate({ name })} required max={80} shellClassName="max-w-[260px]" aria-label="Nazwa szablonu" data-testid="template-name" />
             <span className="flex-1" />
-            <TemplateDaysButton template={template} today={today} kind="apply" />
-            <TemplateDaysButton template={template} today={today} kind="revoke" />
             <button type="button" className="btn" onClick={() => void copy()} data-testid="template-copy">
               Skopiuj szablon
             </button>
@@ -344,6 +342,11 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
             <button type="button" className="btn" onClick={() => void remove()}>
               Usuń
             </button>
+          </div>
+          {/* Its own row: in the name's row the buttons wrap under the name at the editor's width (T1910). */}
+          <div className="flex flex-wrap items-center gap-2" data-testid="template-days-row">
+            <TemplateDaysButton template={template} today={today} kind="apply" />
+            <TemplateDaysButton template={template} today={today} kind="revoke" />
           </div>
           {template.archived && (
             <p className="rounded border border-line-strong bg-raised px-3 py-2 text-[12.5px]" data-testid="template-archived">

@@ -54,7 +54,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 10. **1.29.0 – szablon w wybrane dni (D540–D545, T1900–T1909, sesja d1):** w edytorze szablonu „Zastosuj do…” i „Odwołaj w…”
    (Dziś · Jutro · Wybierz dni… – miesiąc z Ctrl+klik i Shift+klik, pola DD-MM-RRRR i ddmmrrrr); kolizja na dniu bez bloków
    szablonu pyta „Uzupełnij luki / Nadpisz plan”. Silnik `src/shared/engine/templateApply.ts`, okno `src/renderer/features/templates/`.
-   Dwie rundy `/code-review` (T1906–T1909). Odbiór SZ1–SZ3 w `docs/odbior.md`. PR – w toku (gałąź `claude/1.29-szablon-do-dni`).
+   Dwie rundy `/code-review` (T1906–T1909); układ przycisków po CI – T1910. Odbiór SZ1–SZ3 w `docs/odbior.md`. PR #99.
    - Przyjęte bez pytania (użytkownik: „tryb autoakceptacji zalecanych”): bloki zaczęte, sesje, wykłady i zjazdy nigdy nie są
      odwoływane; kopie w godzinach szablonu bez przesunięcia pobudki; każdy dzień dostaje wersję szablonu ważną w tym dniu (przed
      pierwszą – pierwszą); najwyżej 366 dni naraz; dni nieczytelne pominięte i wymienione w linii; blok przeniesiony na inny dzień
