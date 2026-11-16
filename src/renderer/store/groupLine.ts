@@ -36,6 +36,12 @@ const endings = new Map<GroupView, ReturnType<typeof setTimeout>>()
 export const UNDO_FAILED_TEXT = 'Nie udało się cofnąć zmiany'
 
 /**
+ * What an undo throws when it did not take the change back (or not all of it) and has said why itself (a toast of the save, a file that cannot be
+ * read now): the line stays for another try, without a second message.
+ */
+export class UndoNotDone extends Error {}
+
+/**
  * The end of the line `which` of `view` at `until` (the window's clock): the timer counts what is left from now, not a whole
  * `UNDO_LINE_MS` (a line made at `now` in the past ends at its own end). A line whose undo is running is not taken away under it –
  * `undoGroupLine` ends it when the undo does.
@@ -83,7 +89,7 @@ export function clearGroupLine(view: GroupView, which?: number): void {
 /**
  * „Cofnij” of the line of `view`: runs its undo once (while it runs, another call does nothing); afterwards the line is gone – unless a
  * newer group change replaced it meanwhile – and the undo's message, if any, is shown. The line stands while the undo runs, whatever the
- * time. An undo that throws leaves the line and says so: to the end of its own term, or – when that has passed meanwhile – for a new
+ * time. An undo that throws leaves the line and says so (one that threw `UndoNotDone` has said why itself): to the end of its own term, or – when that has passed meanwhile – for a new
  * `UNDO_LINE_MS` from the failure, so there is something to try again.
  */
 export async function undoGroupLine(view: GroupView): Promise<void> {
@@ -95,7 +101,7 @@ export async function undoGroupLine(view: GroupView): Promise<void> {
   let message: string | void
   try {
     message = await line.undo()
-  } catch {
+  } catch (e) {
     const now = Date.now()
     const still = useGroupLine.getState().lines[view]
     if (still?.seq === line.seq) {
@@ -103,7 +109,7 @@ export async function undoGroupLine(view: GroupView): Promise<void> {
       useGroupLine.setState((s) => ({ lines: { ...s.lines, [view]: { ...s.lines[view]!, undoing: false, until } } }))
       arm(view, line.seq, until)
     }
-    toast(UNDO_FAILED_TEXT, 'error')
+    if (!(e instanceof UndoNotDone)) toast(UNDO_FAILED_TEXT, 'error')
     return
   }
   clearGroupLine(view, line.seq)

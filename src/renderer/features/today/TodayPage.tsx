@@ -4,7 +4,7 @@
  * exception), getting up later, the change of the day's type, the exchange for a work block added after the approval,
  * moving and copying.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { costText } from '@shared/costText'
 import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
@@ -50,9 +50,10 @@ import { occurrenceRuleText } from '../series/seriesForm'
 import { saveTileCosts } from '../plan/costSave'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis, daySummary } from '../plan/dayItems'
-import { menuCtxOf } from '../plan/groupMenu'
+import { menuCtxOf, type MenuState } from '../plan/groupMenu'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
-import { useAxisGroup } from '../plan/useAxisGroup'
+import { useAxisGroup, type AxisTile } from '../plan/useAxisGroup'
+import { judgeBlocks } from '../plan/groupRun'
 import { rememberNewBlockCategory } from '../plan/lastCategory'
 import { edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
@@ -278,6 +279,14 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   // D527, D528: the selection of many blocks of the axis – Ctrl+click, Shift+click, Shift+arrows, Ctrl+A, the menu of the right button; scope: the day. It
   // selects what the axis draws (the checked calendars' blocks and the revealed one), in one list for the order, the line and the menu.
   const menuCtx = useMemo(() => menuCtxOf(names), [names])
+  // Stable while the day's model is: the menu opened counts its entries again when the day or its data change (T1720), not at every render.
+  const stateOf = useCallback((id: string, tile: AxisTile): MenuState => {
+    const f = model.state.facts.blocks.get(id)
+    return f?.startedAt != null ? 'begun' : f?.parkedAt != null || f?.cancelledAt != null ? 'off' : tile.dim ? 'past' : 'open'
+  }, [model])
+  // T1720: the entries by the engine's rules on the day as the axis shows it (the write judges again, in its turn).
+  const judge = useCallback((ids: readonly string[]) => judgeBlocks(model, ids, today), [model, today])
+  const where = useMemo(() => ({ date }), [date])
   const group = useAxisGroup({
     view: 'today',
     tiles: axisItems.items,
@@ -288,10 +297,9 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     moveFrom: date,
     energy: rd.general.modules.energy,
     ctx: menuCtx,
-    stateOf: (id, tile) => {
-      const f = model.state.facts.blocks.get(id)
-      return f?.startedAt != null ? 'begun' : f?.parkedAt != null || f?.cancelledAt != null ? 'off' : tile.dim ? 'past' : 'open'
-    }
+    stateOf,
+    where,
+    judge
   })
   // The scope picked for the steps of a block of a series holds while its panel stays open (T798): another block or none – asked again.
   const stepsScope = useRef<SeriesScope | null>(null)

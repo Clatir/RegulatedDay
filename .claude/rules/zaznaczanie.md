@@ -108,6 +108,10 @@ paths:
   wcześniej o 5, 15, 30, 60 i pole, „Przenieś na dzień…” → `GroupMoveDialog`, „Odwołaj”, „Zaparkuj”, „Usuń”; szablon bez trzech działań dnia; wyłączone z powodem wg `MenuBlock.state` (`open` / `begun` / `past` / `off`): wszystkie zaczęte –
   „Żaden blok nie jest niezaczęty”, wszystkie minione, wszystkie zdjęte z planu (zaparkowane, odwołane), żaden nie ma godziny do przesunięcia, różne podkategorie dla wariantu; okno kosztu zaczyna od kosztu
   pierwszego zaznaczonego). `BlockGroupMenu` składa menu i dwa okna dla ekranów. Prawy przycisk i klawisz menu na elemencie: `menuBind(open)` w `ContextMenu.tsx` (kafelek osi, `BlockBox`, wiersz Spraw, dzień Kalendarza).
-- **Zaślepka Z4-A:** każda zmiana idzie przez `runGroupAction(view, ids, akcja)` → `groupRunner.run` (akcje `GroupAction`: category, variant, cost, routine, shift (ze znakiem), moveTo, cancel, park, remove;
-  `ids` w „Tygodniu” to `blockKey(date, id)`). Domyślnie biegacz mówi toastem „…jeszcze nie jest podłączona”; Z4-A podmienia `groupRunner.run` i bierze wyłączenia z `judgeGroup`.
+- **Działania (Z4-B, Z5):** każda zmiana idzie przez `runBlockGroup(view, ids, akcja, where)` z `plan/groupRun.ts` (importują go wprost `BlockGroupMenu`, `useAxisGroup`, `weekSelect`):
+  „Dziś” – `where: { date }` → `changeDayGroup`, „Szablony” – `{ templateId, from }` → `changeTemplateGroup`, „Tydzień”/„3 dni” – klucze `blockKey` po dniach → `changeDaysGroup`
+  (jedna edycja, jedno „Cofnij”). Linia `showGroupLine` (`blockLineText`: czasownik akcji, pominięte, „został – …”, energia, seria, „przesunięto N”); dni niezapisane – „1 dzień czeka na odpowiedź”, „… niezapisany”; zmiana bez „Cofnij” – ten sam
+  tekst w rogu; nic nie zmieniono – toast `nothingText`; „Cofnij” niepełne – `UndoNotDone` (linia zostaje, bez drugiego komunikatu). Pozycje menu: `MenuCtx.judge` =
+  `judgeBlocks` → `ruleVerdicts` silnika (jeden przebieg na otwarcie menu – `useMemo` po `menu`, `view`, wartości `where`, `ctx` i `blocksOf`; ekrany trzymają `judge`, `stateOf`, `where` i `blocksOf` stałe między rysowaniami; „Dziś”, szablon); bez niego (kolumny) stany
+  `MenuBlock` i `notToday` (odwołaj / zaparkuj tylko dziś, T1720).
 - E2E ciągu Z: `tests/e2e/group-select.spec.ts` (oś jutra: Ctrl/Shift/klik/Esc/kopia Ctrl/menu; „Tydzień”: Ctrl+klik dwóch dni; Kalendarz: 7 dni → „Wolne” → linia → „Cofnij”) – dni z przyszłości liczone od `logicalToday()`, nic nie zależy od godziny testu.
