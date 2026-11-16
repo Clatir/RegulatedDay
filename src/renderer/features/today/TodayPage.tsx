@@ -96,6 +96,8 @@ import { hiddenBlocksAmong, useVisibleBlocks } from '../calendars/calendarFilter
 import { CalendarChips } from '../calendars/CalendarChips'
 import { axisWithRevealed, useVisibleAllDayIn } from '../calendars/visibleViews'
 import { UnclosedDays } from '../ritual/UnclosedDays'
+import { dragPreview } from '@shared/engine/groupDrag'
+import { dragDayGroup } from '../plan/groupDrag'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
 /** What belongs to the new block on the screen: a press there is no click elsewhere (D461) – its panel and its tile on the axis. */
@@ -711,6 +713,16 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
               clickCreates={false}
               // D513: dropped with Ctrl held – a copy at that hour, the original where it is (today and later), pushing apart as a new block.
               onCopy={date >= today ? copyHere : undefined}
+              // D531: a selected block of two and more drags the group – the same difference for each (with Ctrl – its copy), today and later.
+              groupDrag={
+                date >= today
+                  ? {
+                      has: (id) => group.sel.count >= 2 && group.sel.isSelected(id),
+                      preview: (_id, minutes, copy) => dragPreview(model, group.sel.selected, minutes, today, { copy, axis: isToday ? 'forecast' : 'plan' }),
+                      drop: (_id, minutes, copy) => void dragDayGroup({ view: 'today', keys: group.sel.selected.map((id) => ({ date, id })), delta: { days: 0, minutes }, copy })
+                    }
+                  : undefined
+              }
               // D305: the dragged block's planned start, as an edit of the day – today and later (a day gone is history);
               // D367: with the blocks it pushes apart.
               onMove={

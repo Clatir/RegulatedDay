@@ -67,7 +67,7 @@ export interface CopyDone {
 const NO_FILES: Promise<string[]> = Promise.resolve([])
 
 /** A file of the change stands as the change left it (`after`); none – it is gone. */
-const stands = (now: RawRecord | null, after: RawRecord | null): boolean => (now == null ? after == null : after != null && isRaw(now) && sameContentAs(now, after))
+export const stands = (now: RawRecord | null, after: RawRecord | null): boolean => (now == null ? after == null : after != null && isRaw(now) && sameContentAs(now, after))
 
 /**
  * „Cofnij” of a copy (one edit): the copies of the files come to their end first (a record written after it would stand without its

@@ -134,7 +134,8 @@ export function pushApart(ctx: DayContext, state: DayState, plan: readonly PlanB
   // The other blocks the change put (`placed`): each holds its start – a block of the push (one lifted or written already, or shown
   // later than before the change: the change moved it there) shown right before it while it stands later than its start goes behind it
   // (fractional starts just after its start: the latest lifted nearest behind it, so the order the axis showed them stays). A block the
-  // change did not touch stays – a placed block after it may stand a transition buffer later, as any block after it. Starts only grow.
+  // change did not touch stays when it starts before the placed one – a placed block after it may stand a transition buffer later, as any
+  // block after it; one planned at the placed one's very start is on the place taken and goes behind it (T1750). Starts only grow.
   const others = opts.placed ? after.filter((b) => b.id !== id && opts.placed!.has(b.id) && b.start != null && b.alongside == null && !b.bg) : []
   const liftsOf = new Map<string, number>()
   /** The blocks to go behind a placed one in this count (pure): [the block, the placed one]. */
@@ -146,7 +147,7 @@ export function pushApart(ctx: DayContext, state: DayState, plan: readonly PlanB
       const i = fg.findIndex((p) => p.block.id === q.id)
       const prev = i > 0 ? fg[i - 1]!.block.id : null
       if (prev == null || fg[i]!.from <= q.start! || !start.has(prev) || start.get(prev)! > q.start!) continue
-      if (!lifted.has(prev) && !written.has(prev) && fg[i - 1]!.from <= before.get(prev)!.from) continue
+      if (!lifted.has(prev) && !written.has(prev) && fg[i - 1]!.from <= before.get(prev)!.from && start.get(prev)! < q.start!) continue
       out.push([prev, q])
     }
     return out

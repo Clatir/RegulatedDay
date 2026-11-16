@@ -45,6 +45,8 @@ paths:
   i „Szablony” podają `onCopy` – „Dziś” woła `copyDayBlock`); z Ctrl
   bez strefy równoległej (D492); oryginał zostaje w swoim pasie, duch `copy-ghost` (`data-start`/`data-end`), `data-copying` i kursor
   `copy`; puszczenie z Ctrl → `onCopy(id, start)` od razu (bez trzymania), w miejscu oryginału (`staysPut`) – nic.
+- Grupa (D531): `Timeline.groupDrag` / `DayGrid` `Lift.members` z Ctrl → `dragDayGroup(copy)` / `dragTemplateGroup(copy)` – każda kopia jak D513 (reguły `zmiany-grupowe.md`),
+  duchy `copy-ghost[data-of]` każdej kopii.
 - `DayGrid`: `Lift.plain` (miejsce na godzinę, bez `onto`), `copying` (kursor, `data-copying`, oryginał bez przyciemnienia), `up` z
   `ev.ctrlKey` → `copyDayBlock` (siatka wolna po zapisie planu). Esc przerywa tylko przy `keydown` (`keyup` słucha się dla Ctrl) –
   tak samo w `usePointerDrag`.

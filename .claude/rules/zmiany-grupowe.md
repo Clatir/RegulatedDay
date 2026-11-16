@@ -11,6 +11,10 @@ paths:
   - "tests/unit/engine/group-edit-calls.test.ts"
   - "tests/web/group-actions.test.ts"
   - "tests/fs/group-edit.test.ts"
+  - "src/shared/engine/groupDrag.ts"
+  - "src/renderer/features/plan/groupDrag.ts"
+  - "tests/unit/engine/group-drag.test.ts"
+  - "tests/web/group-drag.test.ts"
 ---
 
 # Zmiany grupowe bloków (D527–D531, ciąg Z – logika i zapis)
@@ -32,7 +36,7 @@ linii – moduł Z1 (`src/shared/groupText.ts`); tu tylko dane.
   (Twój – z pliku, migawki – `cancelled`), `movedDays` (kolejno `moveBetweenDays`, blok obok pierwszego zostaje obok, gdy ten też jedzie).
   Rozsuwanie `groupPush`: jedno `pushApart` od pierwszego ruszonego z pierwszego planu, pozostałe ruszone jako `placed` (trzymają godziny,
   blok pchnięty – podniesiony, zapisany albo pokazany później niż przed zmianą – który stanąłby tuż przed takim i go opóźnił, idzie za nim;
-  nietknięty zostaje) – zapisany start = pokazany (D367; test niezmiennika w `group-edit.test.ts`).
+  nietknięty zostaje, chyba że zaczyna się na samym starcie postawionego – wtedy idzie za nim, T1750) – zapisany start = pokazany (D367; test niezmiennika w `group-edit.test.ts`).
 - „Cofnij”: `fieldsUndoOf` / `fieldsUndoIn` (tylko `UNDO_KEYS`, PRZED i PO), `undoFields` / `undoFieldsIn` – blok wraca, gdy każde jego pole
   ma nadal wartość PO, inaczej `kept`; blok migawki, którego wpis zmiana dopisała (`added`), wychodzi z pliku, póki wpis stoi jak po niej;
   `undoRemoval`; `groupFreed` (D368 – zakotwiczony w czasie kotwicy, gdy ta coś zwalnia); `groupLogDrafts` (bloki według godzin z prognozy, remis – kolejność planu; każdy
@@ -57,4 +61,25 @@ linii – moduł Z1 (`src/shared/groupText.ts`); tu tylko dane.
   `written` – identyfikatory dla „Cofnij”, jak `closeDay`/`undoClose`).
 - „Szablony” – `templates/templateGroup.ts` `changeTemplateGroup({ templateId, from }, ids, a)`: identyfikatory wersji; w turze zapisu szablon
   z widoku i dzień wersji (`templateDay.ts` `templateDayOf` – ta sama reguła co strona), jedna zmiana wersji od `from` (bez zmiany – bez wersji
-  i „Cofnij”); usuń – odmowa przy `attachmentsUnread`; przesunięcie – `templateShift` (`frameOf`, `reshown` – wspólne z `inTemplate`).
+  i „Cofnij”); usuń – odmowa przy `attachmentsUnread`; przesunięcie – `templateShift` (`frameOf`, `reshown` – wspólne z `inTemplate`; `preview` – podgląd przeciągania).
+
+## Przeciąganie grupy (D531, Z6)
+- Czyste – `engine/groupDrag.ts`: `judgeDrag(dni, klucze {date,id}, {days, minutes}, today, { inView, copy })` → `take` (`DragMove`: dzień, cel, nowy start =
+  `axisStartsOf` + minuty – jeden lookup na wywołanie), `along`, `stayed` (`DragStayWhy` – słowa „1 został – już trwa”: `stayWordOf` z `SkipWhy`). W dniu –
+  reguła „Przesuń o” (`judgeGroup` 'shift'), na inny dzień – „poza dniem” z 'shift', reszta z 'moveTo' (zakotwiczone D424/D426); cel miniony – „dzień minął”,
+  spoza widoku – „poza widokiem”; kopia nie bierze zakotwiczonych („zakotwiczony”, też w szablonie). `draggedDays` → `days`, `stages` (najpierw połówki
+  przynoszące – `owner`, T952), `links`, `sources`, `copies`, `moved`. W dniu – `shiftedDay`; na inne dni – `moveTarget` dla wszystkich par, potem
+  `moveSource`, rozsunięcie `groupPush` na `dayPlan` po zmianie (`withPushedStarts`; sam plan – `pushedPlan`); `DragJudged.delta` (T1779); kopia –
+  oryginały `fixed` w rozsuwaniu, kopie grupy równoległej zostają grupą – część bez pierwszego bloku: pierwsza z części jest nowym pierwszym (`copyHeads`,
+  T1766, T1770). `dragPreview` – tylko plan (`shiftPatches` + `groupPush`, kopia – `copiedPlan`; T1778); id kopii w podglądzie – `copyKeyOf`.
+- Okno – `plan/groupDrag.ts`: `dragDayGroup({ view, keys, delta, copy, inView })` – dni czytane i liczone w turze, jedno `edit` (zależne `after` = wszyscy
+  właściciele; „dziś” i dni liczone w turze, T1773), linia `showGroupLine` (`dragLineText`), nic nie pojechało – komunikat. „Cofnij”: w obrębie dnia – jak
+  „Przesuń o” (`fieldsUndoOf` / `undoFields`, T1763; reguła `undoEditDays`: zapisany dzień liczony raz, z pytaniem – bez liczenia, nigdy ponownie,
+  odrzucony / nieczytelny – kolejne „Cofnij”, `UndoNotDone`, T1772); na inne dni – `undoDays` (`takeBackDays`, składowe `links` razem, źródła pierwsze; ta sama pamięć dni, T1780);
+  `keptText`. Kopia – `change` (sprawy z dniem, załączniki w tle, „Cofnij” dzień po dniu – `stands` z `blockCopy.ts`). Szablon – `dragTemplateGroup` (ruch =
+  `changeTemplateGroup` 'shift', kopia = `templateGroupCopy`), `templateDragPreview` (zakotwiczone za kotwicą – `moved`; `templateShift(…, { preview: true })`).
+- Gesty: `Timeline.groupDrag` (`has`, `preview`, `drop`; bez strefy równoległej; Esc przy wciśniętym – także przed progiem 4 px – odwołuje w fazie
+  przechwytywania i wycisza klik myszy po nim – do puszczenia (+ jedna tura), `lostpointercapture` albo naciśnięcia; klik z klawiatury nigdy, T1764, T1777;
+  trzymanie z podglądu miejsca upuszczenia – `groupPreviewAt`, T1776; chwycony, który zostaje – bez trzymania, T1767). `DayGrid`: `Lift.members`, dni grupy
+  liczone przy pierwszym ruchu ponad próg (`countDragDays`, T1774), pasma `week-group-drop[data-of]` i przyciemnienie z oceny upuszczenia (`dragGoing` →
+  `groupBands`, T1765) tylko przy zmianie kolumny, startu, Ctrl (`placedFor`, T1775); Esc grupy także przed progiem (T1771).

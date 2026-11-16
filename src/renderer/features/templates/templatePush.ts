@@ -13,7 +13,9 @@ import { firstFixedStart, shiftedStart, unshiftedStart } from '@shared/engine/cr
 import type { DayContext, DayState } from '@shared/engine/day'
 import { idxOfLogical, logicalSpan } from '@shared/engine/grid'
 import { copiedBlock } from '@shared/engine/planEdit'
-import { groupPush, patchedPlan, shiftPatches } from '@shared/engine/groupEdit'
+import { groupPush, patchedPlan, pushedPlan, shiftPatches } from '@shared/engine/groupEdit'
+import { groupRootOf, plannedStart } from '@shared/engine/parallel'
+import { copyHeads } from '@shared/engine/groupDrag'
 import { axisMoves, pushApart, withBlock, type PushHold } from '@shared/engine/pushApart'
 import type { DaySnapshot } from '@shared/model/events'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN, type PlanBlock, type TemplateVersion } from '@shared/model/plan'
@@ -150,18 +152,22 @@ export function templateCopy(day: TemplateDay, block: PlanBlock, startMin: numbe
   return inTemplate(day, c.block, c.patch, null, 'new', undefined, undefined, stay)
 }
 
-/** A change of the version's blocks by their ids in it (a group's shift): the fields of each, and how many blocks it pushed apart. */
+/**
+ * A change of the version's blocks by their ids in it (a group's shift): the fields of each, and how many blocks it pushed apart; `preview` –
+ * asked for (D531: the drag of a group shows it while it is held) – every block whose place on the axis it moves, by its id in the version, there.
+ */
 export interface TemplatePatches {
   patches: Array<{ id: string; patch: Partial<PlanBlock> }>
   pushed: number
+  preview?: Map<string, BlockSpan>
 }
 
 /**
  * „Przesuń o” ±N min of blocks of the version (D528) – `ids` the blocks of the day it makes (`judgeGroup` took them): each at its start
  * plus `minutes` on that day, at the nearest place the day can show it (as its drag, D372), with the blocks they push apart (D367 – the
- * others held where the change put them), all in the template's hours by their ids in the version.
+ * others held where the change put them), all in the template's hours by their ids in the version. `preview` – also where the axis shows them.
  */
-export function templateShift(day: TemplateDay, ids: readonly string[], minutes: number): TemplatePatches {
+export function templateShift(day: TemplateDay, ids: readonly string[], minutes: number, o: { preview?: boolean } = {}): TemplatePatches {
   const shifted = shiftPatches(day.ctx.plan, ids, minutes)
   const { toTemplate, onDay, reach } = frameOf(day, patchedPlan(day.ctx.plan, shifted))
   // Each block put where the day can show it; every other block of the template where the day's wake shows it then.
@@ -184,7 +190,76 @@ export function templateShift(day: TemplateDay, ids: readonly string[], minutes:
     const b = day.ctx.plan.find((x) => x.id === p.id)
     if (of && b) patches.push({ id: of, patch: { startMin: toTemplate(b, p.startMin) } })
   }
-  return { patches, pushed: pushed.filter((p) => src.has(p.id)).length }
+  const out: TemplatePatches = { patches, pushed: pushed.filter((p) => src.has(p.id)).length }
+  if (o.preview) {
+    out.preview = new Map()
+    for (const [dayId, span] of axisMoves(day.ctx, day.state, pushedPlan(after, pushed), 'plan')) {
+      const of = src.get(dayId)
+      if (of) out.preview.set(of, span)
+    }
+  }
+  return out
+}
+
+/** The copies of a group of the version (D531 with Ctrl – D513 for each): the new blocks of the version, the others' fields, the pushed and the preview. */
+export interface TemplateGroupCopy {
+  /** The new blocks of the version (the template's hours), each with the id in the version of the block it copies. */
+  puts: Array<{ block: PlanBlock; of: string }>
+  patches: Array<{ id: string; patch: Partial<PlanBlock> }>
+  pushed: number
+  /** The blocks the copies push apart (by their ids in the version) and the copies (by the id in the version of the block each copies). */
+  preview: Map<string, BlockSpan>
+  copies: Map<string, BlockSpan>
+}
+
+/**
+ * Blocks of the version copied by Ctrl + drag of a group (D531, D513): `ids` – the blocks of the day the version makes the copy takes, each copied
+ * `minutes` later (earlier) than its plan, at the nearest place the day can show it (D372, as a copy of one – `templateCopy`); copies of a group of
+ * parallel blocks stay a group (D492: beside the copy of its first block); the originals held where they are (fixed blocks of the count – a copy
+ * never changes them), the blocks after the copies pushed apart (D367, the copies holding their starts – `groupPush`), all in the template's
+ * hours. `idOf` – the id of the copy of the block of the version `of` (a new one; in a preview `copyKeyOf`).
+ */
+export function templateGroupCopy(day: TemplateDay, ids: readonly string[], minutes: number, idOf: (of: string) => string): TemplateGroupCopy {
+  const src = sources(day)
+  const originals = new Set(ids)
+  const plan = new Map(day.ctx.plan.map((x) => [x.id, x]))
+  const made = ids.flatMap((id) => {
+    const b = plan.get(id)
+    const start = b ? plannedStart(b, plan) : null
+    if (!b || start == null) return []
+    const of = src.get(id) ?? id
+    const copy = copiedBlock(b, start + minutes, { id: idOf(of), origin: 'template' })
+    return [{ dayId: id, copy: { ...copy, sourceId: copy.id }, of }]
+  })
+  // D492 (T1770): the copies of one group stay a group – beside the copy of its first block, or (that one not copied) of the first of the part.
+  const heads = copyHeads(made.map((m) => ({ key: groupRootOf(plan, m.dayId) ?? m.dayId, of: m.dayId, copy: m.copy.id })))
+  const grouped = made.map((m) => (heads.has(m.copy.id) ? { ...m, copy: { ...m.copy, alongside: heads.get(m.copy.id)! } } : m))
+  const { toTemplate, onDay, reach } = frameOf(day, grouped.reduce((p, m) => withBlock(p, m.copy), [...day.ctx.plan]))
+  const put = grouped.map((m) => ({ ...m, copy: { ...m.copy, startMin: reach(m.copy, m.copy.startMin!) } }))
+  const after = put.reduce((p, m) => withBlock(p, m.copy), reshown(day, onDay))
+  const held = after.map((b) => (originals.has(b.id) ? { ...b, fixed: true } : b))
+  const pushed = groupPush(day, held, new Set(put.map((m) => m.copy.id)), { hold: reach, onUnsettled }).filter((p) => !originals.has(p.id))
+  const patches: TemplateGroupCopy['patches'] = []
+  for (const p of pushed) {
+    const of = src.get(p.id)
+    const b = plan.get(p.id)
+    if (of && b) patches.push({ id: of, patch: { startMin: toTemplate(b, p.startMin) } })
+  }
+  // Where the axis shows them: the copies by the blocks they copy (their ids – an explicit list), the pushed by their ids in the version.
+  const copyOf = new Map(put.map((m) => [m.copy.id, m.of]))
+  const preview = new Map<string, BlockSpan>()
+  const copies = new Map<string, BlockSpan>()
+  for (const [dayId, span] of axisMoves(day.ctx, day.state, pushedPlan(after, pushed), 'plan')) {
+    if (copyOf.has(dayId)) copies.set(copyOf.get(dayId)!, span)
+    else if (!originals.has(dayId) && src.has(dayId)) preview.set(src.get(dayId)!, span)
+  }
+  return {
+    puts: put.map((m) => ({ block: { ...m.copy, startMin: toTemplate(m.copy, m.copy.startMin!), origin: 'template', sourceId: null }, of: m.of })),
+    patches,
+    pushed: pushed.filter((p) => src.has(p.id)).length,
+    preview,
+    copies
+  }
 }
 
 /** The version's blocks with the change laid on (each patch over the block as the version holds it then). */
