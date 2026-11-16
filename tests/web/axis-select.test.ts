@@ -17,7 +17,8 @@ import { settingsOn } from '@shared/model/settings'
 import { DeleteDialog } from '@renderer/components/DeleteDialog'
 import { installDeleteKey, useDeleteSelected, useDeleteResolver } from '@renderer/lib/deleteKey'
 import { installEscape, setWindowEscape, useEscapeLayer } from '@renderer/lib/escape'
-import { groupRunner, menuCtxOf, type GroupAction, type MenuState } from '@renderer/features/plan/groupMenu'
+import { menuCtxOf, type GroupAction, type MenuCtx, type MenuState } from '@renderer/features/plan/groupMenu'
+import { BlockGroupMenu } from '@renderer/features/plan/BlockGroupMenu'
 import { Timeline, type TimelineItem } from '@renderer/features/plan/Timeline'
 import { useAxisGroup } from '@renderer/features/plan/useAxisGroup'
 import { TemplatesPage } from '@renderer/features/templates/TemplatesPage'
@@ -25,6 +26,12 @@ import { useData } from '@renderer/store/data'
 import { useUi } from '@renderer/store/ui'
 
 const records = new Map<string, RawRecord>()
+// The change of a pick: caught (the screens call `runBlockGroup` of `groupRun.ts`).
+const { runs } = vi.hoisted(() => ({ runs: [] as Array<{ view: string; ids: readonly string[]; action: unknown }> }))
+vi.mock('@renderer/features/plan/groupRun', async (orig) => ({
+  ...(await orig<typeof import('@renderer/features/plan/groupRun')>()),
+  runBlockGroup: vi.fn(async (view: string, ids: readonly string[], action: unknown) => void runs.push({ view, ids: [...ids], action }))
+}))
 vi.mock('@renderer/store/data', async (orig) => ({
   ...(await orig<typeof import('@renderer/store/data')>()),
   tryUpdateRecord: vi.fn(async (rel: string, fn: (raw: RawRecord) => RawRecord | null) => {
@@ -41,7 +48,6 @@ let host: HTMLElement | null = null
 let offEsc: () => void
 let offDel: () => void
 const capture = ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture'] as const
-const runs: Array<{ view: string; ids: readonly string[]; action: GroupAction }> = []
 
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -50,7 +56,6 @@ beforeEach(() => {
   offEsc = installEscape()
   offDel = installDeleteKey()
   runs.length = 0
-  groupRunner.run = (view, ids, action) => void runs.push({ view, ids: [...ids], action })
   for (const name of capture) Object.defineProperty(Element.prototype, name, { value: name === 'hasPointerCapture' ? () => false : () => undefined, configurable: true, writable: true })
   useUi.setState({ toasts: [] })
 })
@@ -100,6 +105,7 @@ function Harness({ items = TILES, onCopy, stateOf }: { items?: TimelineItem[]; o
   const names = { rd, settings: settingsOn(rd.settings, TODAY), routines: [], requests: [] }
   const group = useAxisGroup({
     view: 'today',
+    where: { date: TODAY },
     tiles: items,
     present: items.map((i) => i.id),
     scope: TODAY,
@@ -492,5 +498,48 @@ describe('„Dziś”: okablowanie strony (TodayPage mierzy E2E; tu – warunki 
     // The Esc of the panel is a layer of its own, the selection's is a base layer – the panel opened by the click closes first (T1543).
     const hook = readFileSync('src/renderer/lib/useSelection.ts', 'utf8')
     expect(hook).toContain('useEscapeLayer(enabled && count > 0, clear, true')
+  })
+})
+
+describe('menu „Zmień N bloków”: werdykty silnika raz na otwarcie, znowu przy zmianie danych (T1720)', () => {
+  const menu = { ids: ['a', 'b'], at: { x: 10, y: 10 } }
+  const ctx = menuCtxOf({ rd: rdFrom({ schema: 1 }), settings: settingsOn(rdFrom({ schema: 1 }).settings, '2026-11-16'), routines: [] })
+  const blocksOf = (ids: readonly string[]) => ids.map((id) => ({ id, categoryId: 'inne', variantId: null, routine: null, costs: null, state: 'open' as const, movable: true }))
+  const verdicts = (take: number) => ({ day: { take, skipped: take ? [] : (['nie dziś', 'nie dziś'] as const).slice() } })
+  let host: HTMLDivElement
+  let root: Root
+  const show = (o: { ctx: MenuCtx; date: string }) => act(async () => root.render(createElement(BlockGroupMenu, { view: 'today', menu, onClose: () => undefined, blocksOf, ctx: o.ctx, today: '2026-11-16', where: { date: o.date } })))
+  const cancel = () => document.querySelector('[data-testid="block-menu-cancel"]')!
+  beforeEach(() => {
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+  })
+  afterEach(() => {
+    act(() => root.unmount())
+    host.remove()
+  })
+
+  it('kolejne rysowanie ekranu z tymi samymi danymi (to samo `ctx` i `blocksOf`, nowy obiekt `where` o tej samej wartości) nie liczy ich znowu', async () => {
+    const judge = vi.fn(() => verdicts(2))
+    const same = { ...ctx, judge }
+    await show({ ctx: same, date: '2026-11-16' })
+    await show({ ctx: same, date: '2026-11-16' })
+    expect(cancel().getAttribute('aria-disabled')).toBeNull()
+    expect(judge).toHaveBeenCalledTimes(1)
+  })
+
+  it('przy otwartym menu zmienia się dzień albo jego dane – pozycje liczone od nowa', async () => {
+    const today = vi.fn(() => verdicts(2))
+    await show({ ctx: { ...ctx, judge: today }, date: '2026-11-16' })
+    expect(cancel().getAttribute('aria-disabled')).toBeNull()
+    // The day's data changed (a new model – a new `judge` of the screen): counted again.
+    const changed = vi.fn(() => verdicts(0))
+    await show({ ctx: { ...ctx, judge: changed }, date: '2026-11-16' })
+    expect(changed).toHaveBeenCalledTimes(1)
+    expect(cancel().getAttribute('title')).toBe('Odwołać i zaparkować można tylko dzisiejsze bloki')
+    // Another day with the same `ctx`: counted again too.
+    await show({ ctx: { ...ctx, judge: changed }, date: '2026-11-17' })
+    expect(changed).toHaveBeenCalledTimes(2)
   })
 })

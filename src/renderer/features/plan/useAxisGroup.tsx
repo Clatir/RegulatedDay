@@ -6,13 +6,14 @@
  * A selection of one that a plain click made goes with the panel, as the open block always did: the screen's closing of the panel is `release` (a group of
  * two or more, made with Ctrl or Shift, stays).
  */
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { PlanBlock } from '@shared/model/plan'
 import { useSelection, type SelectionApi } from '../../lib/useSelection'
 import type { DeleteTarget } from '../../lib/deleteKey'
 import type { GroupView } from '../../store/groupLine'
 import { BlockGroupMenu } from './BlockGroupMenu'
-import { blockSummary, byStart, onAxis, removeBlocksTarget, runGroupAction, type MenuBlock, type MenuCtx, type MenuState } from './groupMenu'
+import { blockSummary, byStart, onAxis, removeBlocksTarget, type GroupWhere, type MenuBlock, type MenuCtx, type MenuJudge, type MenuState } from './groupMenu'
+import { runBlockGroup } from './groupRun'
 import type { TimelineItem } from './Timeline'
 
 /** What the hook needs of a tile of the axis. */
@@ -36,6 +37,10 @@ export interface AxisGroupOptions {
   ctx: MenuCtx
   /** Where a block is in its day (default: still to come). */
   stateOf?: (id: string, tile: AxisTile) => MenuState
+  /** Where the blocks are (the day, the template's version) – the change of the menu goes there. */
+  where: GroupWhere
+  /** The engine's judgement of the menu's entries on the view's model (T1720); none – `stateOf`. */
+  judge?: MenuJudge
 }
 
 export interface AxisGroup {
@@ -66,17 +71,23 @@ export function useAxisGroup(o: AxisGroupOptions): AxisGroup {
   const chosen = useMemo(() => sel.selected.flatMap((id) => (tiles.has(id) ? [tiles.get(id)!] : [])), [sel.selected, tiles])
   const summary = useMemo(() => blockSummary(chosen, o.energy), [chosen, o.energy])
   const [menu, setMenu] = useState<{ ids: readonly string[]; at: { x: number; y: number } } | null>(null)
-  const removeTarget = sel.count >= 2 ? removeBlocksTarget(sel.count, () => runGroupAction(o.view, [...sel.selected], { kind: 'remove' })) : null
+  const removeTarget = sel.count >= 2 ? removeBlocksTarget(sel.count, () => runBlockGroup(o.view, [...sel.selected], { kind: 'remove' }, o.where)) : null
+  // Stable while the screen's inputs are (the menu counts its entries again only when they change).
+  const ctx: MenuCtx = useMemo(() => (o.judge ? { ...o.ctx, judge: o.judge } : o.ctx), [o.ctx, o.judge])
   const count = useRef(0)
   count.current = sel.count
   /** The selected blocks as the menu knows them: what the plan says (category, variant, routine), what the tile says (cost, hour), where they are in the day. */
-  const blocksOf = (ids: readonly string[]): MenuBlock[] =>
-    ids.flatMap((id) => {
-      const b = o.plan.find((x) => x.id === id)
-      const t = tiles.get(id)
-      if (!b || !t) return []
-      return [{ id, categoryId: b.categoryId, variantId: b.variantId ?? null, routine: b.routine ?? null, costs: t.cost?.costs ?? null, state: o.stateOf?.(id, t) ?? 'open', movable: t.movable === true }]
-    })
+  const { plan, stateOf } = o
+  const blocksOf = useCallback(
+    (ids: readonly string[]): MenuBlock[] =>
+      ids.flatMap((id) => {
+        const b = plan.find((x) => x.id === id)
+        const t = tiles.get(id)
+        if (!b || !t) return []
+        return [{ id, categoryId: b.categoryId, variantId: b.variantId ?? null, routine: b.routine ?? null, costs: t.cost?.costs ?? null, state: stateOf?.(id, t) ?? 'open', movable: t.movable === true }]
+      }),
+    [plan, tiles, stateOf]
+  )
   return {
     sel,
     summary,
@@ -98,6 +109,6 @@ export function useAxisGroup(o: AxisGroupOptions): AxisGroup {
     },
     onContext: (id, at) => setMenu({ ids: [...sel.onItemContext(id)], at }),
     removeTarget,
-    overlay: <BlockGroupMenu view={o.view} menu={menu} onClose={() => setMenu(null)} blocksOf={blocksOf} ctx={o.ctx} today={o.today} moveFrom={o.moveFrom} />
+    overlay: <BlockGroupMenu view={o.view} menu={menu} onClose={() => setMenu(null)} blocksOf={blocksOf} ctx={ctx} today={o.today} moveFrom={o.moveFrom} where={o.where} />
   }
 }

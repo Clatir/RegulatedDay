@@ -19,6 +19,7 @@ import {
   judgeGroup,
   movedDays,
   removedDay,
+  ruleVerdicts,
   shiftedDay,
   undoFields,
   undoRemoval,
@@ -597,5 +598,40 @@ describe('Skutek energii (D529): najniższa energia przed i po – ten sam silni
     const s = scenario(plan).checkin('07:00', ZERO)
     const d = dayOf(s, '07:30', ['e1', 'e2', 'e3'])
     expect(groupEnergy(d, { plan: d.ctx.plan }, {})).toBeNull()
+  })
+})
+
+describe('T1720 – reguły pozycji menu jednym przebiegiem (`ruleVerdicts`)', () => {
+  const plan = [
+    flex('run', '07:00', 60),
+    flex('park', '13:00', 30),
+    { ...fixed('ses', '14:00', 60), origin: 'session' as const, categoryId: 'sesja-ny' },
+    flex('r', '09:00', 30, { categoryId: 'rutyny' }),
+    flex('ok', '10:00', 30),
+    flex('anch', '10:30', 30, { startMin: null, anchor: 'ok' })
+  ]
+  const ids = ['run', 'park', 'ses', 'r', 'ok', 'anch', 'nic']
+  const day = () => dayOf(scenario(plan).start('run', '07:00').raw({ k: 'block.park', block: 'park', at: scenario(plan).at('07:30'), rule: 'user' }, '07:30'), '08:00')
+  // What `judgeGroup` of the rule's action says: the blocks it takes (with the same value, with a moved one) and the reasons of the rest.
+  const judged = (a: GroupAction) => {
+    const j = judgeGroup(day(), ids, a, DATE)
+    return { take: j.take.length + j.same.length + j.along.length, skipped: j.skipped.map((x) => x.why).sort() }
+  }
+  const sorted = (v: { take: number; skipped: readonly string[] } | undefined) => v && { take: v.take, skipped: [...v.skipped].sort() }
+
+  it('każda reguła jak `judgeGroup` swojego działania: ile bierze i powody pominiętych (zakotwiczony do przesuwanego – idzie z nim)', () => {
+    const v = ruleVerdicts(day(), ids, DATE)
+    expect(sorted(v.fields)).toEqual(judged({ k: 'category', categoryId: 'analiza', variantId: null }))
+    expect(sorted(v.cost)).toEqual(judged({ k: 'cost', costs: { head: 9, emotions: 9, senses: 9, body: 9 } }))
+    expect(sorted(v.routine)).toEqual(judged({ k: 'routine', routine: 'poranek', minutes: 20 }))
+    expect(sorted(v.place)).toEqual(judged({ k: 'shift', minutes: 15 }))
+    expect(sorted(v.place)).toEqual(judged({ k: 'moveTo', date: NEXT }))
+    expect(sorted(v.day)).toEqual(judged({ k: 'park' }))
+    expect(v.place!.take).toBe(3)
+  })
+
+  it('dzień przyszły – działania dnia „nie dziś”; szablon – bez działań dnia', () => {
+    expect(sorted(ruleVerdicts(day(), ids, '2026-10-27').day)).toEqual({ take: 0, skipped: ['nie dziś', 'nie dziś', 'nie dziś', 'nie dziś', 'nie dziś', 'nie dziś', 'nie ma'].sort() })
+    expect(ruleVerdicts(day(), ids, DATE, { dayActions: false }).day).toBeUndefined()
   })
 })

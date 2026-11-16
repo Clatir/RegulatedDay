@@ -5,9 +5,10 @@
  * right button or Shift+F10 opens „Zmień 4 bloki”. The ids of the selection are `blockKey(date, id)` (an id may repeat from day to day); the grid is
  * keyed by its first day, so another week, another three days or another view starts with nothing selected.
  */
-import { useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
-import { removeBlocksTarget, blockKey, blockSummary, menuCtxOf, parseBlockKey, runGroupAction, weekOrder, type MenuBlock, type MenuState } from '../plan/groupMenu'
+import { removeBlocksTarget, blockKey, blockSummary, menuCtxOf, parseBlockKey, weekOrder, type MenuBlock, type MenuState } from '../plan/groupMenu'
+import { runBlockGroup } from '../plan/groupRun'
 import { BlockGroupMenu } from '../plan/BlockGroupMenu'
 import type { DeleteTarget } from '../../lib/deleteKey'
 import { useSelection, type SelectionApi } from '../../lib/useSelection'
@@ -42,16 +43,21 @@ export function useWeekGroup(o: { days: readonly HorizonDay[]; scope: string; to
   const chosen = useMemo(() => sel.selected.flatMap((k) => (byKey.has(k) ? [byKey.get(k)!] : [])), [sel.selected, byKey])
   const summary = useMemo(() => blockSummary(chosen, o.energy), [chosen, o.energy])
   const [menu, setMenu] = useState<{ ids: readonly string[]; at: { x: number; y: number } } | null>(null)
-  const removeTarget = sel.count >= 2 ? removeBlocksTarget(sel.count, () => runGroupAction('week', [...sel.selected], { kind: 'remove' })) : null
+  const removeTarget = sel.count >= 2 ? removeBlocksTarget(sel.count, () => runBlockGroup('week', [...sel.selected], { kind: 'remove' })) : null
   // The subcategories, variants and routines to choose from are those of the first selected day (the settings of a date).
   const first = (menu?.ids[0] ? parseBlockKey(menu.ids[0]).date : o.today) || o.today
   const ctx = useMemo(() => menuCtxOf(o.namesOf(first)), [first, o.namesOf])
-  const blocksOf = (ids: readonly string[]): MenuBlock[] =>
-    ids.flatMap((k) => {
-      const b = byKey.get(k)
-      if (!b) return []
-      return [{ id: k, categoryId: b.categoryId, variantId: b.named.variantId ?? null, routine: b.named.routine ?? null, costs: b.cost?.costs ?? null, state: stateOfWeek(b.state), movable: b.movable === true }]
-    })
+  // Stable while the days are (the menu counts its entries again only when they change).
+  const today = o.today
+  const blocksOf = useCallback(
+    (ids: readonly string[]): MenuBlock[] =>
+      ids.flatMap((k) => {
+        const b = byKey.get(k)
+        if (!b) return []
+        return [{ id: k, categoryId: b.categoryId, variantId: b.named.variantId ?? null, routine: b.named.routine ?? null, costs: b.cost?.costs ?? null, state: stateOfWeek(b.state), movable: b.movable === true, notToday: parseBlockKey(k).date !== today }]
+      }),
+    [byKey, today]
+  )
   return {
     sel,
     summary,
