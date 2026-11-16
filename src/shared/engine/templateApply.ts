@@ -16,7 +16,7 @@
  * nor is a block one of them is anchored to – a template block colliding with one of them is left out in both modes. Past days are days
  * like the others (D542).
  */
-import { dayRaw, isRaw, putBlock, setCancelled, type Raw } from '../data/dayEdits'
+import { dayBlocks, dayRaw, isRaw, putBlock, setCancelled, setSessionAnswer, type Raw } from '../data/dayEdits'
 import type { DaySnapshot } from '../model/events'
 import { layerKept, sessionIdOf, templateVersionOn, type PlanBlock, type Template, type TemplateVersion } from '../model/plan'
 import { dayAnswer, entryDef, sessionEntries } from '../model/templateSessions'
@@ -169,13 +169,15 @@ export function applyTemplate(t: Template, day: ApplyDay, mode: ApplyMode, judge
   }
   const take = new Set<string>()
   for (const x of judged.missing) if (!x.clash.length || (m === 'overwrite' && x.clash.every(mayCancel))) take.add(x.block.id)
-  // A block anchored to a template block left out is left out too (it has no place without it).
+  // A block anchored to a block that will not be in the plan – a template block left out, or one begun and then removed (D336) – is
+  // left out too (it has no place without it).
   const byId = new Map(judged.missing.map((x) => [x.block.id, x]))
+  const inPlan = new Set(day.plan.map((b) => b.id))
   for (let changed = true; changed; ) {
     changed = false
     for (const id of take) {
       const a = byId.get(id)?.block.anchor
-      if (a && byId.has(a) && !take.has(a)) {
+      if (a && !take.has(a) && !inPlan.has(a)) {
         take.delete(id)
         changed = true
       }
@@ -190,20 +192,15 @@ export function applyTemplate(t: Template, day: ApplyDay, mode: ApplyMode, judge
   }
   let raw = dayRaw(day.raw, day.date)
   for (const id of cancel) raw = setCancelled(raw, id, true)
-  const answers = isRaw(raw.sessions) ? { ...raw.sessions } : {}
-  let answered = false
+  const cancelled = isRaw(raw.cancelled) ? raw.cancelled : Array.isArray(raw.cancelled) ? Object.fromEntries(raw.cancelled.map((x) => [String(x), true])) : {}
   for (const id of take) {
     const b = byId.get(id)!.block
-    if (b.origin === 'session' && b.sourceId && answers[b.sourceId] === 'no') {
-      delete answers[b.sourceId]
-      answered = true
-    }
-    // Cancelled before (a block of the snapshot, or a copy „Nadpisz” / „Odwołaj” left in the file): back. A block of the snapshot comes back
-    // as the day had it (your change of it stays); another one is written into the file.
-    raw = setCancelled(raw, b.id, false)
+    if (b.origin === 'session' && b.sourceId && isRaw(raw.sessions) && raw.sessions[b.sourceId] === 'no') raw = setSessionAnswer(raw, b.sourceId, null)
+    // Cancelled before (a block of the snapshot, or a copy „Nadpisz” / „Odwołaj” left in the file): back – only then is `cancelled` written.
+    // A block of the snapshot comes back as the day had it (your change of it stays); another one is written into the file.
+    if (cancelled[b.id]) raw = setCancelled(raw, b.id, false)
     if (!asSnap.has(b.id)) raw = putBlock(raw, b)
   }
-  if (answered) raw = { ...raw, sessions: answers }
   return { raw, added: take.size, cancelled: gone.size, skipped: judged.missing.length - take.size }
 }
 
@@ -211,15 +208,12 @@ export interface Revoked {
   raw: Raw
   /** Blocks of the template taken out of the plan. */
   removed: number
-  /** Blocks of the template left because they have begun. */
+  /** Blocks of the template left because they (or a block anchored to them) have begun. */
   begun: number
 }
 
 /** The ids of the day file's own blocks. */
-const fileIds = (raw: Raw): Set<string> => {
-  const list = Array.isArray(raw.blocks) ? raw.blocks : isRaw(raw.blocks) ? Object.values(raw.blocks) : []
-  return new Set(list.filter(isRaw).map((b) => String(b.id)))
-}
+const fileIds = (raw: Raw): Set<string> => new Set(dayBlocks(raw).filter(isRaw).map((b) => String(b.id)))
 
 /**
  * „Odwołaj ten szablon w…” (D543): every block of the template on the day – the day's own template's or a copy's – leaves the plan
@@ -233,22 +227,18 @@ export function revokeTemplate(t: Template, day: ApplyDay): Revoked {
   const inFile = fileIds(raw)
   let removed = 0
   let begun = 0
-  const answers = isRaw(raw.sessions) ? { ...raw.sessions } : {}
-  let answered = false
+  // A block a begun block or a block of the day's layers is anchored to stays (it would take that one out of the plan with it, D336).
+  const holds = (b: PlanBlock): boolean => anchoredTo(day.plan, b.id).some((x) => day.begun.has(x.id) || (layerKept(x) && !isOfTemplate(x, day.date, t.id)))
   for (const b of day.plan) {
     const ofT = isOfTemplate(b, day.date, t.id)
     const session = b.origin === 'session' && !!b.sourceId && sessionIds.has(b.sourceId) && b.id === sessionBlockId(day.date, b.sourceId) && (own || inFile.has(b.id))
     if (!ofT && !session) continue
-    if (day.begun.has(b.id)) {
+    if (day.begun.has(b.id) || holds(b)) {
       begun++
       continue
     }
     removed++
-    if (session) {
-      answers[b.sourceId!] = 'no'
-      answered = true
-    } else raw = setCancelled(raw, b.id, true)
+    raw = session ? setSessionAnswer(raw, b.sourceId!, 'no') : setCancelled(raw, b.id, true)
   }
-  if (answered) raw = { ...raw, sessions: answers }
   return { raw, removed, begun }
 }

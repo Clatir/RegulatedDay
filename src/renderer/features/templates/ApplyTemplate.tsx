@@ -38,19 +38,14 @@ export function TemplateDaysButton({ template, today, kind }: { template: Templa
         toast(`Najwyżej ${APPLY_DAYS_MAX} dni naraz.`, 'error', 6000)
         return false
       }
-      try {
-        if (kind === 'revoke') return await revokeInDays(template, list)
-        const asked = await askedDays(template, list)
-        if (asked.length) {
-          setAsking({ dates: list, asked })
-          return true
-        }
-        return await applyToDays(template, list, 'fill')
-      } catch (e) {
-        // A read that failed outside the save (the bridge): said, nothing written.
-        toast(`Nie odczytano dni: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
-        return false
+      // A day that cannot be read is said by the save (`plannedDay` never throws); the save says its own failures.
+      if (kind === 'revoke') return revokeInDays(template, list)
+      const asked = await askedDays(template, list)
+      if (asked.length) {
+        setAsking({ dates: list, asked })
+        return true
       }
+      return applyToDays(template, list, 'fill')
     })
 
   const items = [

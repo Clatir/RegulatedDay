@@ -258,3 +258,25 @@ describe('poprawki po przeglądzie (T1906, T1907)', () => {
     expect(r.raw.sessions).toBeUndefined()
   })
 })
+
+describe('poprawki po drugim przeglądzie', () => {
+  it('„Odwołaj” nie odwołuje bloku, do którego zakotwiczony jest zaczęty (zaczęty nie wypada z planu)', () => {
+    const wed = dayOf(WED, null, [id(WED, 'po')])
+    const r = revokeTemplate(training, wed)
+    expect(r).toMatchObject({ removed: 1, begun: 2 })
+    expect(planAfter(wed, r.raw).map((b) => b.id)).toEqual(expect.arrayContaining([id(WED, 'rano'), id(WED, 'po')]))
+  })
+
+  it('blok zakotwiczony do zaczętego i usuniętego nie jest liczony jako dodany', () => {
+    const raw = { schema: 1, date: WED, cancelled: { [id(WED, 'rano')]: true, [id(WED, 'po')]: true } }
+    const day = dayOf(WED, raw, [id(WED, 'rano')])
+    const r = applyTemplate(training, day, 'fill')
+    expect(r.added).toBe(0)
+    expect(planAfter(day, r.raw).map((b) => b.id)).not.toContain(id(WED, 'po'))
+  })
+
+  it('kopia do dnia bez odwołań nie pisze pustej mapy „cancelled”', () => {
+    const r = applyTemplate(training, dayOf(THU), 'fill')
+    expect(r.raw.cancelled).toBeUndefined()
+  })
+})
