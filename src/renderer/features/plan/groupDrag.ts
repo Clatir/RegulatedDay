@@ -24,7 +24,7 @@ import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { copyAttachments, removeAttachments } from '../../store/attachments'
 import { change, DAY_UNREADABLE, type CaseUndoFile } from '../../store/cases'
-import { editOf, isSaved, outcomeFate, rawRecord, readDayFiles, trySaveWith, useData, type SendState } from '../../store/data'
+import { editOf, outcomeFate, rawRecord, readDayFiles, trySaveWith, useData, type SendState } from '../../store/data'
 import { countedDay, type DayModel } from '../../store/day'
 import { takeBackDays, type DayEdit } from '../../store/dayUndo'
 import { showGroupLine, UndoNotDone, type GroupView } from '../../store/groupLine'
@@ -40,9 +40,6 @@ import { moveUncountedText, moveUnreadableText, statusOf, type WeekMoveStatus } 
 import { undoUnreadableText } from '../week/weekActions'
 import { unwrittenDaysText } from './groupRun'
 import { stands } from './blockCopy'
-
-/** Said when „Cofnij” of a drag cannot read a day it would take back: nothing is taken back, the line stays (another try). */
-export const DRAG_UNDO_UNREADABLE = 'plik dnia jest teraz nieczytelny – spróbuj za chwilę'
 
 /** What a group's drag came to: written or not, how many blocks went (were copied), which stayed and why, the pushed, the energy, „Cofnij”. */
 export interface GroupDragDone {
@@ -205,7 +202,7 @@ async function moveGroup(o: DayGroupDrag): Promise<GroupDragDone> {
   if (m.energy) done.energy = m.energy
   const fields = m.fields
   if (fields) done.undo = shiftedUndo(fields)
-  else if (m.whole.length) done.undo = () => undoDays(m.whole, d.links, new Set(d.sources), countsOf(d, o.keys))
+  else if (m.whole.length) done.undo = undoDays(m.whole, d.links, new Set(d.sources), countsOf(d, o.keys))
   return done
 }
 
@@ -276,39 +273,72 @@ function countsOf(d: GroupDragged, keys: readonly DragKey[]): Map<string, number
 }
 
 /**
- * „Cofnij” of a drag (D531): from the days' files as they are now, each day that still stands as the drag left it goes back (`takeBackDays`);
- * the days of a block moved between them (`links`) go back together or not at all (D417) – one changed since leaves them all as they are. The
- * days the blocks came from go first (`sources`: their half brings the blocks back – the owner, T953). A day that cannot be read now – nothing
- * is taken back (throws: the line stays for another try). Says how many blocks stay (`keptText`) – those of the days left.
+ * „Cofnij” of a drag to other days (D531): from the days' files as they are now, each day that still stands as the drag left it goes back
+ * (`takeBackDays`); the days of a block moved between them (`links`) go back together or not at all (D417) – one changed since leaves the rest of
+ * them as they are (counted: `keptText`). The days the blocks came from go first (`sources`: their half brings the blocks back – the owner, T953).
+ * It remembers what it did (T1780, the rule of T1772): a day taken back (saved) is never sent again; one whose entry met a question waits for your
+ * answer – not counted, never sent again; one refused, or of a group with a day not readable now, is left for the next „Cofnij”, which does only
+ * those – this one throws `UndoNotDone` (the save or the toast said why: the line stays).
  */
-async function undoDays(days: readonly DayEdit[], links: readonly string[][], sources: ReadonlySet<string>, counts: ReadonlyMap<string, number>): Promise<string | void> {
+function undoDays(days: readonly DayEdit[], links: readonly string[][], sources: ReadonlySet<string>, counts: ReadonlyMap<string, number>): () => Promise<string | void> {
+  const left = new Map(days.map((d) => [d.date, d]))
   let kept = 0
-  let unreadable = false
-  const out = await trySaveWith(async () => {
-    kept = 0
-    const files = await readDayFiles(days.map((d) => d.date))
-    const t = takeBackDays(days, files)
-    if (t.unreadable.length) {
-      unreadable = true
-      return []
+  let waiting = 0
+  return async () => {
+    const todo = [...left.values()]
+    const state: SendState = { afterSend: false }
+    const sent: string[] = []
+    const stays: string[] = []
+    const notRead: string[] = []
+    const out = await trySaveWith(async () => {
+      sent.length = 0
+      stays.length = 0
+      notRead.length = 0
+      const files = await readDayFiles(todo.map((d) => d.date))
+      const t = takeBackDays(todo, files)
+      notRead.push(...t.unreadable)
+      const changed = new Set(t.changed)
+      // The days still to take back of each group of linked days: a day not readable – the group waits; one changed since – the group stays.
+      const back = new Map(t.back.map((x) => [x.date, x.edit]))
+      const first: EditEntry[] = []
+      const then: EditEntry[] = []
+      for (const l of links) {
+        const open = l.filter((d) => left.has(d))
+        if (!open.length || open.some((d) => notRead.includes(d))) continue
+        if (open.some((d) => changed.has(d))) {
+          stays.push(...open)
+          continue
+        }
+        for (const d of open) {
+          const e = back.get(d)
+          if (!e) continue
+          ;(sources.has(d) ? first : then).push(e)
+          sent.push(d)
+        }
+      }
+      // Sources first (sent in that order too): the others laid only once they are.
+      const order = [...sent.filter((d) => sources.has(d)), ...sent.filter((d) => !sources.has(d))]
+      sent.splice(0, sent.length, ...order)
+      const after = first.map((_, i) => i)
+      return [...first, ...then.map((e) => (after.length ? { ...e, after } : e))]
+    }, state)
+    if (out == null && !state.afterSend) throw new UndoNotDone()
+    // A group changed since stays as it is – its blocks counted once.
+    for (const d of stays) {
+      left.delete(d)
+      kept += counts.get(d) ?? 0
     }
-    const changed = new Set(t.changed)
-    const left = links.filter((l) => l.some((d) => changed.has(d)))
-    const leftDays = new Set(left.flat())
-    for (const l of left) for (const d of l) kept += counts.get(d) ?? 0
-    const back = t.back.filter((x) => !leftDays.has(x.date))
-    const first = back.filter((x) => sources.has(x.date)).map((x) => x.edit)
-    const then = back.filter((x) => !sources.has(x.date)).map((x) => x.edit)
-    const after = first.map((_, i) => i)
-    return [...first, ...then.map((e) => (after.length ? { ...e, after } : e))]
-  })
-  // Nothing taken back (a day not readable now, the save refused – said by its toast): the line stays for another try.
-  if (unreadable) {
-    toast(DRAG_UNDO_UNREADABLE, 'error', 6000)
-    throw new UndoNotDone()
+    sent.forEach((d, k) => {
+      const fate = out == null ? 'asked' : outcomeFate(out[k])
+      if (fate === 'refused') return
+      left.delete(d)
+      if (fate === 'asked') waiting++
+    })
+    if (notRead.length) toast(undoUnreadableText(notRead), 'error', 6000)
+    if (left.size) throw new UndoNotDone()
+    const said = [...(kept ? [keptText(kept)] : []), ...unwrittenDaysText({ waitingDays: waiting })]
+    return said.length ? said.join(' · ') : undefined
   }
-  if (!isSaved(out)) throw new UndoNotDone()
-  return kept ? keptText(kept) : undefined
 }
 
 /** What a copy made in its turn. */

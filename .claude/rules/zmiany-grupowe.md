@@ -75,7 +75,7 @@ linii – moduł Z1 (`src/shared/groupText.ts`); tu tylko dane.
 - Okno – `plan/groupDrag.ts`: `dragDayGroup({ view, keys, delta, copy, inView })` – dni czytane i liczone w turze, jedno `edit` (zależne `after` = wszyscy
   właściciele; „dziś” i dni liczone w turze, T1773), linia `showGroupLine` (`dragLineText`), nic nie pojechało – komunikat. „Cofnij”: w obrębie dnia – jak
   „Przesuń o” (`fieldsUndoOf` / `undoFields`, T1763; reguła `undoEditDays`: zapisany dzień liczony raz, z pytaniem – bez liczenia, nigdy ponownie,
-  odrzucony / nieczytelny – kolejne „Cofnij”, `UndoNotDone`, T1772); na inne dni – `undoDays` (`takeBackDays`, składowe `links` razem, źródła pierwsze); nieczytelny dzień – wyjątek, linia zostaje;
+  odrzucony / nieczytelny – kolejne „Cofnij”, `UndoNotDone`, T1772); na inne dni – `undoDays` (`takeBackDays`, składowe `links` razem, źródła pierwsze; ta sama pamięć dni, T1780);
   `keptText`. Kopia – `change` (sprawy z dniem, załączniki w tle, „Cofnij” dzień po dniu – `stands` z `blockCopy.ts`). Szablon – `dragTemplateGroup` (ruch =
   `changeTemplateGroup` 'shift', kopia = `templateGroupCopy`), `templateDragPreview` (zakotwiczone za kotwicą – `moved`; `templateShift(…, { preview: true })`).
 - Gesty: `Timeline.groupDrag` (`has`, `preview`, `drop`; bez strefy równoległej; Esc przy wciśniętym – także przed progiem 4 px – odwołuje w fazie

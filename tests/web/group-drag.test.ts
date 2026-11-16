@@ -122,6 +122,23 @@ describe('zapis przeciągnięcia grupy („Tydzień”): jedna zmiana wszystkich
     expect(lineOf('week')).toBeUndefined()
   })
 
+  it('„Cofnij” przeniesienia, z którego zapisał się tylko dzień źródłowy: drugie „Cofnij” ponawia tylko dzień docelowy (T1780, reguła T1772)', async () => {
+    // The first undo (the second edit) meets a broken file of Wednesday: Monday has its blocks back, Wednesday still holds them.
+    const s = stub({ [MON]: fileOf(MON, [flex('x', '11:00', 30), flex('y', '11:30', 30)]), [WED]: fileOf(WED, []) }, { broken: (call, date) => call === 2 && date === WED })
+    await dragDayGroup({ view: 'week', keys: [{ date: MON, id: 'x' }, { date: MON, id: 'y' }], delta: { days: 2, minutes: 0 }, copy: false })
+    await act(() => undoGroupLine('week'))
+    expect(startsOf(s.files[MON], MON)).toEqual({ x: lm('11:00'), y: lm('11:30') })
+    expect(startsOf(s.files[WED], WED)).toEqual({ x: lm('11:00'), y: lm('11:30') })
+    expect(lineOf('week')).toBe('Przeniesiono 2 bloki')
+    // The second „Cofnij” sends Wednesday alone; Monday (taken back already) is never counted as changed since.
+    useUi.setState({ toasts: [] })
+    await act(() => undoGroupLine('week'))
+    expect(s.sent.at(-1)!.map((e) => dateOf(e.rel))).toEqual([WED])
+    expect(startsOf(s.files[WED], WED)).toEqual({})
+    expect(lineOf('week')).toBeUndefined()
+    expect(useUi.getState().toasts.map((t) => t.text).filter((t) => t.includes('od tego czasu') || t.includes('zmieniła się'))).toEqual([])
+  })
+
   it('dzień zmieniony od tego czasu – „Cofnij” zostawia oba dni (blok nigdy na żadnym albo na obu), mówi, ile zostało', async () => {
     const s = stub({ [MON]: fileOf(MON, [flex('x', '11:00', 30), flex('y', '11:30', 30)]), [TUE]: fileOf(TUE, []) })
     await dragDayGroup({ view: 'week', keys: [{ date: MON, id: 'x' }, { date: MON, id: 'y' }], delta: { days: 1, minutes: 0 }, copy: false })
