@@ -549,3 +549,4 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1777 | Wyciszenie kliku po Esc nigdy nie dotyczy kliku z klawiatury; gaśnie po puszczeniu, utracie przechwycenia albo naciśnięciu |
 | T1778 | Podgląd przeciągania grupy liczony z planu, bez budowania plików |
 | T1779 | `DragJudged.delta` niesie różnicę przeciągnięcia |
+| T1780 | „Cofnij” przeniesienia grupy na inne dni pamięta cofnięte dni: zapisany nie wraca do wysyłki, z pytaniem – czeka na odpowiedź bez ponowienia, odrzucony albo nieczytelny – kolejne „Cofnij” robi tylko resztę |
