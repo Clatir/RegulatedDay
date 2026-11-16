@@ -51,6 +51,18 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 8. **1.21.0–1.27.0** (14–15.11, PR #90–#96): wpisy z „Przyjęte bez użytkownika” i „Uwagi na później” – `docs/archiwum/postep-1.2x.md`
    (sekcja „Kolejka postępu 1.21–1.27”); do odbioru: I1–I4, KR, 1.22-B, EN, KK, KT, ED, KS, KP, RE, SE, CI w `docs/odbior.md`.
 9. **1.28.0 – zaznaczanie wielu i zmiany grupowe (ciąg Z, D527–D531, T1541–T1780):** wydane 16.11 (PR #97, `main` 94edb77, run 43801472212); wpis, „Przyjęte” (zaakceptowane przez użytkownika 16.11) i uwagi na później – `docs/archiwum/postep-ciag-Z.md`; odbiór ZG1–ZG10 w `docs/odbior.md`. Równolegle sesja d1 robi 1.29.0 (D540–D549, T1900–T1949).
+10. **1.29.0 – szablon w wybrane dni (D540–D545, T1900–T1909, sesja d1):** w edytorze szablonu „Zastosuj do…” i „Odwołaj w…”
+   (Dziś · Jutro · Wybierz dni… – miesiąc z Ctrl+klik i Shift+klik, pola DD-MM-RRRR i ddmmrrrr); kolizja na dniu bez bloków
+   szablonu pyta „Uzupełnij luki / Nadpisz plan”. Silnik `src/shared/engine/templateApply.ts`, okno `src/renderer/features/templates/`.
+   Dwie rundy `/code-review` (T1906–T1909). Odbiór SZ1–SZ3 w `docs/odbior.md`. PR – w toku (gałąź `claude/1.29-szablon-do-dni`).
+   - Przyjęte bez pytania (użytkownik: „tryb autoakceptacji zalecanych”): bloki zaczęte, sesje, wykłady i zjazdy nigdy nie są
+     odwoływane; kopie w godzinach szablonu bez przesunięcia pobudki; każdy dzień dostaje wersję szablonu ważną w tym dniu (przed
+     pierwszą – pierwszą); najwyżej 366 dni naraz; dni nieczytelne pominięte i wymienione w linii; blok przeniesiony na inny dzień
+     nie wraca; własne bloki odwołane przez `cancelled`, nie usunięte (T1907); dzień z pytaniem (zmiana z innego komputera) zamyka okno.
+   - Uwagi na później: własny stały blok odwołany przez „Nadpisz” dalej ogranicza poranne przesunięcie pobudki (`boundOf` liczy
+     odwołane); `inPortions` → `mapLimit` (`src/main/datastore/concurrency.ts`) przenieść do shared; reguła `off` budowana w
+     oknie, a `ofTemplate`/odwołanie liczą bloki odwołane w logu; `readApplyDays` – trzecia kopia `countedAll`; `parseDmy` osobno
+     od `parseDate`; `tests/fs/horizon.test.ts` niestabilny przy pełnym obciążeniu („tydzień i cele naraz”).
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
