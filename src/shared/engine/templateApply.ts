@@ -2,33 +2,36 @@
  * „Zastosuj ten szablon do…” and „Odwołaj ten szablon w…” (D540–D545): a template's blocks copied into the plans of chosen days, or
  * taken out of them. Without a DOM, on the raw day files (`dayEdits.ts` – unknown fields stay).
  *
- * A copy (D540) is the template's version in force on the day (the first one for a day before it): each block with the id the day's own
- * template would give it (`templateBlockId` – the same on every computer, so a day of this template and a copy into it are one set of
- * blocks), `origin: 'template'`, at the template's hours; anchors to the template's blocks get the day's ids, a block anchored to a session
- * goes with that session's block of the day (none – it is not copied, as in `createDay`). The template's sessions (D511) come as the
- * sessions of the day: their block from the entry (`entryDef` → `sessionBlock`), a „nie” the day answered taken back. Nothing about the
- * day's type, budget or wake changes.
+ * A copy (D540) is the template's version in force on the day (the first one for a day before it): its blocks as the day of the template
+ * has them (`templateDayBlocks` – one rule with `createDay`: the ids `templateBlockId`, the same on every computer, so a day of this
+ * template and a copy into it are one set of blocks), `origin: 'template'`, at the template's hours (T1901). The template's sessions
+ * (D511) come as the sessions of the day: their block from the entry (`entryDef` → `sessionBlock`), a „nie” the day answered taken back.
+ * Nothing about the day's type, budget or wake changes.
  *
- * Collision (D541) = an overlap in time on the axis of the plan with a block of the day; blocks in the background never collide. A day
- * with blocks of this template already, or without collisions, takes the blocks that fit („Uzupełnij luki”) without asking; otherwise
- * the window asks: „Uzupełnij luki” or „Nadpisz plan”. „Nadpisz” cancels the day's colliding blocks (a block of the snapshot – `cancelled`,
- * your own – out of the file); a block that has begun and a block of the day's own layers (session, lecture, zjazd – `layerKept`) are
- * never cancelled – a template block colliding with one of them is left out in both modes. Past days are days like the others (D542).
+ * Collision (D541) = an overlap in time on the axis of the plan with a block of the day still in the plan (a block the log cancelled or
+ * parked is not – T1906); blocks in the background never collide. A day with blocks of this template already, or without collisions,
+ * takes the blocks that fit („Uzupełnij luki”) without asking; otherwise the window asks: „Uzupełnij luki” or „Nadpisz plan”. „Nadpisz”
+ * cancels the day's colliding blocks (by `cancelled` – your own block stays in the file with its attachments, T1907) and with them what is
+ * anchored to them; a block that has begun and a block of the day's own layers (session, lecture, zjazd – `layerKept`) are never cancelled,
+ * nor is a block one of them is anchored to – a template block colliding with one of them is left out in both modes. Past days are days
+ * like the others (D542).
  */
-import { dayRaw, putBlock, setCancelled, takeBlock, type Raw } from '../data/dayEdits'
-import { isSessionEntry, layerKept, sessionIdOf, templateVersionOn, type PlanBlock, type Template, type TemplateVersion } from '../model/plan'
-import { dayAnswer, entryDef, sessionEntries } from '../model/templateSessions'
-import { SESSION_ANCHOR, sessionBlock, sessionBlockId, templateBlockId } from './createDay'
+import { dayRaw, isRaw, putBlock, setCancelled, type Raw } from '../data/dayEdits'
 import type { DaySnapshot } from '../model/events'
+import { layerKept, sessionIdOf, templateVersionOn, type PlanBlock, type Template, type TemplateVersion } from '../model/plan'
+import { dayAnswer, entryDef, sessionEntries } from '../model/templateSessions'
+import { sessionBlock, sessionBlockId, templateBlockId, templateDayBlocks } from './createDay'
 
-/** A day as the apply reads it: its plan as the day shows it (`dayPlan`), its snapshot, its file and the blocks that have begun. */
+/** A day as the apply reads it: its plan as the day shows it (`dayPlan`), its snapshot, its file and what its log says of its blocks. */
 export interface ApplyDay {
   date: string
   plan: readonly PlanBlock[]
   snapshot: DaySnapshot
   raw: Raw | null
-  /** The ids of the day's blocks that have begun (a run in its log) – never cancelled. */
+  /** The ids of the day's blocks that have begun (a run in its log) – never cancelled, never brought back (D336). */
   begun: ReadonlySet<string>
+  /** The ids of blocks the log took off the plan before they began (cancelled, parked) – no place, no collision. */
+  off?: ReadonlySet<string>
 }
 
 export type ApplyMode = 'fill' | 'overwrite'
@@ -40,8 +43,8 @@ export interface ApplyJudged {
   ofTemplate: boolean
   /** The template's blocks not in the day's plan: each with the day's blocks it overlaps (empty – it fits). */
   missing: Array<{ block: PlanBlock; clash: PlanBlock[] }>
-  /** How many of the template's blocks the plan has already. */
-  present: number
+  /** How many blocks the template's version has for the day (0 – nothing to apply). */
+  total: number
 }
 
 /** The version of `t` a day takes: the one in force on it, the first one for a day before it. */
@@ -57,8 +60,8 @@ export const isOfTemplate = (b: Pick<PlanBlock, 'id' | 'origin' | 'sourceId'>, d
 const entrySessionIds = (t: Template): Set<string> => new Set(t.versions.flatMap((v) => sessionEntries(v).map(sessionIdOf)))
 
 /**
- * The template's blocks as the day would have them (`createDay`'s rule, at the template's hours): the sessions of its entries the day of
- * the week does not answer „nie” to, then the other blocks. A block anchored to a session neither the template nor the day has – none.
+ * The template's blocks as the day would have them: the sessions of its entries the day of the week does not answer „nie” to, then the
+ * other blocks (`templateDayBlocks`); a block anchored to a session neither the template nor the day has – none.
  */
 export function templateBlocksFor(t: Template, version: TemplateVersion, day: Pick<ApplyDay, 'date' | 'plan' | 'snapshot'>): PlanBlock[] {
   const { date } = day
@@ -75,18 +78,7 @@ export function templateBlocksFor(t: Template, version: TemplateVersion, day: Pi
     out.push(block)
     if (!sessions.has(sessionIdOf(e))) sessions.set(sessionIdOf(e), block.id)
   }
-  const entries = new Map(version.blocks.filter(isSessionEntry).map((b) => [b.id, sessionIdOf(b)]))
-  const ids = new Map(version.blocks.map((b) => [b.id, templateBlockId(date, t.id, b.id)]))
-  for (const b of version.blocks) {
-    if (entries.has(b.id)) continue
-    let anchor: string | null = null
-    if (b.anchor) {
-      const session = b.anchor.startsWith(SESSION_ANCHOR) ? b.anchor.slice(SESSION_ANCHOR.length) : (entries.get(b.anchor) ?? null)
-      anchor = session != null ? (sessions.get(session) ?? null) : (ids.get(b.anchor) ?? null)
-      if (!anchor) continue
-    }
-    out.push({ ...b, id: ids.get(b.id)!, anchor, startMin: anchor ? null : b.startMin, origin: 'template', sourceId: b.id })
-  }
+  out.push(...templateDayBlocks(t.id, version, date, (id) => sessions.get(id) ?? null))
   return out
 }
 
@@ -113,55 +105,53 @@ function spansOf(blocks: readonly PlanBlock[]): Map<string, { start: number; end
 /** The background rule of the day (the block's own, else its category's). */
 const inBackground = (b: PlanBlock, snapshot: DaySnapshot): boolean => b.background ?? snapshot.settings.categories[b.categoryId]?.startsInBackground ?? false
 
-/** The template's blocks judged against a day's plan: which are there, which are missing, what each missing one overlaps. */
+/** The template's blocks judged against a day's plan: which are missing, what each missing one overlaps. */
 export function judgeApply(t: Template, day: ApplyDay): ApplyJudged {
   const version = versionForDay(t, day.date)
   const cands = version ? templateBlocksFor(t, version, day) : []
   const inPlan = new Set(day.plan.map((b) => b.id))
-  // Moved to another day: the block is there, not here – not brought back.
+  // Moved to another day: the block is there, not here – not brought back. Begun and then removed (D336) – not brought back either.
   const moved = dayRaw(day.raw, day.date).movedTo
-  const movedAway = new Set(isRawMap(moved) ? Object.keys(moved) : [])
-  const missingBlocks = cands.filter((b) => !inPlan.has(b.id) && !movedAway.has(b.id))
+  const away = new Set(isRaw(moved) ? Object.keys(moved) : [])
+  const missingBlocks = cands.filter((b) => !inPlan.has(b.id) && !away.has(b.id) && !day.begun.has(b.id))
+  const standing = day.plan.filter((p) => !day.off?.has(p.id))
   const spans = spansOf([...day.plan, ...missingBlocks])
   const missing = missingBlocks.map((block) => {
     const s = spans.get(block.id)
     if (!s || inBackground(block, day.snapshot)) return { block, clash: [] }
-    const clash = day.plan.filter((p) => {
+    const clash = standing.filter((p) => {
       const q = spans.get(p.id)
       return !!q && !inBackground(p, day.snapshot) && q.start < s.end && s.start < q.end
     })
     return { block, clash }
   })
-  return {
-    date: day.date,
-    ofTemplate: day.plan.some((b) => isOfTemplate(b, day.date, t.id)),
-    missing,
-    present: cands.length - missingBlocks.length
-  }
+  return { date: day.date, ofTemplate: day.plan.some((b) => isOfTemplate(b, day.date, t.id)), missing, total: cands.length }
 }
 
 /** The day asks „Uzupełnij luki czy nadpisz plan?” (D541): it has no blocks of the template and one of them collides. */
 export const asksMode = (j: ApplyJudged): boolean => !j.ofTemplate && j.missing.some((m) => m.clash.length > 0)
 
-/** Whether „Nadpisz” may cancel a day's block: not begun, not of the day's own layers. */
-const cancellable = (b: PlanBlock, day: ApplyDay): boolean => !day.begun.has(b.id) && !layerKept(b)
+/** The blocks of the plan anchored to `id`, also through others (they leave the plan with it – `dayPlan`). */
+function anchoredTo(plan: readonly PlanBlock[], id: string): PlanBlock[] {
+  const out: PlanBlock[] = []
+  const seen = new Set([id])
+  for (let i = 0, front = [id]; i < 20 && front.length; i++) {
+    const next = plan.filter((b) => b.anchor != null && front.includes(b.anchor) && !seen.has(b.id))
+    for (const b of next) seen.add(b.id)
+    out.push(...next)
+    front = next.map((b) => b.id)
+  }
+  return out
+}
 
 export interface Applied {
   raw: Raw
   /** Blocks brought into the plan. */
   added: number
-  /** Blocks of the day cancelled („Nadpisz”). */
+  /** Blocks of the day that left the plan („Nadpisz”): the colliding ones and what is anchored to them. */
   cancelled: number
   /** Template blocks left out: collide with the plan (fill) or with a block never cancelled (overwrite), or anchored to one left out. */
   skipped: number
-}
-
-/** The ids of the snapshot's blocks: those leave by `cancelled`, the file's own ones by being taken out. */
-const snapshotIds = (s: DaySnapshot): Set<string> => new Set(s.blocks.map((b) => b.id))
-
-/** Takes a block out of the day's plan: a snapshot's – cancelled, a file's – out of it. */
-function withoutBlock(raw: Raw, id: string, inSnapshot: ReadonlySet<string>): Raw {
-  return inSnapshot.has(id) ? setCancelled(raw, id, true) : takeBlock(raw, id)
 }
 
 /**
@@ -169,44 +159,53 @@ function withoutBlock(raw: Raw, id: string, inSnapshot: ReadonlySet<string>): Ra
  * cancelled or answered „nie” to is brought back (its entry removed); one the snapshot does not have is written into the file.
  */
 export function applyTemplate(t: Template, day: ApplyDay, mode: ApplyMode, judged = judgeApply(t, day)): Applied {
-  const asSnap = snapshotIds(day.snapshot)
+  const asSnap = new Set(day.snapshot.blocks.map((b) => b.id))
   const m = asksMode(judged) ? mode : 'fill'
-  let raw = dayRaw(day.raw, day.date)
-  const take = new Set<string>()
-  const cancel = new Set<string>()
-  for (const x of judged.missing) {
-    if (!x.clash.length) take.add(x.block.id)
-    else if (m === 'overwrite' && x.clash.every((c) => cancellable(c, day) || cancel.has(c.id))) {
-      take.add(x.block.id)
-      for (const c of x.clash) cancel.add(c.id)
-    }
+  // A day's block „Nadpisz” may cancel: neither it nor anything anchored to it has begun or is of the day's own layers.
+  const leaving = new Map<string, PlanBlock[]>()
+  const mayCancel = (c: PlanBlock): boolean => {
+    if (!leaving.has(c.id)) leaving.set(c.id, [c, ...anchoredTo(day.plan, c.id)])
+    return leaving.get(c.id)!.every((b) => !day.begun.has(b.id) && !layerKept(b))
   }
+  const take = new Set<string>()
+  for (const x of judged.missing) if (!x.clash.length || (m === 'overwrite' && x.clash.every(mayCancel))) take.add(x.block.id)
   // A block anchored to a template block left out is left out too (it has no place without it).
-  const byId = new Map(judged.missing.map((x) => [x.block.id, x.block]))
+  const byId = new Map(judged.missing.map((x) => [x.block.id, x]))
   for (let changed = true; changed; ) {
     changed = false
     for (const id of take) {
-      const a = byId.get(id)?.anchor
+      const a = byId.get(id)?.block.anchor
       if (a && byId.has(a) && !take.has(a)) {
         take.delete(id)
         changed = true
       }
     }
   }
-  for (const id of cancel) raw = withoutBlock(raw, id, asSnap)
-  const answers = isRawMap(raw.sessions) ? { ...raw.sessions } : {}
-  for (const x of judged.missing) {
-    if (!take.has(x.block.id)) continue
-    const b = x.block
-    if (b.origin === 'session' && b.sourceId && answers[b.sourceId] === 'no') delete answers[b.sourceId]
-    // A block of the snapshot comes back as the day had it (your change of it stays); another one is written into the file.
-    raw = asSnap.has(b.id) ? setCancelled(raw, b.id, false) : putBlock(raw, b)
+  // Cancelled only for what is taken in the end.
+  const cancel = new Set<string>()
+  const gone = new Set<string>()
+  for (const id of take) for (const c of byId.get(id)!.clash) if (!cancel.has(c.id)) {
+    cancel.add(c.id)
+    for (const b of leaving.get(c.id) ?? [c]) gone.add(b.id)
   }
-  if (isRawMap(raw.sessions) || Object.keys(answers).length) raw = { ...raw, sessions: answers }
-  return { raw, added: take.size, cancelled: cancel.size, skipped: judged.missing.length - take.size }
+  let raw = dayRaw(day.raw, day.date)
+  for (const id of cancel) raw = setCancelled(raw, id, true)
+  const answers = isRaw(raw.sessions) ? { ...raw.sessions } : {}
+  let answered = false
+  for (const id of take) {
+    const b = byId.get(id)!.block
+    if (b.origin === 'session' && b.sourceId && answers[b.sourceId] === 'no') {
+      delete answers[b.sourceId]
+      answered = true
+    }
+    // Cancelled before (a block of the snapshot, or a copy „Nadpisz” / „Odwołaj” left in the file): back. A block of the snapshot comes back
+    // as the day had it (your change of it stays); another one is written into the file.
+    raw = setCancelled(raw, b.id, false)
+    if (!asSnap.has(b.id)) raw = putBlock(raw, b)
+  }
+  if (answered) raw = { ...raw, sessions: answers }
+  return { raw, added: take.size, cancelled: gone.size, skipped: judged.missing.length - take.size }
 }
-
-const isRawMap = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 
 export interface Revoked {
   raw: Raw
@@ -216,23 +215,29 @@ export interface Revoked {
   begun: number
 }
 
+/** The ids of the day file's own blocks. */
+const fileIds = (raw: Raw): Set<string> => {
+  const list = Array.isArray(raw.blocks) ? raw.blocks : isRaw(raw.blocks) ? Object.values(raw.blocks) : []
+  return new Set(list.filter(isRaw).map((b) => String(b.id)))
+}
+
 /**
  * „Odwołaj ten szablon w…” (D543): every block of the template on the day – the day's own template's or a copy's – leaves the plan
- * unless it has begun; the sessions of its entries leave by „nie” – only when the day's own template is this one or the session's block
- * is the file's (a copy brought it), never a session of another template or of the layer.
+ * (`cancelled`) unless it has begun; the sessions of its entries leave by „nie” – only when the day's own template is this one or the
+ * session's block is the file's (a copy brought it), never a session of another template, of the layer or one a „tak” brought back.
  */
 export function revokeTemplate(t: Template, day: ApplyDay): Revoked {
-  const asSnap = snapshotIds(day.snapshot)
   const sessionIds = entrySessionIds(t)
   const own = day.snapshot.templateId === t.id
   let raw = dayRaw(day.raw, day.date)
+  const inFile = fileIds(raw)
   let removed = 0
   let begun = 0
-  const answers = isRawMap(raw.sessions) ? { ...raw.sessions } : {}
+  const answers = isRaw(raw.sessions) ? { ...raw.sessions } : {}
   let answered = false
   for (const b of day.plan) {
     const ofT = isOfTemplate(b, day.date, t.id)
-    const session = b.origin === 'session' && !!b.sourceId && sessionIds.has(b.sourceId) && b.id === sessionBlockId(day.date, b.sourceId) && (own || !asSnap.has(b.id))
+    const session = b.origin === 'session' && !!b.sourceId && sessionIds.has(b.sourceId) && b.id === sessionBlockId(day.date, b.sourceId) && (own || inFile.has(b.id))
     if (!ofT && !session) continue
     if (day.begun.has(b.id)) {
       begun++
@@ -242,7 +247,7 @@ export function revokeTemplate(t: Template, day: ApplyDay): Revoked {
     if (session) {
       answers[b.sourceId!] = 'no'
       answered = true
-    } else raw = withoutBlock(raw, b.id, asSnap)
+    } else raw = setCancelled(raw, b.id, true)
   }
   if (answered) raw = { ...raw, sessions: answers }
   return { raw, removed, begun }

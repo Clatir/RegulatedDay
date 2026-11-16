@@ -38,13 +38,19 @@ export function TemplateDaysButton({ template, today, kind }: { template: Templa
         toast(`Najwyżej ${APPLY_DAYS_MAX} dni naraz.`, 'error', 6000)
         return false
       }
-      if (kind === 'revoke') return revokeInDays(template, list)
-      const asked = await askedDays(template, list)
-      if (asked.length) {
-        setAsking({ dates: list, asked })
-        return true
+      try {
+        if (kind === 'revoke') return await revokeInDays(template, list)
+        const asked = await askedDays(template, list)
+        if (asked.length) {
+          setAsking({ dates: list, asked })
+          return true
+        }
+        return await applyToDays(template, list, 'fill')
+      } catch (e) {
+        // A read that failed outside the save (the bridge): said, nothing written.
+        toast(`Nie odczytano dni: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
+        return false
       }
-      return applyToDays(template, list, 'fill')
     })
 
   const items = [
@@ -162,6 +168,7 @@ function DaysDialog({ title, verb, today, busy, onClose, onPick, testId }: { tit
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [tooLong, setTooLong] = useState(false)
 
   /** The fields typed: both dates – the range, only „Od” – that day; the month shows the first one. */
   const typed = (f: string, t: string) => {
@@ -169,15 +176,18 @@ function DaysDialog({ title, verb, today, busy, onClose, onPick, testId }: { tit
     setTo(t)
     const a = parseDmy(f)
     const b = parseDmy(t)
+    setTooLong(false)
     if (!a || (t.trim() && !b)) return
+    // Counted before the days are listed: a range of centuries is never built.
+    if (Math.abs(Date.parse(b ?? a) - Date.parse(a)) / 86_400_000 + 1 > APPLY_DAYS_MAX) return setTooLong(true)
     const days = daysFromTo(a, b ?? a)
-    if (days.length > APPLY_DAYS_MAX) return
     setSel(new Set(days))
     setMonth(monthOf(days[0]!))
   }
   /** The grid picked: the fields show the first and the last day. */
   const picked = (next: Set<string>) => {
     setSel(next)
+    setTooLong(false)
     const list = [...next].sort()
     setFrom(list.length ? dmy(list[0]!) : '')
     setTo(list.length > 1 ? dmy(list[list.length - 1]!) : '')
@@ -194,12 +204,16 @@ function DaysDialog({ title, verb, today, busy, onClose, onPick, testId }: { tit
       actions={
         <>
           <span className="mr-auto text-[12px] text-muted" data-testid={`${testId}-count`}>
-            {list.length ? `Wybrane: ${countLabel(list.length, 'dzień', 'dni', 'dni')}${past ? ` (minione: ${past})` : ''}` : 'Kliknij dzień; Ctrl+klik dodaje, Shift+klik – zakres.'}
+            {tooLong
+              ? `Zakres dłuższy niż ${APPLY_DAYS_MAX} dni – wybierz krótszy.`
+              : list.length
+                ? `Wybrane: ${countLabel(list.length, 'dzień', 'dni', 'dni')}${past ? ` (minione: ${past})` : ''}`
+                : 'Kliknij dzień; Ctrl+klik dodaje, Shift+klik – zakres.'}
           </span>
           <button type="button" className="btn" onClick={onClose}>
             Anuluj
           </button>
-          <button type="button" className="btn btn-accent" disabled={!list.length || busy} onClick={() => onPick(list)} data-testid={`${testId}-ok`}>
+          <button type="button" className="btn btn-accent" disabled={!list.length || busy || tooLong} onClick={() => onPick(list)} data-testid={`${testId}-ok`}>
             {verb}
             {list.length ? ` (${list.length})` : ''}
           </button>

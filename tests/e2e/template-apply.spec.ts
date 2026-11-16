@@ -62,7 +62,11 @@ test('szablon: Zastosuj do jutra (pytanie, luki), bez pytania drugi raz, zakres 
   write(dataDir, paths.day(tomorrow), { schema: 1, date: tomorrow, wakeMin: 12 * 60, blocks: [mine] })
   write(dataDir, paths.day(after), { schema: 1, date: after, blocks: [{ ...mine }] })
   const id = (date: string, b: string) => templateBlockId(date, 'trening', b)
-  const ids = (date: string) => fileOf(dataDir, date).blocks.map((b) => b.id)
+  // The blocks of the file still in the plan („Nadpisz” and „Odwołaj” cancel – the block stays in the file, T1907).
+  const ids = (date: string) => {
+    const f = fileOf(dataDir, date)
+    return f.blocks.map((b) => b.id).filter((x) => !f.cancelled.includes(x))
+  }
 
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
