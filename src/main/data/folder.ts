@@ -2351,7 +2351,7 @@ export class DataFolder {
       void _d
       // Requests („zrobione teraz”, urgent, after the fact, „Koniec”) and the rest of the timer.
       // „Cofnij” of an end by the chain judges your return (T1968): the leader's activity, this computer's observation too.
-      const activity = act.a === 'undo' ? await this.activityFor(day, read, now) : undefined
+      const activity = act.a === 'undo' && state.facts.autos.some((x) => x.id === act.target && x.rule === 'awayChain') ? await this.activityFor(day, read, now) : undefined
       const r = act.a === 'requestNow' || act.a === 'requestEnd' || act.a === 'requestAfter' ? requestAction(state, act as RequestAction, now) : timerAction(ctx, state, act as TimerAction, now, activity)
       if (r.ok && r.events.length && !probe) await this.writeOn(day, laid, r.events, chosen.before)
       return r

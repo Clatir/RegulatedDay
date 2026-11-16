@@ -1232,9 +1232,9 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   blok „poza komputerem” z planu (posiłek, rutyna, sprawy domowe, prośby domowe, regeneracja, słuchanie z dala od
   komputera; zaczęty sam albo kliknięciem; poza dojazdem i zajęciami stacjonarnymi, które mają swoje reguły) kończy się
   przy pierwszym użyciu komputera po co najmniej 2 min bez wejścia, a najpóźniej o swoim planowanym końcu (z pauzami, nie
-  po porze snu; regeneracja, na którą czeka blok stały, bez tej granicy) – jako skończony, bez limitu 30 min ponad plan.
+  po porze snu; regeneracja – do swojego planowanego końca) – jako skończony, bez limitu 30 min ponad plan.
   Liczy się ustawienie z chwili startu bloku: zmiana „od dziś” nie zmienia bloków zaczętych wcześniej. Następny blok poza
-  komputerem zaczyna się wtedy sam, od razu: po końcu według planu wystarczą 2 min jego czasu bez wejścia (D554); pierwszy
+  komputerem zaczyna się wtedy sam, od razu: po końcu według planu, gdy od tamtej chwili nie wróciłeś, wystarczą 2 min jego czasu bez wejścia (D554); pierwszy
   blok ciągu (także rano przed pierwszym użyciem) i dojazd czekają jak dotąd 10 min; przerwa w planie między blokami
   zostaje – następny zaczyna się o swojej godzinie. Powrót w trakcie bloku kończy
   go jak dotąd, z krótkim pytaniem „trwał do teraz · skończył się o…”. Koniec według planu nie ma pytania po powrocie ani
@@ -1242,7 +1242,7 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   planu, jednym ciągiem)”) z „Cofnij” (D555). „Cofnij” takiego końca cofa też bloki, które aplikacja zaczęła po nim przed
   Twoim powrotem (nie zaczną się już same tego dnia), a blok kończy się według zwykłych reguł (pierwsze użycie, limit);
   gdy któryś z nich zmieniłeś po starcie albo w tym czasie zaczął się inny blok (np. stały), „Cofnij” odmawia (lista go
-  nie pokazuje). „Cofnij” końca przy pierwszym użyciu (nie wróciłeś) zostawia koniec najpóźniej według planu. Późniejszy
+  nie pokazuje). „Cofnij” końca przy pierwszym użyciu (nie wróciłeś) – liczy się następny powrót, najpóźniej planowany koniec. Późniejszy
   log z wejściem w czasie bloku zastępuje koniec według planu końcem przy pierwszym użyciu. Przykład: posiłek 12:00–12:30
   i spacer 12:30–13:30, odejście 11:50, powrót 14:00 – posiłek 12:00–12:30, spacer 12:30–13:30, oba skończone, bez
   pytania; powrót o 13:00 – spacer do 13:00 z pytaniem; bez ustawienia – posiłek do 13:00 (limit), spacer 13:00–14:00

@@ -152,12 +152,14 @@ describe('ciąg bloków poza komputerem (D553, D554)', () => {
 
   it('pierwszy blok ciągu: odejście sprzed jego godziny wystarcza po 2 min (T1963)', () => {
     const x = { from: 0, to: 15 * MIN }
-    expect(awayKnownAt(x, 10 * MIN, true)).toBe(12 * MIN)
-    expect(awayKnownAt(x, 10 * MIN, false)).toBeNull()
+    expect(awayKnownAt(x, 10 * MIN, 10 * MIN)).toBe(12 * MIN)
+    expect(awayKnownAt(x, 10 * MIN, null)).toBeNull()
     // Left only 3 min before: still 10 min of the stretch first.
-    expect(awayKnownAt({ from: 7 * MIN, to: 30 * MIN }, 10 * MIN, true)).toBe(17 * MIN)
+    expect(awayKnownAt({ from: 7 * MIN, to: 30 * MIN }, 10 * MIN, 10 * MIN)).toBe(17 * MIN)
     // Back within 2 min of the hour: it does not begin.
-    expect(awayKnownAt({ from: 0, to: 11 * MIN }, 10 * MIN, true)).toBeNull()
+    expect(awayKnownAt({ from: 0, to: 11 * MIN }, 10 * MIN, 10 * MIN)).toBeNull()
+    // Left after the chain's end (you came back in between): its 10 min, from the hour (T1969).
+    expect(awayKnownAt({ from: 12 * MIN, to: 40 * MIN }, 15 * MIN, 10 * MIN)).toBe(25 * MIN)
   })
 
   it('późniejszy log z wejściem w czasie bloku cofa koniec według planu – koniec przy pierwszym użyciu (T465)', () => {
@@ -259,7 +261,7 @@ describe('poprawki po przeglądzie (T1968)', () => {
     expect([...list.groups.flatMap((g) => g.items), ...list.items].find((x) => x.id === end.id)?.undo).toBe(false)
   })
 
-  it('„Cofnij” z innego końca nie zmienia ciągu, a jego „Cofnij” trzyma się po zmianie pory snu', () => {
+  it('Twoje „Cofnij” końca ciągu – zwykłe reguły na stałe, bez nowego końca według planu', () => {
     const s = used([meal(), walk()], '11:50', '14:00')
     run(s, '11:55', '14:01')
     const end = s.state('14:05').facts.autos.find((a) => a.rule === 'awayChain' && a.block === 'm')!
@@ -274,3 +276,84 @@ describe('poprawki po przeglądzie (T1968)', () => {
     expect(nextCheckAt(0, 1000, null)).toBeNull()
   })
 })
+
+describe('poprawki po przeglądzie, runda 2 (T1969)', () => {
+  it('„Cofnij” pierwszego użycia, które zastąpiło koniec ciągu po późniejszym logu: blok kończy się według zwykłych reguł', () => {
+    const s = used([meal(), walk('13:00')], '11:50', '14:00')
+    run(s, '11:55', '12:31')
+    s.observe('12:20', '12:21', 'pcb').using('12:20', '12:21', 'pcb')
+    run(s, '12:32', '12:33')
+    const end = s.state('14:05').facts.autos.find((a) => a.rule === 'firstUse' && a.block === 'm')!
+    expect(click(s, '14:05', { a: 'undo', target: end.id }).ok).toBe(true)
+    run(s, '14:06', '14:08')
+    expect(s.state('14:09').facts.blocks.get('m')).toMatchObject({ endRule: 'limit' })
+  })
+
+  it('po cofniętym pierwszym użyciu liczy się następny powrót', () => {
+    const s = used([meal(), walk()], '11:50', '13:00')
+    run(s, '11:55', '13:02')
+    s.gap('13:03', '13:20')
+    const end = s.state('13:05').facts.autos.find((a) => a.rule === 'firstUse' && a.block === 'w')!
+    expect(click(s, '13:05', { a: 'undo', target: end.id }).ok).toBe(true)
+    expect(run(s, '13:06', '13:25')).toEqual(['firstUse w 13:20'])
+  })
+
+  it('bez ustawienia też: po cofniętym pierwszym użyciu – następny powrót', () => {
+    const s = used([walk()], '12:20', '13:00', false)
+    run(s, '12:25', '13:02')
+    s.gap('13:03', '13:20')
+    const end = s.state('13:05').facts.autos.find((a) => a.rule === 'firstUse' && a.block === 'w')!
+    expect(click(s, '13:05', { a: 'undo', target: end.id }).ok).toBe(true)
+    expect(run(s, '13:06', '13:25')).toEqual(['firstUse w 13:20'])
+  })
+
+  it('blok cofnięty razem z końcem ciągu i zaczęty później kliknięciem znów kończy się według planu', () => {
+    const s = used([meal(), walk()], '11:50', '14:00')
+    run(s, '11:55', '14:01')
+    const end = s.state('14:05').facts.autos.find((a) => a.rule === 'awayChain' && a.block === 'm')!
+    expect(click(s, '14:05', { a: 'undo', target: end.id }).ok).toBe(true)
+    run(s, '14:06', '14:10')
+    click(s, '18:00', { a: 'start', block: 'w' })
+    s.gap('18:00', '20:00')
+    expect(run(s, '18:01', '19:01')).toEqual(['awayChain w 19:00'])
+  })
+
+  it('powrót do komputera po końcu ciągu zrywa ciąg: następny blok czeka swoje 10 min', () => {
+    const s = used([meal(), block({ id: 'h', cat: 'sprawy', at: '18:00', min: 30 })], '11:50', '12:45')
+    s.gap('17:52', null)
+    run(s, '11:55', '12:46')
+    expect(run(s, '17:55', '18:09')).toEqual([])
+    expect(run(s, '18:10', '18:10')).toEqual(['awayStart h 18:00'])
+  })
+
+  it('regeneracja w ciągu trwa do swojego planowanego końca także po porze snu', () => {
+    const s = used([block({ id: 'e', cat: 'regeneracja', at: '21:30', min: 60 })], '21:20')
+    expect(run(s, '21:25', '22:31')).toEqual(['awayStart e 21:30', 'awayChain e 22:30'])
+  })
+
+  it('blok kliknięty w minucie powrotu nie blokuje „Cofnij”', () => {
+    const s = used([meal(), walk(), block({ id: 'x', cat: 'inne', at: '15:00', min: 30 })], '11:50', '14:00')
+    run(s, '11:55', '13:59')
+    click(s, '14:00', { a: 'start', block: 'x' })
+    run(s, '14:01', '14:02')
+    const end = s.state('14:05').facts.autos.find((a) => a.rule === 'awayChain' && a.block === 'm')!
+    expect(click(s, '14:05', { a: 'undo', target: end.id }).ok).toBe(true)
+  })
+
+  it('prośba w czasie ciągu: „Cofnij” końca odmawia', () => {
+    const s = used([meal(), walk('13:00')], '11:50', '14:00')
+    run(s, '11:55', '12:39')
+    s.request('r1', '12:40', '12:45')
+    run(s, '12:40', '14:01')
+    const end = s.state('14:05').facts.autos.find((a) => a.rule === 'awayChain' && a.block === 'm')!
+    expect(click(s, '14:05', { a: 'undo', target: end.id })).toMatchObject({ ok: false, why: 'tego już nie cofniesz – po tym końcu kolejny blok zmienił się albo biegło coś innego' })
+  })
+
+  it('dojazd według planu: późniejszy log z wcześniejszym użyciem – nowy koniec w tym samym przebiegu (T1966)', () => {
+    const s = used([block({ id: 'd', cat: 'dojazd', variant: 'dojazd', at: '13:00', min: 30 })], '12:50', null, false)
+    run(s, '12:55', '13:31')
+    s.observe('13:20', '13:21', 'pcb').using('13:20', '13:21', 'pcb')
+    expect(leader(s, '13:32').map((e) => e.autoRule)).toEqual(['revalidate', 'firstUse'])
+  })
+})
+

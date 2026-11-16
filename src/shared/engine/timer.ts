@@ -367,7 +367,9 @@ export function awayChainUndo(state: DayState, activity: Activity, a: AutoAction
   // The return the block's usual end counts (`awayEnd`: the first use after 2 min without input from its start or last run).
   const from = atOf(state.grid, f.group != null ? (f.runs.at(-1)?.from ?? f.startedAt) : f.startedAt)
   const back = firstUseAfter(activity, from)
-  const before = (idx: number) => idx >= a.at && (!back || atOf(state.grid, idx) < back.use)
+  // In minutes: a block clicked in the minute of the return ran after it (T1969).
+  const backIdx = back ? idxOf(state.grid, back.use) : null
+  const before = (idx: number) => idx >= a.at && (backIdx == null || idx < backIdx)
   const out: AutoAction[] = []
   const going = new Set<string>()
   for (const x of state.facts.autos) {
@@ -379,11 +381,13 @@ export function awayChainUndo(state: DayState, activity: Activity, a: AutoAction
     going.add(x.block)
     for (const m of mates) if (m.block) going.add(m.block)
   }
-  // Any other run in front from that end to the return stays – so does the end (the block would run beside it).
+  // Any other run in front from that end to the return stays – so does the end (the block would run beside it); a request and
+  // „Odcinam się” hold the front too (T1969).
   for (const [id, g] of state.facts.blocks) {
     if (id === a.block || going.has(id)) continue
     if (g.runs.some((r) => !r.bg && before(r.from))) return null
   }
+  if (state.facts.requests.some((r) => before(r.from)) || state.facts.disconnect.some((d) => before(d.from))) return null
   return out
 }
 
@@ -905,7 +909,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       if (a.rule === 'awayChain' && a.k === 'block.end') {
         // The caller's activity (this computer's own observation too); without it – from the day's log alone.
         const chained = awayChainUndo(state, activity ?? activityOf(ctx.events, state.grid.start, at), a)
-        if (chained == null) return no('tego już nie cofniesz – kolejny blok zmienił się po starcie')
+        if (chained == null) return no('tego już nie cofniesz – po tym końcu kolejny blok zmienił się albo biegło coś innego')
         pair = chained
       }
       // A fixed start's pause and that start go back together, either way, while the fixed block runs and the flexible one
