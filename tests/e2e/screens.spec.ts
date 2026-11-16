@@ -333,6 +333,10 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       const name = (await page.getByTestId('template-name').boundingBox())!
       expect(name.width).toBeLessThanOrEqual(262)
       expect(Math.abs(name.y - (await page.getByTestId('template-copy').boundingBox())!.y)).toBeLessThan(12)
+      // „Zastosuj do…” and „Odwołaj w…” in one row of their own, under the name (T1910).
+      const apply = (await page.getByTestId('template-apply').boundingBox())!
+      expect(apply.y).toBeGreaterThan(name.y + 12)
+      expect(Math.abs(apply.y - (await page.getByTestId('template-revoke').boundingBox())!.y)).toBeLessThan(12)
       await shot(page, 'e3-07-templates')
 
       // Historia: the request edited – its earlier version, restored.

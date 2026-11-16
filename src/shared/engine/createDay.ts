@@ -9,7 +9,7 @@
 import { derivedId } from '../model/ids'
 import { SESSION_CATEGORY } from '../model/categories'
 import type { DaySnapshot } from '../model/events'
-import { PLAN_MAX, PLAN_MIN, isSessionEntry, planBlock, sessionBlockFieldsFrom, sessionIdOf, type DayFile, type LectureSeries, type PlanBlock, type SessionBlockFields, type Template } from '../model/plan'
+import { PLAN_MAX, PLAN_MIN, isSessionEntry, planBlock, sessionBlockFieldsFrom, sessionIdOf, type DayFile, type LectureSeries, type PlanBlock, type SessionBlockFields, type Template, type TemplateVersion } from '../model/plan'
 import type { SeriesPlan } from '../model/series'
 import { stepsFrom, withDone } from '../model/steps'
 import { DEFAULT_SETTINGS, settingsOn, type DayTypeId, type RulesSettings, type SessionDef, type SettingsChange } from '../model/settings'
@@ -188,22 +188,7 @@ export function createDay(inp: DayInputs): DaySnapshot {
   // The template's blocks; anchors to template blocks and sessions get the day's ids. A block anchored to a session that
   // is not on this day is not on it either (a cancelled session cancels the blocks anchored to it). The template's sessions
   // (D511) are the sessions above – a block anchored to one by its id follows it as „session:<id>” does.
-  if (tpl) {
-    // The template's entries (D511), whatever their answer of the day – a second one of a session's id too (T1416): block id →
-    // the session's id (`sessionIdOf`, T1406). None of them is a block of the template on the day.
-    const entries = new Map(tpl.version.blocks.filter(isSessionEntry).map((b) => [b.id, sessionIdOf(b)]))
-    const ids = new Map(tpl.version.blocks.map((b) => [b.id, templateBlockId(date, tpl.template.id, b.id)]))
-    for (const b of tpl.version.blocks) {
-      if (entries.has(b.id)) continue
-      let anchor: string | null = null
-      if (b.anchor) {
-        const session = b.anchor.startsWith(SESSION_ANCHOR) ? b.anchor.slice(SESSION_ANCHOR.length) : (entries.get(b.anchor) ?? null)
-        anchor = session != null ? (sessionIds.get(session) ?? null) : (ids.get(b.anchor) ?? null)
-        if (!anchor) continue
-      }
-      blocks.push({ ...b, id: ids.get(b.id)!, anchor, startMin: anchor ? null : b.startMin, origin: 'template', sourceId: b.id })
-    }
-  }
+  if (tpl) blocks.push(...templateDayBlocks(tpl.template.id, tpl.version, date, (id) => sessionIds.get(id) ?? null))
 
   for (const s of lecturesOn(inp.lectures, date)) {
     blocks.push(
@@ -252,6 +237,31 @@ export function createDay(inp: DayInputs): DaySnapshot {
   const nextWakeMin = nextWakeForBedtime(null, null, inp.changes, addDays(date, 1))
   const gone = new Set([...(dayFile?.cancelled ?? []), ...Object.keys(dayFile?.movedTo ?? {})])
   return { ...snapshot, blocks: pushedBySeries(snapshot, date, nextWakeMin, gone) }
+}
+
+/**
+ * The blocks of a template's version on a day (the template's sessions – its entries – are not among them): ids of the day
+ * (`templateBlockId`), anchors to the template's blocks given the day's ids, an anchor to a session (`session:<id>` or an entry,
+ * D511) the block of that session on the day (`sessionOf`) – none: the block is not on the day. One rule for the day of the
+ * template (`createDay`) and for a copy of it into another day („Zastosuj do…”, D540).
+ */
+export function templateDayBlocks(templateId: string, version: TemplateVersion, date: string, sessionOf: (sessionId: string) => string | null): PlanBlock[] {
+  // The template's entries (D511), whatever their answer of the day – a second one of a session's id too (T1416): block id →
+  // the session's id (`sessionIdOf`, T1406). None of them is a block of the template on the day.
+  const entries = new Map(version.blocks.filter(isSessionEntry).map((b) => [b.id, sessionIdOf(b)]))
+  const ids = new Map(version.blocks.map((b) => [b.id, templateBlockId(date, templateId, b.id)]))
+  const out: PlanBlock[] = []
+  for (const b of version.blocks) {
+    if (entries.has(b.id)) continue
+    let anchor: string | null = null
+    if (b.anchor) {
+      const session = b.anchor.startsWith(SESSION_ANCHOR) ? b.anchor.slice(SESSION_ANCHOR.length) : (entries.get(b.anchor) ?? null)
+      anchor = session != null ? sessionOf(session) : (ids.get(b.anchor) ?? null)
+      if (!anchor) continue
+    }
+    out.push({ ...b, id: ids.get(b.id)!, anchor, startMin: anchor ? null : b.startMin, origin: 'template', sourceId: b.id })
+  }
+  return out
 }
 
 /** The snapshot's blocks with the sessions' answers given after the day was made (spec „Sesje tradingowe”): „nie” takes a session away, „tak” brings one the day was made without. */

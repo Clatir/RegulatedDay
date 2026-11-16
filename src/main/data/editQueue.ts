@@ -42,6 +42,11 @@ export interface QueuedEdit {
    * it waits too; one answered „theirs” takes it out with it (the attachments a removal took go back to how they were).
    */
   after?: string[]
+  /**
+   * Laid whole or not at all (T1959 – a step of „Zastosuj szablon” whose day stands whole or is as before): a field that meets a change
+   * elsewhere writes nothing of it – a question about all of it, as an entry others go with (T960).
+   */
+  whole?: boolean
 }
 
 /** Why an entry waits behind an earlier one for the same file that is still a question (it never goes by itself). */
@@ -85,7 +90,8 @@ export class EditQueue {
   private unread = false
 
   constructor(
-    private readonly o: { stateDir: string; computer: string; read?: (file: string) => string }
+    /** `afterRun` – called in the turn of every run of the queue, after it laid what it could (T1960: facts owed to entries laid now). */
+    private readonly o: { stateDir: string; computer: string; read?: (file: string) => string; afterRun?: () => Promise<void> }
   ) {}
 
   get file(): string {
@@ -219,6 +225,40 @@ export class EditQueue {
   }
 
   /**
+   * Entries taken out of the queue again (T1959: „Cofnij” of a step's entry still waiting – `undoTemplateDays`), in turn with the runs of
+   * the queue: the ids taken out (one not there was laid already).
+   */
+  withdraw(ids: readonly string[]): Promise<Set<string>> {
+    const run = this.running.then(() => this.dropNow(ids))
+    this.running = run.catch(() => undefined)
+    return run
+  }
+
+  /**
+   * `ids` and the entries that go with them (`after`, as „theirs”) out of the queue – on the disk first, then here (as `add`). The ids
+   * that were there and are gone now; one not there was laid already (or never queued).
+   */
+  private dropNow(ids: readonly string[]): Set<string> {
+    const drop = new Set(ids.filter((id) => this.entries.some((e) => e.id === id)))
+    if (!drop.size) return drop
+    const asked = new Set(drop)
+    for (let grew = true; grew; ) {
+      grew = false
+      for (const x of this.entries) {
+        if (drop.has(x.id) || !x.after?.some((a) => drop.has(a))) continue
+        drop.add(x.id)
+        grew = true
+      }
+    }
+    const next = this.entries.filter((e) => !drop.has(e.id))
+    this.persist(next)
+    this.entries = next
+    for (const id of drop) this.outcomes.delete(id)
+    this.bound = null
+    return asked
+  }
+
+  /**
    * The last outcome of an entry: stored while it stays queued; gone from the queue – applied (an earlier run, already
    * under way when it was added, laid it).
    */
@@ -233,9 +273,35 @@ export class EditQueue {
    * check of the folder and an edit of the window never lay the same entry twice nor lose one between them.
    */
   apply(records: RecordStore): Promise<Outcome[]> {
-    const run = this.running.then(() => this.applyNow(records))
+    const run = this.running.then(async () => {
+      const out = await this.applyNow(records)
+      await this.afterRun()
+      return out
+    })
     this.running = run.catch(() => [])
     return run
+  }
+
+  /**
+   * A step's entries (`ids`) laid with the rest of the queue, and in the same turn – no run between – those that did not go in taken out
+   * again (T1959): a question, refused, behind a question; one that waits for the folder stays when `keepWaiting` (D552). The outcomes of
+   * `ids` in their order and the ids taken out.
+   */
+  applyStep(records: RecordStore, ids: readonly string[], keepWaiting: boolean): Promise<{ outcomes: Outcome[]; withdrawn: Set<string> }> {
+    const run = this.running.then(async () => {
+      const out = await this.applyNow(records)
+      const of = (id: string) => out.find((x) => x.id === id) ?? this.outcomeOf(id)
+      const stays = (o: Outcome) => o.status === 'applied' || (keepWaiting && o.status === 'waiting' && o.why !== BEHIND_QUESTION && o.why !== AFTER_OWNER)
+      const withdrawn = this.dropNow(ids.filter((id) => !stays(of(id))))
+      await this.afterRun()
+      return { outcomes: ids.map(of), withdrawn }
+    })
+    this.running = run.catch(() => undefined)
+    return run
+  }
+
+  private async afterRun(): Promise<void> {
+    await this.o.afterRun?.().catch(() => undefined)
   }
 
   private running: Promise<unknown> = Promise.resolve()
@@ -409,7 +475,7 @@ export class EditQueue {
     // An entry others go with (`after`) is laid whole or not at all (T960): with a field that met a change elsewhere nothing
     // of it is written until you answer – „theirs” then takes it and them out with nothing of it left (a block moved to
     // another day never stays on both: its target is the owner, the source goes with it).
-    if (conflicts.length && this.entries.some((x) => x.after?.includes(edit.id))) return { id: edit.id, status: 'conflict', fields: conflicts }
+    if (conflicts.length && (edit.whole || this.entries.some((x) => x.after?.includes(edit.id)))) return { id: edit.id, status: 'conflict', fields: conflicts }
     if (applied.length) await records.write(edit.rel, { ...(value as Record<string, unknown>), updatedAt: stamp, updatedBy: this.o.computer }, 'edit')
     if (conflicts.length) {
       // What did not meet a change elsewhere is written; the rest stays queued as a question.

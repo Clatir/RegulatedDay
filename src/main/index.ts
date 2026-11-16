@@ -910,6 +910,26 @@ function registerIpc(): void {
     kind === 'park' || kind === 'cancel' ? needHub().groupLog(String(day), kind, strings(ids)) : { ok: false, why: 'nieznana zmiana', confirm: null, written: [], taken: [], skipped: [] }
   )
   handle(CH.undoGroupLog, (_e, day: unknown, ids: unknown) => needHub().undoGroupLog(String(day), strings(ids)))
+  // D547, D550: „Zastosuj szablon” – the days' files and the facts of its blocks gone by in one step, and its „Cofnij”.
+  const plain = (v: unknown): Array<Record<string, unknown>> => (Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object') : [])
+  const entryAt = (v: unknown): number | null => (Number.isInteger(v) && (v as number) >= 0 ? (v as number) : null)
+  const pendingOf = (a: Record<string, unknown>) => (typeof a.pending === 'string' ? { pending: a.pending } : {})
+  const choiceOf = (v: unknown) => {
+    const c = v && typeof v === 'object' ? (v as Record<string, unknown>) : null
+    return c && (c.hours === 'plan' || c.hours === 'now') && (c.past === 'done' || c.past === 'skip') ? { hours: c.hours as 'plan' | 'now', past: c.past as 'done' | 'skip' } : null
+  }
+  handle(CH.applyTemplateDays, (_e, entries: unknown, asks: unknown) =>
+    needHub().applyTemplateDays(Array.isArray(entries) ? (entries as EditEntry[]) : [], plain(asks).flatMap((a) => (entryAt(a.entry) == null ? [] : [{ day: String(a.day), ids: strings(a.ids), entry: entryAt(a.entry)!, ...(typeof a.template === 'string' ? { template: a.template } : {}), ...(choiceOf(a.choice) ? { choice: choiceOf(a.choice)! } : {}) }])))
+  )
+  handle(CH.judgeTemplateUndo, (_e, asks: unknown) => needHub().judgeTemplateUndo(plain(asks).map((a) => ({ day: String(a.day), written: strings(a.written), ...pendingOf(a) }))))
+  handle(CH.undoTemplateDays, (_e, entries: unknown, asks: unknown, kept: unknown) =>
+    needHub().undoTemplateDays(
+      Array.isArray(entries) ? (entries as EditEntry[]) : [],
+      plain(asks).map((a) => ({ day: String(a.day), written: strings(a.written), entry: entryAt(a.entry), ...pendingOf(a) })),
+      plain(kept).map((k) => ({ day: String(k.day), blocks: strings(k.blocks) }))
+    )
+  )
+  handle(CH.dayRuns, (_e, day: unknown) => needHub().dayRuns(String(day)))
   handle(CH.unclosedDays, () => needHub().unclosedDays())
   handle(CH.computerList, () => needHub().computerList())
   // A folder picked in a window of Windows over the window that asked (the wizard's data folder, „Dane” in the settings).

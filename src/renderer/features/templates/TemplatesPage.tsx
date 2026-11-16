@@ -34,6 +34,7 @@ import { takeFoundPick, useUi } from '../../store/ui'
 import { attachTransfer } from '../attachments/attachDrop'
 import { withAttachCounts } from '../attachments/attachView'
 import { GroupLine } from '../../components/GroupLine'
+import { TemplateDaysButton } from './ApplyTemplate'
 import { BlockEditor } from '../plan/BlockEditor'
 import { menuCtxOf } from '../plan/groupMenu'
 import { useAxisGroup } from '../plan/useAxisGroup'
@@ -341,6 +342,11 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
             <button type="button" className="btn" onClick={() => void remove()}>
               Usuń
             </button>
+          </div>
+          {/* Its own row: in the name's row the buttons wrap under the name at the editor's width (T1910). */}
+          <div className="flex flex-wrap items-center gap-2" data-testid="template-days-row">
+            <TemplateDaysButton template={template} today={today} kind="apply" />
+            <TemplateDaysButton template={template} today={today} kind="revoke" />
           </div>
           {template.archived && (
             <p className="rounded border border-line-strong bg-raised px-3 py-2 text-[12.5px]" data-testid="template-archived">

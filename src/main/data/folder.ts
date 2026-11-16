@@ -15,13 +15,14 @@ import { join } from 'node:path'
 import { writeFileAtomic } from '../datastore/atomic'
 import type { ComputerRow, SearchCorpus } from '@shared/api'
 import { EventClock, type ClockSources } from '@shared/data/clock'
-import { sameContentAs, setAt, type MergeConflict } from '@shared/data/merge'
+import { inverseEdit, sameContentAs, setAt, type MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
 import { readLogText } from '@shared/data/logText'
 import { activityOf, type Activity } from '@shared/engine/activity'
 import { answerEvents, autoActions, closedSince, fixedStartPausesClosed, nextDeadline, questionsOf, runFromOf, shutdownActions, type AutoEvent, type Question } from '@shared/engine/auto'
 import { simEvents } from '@shared/engine/sim'
 import { groupLogDrafts, groupLogUndo, type GroupSkip } from '@shared/engine/groupEdit'
+import { foregroundRuns, templateDoneDrafts, templateDoneUndo, type DayRun, type DoneSkipWhy } from '@shared/engine/templateApply'
 import { createDay, nextWakeForBedtime, type HolidayLookup } from '@shared/engine/createDay'
 import { dayContextOf } from '@shared/engine/context'
 import { computeDay, newSegments, type DayContext, type DayState } from '@shared/engine/day'
@@ -140,6 +141,12 @@ const CALIBRATION_RECHECK_MS = 10 * 60_000
 const ROOM_FILE = 'room.json'
 /** The full-screen celebrations shown on this computer (its state folder, T510). */
 const CELEBRATED_FILE = 'celebrated.json'
+/** The frozen days „Zastosuj szablon” changed that are still to be graded again (D550, T1952), in this computer's state folder. */
+const REGRADE_FILE = 'regrade.json'
+/** The facts owed to entries of „Zastosuj szablon” waiting for the folder (D552, T1960), in this computer's state folder. */
+const OWED_FILE = 'owed.json'
+/** What became of facts owed is kept this long (the line of „Szablony” and its „Cofnij”). */
+const OWED_KEEP_MS = 24 * 3_600_000
 /** „Prośba ▸” ranks the people by the requests of this many days (D311). */
 const PEOPLE_DAYS = 28
 /** The days before today are counted again this often (late logs of other computers). */
@@ -289,6 +296,86 @@ export interface CheckResult {
 /** A click of the widget or the main window, with the day it concerns (default: the day of the running block, else today). */
 /** `probe`: only judged – its cost or refusal – never written (a step of „Przedłuż” before its second click). */
 export type TimerClick = (TimerAction | RequestAction) & { day?: string; probe?: boolean }
+
+/** An edit of the window as `edit` takes it. */
+export type EditIn = Omit<QueuedEdit, 'id' | 'at' | 'schema' | 'after'> & { schema?: number; after?: readonly number[] }
+
+/** What „Zastosuj szablon” did on a day (D547, D550, D552): its facts, the blocks done and those not, the day closed or frozen. */
+export interface TemplateDayFacts {
+  day: string
+  /** The facts that stand (for „Cofnij”). */
+  written: string[]
+  /** The blocks done: in the plan the folder holds, with their facts. */
+  taken: string[]
+  skipped: Array<{ id: string; why: DoneSkipWhy }>
+  closed: boolean
+  /** Its entry waits for the folder (D552): the queue's id – its facts are written once it is laid. */
+  pending?: string
+  /** Frozen, and graded again it could not be now (why); `later` – a later check does it (T1952, T1961). */
+  regradeFailed?: string | null
+  regradeLater?: boolean
+}
+
+/** Why a step's entry was taken out of the queue again (T1959): a change on another computer, a broken file, behind a question. */
+export type WithdrawnWhy = 'changed' | 'removed' | 'broken' | 'behind'
+
+/** An outcome of a step: the queue's, or – its entry taken out of the queue again – withdrawn, with why. */
+export type StepOutcome = (Outcome & { routineCostKept?: true }) | { id: string; status: 'withdrawn'; why: WithdrawnWhy }
+
+/** What `applyTemplateDays` did: the outcomes of the entries and the facts of each day asked. */
+export interface TemplateApplied {
+  outcomes: StepOutcome[]
+  facts: TemplateDayFacts[]
+}
+
+/**
+ * What `undoTemplateDays` did (refused – nothing): by day the blocks taken back and those still in the plan (their facts stay – „został”),
+ * the days not taken back (their inverse did not go in – the outcome says why), the closed days counted again, those later or not.
+ */
+export type TemplateUndoneIn =
+  | { ok: true; outcomes: StepOutcome[]; undone: Array<{ day: string; blocks: string[]; stayed: string[] }>; notUndone: string[]; closed: string[]; regradeLater: string[]; regradeFailed: string[] }
+  | { ok: false; why: string }
+
+/** A day of `undoTemplateDays` judged before anything is written; `blockOf` – the block of each fact; `pending` – its entry still queued. */
+interface UndoJudged {
+  u: { drafts: TimerDraft[]; undone: string[]; kept: string[] }
+  closed: boolean
+  frozen: boolean
+  blockOf: ReadonlyMap<string, string>
+  pending: boolean
+}
+
+/** A day's facts owed to an entry of „Zastosuj” (D552, T1960): written once the entry is laid; then what they became, for the step and „Cofnij”. */
+interface OwedFacts {
+  entry: string
+  day: string
+  ids: string[]
+  template?: string
+  choice?: unknown
+  at: number
+  /** Set once laid (or gone): what was written. */
+  done?: { written: string[]; taken: string[]; skipped: Array<{ id: string; why: DoneSkipWhy }>; closed: boolean; regradeFailed: string | null; regradeLater: boolean }
+}
+
+const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e))
+
+/** Why the queue did not take a step's entry (`EditQueue.applyStep`), in the words the window says it with. */
+function withdrawnWhy(o: Outcome | undefined): WithdrawnWhy {
+  if (o?.status === 'broken') return 'broken'
+  if (o?.status === 'removedElsewhere') return 'removed'
+  if (o?.status === 'waiting') return 'behind'
+  return 'changed'
+}
+
+/** An applied entry the other way (a step that failed after it, T1959): a removal – the record made again as it was; else `inverseEdit`. */
+function backOf(e: EditIn, now: Record<string, unknown> | null): EditIn | null {
+  if (e.remove && e.base && typeof e.base === 'object' && !Array.isArray(e.base)) {
+    const { updatedAt: _a, updatedBy: _b, ...was } = e.base as Record<string, unknown>
+    return { rel: e.rel, create: true, edits: Object.entries(was).map(([k, v]) => ({ path: [k], base: undefined, value: v })) }
+  }
+  const made = e.create ? (e.edits.reduce<unknown>((r, f) => setAt(r, f.path, f.value), {}) as Record<string, unknown>) : null
+  return inverseEdit({ rel: e.rel, edits: e.edits.map((f) => ({ path: [...f.path], base: f.base, value: f.value })), ...(e.create ? { create: true } : {}) }, now, made)
+}
 
 /** An action on a day's log (`dayAction`); done – with the ids its events got in the log, in their order (D468). */
 export type DayActionResult = Exclude<ActionResult, { ok: true }> | (Extract<ActionResult, { ok: true }> & { written: string[] })
@@ -443,7 +530,7 @@ export class DataFolder {
         this.routineWritten(rel, now.before, now.value)
       }
     })
-    this.queue = new EditQueue({ stateDir: o.stateDir, computer: o.computer })
+    this.queue = new EditQueue({ stateDir: o.stateDir, computer: o.computer, afterRun: () => this.settleOwed() })
     this.presence = new PresenceStore(
       { fs: o.fs, dataDir: o.dataDir, computer: o.computer, now },
       {
@@ -960,7 +1047,24 @@ export class DataFolder {
    * Your edits from the main window (spec „Edycje plików … trafiają najpierw do lokalnej trwałej kolejki”): each goes to
    * the queue on the disk first, then the queue is laid onto the folder; what met a change elsewhere stays a question.
    */
-  async edit(entries: ReadonlyArray<Omit<QueuedEdit, 'id' | 'at' | 'schema' | 'after'> & { schema?: number; after?: readonly number[] }>): Promise<Array<Outcome & { routineCostKept?: true }>> {
+  async edit(entries: ReadonlyArray<EditIn>): Promise<Array<Outcome & { routineCostKept?: true }>> {
+    const ids = await this.enqueue(entries)
+    const outcomes = await this.queue.apply(this.records)
+    return this.outcomesOf(ids, entries, outcomes)
+  }
+
+  /**
+   * A step's edits (T1959): queued as laid whole or not at all, laid with the queue, and those that did not go in taken out again in the
+   * same turn (`EditQueue.applyStep`; one that waits for the folder stays when `keepWaiting`, D552). Its outcomes, and the ids taken out.
+   */
+  private async editStep(entries: ReadonlyArray<EditIn>, keepWaiting: boolean): Promise<{ ids: string[]; outcomes: Array<Outcome & { routineCostKept?: true }>; withdrawn: Set<string> }> {
+    const ids = await this.enqueue(entries, true)
+    const r = await this.queue.applyStep(this.records, ids, keepWaiting)
+    return { ids, outcomes: this.outcomesOf(ids, entries, r.outcomes), withdrawn: r.withdrawn }
+  }
+
+  /** Edits checked and on the queue's disk (`whole` – laid whole or not at all, T1959): their ids, in their order. */
+  private async enqueue(entries: ReadonlyArray<EditIn>, whole = false): Promise<string[]> {
     // A new record only where there is none: a file that is there but cannot be read now (OneDrive still fetching it) or
     // that came meanwhile is never taken as missing – its every field would be a question about a change you never made.
     const fresh: string[] = []
@@ -996,7 +1100,7 @@ export class DataFolder {
       // The entries before it in this edit it goes with (T923), by their place.
       const after = [...new Set(e.after ?? [])].filter((i) => Number.isInteger(i) && i >= 0 && i < ids.length).map((i) => ids[i]!)
       ids.push(id)
-      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}), ...(after.length ? { after } : {}) })
+      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}), ...(after.length ? { after } : {}), ...(whole ? { whole: true } : {}) })
     }
     // All of them on the disk at once, or none (A3-15): a save that fails leaves no part of it to be written later.
     this.queue.add(...queued)
@@ -1004,7 +1108,11 @@ export class DataFolder {
     for (const rel of fresh) this.absent.add(rel)
     // What an earlier write of these records left unsaid is not this save's (T1446).
     for (const e of entries) this.routineCostKept.delete(e.rel)
-    const outcomes = await this.queue.apply(this.records)
+    return ids
+  }
+
+  /** The outcome of each queued entry (`ids`), in their order, with a routine's cost not followed said once (T1446). */
+  private outcomesOf(ids: readonly string[], entries: ReadonlyArray<EditIn>, outcomes: readonly Outcome[]): Array<Outcome & { routineCostKept?: true }> {
     // One outcome per entry, in their order: an entry a run chained before this one laid has its outcome in the queue.
     return ids.map((id, i) => {
       const o = outcomes.find((x) => x.id === id) ?? this.queue.outcomeOf(id)
@@ -1039,6 +1147,10 @@ export class DataFolder {
   /** One check (every 15 s): presences, who leads, the journal against OneDrive, the queue, and the leader's tasks. */
   async check(): Promise<CheckResult> {
     const now = this.clock.now()
+    const epoch = this.planWrites
+    // A step of „Zastosuj szablon” on the plans and the facts went on during this pass (`planWrite`): what it read may show a block gone
+    // by without its facts – nothing the leader writes from the day now; the next pass judges it with both (T1923).
+    const stale = () => this.planDepth > 0 || this.planWrites !== epoch
     const problems: string[] = []
     const day = logicalDayOf(now)
     // A data folder gone while the app works (moved, deleted, OneDrive not there) is unavailable, never empty: no leader's
@@ -1142,28 +1254,30 @@ export class DataFolder {
         const ctx = await this.dayContext(day, read, now)
         const state = computeDay(ctx)
         const gate = await this.gateOf(day, read, now)
-        for (const seg of newSegments(state, state.grid.start, Math.min(gate, now))) {
-          this.append({ day, dom: 'timer', k: 'minutes', ...seg })
-          segments++
-        }
-        if (state.hardEnd.passed != null && !state.facts.hardEndPass && state.grid.start + state.hardEnd.passed * 60_000 <= gate) {
-          this.append({ id: derivedId(day, 'hardend.pass'), day, dom: 'timer', k: 'hardend.pass', at: state.grid.start + state.hardEnd.passed * 60_000, basis: 'prowadzący', quiet: state.hardEnd.nothingMissing })
-        }
-        // Descents to the reserve, registered once their minute is closed by the gate (events up to 30 s after a minute
-        // still round into it): they stay whatever later corrections say (spec). Apart, so energy never stops the rest.
-        try {
-          const gateIdx = idxOf(state.grid, gate)
-          for (const d of newDescents(state.grid, computeEnergy(ctx, state))) {
-            if (idxOf(state.grid, d.at) >= gateIdx) continue
-            this.append({ id: derivedId(day, 'energy.reserve', d.pool, d.at), day, dom: 'energy', k: 'energy.reserve', at: d.at, pool: d.pool, silent: d.silent })
+        if (!stale()) {
+          for (const seg of newSegments(state, state.grid.start, Math.min(gate, now))) {
+            this.append({ day, dom: 'timer', k: 'minutes', ...seg })
+            segments++
           }
-        } catch (e) {
-          problems.push(`energia: ${String(e)}`)
+          if (state.hardEnd.passed != null && !state.facts.hardEndPass && state.grid.start + state.hardEnd.passed * 60_000 <= gate) {
+            this.append({ id: derivedId(day, 'hardend.pass'), day, dom: 'timer', k: 'hardend.pass', at: state.grid.start + state.hardEnd.passed * 60_000, basis: 'prowadzący', quiet: state.hardEnd.nothingMissing })
+          }
+          // Descents to the reserve, registered once their minute is closed by the gate (events up to 30 s after a minute
+          // still round into it): they stay whatever later corrections say (spec). Apart, so energy never stops the rest.
+          try {
+            const gateIdx = idxOf(state.grid, gate)
+            for (const d of newDescents(state.grid, computeEnergy(ctx, state))) {
+              if (idxOf(state.grid, d.at) >= gateIdx) continue
+              this.append({ id: derivedId(day, 'energy.reserve', d.pool, d.at), day, dom: 'energy', k: 'energy.reserve', at: d.at, pool: d.pool, silent: d.silent })
+            }
+          } catch (e) {
+            problems.push(`energia: ${String(e)}`)
+          }
         }
         // What the app does by itself (spec „Działania automatyczne”): today's, and yesterday's while a block of it runs
         // through 04:00 (it belongs to the day it began). Apart, so the timer never stops the rest.
         try {
-          const r = await this.autoTasks(day, read, ctx, state, now, gate)
+          const r = await this.autoTasks(day, read, ctx, state, now, gate, stale)
           autos += r.written
           nextAt = r.nextAt
           const yesterday = addDays(day, -1)
@@ -1171,7 +1285,7 @@ export class DataFolder {
           if (yRead.complete && spillsOver(yesterday, yRead.events)) {
             const yCtx = await this.dayContext(yesterday, yRead, now)
             // Input after 04:00 is in today's logs: both gates hold (`gateOf` – the bar's overlay takes the same, D345).
-            const y = await this.autoTasks(yesterday, yRead, yCtx, computeDay(yCtx), now, await this.gateOf(yesterday, yRead, now))
+            const y = await this.autoTasks(yesterday, yRead, yCtx, computeDay(yCtx), now, await this.gateOf(yesterday, yRead, now), stale)
             autos += y.written
             if (y.nextAt != null) nextAt = nextAt == null ? y.nextAt : Math.min(nextAt, y.nextAt)
           }
@@ -1183,7 +1297,7 @@ export class DataFolder {
         try {
           await this.ritualStart(now)
           await this.gameStart(now)
-          frozen = await this.freezeTasks(now, settled, problems)
+          frozen = await this.freezeTasks(now, settled, problems, stale)
         } catch (e) {
           problems.push(`zamrażanie: ${String(e)}`)
         }
@@ -1193,6 +1307,8 @@ export class DataFolder {
         problems.push(`zadania prowadzącego: ${String(e)}`)
       }
     }
+    // D550: frozen days „Zastosuj” changed that could not be graded again then (T1952) – on any computer that wrote them, once settled.
+    if (settled && read?.complete && !read.ahead) await this.regradeDue(now, stale).catch((e) => problems.push(`ocena od nowa: ${String(e)}`))
     if (now - this.lastObserve >= OBSERVE_EVERY_MS) {
       this.append({ day, dom: 'meta', k: 'observe.alive', at: now })
       this.lastObserve = now
@@ -1290,7 +1406,7 @@ export class DataFolder {
    * ritual (none before the version with its screens, T482): the grade as written up to the last event of every computer
    * it sees, in the day's log and in this computer's file of grades (derived – the logs can make it again).
    */
-  private async freezeTasks(now: number, settled: boolean, problems: string[]): Promise<string[]> {
+  private async freezeTasks(now: number, settled: boolean, problems: string[], stale: () => boolean = () => false): Promise<string[]> {
     const from = await this.ritualDay()
     if (from == null) return []
     const today = logicalDayOf(now)
@@ -1330,7 +1446,9 @@ export class DataFolder {
           inputs ??= this.gameInputs(day, today)
           const grade = await (this.o.worker ?? inProcess).run({ kind: 'grade', ctx: await this.dayContext(day, read, now), know: was.know, game: (await inputs)(day) })
           const line = { day, at: now, v: this.rulesVersion, how: was.how, know: was.know, missing: was.missing, grade }
+          if (stale()) continue
           await this.appendGrade(day, line)
+          if (stale()) continue
           this.append({ id: derivedId(day, 'freeze', this.o.computer, String(this.rulesVersion)), day, dom: 'game', k: 'day.freeze', at: now, how: was.how, know: was.know, missing: was.missing, grade })
           this.frozenDays.add(day)
           out.push(day)
@@ -1359,7 +1477,10 @@ export class DataFolder {
         // The file of grades first: a freeze in the log is never left without its line (the line is derived – a second
         // one after a failed log write is harmless, the freeze event is what counts).
         const line = { day, at: now, v: this.rulesVersion, how: decision.how, know, missing: decision.missing, grade }
+        // Not while a step of „Zastosuj szablon” changes the days (`planWrite`, D550): the day is frozen with it at the next pass.
+        if (stale()) continue
         await this.appendGrade(day, line)
+        if (stale()) continue
         this.append({ id: derivedId(day, 'freeze', this.o.computer), day, dom: 'game', k: 'day.freeze', at: now, how: decision.how, know, missing: decision.missing, grade })
         this.frozenDays.add(day)
         out.push(day)
@@ -2025,8 +2146,10 @@ export class DataFolder {
   }
 
   /** The leader's automatic actions of one day up to the gate, and the day's next deadline. */
-  private async autoTasks(day: string, read: DayRead, ctx: DayContext, state: DayState, now: number, gate: number): Promise<{ written: number; nextAt: number | null }> {
+  private async autoTasks(day: string, read: DayRead, ctx: DayContext, state: DayState, now: number, gate: number, stale: () => boolean = () => false): Promise<{ written: number; nextAt: number | null }> {
     const activity = await this.activityFor(day, read, now)
+    // A step of „Zastosuj szablon” went on meanwhile (`planWrite`): the next pass, with both its plan and its facts.
+    if (stale()) return { written: 0, nextAt: nextDeadline(state) }
     let written = 0
     for (const e of autoActions({ ctx, state, activity, now, gate: Math.min(gate, now) })) {
       this.append({ ...e, day, dom: 'timer' })
@@ -2096,11 +2219,12 @@ export class DataFolder {
    * that pauses the interrupted one (its pause comes before the end at the close): the bar waits for the settling then, as
    * in 1.0.1. The activity is counted only while a block runs (`withActivity` – always; `known` – counted already).
    */
-  private async barDay(day: string, read: DayRead, at: number, withActivity: true, known?: Activity | null): Promise<BarDayWith>
-  private async barDay(day: string, read: DayRead, at: number, withActivity?: boolean, known?: Activity | null): Promise<BarDay>
-  private async barDay(day: string, read: DayRead, at: number, withActivity = false, known: Activity | null = null): Promise<BarDay> {
-    const dayFile = await this.dayFile(day, true)
-    const ctx = await this.ownContext(day, read, at, undefined, dayFile)
+  private async barDay(day: string, read: DayRead, at: number, withActivity: true, known?: Activity | null, file?: DayFile | null, shared?: Inputs): Promise<BarDayWith>
+  private async barDay(day: string, read: DayRead, at: number, withActivity?: boolean, known?: Activity | null, file?: DayFile | null, shared?: Inputs): Promise<BarDay>
+  private async barDay(day: string, read: DayRead, at: number, withActivity = false, known: Activity | null = null, file?: DayFile | null, shared?: Inputs): Promise<BarDay> {
+    // `file`: the day's file as the folder holds it (the facts of „Zastosuj” are judged on what is there – `settleOwed`), else as you see it now.
+    const dayFile = file !== undefined ? file : await this.dayFile(day, true)
+    const ctx = await this.ownContext(day, read, at, shared, dayFile)
     const state = computeDay(ctx)
     const t = timerNow(state)
     const runs = t.fg != null || t.bg.length > 0
@@ -2563,6 +2687,356 @@ export class DataFolder {
       return u.drafts
     })
     return { ...r, ...made }
+  }
+
+  /**
+   * „Zastosuj szablon” (D540–D552) as ONE step (`serial`; a leader's pass that overlaps it writes nothing – `planWrite`): every day's log read
+   * first (one not read whole – nothing at all is written); the entries queued whole or not at all (T1959) with the facts owed to each day
+   * noted (`owe`), then laid (`EditQueue.applyStep`) – one that did not go in taken out in the same turn, with why; one that waits for the
+   * folder stays (D552). The facts are written by the turn of the queue that lays an entry (`settleOwed` – now, or once the folder is back),
+   * on the plan the folder holds (`templateDoneDrafts`); a frozen day is graded again (D550). A day stands whole – blocks and facts – or is
+   * as before.
+   */
+  async applyTemplateDays(entries: EditIn[], asks: ReadonlyArray<{ day: string; ids: readonly string[]; entry: number; template?: string; choice?: unknown }>): Promise<TemplateApplied> {
+    return this.serial(() =>
+      this.planWrite(async () => {
+        const now = this.clock.now()
+        const today = logicalDayOf(now)
+        for (const ask of asks) {
+          const e = entries[ask.entry]
+          if (!isIsoDate(ask.day) || ask.day > today || !e || e.rel !== paths.day(ask.day)) throw new Error('zły dzień zmiany szablonu')
+          const read = await this.log.readDay(ask.day)
+          if (!read.complete && !read.away) throw new Error(`nie wszystkie logi dnia ${ask.day} są teraz czytelne – spróbuj za chwilę`)
+        }
+        const ids = await this.enqueue(entries, true)
+        // Noted before the entries are laid: the turn that lays one (this one, or a check's) writes its facts.
+        const noted = await this.oweEdit((all) => [...all, ...asks.map((a): OwedFacts => ({ entry: ids[a.entry]!, day: a.day, ids: [...a.ids], ...(a.template ? { template: a.template } : {}), ...(a.choice !== undefined ? { choice: a.choice } : {}), at: now }))])
+        if (!noted) {
+          await this.queue.withdraw(ids)
+          throw new Error('nie da się teraz zapamiętać zaliczeń (plik stanu nieczytelny) – nic nie zapisano')
+        }
+        const r = await this.queue.applyStep(this.records, ids, true)
+        const outcomes: StepOutcome[] = this.outcomesOf(ids, entries, r.outcomes).map((o, i) => (r.withdrawn.has(ids[i]!) ? { id: o.id, status: 'withdrawn' as const, why: withdrawnWhy(o) } : o))
+        const owed = this.owedList()
+        const facts = asks.map((a): TemplateDayFacts => {
+          const id = ids[a.entry]!
+          const done = owed.find((x) => x.entry === id)?.done
+          if (done) return { day: a.day, written: done.written, taken: done.taken, skipped: done.skipped, closed: done.closed, regradeFailed: done.regradeFailed, regradeLater: done.regradeLater }
+          // Taken out – nothing to say; waiting for the folder (or for its facts at the next run of the queue) – owed.
+          return { day: a.day, written: [], taken: [], skipped: [], closed: false, ...(r.withdrawn.has(id) ? {} : { pending: id }) }
+        })
+        return { outcomes, facts }
+      })
+    )
+  }
+
+  private owedRun: Promise<unknown> = Promise.resolve()
+
+  /**
+   * The facts owed to entries of „Zastosuj” no longer in the queue (D552, T1960) – called in the turn of every run of the queue: on the plan
+   * the folder holds (`barDay` with the folder's file), only of the blocks gone by that are in it (`templateDoneDrafts` – an entry taken out
+   * left none there: nothing is written), a frozen day graded again (D550). A day whose logs cannot be read whole now waits for the next run.
+   * What became of them is kept for the step and its „Cofnij” a day (`done`).
+   */
+  private settleOwed(): Promise<void> {
+    const run = this.owedRun.then(async () => {
+      const now = this.clock.now()
+      const all = this.owedList()
+      const due = all.filter((f) => !f.done && !this.queue.pending.some((e) => e.id === f.entry))
+      const old = all.filter((f) => f.done && now - f.at > OWED_KEEP_MS)
+      if (!due.length && !old.length) return
+      const settled = new Map<string, NonNullable<OwedFacts['done']>>()
+      await this.planWrite(async () => {
+        let inp: Inputs | null = null
+        const game = this.lazyGame(due.map((f) => f.day), now)
+        for (const f of due) {
+          try {
+            const read = await this.log.readDay(f.day)
+            if (!read.complete && !read.away) continue
+            inp ??= await this.inputs(true)
+            const { ctx, state, laid } = await this.barDay(f.day, read, now, false, null, await this.dayFile(f.day), inp)
+            const d = templateDoneDrafts(ctx, state, f.ids, now)
+            const written = d.drafts.length || laid.length ? (await this.writeOn(f.day, laid, d.drafts)).map((e) => e.id) : []
+            const g = d.taken.length && state.facts.frozen ? await this.regrade(f.day, now, game) : null
+            settled.set(f.entry, { written, taken: d.taken, skipped: d.skipped, closed: state.facts.closed != null || state.facts.frozen != null, regradeFailed: g?.why ?? null, regradeLater: g?.later ?? false })
+          } catch (e) {
+            this.o.log?.('error', `zastosuj szablon ${f.day}: zaliczenia czekają (${errorText(e)})`)
+          }
+        }
+      })
+      await this.oweEdit((list) => list.filter((f) => !old.some((x) => x.entry === f.entry)).map((f) => (settled.has(f.entry) ? { ...f, done: settled.get(f.entry)! } : f)))
+    })
+    this.owedRun = run.catch(() => undefined)
+    return run
+  }
+
+  /** The facts owed (D552), as this computer's state folder holds them (a file that cannot be read – none now). */
+  private owedList(): OwedFacts[] {
+    try {
+      return this.stateItems<OwedFacts>(OWED_FILE, 'owed').filter((f) => !!f && typeof f.entry === 'string' && typeof f.day === 'string' && Array.isArray(f.ids))
+    } catch {
+      return []
+    }
+  }
+
+  private oweEdit(change: (list: OwedFacts[]) => OwedFacts[]): Promise<boolean> {
+    return this.stateEdit<OwedFacts>(OWED_FILE, 'owed', change)
+  }
+
+  /** The game's inputs of the days, read once and only when a day is graded again (inside its `regrade` – a failure is that day's). */
+  private lazyGame(days: readonly string[], now: number): () => Promise<(day: string) => GameDayInput> {
+    let got: Promise<(day: string) => GameDayInput> | null = null
+    return () => (got ??= this.gameInputs([...days].sort()[0] ?? logicalDayOf(now), logicalDayOf(now)))
+  }
+
+  /**
+   * Whether „Cofnij” of „Zastosuj” may take back the facts it wrote (`templateDoneUndo` on each day as the bar shows it): the blocks that
+   * stay as they are (another event of the block since – D313), or a refusal of any day (then nothing is taken back).
+   */
+  judgeTemplateUndo(asks: ReadonlyArray<{ day: string; written: readonly string[]; pending?: string }>): Promise<{ ok: true; kept: Array<{ day: string; blocks: string[] }> } | { ok: false; why: string }> {
+    return this.serial(async () => {
+      const now = this.clock.now()
+      const inp = await this.inputs(true)
+      const kept: Array<{ day: string; blocks: string[] }> = []
+      for (const a of asks) {
+        const j = await this.undoJudged(a.day, this.writtenOf(a), now, inp)
+        if (typeof j === 'string') return { ok: false as const, why: j }
+        kept.push({ day: a.day, blocks: j.u.kept })
+      }
+      return { ok: true as const, kept }
+    })
+  }
+
+  /** The facts of a day of „Zastosuj” as they stand now: those its entry, laid since it waited (D552), got; else what the window keeps. */
+  private writtenOf(a: { written: readonly string[]; pending?: string }): readonly string[] {
+    if (!a.pending) return a.written
+    if (this.queue.pending.some((e) => e.id === a.pending)) return []
+    return this.owedList().find((f) => f.entry === a.pending)?.done?.written ?? a.written
+  }
+
+  /**
+   * „Cofnij” of „Zastosuj” as ONE step (`serial`, `planWrite`): every day judged first (a refusal, or blocks kept other than the window was
+   * told – nothing is taken back). A day whose entry still waits for the folder (D552): the entry taken out of the queue, its facts owed
+   * gone – nothing else to take back. The other days' inverses queued whole and laid (`editStep`): one that went in – the facts of the
+   * blocks no longer in the plan the folder holds undone, a block still there keeps them (`stayed`); one that did not – taken out, the facts
+   * stay, the day stays in the line (`notUndone`, why in the outcome). An exception while writing puts all of it back (the undos undone, the
+   * inverses the other way – one turn of the queue), so „Cofnij” can be tried again. A closed day counts again (D550).
+   */
+  async undoTemplateDays(entries: EditIn[], asks: ReadonlyArray<{ day: string; written: readonly string[]; entry: number | null; pending?: string }>, kept: ReadonlyArray<{ day: string; blocks: readonly string[] }>): Promise<TemplateUndoneIn> {
+    return this.serial(() =>
+      this.planWrite(async () => {
+        const now = this.clock.now()
+        const inp = await this.inputs(true)
+        const judged: Array<{ ask: (typeof asks)[number]; j: UndoJudged }> = []
+        for (const ask of asks) {
+          const j = await this.undoJudged(ask.day, this.writtenOf(ask), now, inp)
+          if (typeof j === 'string') return { ok: false as const, why: j }
+          const told = new Set(kept.find((k) => k.day === ask.day)?.blocks ?? [])
+          if (j.u.kept.length !== told.size || j.u.kept.some((b) => !told.has(b))) return { ok: false as const, why: 'dzień zmienił się w międzyczasie – spróbuj jeszcze raz' }
+          if (ask.entry != null && entries[ask.entry]?.rel !== paths.day(ask.day)) return { ok: false as const, why: 'zły dzień' }
+          judged.push({ ask, j: { ...j, pending: !!ask.pending && this.queue.pending.some((e) => e.id === ask.pending) } })
+        }
+        const undone: Array<{ day: string; blocks: string[]; stayed: string[] }> = []
+        const notUndone: string[] = []
+        // A day still waiting: its entry out (the facts owed go with it at the next run – nothing of it is in the folder).
+        const waits = judged.filter((x) => x.j.pending)
+        const out = waits.length ? await this.queue.withdraw(waits.map((x) => x.ask.pending!)) : new Set<string>()
+        const skip = new Set<number>()
+        for (const { ask } of waits) {
+          if (ask.entry != null) skip.add(ask.entry)
+          if (out.has(ask.pending!)) undone.push({ day: ask.day, blocks: [], stayed: [] })
+          else notUndone.push(ask.day)
+        }
+        if (out.size) await this.oweEdit((list) => list.filter((f) => !out.has(f.entry)))
+        const send = entries.flatMap((e, i) => (skip.has(i) ? [] : [{ e, i }]))
+        const step = send.length ? await this.editStep(send.map((x) => x.e), false) : { ids: [], outcomes: [], withdrawn: new Set<string>() }
+        const outcomes: StepOutcome[] = entries.map(() => ({ id: '', status: 'applied' as const }))
+        send.forEach((x, k) => (outcomes[x.i] = step.withdrawn.has(step.ids[k]!) ? { id: step.ids[k]!, status: 'withdrawn', why: withdrawnWhy(step.outcomes[k]) } : step.outcomes[k]!))
+        const wrote = new Map<string, string[]>()
+        try {
+          for (const { ask, j } of judged) {
+            if (j.pending) continue
+            if (ask.entry != null && outcomes[ask.entry]?.status !== 'applied') {
+              notUndone.push(ask.day)
+              continue
+            }
+            const read = await this.log.readDay(ask.day)
+            const { ctx, laid } = await this.barDay(ask.day, read, now, false, null, await this.dayFile(ask.day), inp)
+            const inPlan = new Set(ctx.plan.map((b) => b.id))
+            const gone = j.u.undone.filter((b) => !inPlan.has(b))
+            const drafts = j.u.drafts.filter((d) => gone.includes(j.blockOf.get(String(d.target)) ?? ''))
+            if (drafts.length || laid.length) wrote.set(ask.day, (await this.writeOn(ask.day, laid, drafts)).map((e) => e.id))
+            undone.push({ day: ask.day, blocks: gone, stayed: j.u.undone.filter((b) => inPlan.has(b)) })
+          }
+        } catch (e) {
+          const left: string[] = []
+          for (const [day, ids] of wrote) {
+            if (!ids.length) continue
+            await this.writeOn(day, [], ids.map((target): TimerDraft => ({ k: 'undo', at: now, target, reason: 'user' }))).catch((x) => left.push(`zaliczenia ${day} (${errorText(x)})`))
+          }
+          // The inverses that went in, the other way – one turn of the queue for all of them.
+          const backs: EditIn[] = []
+          for (const [k, x] of send.entries()) {
+            if (outcomes[x.i]?.status !== 'applied') continue
+            const cur = await this.records.read(x.e.rel)
+            const b = backOf(x.e, cur.status === 'ok' ? cur.value : null)
+            if (b) backs.push(b)
+            void k
+          }
+          if (backs.length) {
+            const r = await this.editStep(backs, false).catch(() => null)
+            if (!r || r.withdrawn.size) left.push('plan')
+          }
+          return { ok: false as const, why: left.length ? `${errorText(e)}; nie przywrócono: ${left.join(', ')}` : errorText(e) }
+        }
+        await this.oweEdit((list) => list.filter((f) => !asks.some((a) => a.pending === f.entry)))
+        const closed: string[] = []
+        const regradeLater: string[] = []
+        const regradeFailed: string[] = []
+        const game = this.lazyGame(judged.map((x) => x.ask.day), now)
+        for (const { ask, j } of judged) {
+          if (!j.closed || !undone.some((x) => x.day === ask.day && x.blocks.length)) continue
+          if (!j.frozen) {
+            closed.push(ask.day)
+            continue
+          }
+          const g = await this.regrade(ask.day, now, game)
+          if (!g) closed.push(ask.day)
+          else (g.later ? regradeLater : regradeFailed).push(ask.day)
+        }
+        return { ok: true as const, outcomes, undone, notUndone, closed, regradeLater, regradeFailed }
+      })
+    )
+  }
+
+  /** A day's facts of „Zastosuj” judged for their „Cofnij” on the day as the bar shows it (a text – refused, why). */
+  private async undoJudged(day: string, written: readonly string[], now: number, inp: Inputs): Promise<Omit<UndoJudged, 'pending'> | string> {
+    if (!isIsoDate(day)) return 'zły dzień'
+    const read = await this.log.readDay(day)
+    if (!read.complete && !read.away) return `nie wszystkie logi dnia ${day} są teraz czytelne – spróbuj za chwilę`
+    const { ctx, state } = await this.barDay(day, read, now, false, null, undefined, inp)
+    const u = templateDoneUndo(state.facts, ctx.events, written, this.o.computer, now)
+    if (typeof u === 'string') return u
+    const blockOf = new Map(ctx.events.flatMap((e) => (written.includes(e.id) ? [[e.id, String((e as { block?: unknown }).block)] as const] : [])))
+    return { u, closed: state.facts.closed != null || state.facts.frozen != null, frozen: state.facts.frozen != null, blockOf }
+  }
+
+  /**
+   * The runs of a day's blocks in the foreground on the day as the bar shows it (`barDay` – with the ends the app's close made): what „coś
+   * trwało” of „Zastosuj” is judged on in the window, the same as in its step (D547, T1951).
+   */
+  async dayRuns(day: string): Promise<DayRun[] | null> {
+    if (!isIsoDate(day)) return null
+    const read = await this.log.readDay(day)
+    if (!read.complete && !read.away) return null
+    return foregroundRuns((await this.barDay(day, read, this.clock.now())).state.facts, day)
+  }
+
+  /** Which step on the plans is under way (they may nest – the facts owed, written in a step's turn): a leader's pass that overlaps one writes nothing. */
+  private planWrites = 0
+  private planDepth = 0
+
+  private async planWrite<T>(run: () => Promise<T>): Promise<T> {
+    this.planWrites++
+    this.planDepth++
+    try {
+      return await run()
+    } finally {
+      this.planDepth--
+      this.planWrites++
+    }
+  }
+
+  /**
+   * D550: a frozen day whose facts „Zastosuj” changed (or took back) is graded again by these rules up to every event of it now – from the
+   * folder's files, as `freezeTasks` grades (`dayContext`), only with its logs read whole: a line of grades and a `day.freeze` counting more
+   * events than the one before (`betterFreeze`). Null – done (graded now, or nothing to do: not frozen, graded already up to now) – off the
+   * list; else why it could not be now and whether the day is on the list for a later check (`later`, `regradeDue`). The game's inputs are
+   * read inside (a failure is this day's). A failure of the log's write after the event is in the journal is no failure.
+   */
+  private async regrade(day: string, now: number, game?: () => Promise<(day: string) => GameDayInput>): Promise<{ why: string; later: boolean } | null> {
+    try {
+      const read = await this.log.readDay(day)
+      if (!read.complete) return await this.regradeLater(day, 'nie wszystkie logi dnia są teraz czytelne')
+      const was = foldFacts(gridOf(day), read.events).frozen
+      const know = { ...read.lastByComputer }
+      if (was && !Object.keys(know).every((c) => was.know[c] === know[c])) {
+        const input = (await (game ? game() : this.gameInputs(day, logicalDayOf(now))))(day)
+        const grade = await (this.o.worker ?? inProcess).run({ kind: 'grade', ctx: await this.dayContext(day, read, now), know, game: input })
+        const line = { day, at: now, v: this.rulesVersion, how: was.how, know, missing: was.missing, grade }
+        await this.appendGrade(day, line)
+        this.append({ id: derivedId(day, 'freeze', this.o.computer, 'regrade', String(know[this.o.computer] ?? -1)), day, dom: 'game', k: 'day.freeze', at: now, how: was.how, know, missing: was.missing, grade })
+        await this.log.flush().catch(() => undefined)
+      }
+      await this.stateEdit<string>(REGRADE_FILE, 'days', (days) => days.filter((d) => d !== day))
+      return null
+    } catch (e) {
+      return this.regradeLater(day, errorText(e))
+    }
+  }
+
+  /** A day to be graded again at a later check (T1952) – this computer wrote its facts; `later` – only when the list took it (T1961). */
+  private async regradeLater(day: string, why: string): Promise<{ why: string; later: boolean }> {
+    const later = await this.stateEdit<string>(REGRADE_FILE, 'days', (days) => (days.includes(day) ? days : [...days, day])).catch(() => false)
+    return { why, later }
+  }
+
+  private stateWrites = new Map<string, Promise<unknown>>()
+
+  /**
+   * A list in a JSON file of this computer's state folder (`regrade.json`, `owed.json`) changed by `change`, one change of a file at a time
+   * (as `markCelebrated`); a file that cannot be read is never written over (said in the log). True – the list is as `change` made it.
+   */
+  private stateEdit<T>(file: string, key: string, change: (items: T[]) => T[]): Promise<boolean> {
+    const run = (this.stateWrites.get(file) ?? Promise.resolve()).then(async () => {
+      let items: T[]
+      try {
+        items = this.stateItems<T>(file, key)
+      } catch (e) {
+        this.o.log?.('error', `${file} nieczytelny – nie zapisuję (${errorText(e)})`)
+        return false
+      }
+      const next = change(items)
+      if (JSON.stringify(next) === JSON.stringify(items)) return true
+      await mkdir(this.o.stateDir, { recursive: true })
+      await writeFileAtomic(join(this.o.stateDir, file), JSON.stringify({ [key]: next }))
+      return true
+    })
+    this.stateWrites.set(file, run.catch(() => false))
+    return run
+  }
+
+  /** The items of a list in a JSON file of the state folder: none – no file; a file that cannot be read or parsed throws. */
+  private stateItems<T>(file: string, key: string): T[] {
+    let text: string
+    try {
+      text = readFileSync(join(this.o.stateDir, file), 'utf8')
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw e
+    }
+    const v = JSON.parse(text) as Record<string, unknown>
+    const list = v?.[key]
+    if (!Array.isArray(list)) throw new Error(`${file}: brak listy`)
+    return list as T[]
+  }
+
+  /**
+   * The days `regradeLater` left (D550, T1952), graded again – at a check, unless a step on the plans runs (`stale`) or the day's file still
+   * waits in the queue (its blocks are not in the folder yet).
+   */
+  private async regradeDue(now: number, stale: () => boolean): Promise<void> {
+    let days: string[]
+    try {
+      days = this.stateItems<string>(REGRADE_FILE, 'days').filter((d) => typeof d === 'string')
+    } catch {
+      return
+    }
+    for (const day of days) {
+      if (stale()) return
+      if (this.queue.pending.some((e) => e.rel === paths.day(day))) continue
+      await this.regrade(day, now)
+    }
   }
 
   /**

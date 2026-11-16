@@ -259,6 +259,15 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] ZG8 Del na zaznaczeniu ≥ 2 – jedno pytanie „Usunąć N …?” (1.28.0)
    - [ ] ZG9 Menu bloków – działania w „Dziś”, „Szablonach” i „Tygodniu”, pomijanie i „Cofnij” (1.28.0)
    - [ ] ZG10 Przeciąganie grupy bloków o ten sam czas i dni; z Ctrl – kopia grupy (1.28.0)
+   - [ ] SZ1 Szablon: „Zastosuj do…” – Dziś, Jutro, wybrane dni; pytanie przy kolizji (1.29.0)
+   - [ ] SZ2 Okno dni: Ctrl/Shift w miesiącu, daty DD-MM-RRRR i osiem cyfr (1.29.0)
+   - [ ] SZ3 Szablon: „Odwołaj w…” i „Cofnij” (1.29.0)
+   - [ ] SZ4 Okno „Zastosuj „…” do dziś” – godziny dziś i minione bloki (1.29.0)
+   - [ ] SZ5 Dziś wg planu – minione jako zrealizowane albo pominięte (1.29.0)
+   - [ ] SZ6 Dziś „od teraz” – przesunięcie szablonu, stałe i sesje zostają (1.29.0)
+   - [ ] SZ7 Dni minione – „Nie dodawaj minionych” / „Dodaj jako zrealizowane” (1.29.0)
+   - [ ] SZ8 Dzień zamknięty – punkty przeliczone; „Cofnij” z blokiem zmienionym od tego czasu (1.29.0)
+   - [ ] SZ9 Folder niedostępny – zaliczenia dopisują się po zapisie; „Cofnij” czekającej zmiany (1.29.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -2861,6 +2870,71 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** w „Dziś” (jutro) zaznacz dwa bloki Ctrl+klikiem i przeciągnij jeden z nich o godzinę; powtórz z Ctrl; zacznij przeciągać i naciśnij Esc. W „Tygodniu” zaznacz bloki z poniedziałku i przeciągnij jeden na środę; w zaznaczeniu zostaw też blok zaczęty albo z dnia minionego. W „Szablonach” przeciągnij dwa zaznaczone bloki.
 - **Oczekiwany efekt:** w trakcie wszystkie zaznaczone stoją na nowych miejscach (oś – przerywane obwódki, „Tydzień” – pasma); po puszczeniu jadą o ten sam czas i dni, kolejne bloki się rozsuwają, linia „Przeniesiono 2 bloki · Cofnij”, jedno „Cofnij” przywraca wszystkie dni. Z Ctrl oryginały zostają, a w miejscu upuszczenia stają kopie („Skopiowano 2 bloki”). Esc odwołuje bez zmian i zostawia zaznaczenie. Blok zaczęty albo z dnia minionego zostaje na miejscu i jest policzony („1 został – już trwa”). Pojedyncze przeciąganie niezaznaczonego bloku działa jak dotąd.
 - **Nie przechodzi, gdy:** jedzie tylko chwycony blok; kopia rusza oryginały; zapisana godzina różni się od pokazanej po upuszczeniu; Esc zostawia zmianę albo czyści zaznaczenie.
+
+### SZ – szablon w wybrane dni (1.29.0, D540–D552)
+
+#### SZ1 „Zastosuj do…” szablonu (D540, D541)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-apply.test.ts`, `tests/e2e/template-apply.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** Szablony → szablon z blokami, „Zastosuj do…” → „Jutro” na dniu, który ma własny blok w godzinach jednego z bloków szablonu; potem jeszcze raz „Jutro”; potem na dniu bez kolizji.
+- **Oczekiwany efekt:** przy kolizji okno „Bloki „…” kolidują z planem” z „Uzupełnij luki” i „Nadpisz plan”; luki – dochodzą tylko bloki mieszczące się w wolnym czasie, nadpisz – kolidujący blok odwołany, cały szablon w planie; drugi raz bez pytania i bez dublowania; dzień bez kolizji – bez pytania. Typ dnia i pobudka bez zmian; sesje i bloki zaczęte nigdy nie znikają. Linia na stronie szablonu z „Cofnij”.
+- **Nie przechodzi, gdy:** pytanie w dniu, który ma już bloki szablonu; bloki się dublują; „Nadpisz” zdejmuje sesję albo zaczęty blok; zmienia się typ dnia.
+
+#### SZ2 Okno „Wybierz dni…” (D544)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/date-input.test.ts`, `tests/e2e/template-apply.spec.ts`.
+- **Jak sprawdzić:** „Zastosuj do…” → „Wybierz dni…”; wpisz w „Od” 8 cyfr (np. 19112026), w „Do” inną datę; potem klik, Ctrl+klik i Shift+klik w miesiącu; wpisz 31112026.
+- **Oczekiwany efekt:** 8 cyfr od razu zmienia się w „19-11-2026”, zakres zaznacza się w miesiącu, licznik „Wybrane: N dni”; Ctrl dokłada i zdejmuje dzień, Shift dokłada zakres; pola pokazują pierwszy i ostatni dzień; nieistniejąca data – czerwona ramka, zaznaczenie bez zmian.
+- **Nie przechodzi, gdy:** pole nie rozpoznaje 8 cyfr; Ctrl/Shift działa inaczej niż w Kalendarzu; przycisk zapisuje zero dni.
+
+#### SZ3 „Odwołaj w…” i „Cofnij” (D543, D545)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-apply.test.ts`, `tests/e2e/template-apply.spec.ts`.
+- **Jak sprawdzić:** po SZ1 kliknij „Cofnij” w linii; potem „Odwołaj w…” → „Jutro”; na dniu tego szablonu (jego dzień tygodnia) też „Odwołaj w…”.
+- **Oczekiwany efekt:** „Cofnij” przywraca wszystkie dni jak przed zmianą; „Odwołaj” zdejmuje tylko bloki szablonu (także w jego własnym dniu), Twoje bloki zostają, zaczęte zostają i są policzone w linii.
+- **Nie przechodzi, gdy:** znika Twój blok albo sesja innego szablonu; „Cofnij” zostawia część dni.
+
+#### SZ4 Okno „Zastosuj „…” do dziś” (D546)
+- [ ] Odebrane
+- **Automatycznie:** `tests/e2e/template-apply.spec.ts`, `tests/web/template-apply-text.test.ts`.
+- **Jak sprawdzić:** „Zastosuj do…” → „Dziś”; zamknij „Anuluj” i otwórz drugi raz po zmianie wyborów; potem „Jutro”; potem „Wybierz dni…” z zakresem obejmującym wczoraj i jutro.
+- **Oczekiwany efekt:** okno „Zastosuj „…” do dziś” z grupami „Godziny dziś” (zaznaczone „Wg planu – godziny szablonu”) i „Minione bloki” (zaznaczone „Dodaj jako zrealizowane”); po ponownym otwarciu znów te same domyślne; „Anuluj” niczego nie zmienia; „Jutro” – bez okna; zakres z wczoraj – okno „… do N dni”, bez grupy „Godziny dziś”, gdy dziś nie jest wybrane; po „Zastosuj” – przy kolizji jak dotąd pytanie „Uzupełnij luki / Nadpisz plan”.
+- **Nie przechodzi, gdy:** okno nie pojawia się przy dziś albo dniu minionym; pojawia się przy samych dniach przyszłych albo przy „Odwołaj w…”; okno pamięta poprzedni wybór; „Anuluj” coś zapisuje.
+
+#### SZ5 Dziś wg planu – minione jako zrealizowane albo pominięte (D547)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-apply.test.ts`, `tests/fs/template-done.test.ts`, `tests/web/template-apply-days.test.ts`, `tests/e2e/template-apply.spec.ts`.
+- **Jak sprawdzić:** w południe szablon z blokami rano, jednym trwającym teraz według godzin szablonu i wieczornym; „Dziś” → „Wg planu” + „Dodaj jako zrealizowane”; spójrz na oś „Dziś” i energię; „Cofnij”; potem to samo z „Nie dodawaj minionych”; na koniec dzień, w którym rano biegł Twój blok w godzinach bloku szablonu.
+- **Oczekiwany efekt:** bloki poranne w godzinach szablonu z ✓, energia i budżet liczą je jak zrobione, linia „dodano N bloków (w tym K zrealizowane)”; blok trwający według planu dochodzi niezaczęty i stoi od teraz; wieczorny – w swojej godzinie. „Cofnij” zdejmuje bloki i ✓. „Nie dodawaj minionych” – poranne nie dochodzą, linia „pominięto N (minione)”. Blok szablonu w czasie Twojego biegu – pominięty, „pominięto N (w tym czasie coś trwało)”, Twój bieg bez zmian.
+- **Nie przechodzi, gdy:** cały szablon zaczyna się w chwili dodania; blok miniony bez ✓ albo nie liczy się do energii; po „Cofnij” zostaje ✓ albo blok; blok szablonu nakłada się na Twój rzeczywisty bieg.
+
+#### SZ6 Dziś „W czasie rzeczywistym – od teraz” (D548)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-apply.test.ts`, `tests/e2e/template-apply.spec.ts`.
+- **Jak sprawdzić:** szablon zaczynający się rano blokiem elastycznym, z blokiem stałym i sesją po południu i blokiem późnym wieczorem; „Dziś” → „W czasie rzeczywistym – od teraz”; potem szablon zaczynający się po teraz (np. o 18:00).
+- **Oczekiwany efekt:** pierwszy blok elastyczny zaczyna się teraz, kolejne elastyczne zachowują odstępy i kolejność (w drugim szablonie – przesunięte wcześniej); blok stały i sesja na swoich godzinach; zakotwiczone za kotwicą; blok, który wyszedłby za koniec doby (po 04:00 następnej nocy), pominięty – „pominięto N (poza dobą)”; stały blok, który już minął, idzie według wyboru „Minione bloki”.
+- **Nie przechodzi, gdy:** przesuwa się sesja albo blok stały; zmieniają się odstępy między blokami elastycznymi; blok trafia za koniec doby.
+
+#### SZ7 Dni minione (D549)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-apply.test.ts`, `tests/fs/template-done.test.ts`.
+- **Jak sprawdzić:** „Wybierz dni…” – dwa dni minione; najpierw „Nie dodawaj minionych”, potem „Dodaj jako zrealizowane”; zajrzyj w Kalendarzu do tych dni.
+- **Oczekiwany efekt:** „Nie dodawaj minionych” – dni minione bez zmian, linia albo komunikat „pominięto N (minione)”; „Dodaj jako zrealizowane” – bloki w godzinach szablonu z ✓ (poza tymi, w których czasie coś biegło); „Cofnij” przywraca dni.
+- **Nie przechodzi, gdy:** „Nie dodawaj minionych” coś dopisuje do dnia minionego; bloki dni minionych bez ✓ po „Dodaj jako zrealizowane”.
+
+#### SZ8 Dzień zamknięty i „Cofnij” z blokiem zmienionym (D550, D545)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/template-done.test.ts`, `tests/web/template-apply-days.test.ts`, `tests/web/template-apply-text.test.ts`.
+- **Jak sprawdzić:** w Historii zapamiętaj punkty dnia minionego zamkniętego rytuałem (najlepiej już zamrożonego); „Wybierz dni…” – ten dzień, „Dodaj jako zrealizowane”; zajrzyj do punktów; „Cofnij”. Potem dziś: „Dziś” z blokiem minionym, popraw jego czas w rytuale albo przedłuż go, „Cofnij” w linii szablonu.
+- **Oczekiwany efekt:** linia „… · 1 dzień był zamknięty – punkty przeliczono”, punkty i ocena dnia zmieniają się zgodnie z dodanymi blokami (passa liczy się od nowa); „Cofnij” przywraca punkty sprzed zmiany. Blok poprawiony od tego czasu zostaje z ✓ i komunikat „1 blok zmieniony od tego czasu – został”, reszta wraca. Blok, którego aplikacja nie zaliczyła, stoi w planie, a linia mówi „N bez zaliczenia (powód)”. Dzień zmieniony w międzyczasie na drugim komputerze (np. pobudka) – nic z szablonu w nim nie zostaje, linia „<data>: nie zapisano (plik zajęty albo zmieniony na innym komputerze) – zastosuj jeszcze raz”.
+- **Nie przechodzi, gdy:** punkty dnia zamkniętego się nie zmieniają albo zmieniają się po „Cofnij” inaczej niż przed zmianą; „Cofnij” zdejmuje blok, który od tego czasu poprawiłeś; „Cofnij”, którego nie da się wykonać w jednym dniu, cofa część dni.
+
+#### SZ9 Folder niedostępny – zaliczenia po zapisie (D552)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/template-done.test.ts`, `tests/fs/queue-step.test.ts`, `tests/web/template-apply-days.test.ts`.
+- **Jak sprawdzić:** wyłącz OneDrive albo odłącz folder danych (albo otwórz plik dnia minionego w programie, który go blokuje); „Wybierz dni…” – ten dzień, „Dodaj jako zrealizowane”; potem przywróć folder i odczekaj kilkanaście sekund; drugi raz to samo, ale przed powrotem folderu kliknij „Cofnij”.
+- **Oczekiwany efekt:** linia „… · 1 dzień czeka na folder – zaliczenia dopiszą się po zapisie”; po powrocie folderu bloki są w dniu z ✓, a dzień zamknięty ma przeliczone punkty. „Cofnij” przed powrotem – po powrocie dzień bez bloków i bez ✓.
+- **Nie przechodzi, gdy:** po powrocie folderu bloki są bez ✓ albo ✓ bez bloków; po „Cofnij” coś z szablonu zostaje w dniu.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 

@@ -163,6 +163,9 @@ export function editNotice(out: readonly EditOutcome[]): { text: string; kind: '
   return null
 }
 
+/** The call of the main process that writes the edits of a save (`window.rd.edit`, or one that writes more with them in one step). */
+export type EditSender = (list: EditEntry[]) => Promise<EditOutcome[]>
+
 /**
  * Filled in by a save for a caller that must tell „not sent” from „sent, the result not known”: `afterSend` is set once the
  * main process answered the edit (the queue took it) – a failure after that (the view read again, the notice) may hide a
@@ -238,12 +241,13 @@ function noteTreeChange(): void {
 /**
  * Sends edits made by `make` (in its turn); null when nothing could be sent – the toast said why. Every save of the window goes here, so a
  * change of the tree of categories written (or waiting for the folder) writes `tree.change` here – whichever way it was made (`treeEdit`).
+ * `via` – the call of the main process that writes them (`edit`; one that writes more with them in one step – `applyTemplateDays`).
  */
-async function send(make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>, state?: SendState): Promise<EditOutcome[] | null> {
+async function send(make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>, state?: SendState, via: EditSender = (list) => window.rd.edit(list)): Promise<EditOutcome[] | null> {
   try {
     const list = sentEntries(await make())
     if (!list.length) return []
-    const out = await window.rd.edit(list)
+    const out = await via(list)
     // The queue took it: from now on a failure leaves the result unknown, never „not saved”.
     if (state) state.afterSend = true
     await reloadData()
@@ -275,8 +279,8 @@ export function trySaveEdits(entries: ReadonlyArray<EditEntry | null>): Promise<
  * Edits made in their turn by `make` – from the records (`rawRecord`) and the days' files (`dayFilesNow`) as they are
  * then – and saved; null when nothing could be sent.
  */
-export function trySaveWith(make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>, state?: SendState): Promise<EditOutcome[] | null> {
-  return inTurn(() => send(make, state))
+export function trySaveWith(make: () => Promise<ReadonlyArray<EditEntry | null>> | ReadonlyArray<EditEntry | null>, state?: SendState, via?: EditSender): Promise<EditOutcome[] | null> {
+  return inTurn(() => send(make, state, via))
 }
 
 /** The most days one `dayFiles` answers (the main process reads no more at once): a longer list goes in these portions. */

@@ -49,8 +49,8 @@ Wszystkie wiadomości do użytkownika po polsku. Pytania zawsze klikalne (AskUse
 ## Przegląd i oszczędzanie tokenów (D351)
 - Poziom `/code-review` według ryzyka: **xhigh** – silnik dnia, folder danych i synchronizacja, pasek pulpitu i okna,
   instalator i aktualizacje (zadania G); **high** – reszta kodu; **medium** – same dokumenty i konfiguracja.
-- **Najwyżej dwie rundy na PR:** pierwsza na całym diffie, druga tylko na diffie poprawek z pierwszej. Trzecia tylko,
-  gdy druga znalazła critical albo high – znowu tylko na nowych poprawkach. Poprawki po przeglądzie robi ten sam
+- **Najwyżej trzy rundy na PR (D551):** pierwsza na całym diffie, druga i trzecia tylko na diffie poprawek z rundy
+  poprzedniej. Czwarta tylko, gdy trzecia znalazła critical albo high – znowu tylko na nowych poprawkach. Poprawki po przeglądzie robi ten sam
   wykonawca (SendMessage – jego kontekst zostaje).
 - **Co poprawiamy:** critical i high zawsze, z testem; medium – gdy da się napisać test, który bez poprawki pada
   (w dokumentach: oczywisty błąd). Reszta (low, nit, medium bez testu) → „Uwagi na później” we wpisie w postępie.

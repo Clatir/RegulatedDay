@@ -14,6 +14,7 @@ import type { RitualValue, RitualView } from './engine/ritual'
 import type { CasesRitual } from './engine/cases'
 import type { ResultCode } from './engine/timer'
 import type { GroupSkip } from './engine/groupEdit'
+import type { DayRun, DoneSkipWhy } from './engine/templateApply'
 import type { CloseHow } from './model/events'
 import type { DayTypeId } from './model/settings'
 import type { ZjazdDay, ZjazdWarning } from './import/zjazdy'
@@ -81,6 +82,10 @@ export const CH = {
   undoClose: 'rd:undoClose',
   groupLog: 'rd:groupLog',
   undoGroupLog: 'rd:undoGroupLog',
+  applyTemplateDays: 'rd:applyTemplateDays',
+  judgeTemplateUndo: 'rd:judgeTemplateUndo',
+  undoTemplateDays: 'rd:undoTemplateDays',
+  dayRuns: 'rd:dayRuns',
   unclosedDays: 'rd:unclosedDays',
   computerList: 'rd:computerList',
   exportCsv: 'rd:exportCsv',
@@ -473,7 +478,11 @@ export interface EditEntry {
  * What became of one entry of an edit; `routineCostKept` – a routine's record written with another cost whose `routine.cost` the journal
  * did not take (T1446): today's begun blocks of it count the cost they had (the window says so).
  */
-export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting'; why?: string; routineCostKept?: true }
+/**
+ * `withdrawn` – an entry of a step that writes a day whole or not at all (`applyTemplateDays`) taken out of the queue again: nothing of it
+ * stays; its `why` – `changed` (on another computer), `removed`, `broken`, `behind` (a question before it).
+ */
+export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting' | 'withdrawn'; why?: string; routineCostKept?: true }
 
 /**
  * A record chosen from a backup: what the queue did with it, `behindQuestion` – it waits for your answer to an earlier
@@ -556,6 +565,59 @@ export interface GroupLogUndone extends TimerResult {
   restored: string[]
   kept: string[]
 }
+
+/** „Zastosuj szablon” (D547): a day's blocks gone by to be done – `entry` – the place of the day's entry among the entries sent with it. */
+export interface TemplateDoneAsk {
+  day: string
+  ids: string[]
+  entry: number
+  /** What the facts are owed to, kept with them while the entry waits for the folder (D552). */
+  template?: string
+  choice?: { hours: 'plan' | 'now'; past: 'done' | 'skip' }
+}
+
+/**
+ * What „Zastosuj szablon” did on a day (D547, D550): `written` – the ids of its facts (for „Cofnij”), `taken` – the blocks done, `skipped`
+ * – those asked and not done, with why; `closed` – the day was closed (the ritual) or frozen: its points counted again; `regradeFailed` –
+ * frozen, and its grade could not be written again now (why; `regradeLater` – a later check does it); `pending` – its entry waits for the folder
+ * (D552: the queue's id – the facts are written once it is laid).
+ */
+export interface TemplateDayDone {
+  day: string
+  written: string[]
+  taken: string[]
+  skipped: Array<{ id: string; why: DoneSkipWhy }>
+  closed: boolean
+  regradeFailed?: string | null
+  regradeLater?: boolean
+  pending?: string
+}
+
+/** „Zastosuj szablon” in one step (D547): what became of each entry (as `edit`; `withdrawn` with why), and the facts of each day asked. */
+export interface TemplateApplyResult {
+  outcomes: EditOutcome[]
+  facts: TemplateDayDone[]
+}
+
+/** „Cofnij” of „Zastosuj szablon”: a day's facts to take back – `entry` – its entry among those sent (null – no file to take back). */
+export interface TemplateUndoAsk {
+  day: string
+  written: string[]
+  entry: number | null
+  /** The day's entry of „Zastosuj” (the queue's id) while it waited for the folder (D552). */
+  pending?: string
+}
+
+/** Whether „Cofnij” may take the facts back: the blocks of each day that stay as they are (another event since, D313), or a refusal. */
+export type TemplateUndoJudged = { ok: true; kept: Array<{ day: string; blocks: string[] }> } | { ok: false; why: string }
+
+/**
+ * „Cofnij” of „Zastosuj szablon” in one step: what became of each entry, by day the blocks taken back and those still in the plan (`stayed`
+ * – their facts stay), the days not taken back (`notUndone` – their inverse did not go in), the closed days counted again, those later.
+ */
+export type TemplateUndoResult =
+  | { ok: true; outcomes: EditOutcome[]; undone: Array<{ day: string; blocks: string[]; stayed: string[] }>; notUndone: string[]; closed: string[]; regradeLater: string[]; regradeFailed: string[] }
+  | { ok: false; why: string }
 
 export interface FolderProbe {
   path: string
@@ -844,6 +906,17 @@ export interface RdApi {
   groupLog(day: string, kind: 'cancel' | 'park', ids: string[]): Promise<GroupLogResult>
   /** „Cofnij” of `groupLog` (D529): its events (`ids` from `groupLog`) undone – a block begun since stays. */
   undoGroupLog(day: string, ids: string[]): Promise<GroupLogUndone>
+  /**
+   * „Zastosuj szablon” (D540–D550) in one step of the main process: the facts of the blocks gone by added as done (`asks`, judged on the day
+   * as the bar shows it with the entry laid over it) and the edit of the days' files – a day whose entry does not go in keeps no facts.
+   */
+  applyTemplateDays(entries: EditEntry[], asks: TemplateDoneAsk[]): Promise<TemplateApplyResult>
+  /** Whether „Cofnij” of „Zastosuj” may take its facts back, and which blocks stay as they are (changed since). */
+  judgeTemplateUndo(asks: Array<{ day: string; written: string[]; pending?: string }>): Promise<TemplateUndoJudged>
+  /** „Cofnij” of „Zastosuj” in one step: every day judged first (`kept` as told, else nothing), then the files, then the facts. */
+  undoTemplateDays(entries: EditEntry[], asks: TemplateUndoAsk[], kept: Array<{ day: string; blocks: string[] }>): Promise<TemplateUndoResult>
+  /** The runs of a day's blocks in the foreground as the bar shows it (with the ends the app's close made) – „coś trwało” of „Zastosuj” (null – not readable now). */
+  dayRuns(day: string): Promise<DayRun[] | null>
   /** The days the morning shows to close (D318, spec „Rano aplikacja pokazuje wszystkie niezamknięte dni naraz”). */
   unclosedDays(): Promise<UnclosedDay[]>
   /** The computers of the folder for the settings (A3-13, „Zapomnij komputer”): this one first. */

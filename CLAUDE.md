@@ -16,7 +16,7 @@ Kompas jest indeksem: bez mapy kodu, kroniki wydań i dziennika commitów.
 - Plan napraw (D349, D351): główna sesja na Opus 5.5 · high zleca test i poprawkę każdego zadania wykonawcy
   z `.claude/agents/` według kolumny „Wykonawca” w `docs/plan.md`, a sama sprawdza, robi `/code-review`, PR i scalanie.
 - **Tokeny (D351):** `/code-review` według ryzyka (xhigh – silnik dnia, folder danych, pasek i okna, instalator;
-  high – reszta kodu; medium – dokumenty), najwyżej dwie rundy (druga tylko na poprawkach), medium tylko z testem,
+  high – reszta kodu; medium – dokumenty), najwyżej trzy rundy (D551; druga i trzecia tylko na poprawkach), medium tylko z testem,
   reszta → „Uwagi na później”. Szczegóły: skill `etap`.
 - Po wznowieniu (limit, nowa sesja) najpierw przeczytaj `docs/postep.md`.
 - **`/clear`:** przy każdej pauzie i po każdym zamkniętym kroku powiedz wprost, czy można go teraz bezpiecznie wykonać.
