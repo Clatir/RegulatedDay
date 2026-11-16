@@ -67,8 +67,8 @@ Autowznowienie po limicie: zadanie cron w sesji (co ok. 35 min) czyta ten wpis. 
 | Z3 | scalone a0a8042 (15.11 23:40) | przegląd high 10 uwag poprawionych, T1580–T1589; klik w dzień dalej go otwiera (zakres od Ctrl+klik) |
 | Z4 | scalone w całości 105cbb4 (16.11 02:35): A, B cz. 1, B cz. 2; trzy rundy xhigh na A i na B cz. 2 | uwagi na później: „Cofnij” usunięcia z pytaniem dziś otwiera blok przed odpowiedzią; linia „Przeniesiono 0 bloków · 2 dni niezapisane” (oba źródła odrzucone) |
 | Z5 | scalone razem z Z4 (105cbb4) | |
-| Z6 | gotowe w `C:/CC-Projekty/RD-z6` (T1750–T1762, poprawka liftsIn – remis startu); runda 1 xhigh 15 uwag – poprawki w toku; po scaleniu Z4 – merge paczki do z6 | |
-| Z7 | czeka | wersja, CHANGELOG, odbiór, Setup, PR, wydanie |
+| Z6 | scalone a1228e2 (16.11 03:00); dwie rundy xhigh (15 + 11), T1750–T1780 | uwaga na później: tworzenie dnia z szablonu nie przekłada `alongside` bloków szablonu na id dnia (grupy równoległe z szablonu nie są grupą w dniu) |
+| Z7 | w toku: wersja 1.28.0, CHANGELOG, odbiór ZG1–ZG10 gotowe; pełne E2E lokalnie w toku, potem lokalny Setup (build-win.ps1 -SkipTests) do Downloads, PR, CI, scalenie | `package-lock.json` bez podbicia wersji (odczyt i zapis zablokowane w ustawieniach; `npm ci` go przyjmuje) |
 
 **Przyjęte bez użytkownika (pokazać po powrocie):** klik w Kalendarzu dalej otwiera dzień (zakres od Ctrl+klik, T1585); „Przywróć” sprawy → Skrzynka (T1562); grupa spraw planowana w kolejności ekranu (T1570); linia zmian w oknie, nie w pasku pulpitu (T1541); czasowniki „Odwołano”, „Zaparkowano”, „Skopiowano”, dopisek „przesunięto N bloków”; dopiski „N dzień czeka na odpowiedź” / „N … nie zapisany”; podkategoria / wariant / rutyna pomijają zaczęty, sesje i wykłady zmieniane (T1591); „Przesuń o” dziś od miejsca kafelka (T1592); grupa nie staje „równolegle” obok innego bloku (T1757); Esc odwołuje przeciąganie grupy.
 
