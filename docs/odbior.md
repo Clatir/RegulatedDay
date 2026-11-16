@@ -259,6 +259,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] ZG8 Del na zaznaczeniu ≥ 2 – jedno pytanie „Usunąć N …?” (1.28.0)
    - [ ] ZG9 Menu bloków – działania w „Dziś”, „Szablonach” i „Tygodniu”, pomijanie i „Cofnij” (1.28.0)
    - [ ] ZG10 Przeciąganie grupy bloków o ten sam czas i dni; z Ctrl – kopia grupy (1.28.0)
+   - [ ] SZ1 Szablon: „Zastosuj do…” – Dziś, Jutro, wybrane dni; pytanie przy kolizji (1.29.0)
+   - [ ] SZ2 Okno dni: Ctrl/Shift w miesiącu, daty DD-MM-RRRR i osiem cyfr (1.29.0)
+   - [ ] SZ3 Szablon: „Odwołaj w…” i „Cofnij” (1.29.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -2861,6 +2864,29 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** w „Dziś” (jutro) zaznacz dwa bloki Ctrl+klikiem i przeciągnij jeden z nich o godzinę; powtórz z Ctrl; zacznij przeciągać i naciśnij Esc. W „Tygodniu” zaznacz bloki z poniedziałku i przeciągnij jeden na środę; w zaznaczeniu zostaw też blok zaczęty albo z dnia minionego. W „Szablonach” przeciągnij dwa zaznaczone bloki.
 - **Oczekiwany efekt:** w trakcie wszystkie zaznaczone stoją na nowych miejscach (oś – przerywane obwódki, „Tydzień” – pasma); po puszczeniu jadą o ten sam czas i dni, kolejne bloki się rozsuwają, linia „Przeniesiono 2 bloki · Cofnij”, jedno „Cofnij” przywraca wszystkie dni. Z Ctrl oryginały zostają, a w miejscu upuszczenia stają kopie („Skopiowano 2 bloki”). Esc odwołuje bez zmian i zostawia zaznaczenie. Blok zaczęty albo z dnia minionego zostaje na miejscu i jest policzony („1 został – już trwa”). Pojedyncze przeciąganie niezaznaczonego bloku działa jak dotąd.
 - **Nie przechodzi, gdy:** jedzie tylko chwycony blok; kopia rusza oryginały; zapisana godzina różni się od pokazanej po upuszczeniu; Esc zostawia zmianę albo czyści zaznaczenie.
+
+### SZ – szablon w wybrane dni (1.29.0, D540–D545)
+
+#### SZ1 „Zastosuj do…” szablonu (D540, D541, D542)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-apply.test.ts`, `tests/e2e/template-apply.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** Szablony → szablon z blokami, „Zastosuj do…” → „Jutro” na dniu, który ma własny blok w godzinach jednego z bloków szablonu; potem jeszcze raz „Jutro”; potem na dniu bez kolizji.
+- **Oczekiwany efekt:** przy kolizji okno „Bloki „…” kolidują z planem” z „Uzupełnij luki” i „Nadpisz plan”; luki – dochodzą tylko bloki mieszczące się w wolnym czasie, nadpisz – kolidujący blok odwołany, cały szablon w planie; drugi raz bez pytania i bez dublowania; dzień bez kolizji – bez pytania. Typ dnia i pobudka bez zmian; sesje i bloki zaczęte nigdy nie znikają. Linia na stronie szablonu z „Cofnij”.
+- **Nie przechodzi, gdy:** pytanie w dniu, który ma już bloki szablonu; bloki się dublują; „Nadpisz” zdejmuje sesję albo zaczęty blok; zmienia się typ dnia.
+
+#### SZ2 Okno „Wybierz dni…” (D544)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/date-input.test.ts`, `tests/e2e/template-apply.spec.ts`.
+- **Jak sprawdzić:** „Zastosuj do…” → „Wybierz dni…”; wpisz w „Od” 8 cyfr (np. 19112026), w „Do” inną datę; potem klik, Ctrl+klik i Shift+klik w miesiącu; wpisz 31112026.
+- **Oczekiwany efekt:** 8 cyfr od razu zmienia się w „19-11-2026”, zakres zaznacza się w miesiącu, licznik „Wybrane: N dni”; Ctrl dokłada i zdejmuje dzień, Shift dokłada zakres; pola pokazują pierwszy i ostatni dzień; nieistniejąca data – czerwona ramka, zaznaczenie bez zmian.
+- **Nie przechodzi, gdy:** pole nie rozpoznaje 8 cyfr; Ctrl/Shift działa inaczej niż w Kalendarzu; przycisk zapisuje zero dni.
+
+#### SZ3 „Odwołaj w…” i „Cofnij” (D543, D545)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-apply.test.ts`, `tests/e2e/template-apply.spec.ts`.
+- **Jak sprawdzić:** po SZ1 kliknij „Cofnij” w linii; potem „Odwołaj w…” → „Jutro”; na dniu tego szablonu (jego dzień tygodnia) też „Odwołaj w…”.
+- **Oczekiwany efekt:** „Cofnij” przywraca wszystkie dni jak przed zmianą; „Odwołaj” zdejmuje tylko bloki szablonu (także w jego własnym dniu), Twoje bloki zostają, zaczęte zostają i są policzone w linii.
+- **Nie przechodzi, gdy:** znika Twój blok albo sesja innego szablonu; „Cofnij” zostawia część dni.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 

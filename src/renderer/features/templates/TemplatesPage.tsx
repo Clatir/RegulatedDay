@@ -34,6 +34,7 @@ import { takeFoundPick, useUi } from '../../store/ui'
 import { attachTransfer } from '../attachments/attachDrop'
 import { withAttachCounts } from '../attachments/attachView'
 import { GroupLine } from '../../components/GroupLine'
+import { TemplateDaysButton } from './ApplyTemplate'
 import { BlockEditor } from '../plan/BlockEditor'
 import { menuCtxOf } from '../plan/groupMenu'
 import { useAxisGroup } from '../plan/useAxisGroup'
@@ -332,6 +333,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           <div className="flex flex-wrap items-center gap-2">
             <TextField value={template.name} onCommit={(name) => void saveTemplate({ name })} required max={80} shellClassName="max-w-[260px]" aria-label="Nazwa szablonu" data-testid="template-name" />
             <span className="flex-1" />
+            <TemplateDaysButton template={template} today={today} kind="apply" />
+            <TemplateDaysButton template={template} today={today} kind="revoke" />
             <button type="button" className="btn" onClick={() => void copy()} data-testid="template-copy">
               Skopiuj szablon
             </button>

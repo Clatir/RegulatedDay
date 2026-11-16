@@ -550,3 +550,9 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1778 | Podgląd przeciągania grupy liczony z planu, bez budowania plików |
 | T1779 | `DragJudged.delta` niesie różnicę przeciągnięcia |
 | T1780 | „Cofnij” przeniesienia grupy na inne dni pamięta cofnięte dni: zapisany nie wraca do wysyłki, z pytaniem – czeka na odpowiedź bez ponowienia, odrzucony albo nieczytelny – kolejne „Cofnij” robi tylko resztę |
+| T1900 | „Zastosuj szablon” w `engine/templateApply.ts` (czyste): blok kopii ma id `templateBlockId(dzień, szablon, blok)` – to samo co blok własnego dnia szablonu, więc dzień „z blokami szablonu” to dowolny blok `origin: 'template'` z takim id (`isOfTemplate`), a drugie zastosowanie niczego nie dubluje |
+| T1901 | Kopia w godzinach szablonu, bez przesunięcia pobudki dnia (blok pliku dnia nie przesuwa się z pobudką – D334); kotwice jak w `createDay` (blok szablonu → id dnia, sesja → blok sesji dnia albo sesji szablonu; bez kotwicy – pominięty); zakotwiczony do pominiętego – pominięty |
+| T1902 | Blok migawki odwołany w pliku wraca odwołaniem odwołania (Twoja zmiana bloku zostaje), sesja z odpowiedzią „nie” – zdjęciem odpowiedzi; blok przeniesiony na inny dzień (`movedTo`) nie wraca |
+| T1903 | „Zaczęty” = `BlockFact.startedAt` z faktów dnia policzonego w turze zapisu (`countedDay`); „Nadpisz” i „Odwołaj” ich nie ruszają, warstwy dnia – `layerKept` |
+| T1904 | Okno: `features/templates/applyDays.ts` – pytanie (`askedDays`) liczone przed oknem, zapis od nowa w turze (`trySaveWith`, pliki `readDayFiles`), jedna edycja, linia `showGroupLine('template')`, „Cofnij” = `undoDayEdits` (`takeBackDays`); dzień nieczytelny albo niepoliczony – pominięty i nazwany |
+| T1905 | Okno dni: `MonthGrid` w trybie `selected`/`onSelect` (jak kopia dnia), pola „Od”/„Do” – `shared/dateInput.ts` (`parseDmy`, `typedDmy`, `daysFromTo`); menu przycisku – `ContextMenu` |

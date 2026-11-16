@@ -30,6 +30,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `sessionOwnersOf`; `model/sessionMigration.ts` – `moveSessions` (raz, bez kopii i nowych id dni, też zarchiwizowane,
   znacznik wersji), `staleVersionFixes`, zmiany `sesje-w-szablonach[-<data>]` z `movedLayer` i `movedSessions`. Zmiana typu
   przenosi sesje w planie sama (`typeChange.ts` `sessionMoves`, `planWith`; blok ze zmiany typu – `PlanBlock.byType`). Dni sprzed – warstwa.
+- `engine/templateApply.ts` (D540–D545, T1900–T1905) – „Zastosuj / Odwołaj szablon w…”: kopia bloków wersji dnia z id `templateBlockId` (jak własny dzień szablonu – `isOfTemplate`), kolizja = nakładanie w czasie bez tła, `asksMode` (pytanie tylko bez bloków szablonu), „Nadpisz” nie rusza zaczętych i `layerKept`; okno – `features/templates/applyDays.ts`, `ApplyTemplate.tsx`, daty – `shared/dateInput.ts`.
 - `engine/facts.ts` – log → fakty (przebiegi bloków, prośby, „Odcinam się”, zatwierdzenia, odcinki); `viewAt(f, m)`.
 - `engine/blocks.ts` – `BlockInfo` (klasa, czeka na „Zacznij” – tylko stała sesja, wykład/zjazd, oznaczenie „po pracy”).
   Oznaczeń bloku nie ma (D467): `PlanBlock` nie ma `tag` ani `waitUntilMin` – stare pola zostają w pliku nieczytane
