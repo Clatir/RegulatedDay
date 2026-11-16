@@ -65,9 +65,9 @@ Autowznowienie po limicie: zadanie cron w sesji (co ok. 35 min) czyta ten wpis. 
 | Z1 | scalone 35b7148 (15.11 23:10) | przegląd high 9 uwag poprawionych, T1541–T1555; `installer-close.test.ts` pada lokalnie w obu drzewach (środowisko, PowerShell) – sprawdzi CI |
 | Z2 | scalone 15b2e2c (16.11 00:00) | A + B, dwa przeglądy high (10 + 11 uwag), T1560–T1577; E2E Spraw i Del lokalnie zielone |
 | Z3 | scalone a0a8042 (15.11 23:40) | przegląd high 10 uwag poprawionych, T1580–T1589; klik w dzień dalej go otwiera (zakres od Ctrl+klik) |
-| Z4 | A – runda 3 xhigh (9 uwag, ostatnia) w toku w `C:/CC-Projekty/RD-z4`; B cz. 1 (zaznaczanie osi i „Tygodnia”, menu z zaślepką `groupRunner`) scalone e9b9f74; B cz. 2 – podpięcie `runGroupAction` do logiki A | |
+| Z4 | A scalone 0e7d4a9 (16.11 01:00; trzy rundy xhigh, T1590–T1609, T1710–T1715); B cz. 1 scalone e9b9f74; B cz. 2 (podpięcie menu do logiki, także wiele dni – Z5) w toku w `C:/CC-Projekty/RD-z4` | |
 | Z5 | zaznaczanie w „Tygodniu” i „3 dniach” w e9b9f74; działania wielodniowe przy podpięciu Z4-B cz. 2 | |
-| Z6 | czeka na Z4-A | przeciąganie grupy – logika `wykonawca-opus`, interfejs `wykonawca-sonnet`; E2E ciągu Z (group-select.spec.ts) w toku |
+| Z6 | w toku – `wykonawca-opus`, drzewo `C:/CC-Projekty/RD-z6`, gałąź `claude/z6-przeciaganie` | E2E zaznaczania scalone d449dad; odbiór ZG1–ZG8 w toku (Sonnet) |
 | Z7 | czeka | wersja, CHANGELOG, odbiór, Setup, PR, wydanie |
 
 **Przyjęte bez użytkownika (pokazać po powrocie):** (lista rośnie w trakcie)
