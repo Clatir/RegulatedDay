@@ -50,27 +50,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 7. **1.20.0 (uwagi po 1.19.0, D460–D467):** wydane 14.11 08:48 (PR #88, #89); wpis, tabela i uwagi na później – `docs/archiwum/postep-uwagi-1.20.md`; czeka na odbiór (U1–U8).
 8. **1.21.0–1.27.0** (14–15.11, PR #90–#96): wpisy z „Przyjęte bez użytkownika” i „Uwagi na później” – `docs/archiwum/postep-1.2x.md`
    (sekcja „Kolejka postępu 1.21–1.27”); do odbioru: I1–I4, KR, 1.22-B, EN, KK, KT, ED, KS, KP, RE, SE, CI w `docs/odbior.md`.
-9. **Ciąg Z – zaznaczanie i edycja grupowa, paczka 1.28.0 (D527–D531, od T1541):** wpis niżej, „Ciąg Z”.
-
-## Ciąg Z – zaznaczanie i edycja grupowa (paczka 1.28.0)
-
-Start 15.11 22:15. Użytkownik nieobecny ok. 12 h: otwarte sprawy według rekomendacji, zgoda z góry na PR, scalenie
-i `main`; CI tylko raz – na końcowym PR paczki; przed wypchnięciem lokalny Setup.exe 1.28.0 w Downloads. Gałąź
-`claude/paczka-zaznaczanie` (od `main` 41493a1, katalog główny repozytorium); drzewa wykonawców – własne `npm ci`.
-Autowznowienie po limicie: zadanie cron w sesji (co ok. 35 min) czyta ten wpis. Numery: D527–D531, T od T1541.
-
-| # | Stan | Uwagi |
-| --- | --- | --- |
-| Z0 | dokumenty gotowe | D527–D531, specyfikacja „Zaznaczanie wielu i zmiany grupowe”, plan „Ciąg Z” |
-| Z1 | scalone 35b7148 (15.11 23:10) | przegląd high 9 uwag poprawionych, T1541–T1555; `installer-close.test.ts` pada lokalnie w obu drzewach (środowisko, PowerShell) – sprawdzi CI |
-| Z2 | scalone 15b2e2c (16.11 00:00) | A + B, dwa przeglądy high (10 + 11 uwag), T1560–T1577; E2E Spraw i Del lokalnie zielone |
-| Z3 | scalone a0a8042 (15.11 23:40) | przegląd high 10 uwag poprawionych, T1580–T1589; klik w dzień dalej go otwiera (zakres od Ctrl+klik) |
-| Z4 | scalone w całości 105cbb4 (16.11 02:35): A, B cz. 1, B cz. 2; trzy rundy xhigh na A i na B cz. 2 | uwagi na później: „Cofnij” usunięcia z pytaniem dziś otwiera blok przed odpowiedzią; linia „Przeniesiono 0 bloków · 2 dni niezapisane” (oba źródła odrzucone) |
-| Z5 | scalone razem z Z4 (105cbb4) | |
-| Z6 | scalone a1228e2 (16.11 03:00); dwie rundy xhigh (15 + 11), T1750–T1780 | uwaga na później: tworzenie dnia z szablonu nie przekłada `alongside` bloków szablonu na id dnia (grupy równoległe z szablonu nie są grupą w dniu) |
-| Z7 | w toku: wersja 1.28.0, CHANGELOG, odbiór ZG1–ZG10 gotowe; pełne E2E lokalnie w toku, potem lokalny Setup (build-win.ps1 -SkipTests) do Downloads, PR, CI, scalenie | `package-lock.json` bez podbicia wersji (odczyt i zapis zablokowane w ustawieniach; `npm ci` go przyjmuje) |
-
-**Przyjęte bez użytkownika (pokazać po powrocie):** klik w Kalendarzu dalej otwiera dzień (zakres od Ctrl+klik, T1585); „Przywróć” sprawy → Skrzynka (T1562); grupa spraw planowana w kolejności ekranu (T1570); linia zmian w oknie, nie w pasku pulpitu (T1541); czasowniki „Odwołano”, „Zaparkowano”, „Skopiowano”, dopisek „przesunięto N bloków”; dopiski „N dzień czeka na odpowiedź” / „N … nie zapisany”; podkategoria / wariant / rutyna pomijają zaczęty, sesje i wykłady zmieniane (T1591); „Przesuń o” dziś od miejsca kafelka (T1592); grupa nie staje „równolegle” obok innego bloku (T1757); Esc odwołuje przeciąganie grupy.
+9. **1.28.0 – zaznaczanie wielu i zmiany grupowe (ciąg Z, D527–D531, T1541–T1780):** wydane 16.11 (PR #97, `main` 94edb77, run 43801472212); wpis, „Przyjęte” (zaakceptowane przez użytkownika 16.11) i uwagi na później – `docs/archiwum/postep-ciag-Z.md`; odbiór ZG1–ZG10 w `docs/odbior.md`. Równolegle sesja d1 robi 1.29.0 (D540–D549, T1900–T1949).
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;

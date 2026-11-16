@@ -13,25 +13,9 @@ według kolumny „Wykonawca” (D349).
 - **Ciągi** (D317): pozycje jednego ciągu idą bez pauzy do „dalej”; każdy PR kończy się jak zwykle (testy,
   `/code-review`, commit, `docs/postep.md`, `docs/odbior.md`). Poprawki z odbioru wchodzą między PR-y bieżącego ciągu.
 
-## Ciąg Z – zaznaczanie i edycja grupowa (D527–D531), paczka 1.28.0
+## Ciąg Z – zakończony z wydaniem 1.28.0 (D527–D531)
 
-Wzór: FI 1.20.0 (D105) i ICTTJ 1.26.0, dostosowany do osi i silnika dnia. Pytania odpowiedziane 15.11 z góry; użytkownik
-nieobecny ok. 12 h – otwarte sprawy rozstrzygam według rekomendacji (T-decyzje), zgoda z góry na PR i scalenie. Jedna
-gałąź paczki `claude/paczka-zaznaczanie`, zadania scalane do niej po testach lokalnych i `/code-review`, jedno CI na końcu
-(D413); przed wypchnięciem PR – lokalny Setup.exe 1.28.0 w Downloads. Z2, Z3 i Z4 idą równolegle po Z1.
-
-| # | Zadanie | Rodzaj | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
-| --- | --- | --- | --- | --- | --- |
-| Z0 | Decyzje D527–D531, „Konwencje interfejsu” w specyfikacji, plan i postęp | dokumenty | główna sesja · medium | 45 min | Specyfikacja ma zasady zaznaczania, menu i linii zmian grupowych z przykładami-testami |
-| Z1 | Wspólna podstawa: model zaznaczenia (klik, Ctrl, Shift z kotwicą, Shift+strzałki, Ctrl+A, Esc), menu pod prawym przyciskiem (Shift+F10, ✓ / „—”, wyłączone z powodem), napis „Zaznaczone: …”, linia „Zmieniono N … · Cofnij” | Interfejs | `wykonawca-sonnet` · high | 3–4 h | Moduły w `src/shared` i `src/renderer` z testami unit; zaznaczanie i menu działają z klawiatury |
-| Z2 | Sprawy: zaznaczanie na listach i w panelu, menu (lista, kategoria, szacunek, zrobione, „Zaplanuj…”, usuń), Del na grupie, przeciągnięcie grupy na oś (D530) | Całość | `wykonawca-sonnet` · high | 3–4 h | 3 sprawy przeniesione do „Dziś” jednym ruchem, „Cofnij” przywraca; „Zaplanuj…” od 14:00 daje 3 bloki po kolei; testy unit i E2E |
-| Z3 | Kalendarz: Shift+klik zakres dni, Shift+strzałki, Esc, menu z działaniami dnia | Interfejs | `wykonawca-sonnet` · high | 1–2 h | Ctrl+klik 7.12, Shift+klik 13.12 i „Wolne” – 7 dni, jedno „Cofnij” |
-| Z4 | Bloki jednego dnia („Dziś”, „Szablony”): zaznaczanie na osi, menu (D528), pomijanie i seria (D529), jedna zmiana pliku dnia, skutek energii w linii | Całość (silnik dnia) | `wykonawca-opus` · xhigh | 5–7 h | Zmiana podkategorii 4 bloków z 1 zaczętym – 3 zmienione, linia z pominiętym i energią, „Cofnij” przywraca tylko to pole |
-| Z5 | „Tydzień” i „3 dni”: zaznaczanie przez kilka dni (Ctrl+klik bez otwierania dnia), menu na wielu plikach dni, jedno „Cofnij” | Całość | `wykonawca-opus` · xhigh | 3–4 h | 5 bloków w 3 dniach z nowym wariantem, „Cofnij” przywraca 3 dni; dzień zmieniony w międzyczasie zostaje z komunikatem |
-| Z6 | Przeciąganie grupy (D531) w „Dziś”, „Szablonach”, „Tygodniu”, „3 dniach”, z Ctrl – kopia grupy | Całość (silnik dnia) | `wykonawca-opus` · xhigh | 5–8 h | 3 bloki z poniedziałku na środę +1 h, rozsunięcie, jedno „Cofnij” przywraca oba dni; nieprzenośne i minione policzone |
-| Z7 | Paczka: wersja 1.28.0, CHANGELOG, odbiór, pełne testy, lokalny Setup.exe, PR z CI, scalenie, wydanie | dokumenty i wydanie | główna sesja | 1,5 h | Wydanie 1.28.0 opublikowane, Setup w Downloads |
-
-*Razem ciąg Z: 22–31 h pracy, przy równoległych Z2–Z4 ok. 10–13 h.*
+Zaznaczanie wielu i zmiany grupowe, 15–16.11.2026; tabela zadań – `docs/archiwum/postep-ciag-Z.md`. Zostaje Twój odbiór ZG1–ZG10.
 
 ## Poprawki po odbiorze w maszynie – ciąg F zakończony (D324, D349)
 
