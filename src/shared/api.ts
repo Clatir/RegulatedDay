@@ -14,7 +14,7 @@ import type { RitualValue, RitualView } from './engine/ritual'
 import type { CasesRitual } from './engine/cases'
 import type { ResultCode } from './engine/timer'
 import type { GroupSkip } from './engine/groupEdit'
-import type { DoneSkipWhy } from './engine/templateApply'
+import type { DayRun, DoneSkipWhy } from './engine/templateApply'
 import type { CloseHow } from './model/events'
 import type { DayTypeId } from './model/settings'
 import type { ZjazdDay, ZjazdWarning } from './import/zjazdy'
@@ -85,6 +85,7 @@ export const CH = {
   applyTemplateDays: 'rd:applyTemplateDays',
   judgeTemplateUndo: 'rd:judgeTemplateUndo',
   undoTemplateDays: 'rd:undoTemplateDays',
+  dayRuns: 'rd:dayRuns',
   unclosedDays: 'rd:unclosedDays',
   computerList: 'rd:computerList',
   exportCsv: 'rd:exportCsv',
@@ -580,11 +581,16 @@ export interface TemplateDayDone {
   skipped: Array<{ id: string; why: DoneSkipWhy }>
   closed: boolean
   regradeFailed?: string | null
+  /** Its entry would not go in whole now (a change on another computer, a question): its blocks gone by (`stripped`) kept out, no facts. */
+  asked?: boolean
+  stripped?: string[]
 }
 
 /** „Zastosuj szablon” in one step (D547): what became of each entry (as `edit`), and the facts of each day asked. */
 export interface TemplateApplyResult {
-  outcomes: EditOutcome[]
+  /** Null – the edit did not go (`why`); `facts` then say what still stands (facts that could not be taken back). */
+  outcomes: EditOutcome[] | null
+  why?: string
   facts: TemplateDayDone[]
 }
 
@@ -600,7 +606,7 @@ export type TemplateUndoJudged = { ok: true; kept: Array<{ day: string; blocks: 
 
 /** „Cofnij” of „Zastosuj szablon” in one step: what became of each entry, the blocks taken back by day, the closed days counted again. */
 export type TemplateUndoResult =
-  | { ok: true; outcomes: EditOutcome[]; undone: Array<{ day: string; blocks: string[] }>; closed: string[]; regradeFailed: string[] }
+  | { ok: true; outcomes: EditOutcome[]; undone: Array<{ day: string; blocks: string[] }>; asked: string[]; waiting: string[]; closed: string[]; regradeFailed: string[] }
   | { ok: false; why: string }
 
 export interface FolderProbe {
@@ -899,6 +905,8 @@ export interface RdApi {
   judgeTemplateUndo(asks: Array<{ day: string; written: string[] }>): Promise<TemplateUndoJudged>
   /** „Cofnij” of „Zastosuj” in one step: every day judged first (`kept` as told, else nothing), then the files, then the facts. */
   undoTemplateDays(entries: EditEntry[], asks: TemplateUndoAsk[], kept: Array<{ day: string; blocks: string[] }>): Promise<TemplateUndoResult>
+  /** The runs of a day's blocks in the foreground as the bar shows it (with the ends the app's close made) – „coś trwało” of „Zastosuj” (null – not readable now). */
+  dayRuns(day: string): Promise<DayRun[] | null>
   /** The days the morning shows to close (D318, spec „Rano aplikacja pokazuje wszystkie niezamknięte dni naraz”). */
   unclosedDays(): Promise<UnclosedDay[]>
   /** The computers of the folder for the settings (A3-13, „Zapomnij komputer”): this one first. */

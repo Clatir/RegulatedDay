@@ -8,9 +8,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DataView, DayData, EditEntry, RawRecord, RdApi, TemplateApplyResult, TemplateUndoJudged } from '@shared/api'
 import { setAt } from '@shared/data/merge'
 import { templateBlockId } from '@shared/engine/createDay'
+import { withoutBlocks, type DayRun } from '@shared/engine/templateApply'
 import { dayFileFrom, planBlock, type Template } from '@shared/model/plan'
 import { placeLogical } from '@shared/time/day'
-import { applyToDays } from '@renderer/features/templates/applyDays'
+import { applyToDays, keepBlocks } from '@renderer/features/templates/applyDays'
+import { sessionBlockId } from '@shared/engine/createDay'
 import { useData } from '@renderer/store/data'
 import { UndoNotDone, useGroupLine } from '@renderer/store/groupLine'
 import { useUi } from '@renderer/store/ui'
@@ -53,7 +55,7 @@ afterEach(() => {
 })
 
 type Facts = TemplateApplyResult['facts'][number]
-function stub(o: { facts?: Partial<Facts>; apply?: Error; judged?: TemplateUndoJudged } = {}) {
+function stub(o: { facts?: Partial<Facts>; apply?: Error; judged?: TemplateUndoJudged; asked?: boolean; stranded?: boolean; undoAsked?: boolean; runs?: DayRun[] } = {}) {
   const files: Record<string, RawRecord | null> = {}
   const lay = (entries: EditEntry[]) =>
     entries.map((e) => {
@@ -67,10 +69,20 @@ function stub(o: { facts?: Partial<Facts>; apply?: Error; judged?: TemplateUndoJ
     edit: vi.fn(async (entries: EditEntry[]) => lay(entries)),
     applyTemplateDays: vi.fn(async (entries: EditEntry[]) => {
       if (o.apply) throw o.apply
+      if (o.stranded) return { outcomes: null, why: 'kolejka nie przyjęła zmiany', facts: [{ day: THU, written: WRITTEN, taken: [], skipped: [], closed: false, regradeFailed: null }] }
+      if (o.asked) {
+        const stripped = [id('rano'), id('po')]
+        return { outcomes: lay(entries.map((e) => withoutBlocks(e, new Set(stripped)))), facts: [{ day: THU, written: [], taken: [], skipped: [], closed: false, regradeFailed: null, asked: true, stripped }] }
+      }
       return { outcomes: lay(entries), facts: [{ day: THU, written: WRITTEN, taken: [id('rano'), id('po')], skipped: [], closed: false, regradeFailed: null, ...o.facts }] }
     }),
     judgeTemplateUndo: vi.fn(async () => o.judged ?? { ok: true as const, kept: [{ day: THU, blocks: [] }] }),
-    undoTemplateDays: vi.fn(async (entries: EditEntry[]) => ({ ok: true as const, outcomes: lay(entries), undone: [{ day: THU, blocks: [] }], closed: [], regradeFailed: [] })),
+    undoTemplateDays: vi.fn(async (entries: EditEntry[]) =>
+      o.undoAsked
+        ? { ok: true as const, outcomes: entries.map(() => ({ status: 'applied' as const })), undone: [], asked: [THU], waiting: [], closed: [], regradeFailed: [] }
+        : { ok: true as const, outcomes: lay(entries), undone: [{ day: THU, blocks: [] }], asked: [], waiting: [], closed: [], regradeFailed: [] }
+    ),
+    dayRuns: vi.fn(async () => o.runs ?? []),
     dataView: async () => ({ today: THU }) as DataView
   }
   ;(globalThis as unknown as { window: { rd: Partial<RdApi> } }).window = { rd }
@@ -133,5 +145,54 @@ describe('„Zastosuj” dziś – plik i fakty jednym krokiem (D547)', () => {
     expect(s.rd.applyTemplateDays).not.toHaveBeenCalled()
     expect(s.rd.edit).toHaveBeenCalledTimes(1)
     expect(line().text).toBe('„Trening” – 1 dzień: dodano 1 blok · pominięto 2 (minione)')
+  })
+})
+
+describe('runda 2 (T1950–T1955)', () => {
+  it('dzień zmieniony na innym komputerze: minione poza planem, w linii „zastosuj jeszcze raz”; „Cofnij” nie rusza minionych', async () => {
+    const s = stub({ asked: true })
+    expect(await applyToDays(training, [THU], 'fill', { hours: 'plan', past: 'done' }, AT)).toBe(true)
+    expect(inPlan(s.files)).toEqual([id('wieczor')])
+    expect(line().text).toBe('„Trening” – 1 dzień: dodano 1 blok · 19.11.2026: zmieniony na innym komputerze – minione bez zaliczenia, zastosuj jeszcze raz')
+    // No facts stand: „Cofnij” is the plain one, of what went in.
+    await line().undo()
+    expect(s.rd.judgeTemplateUndo).not.toHaveBeenCalled()
+    expect(inPlan(s.files)).toEqual([])
+  })
+
+  it('krok odmówił, ale zaliczeń nie dało się cofnąć: linia mówi, że zostały, „Cofnij” zdejmuje same fakty', async () => {
+    const s = stub({ stranded: true })
+    expect(await applyToDays(training, [THU], 'fill', { hours: 'plan', past: 'done' }, AT)).toBe(false)
+    expect(line().text).toBe('„Trening” – planu nie zapisano, ale zostały zaliczenia: 19.11.2026')
+    await line().undo()
+    expect(s.rd.undoTemplateDays).toHaveBeenCalledWith([], [{ day: THU, written: WRITTEN, entry: null }], [{ day: THU, blocks: [] }])
+  })
+
+  it('„Cofnij”, którego dzień proces główny nie cofnął (zmiana z innego komputera): linia zostaje, kolejne „Cofnij” próbuje tego dnia', async () => {
+    const s = stub({ undoAsked: true })
+    await applyToDays(training, [THU], 'fill', { hours: 'plan', past: 'done' }, AT)
+    await expect(line().undo()).rejects.toBeInstanceOf(UndoNotDone)
+    expect(useUi.getState().toasts.map((t) => t.text).join(' ')).toContain('zmieniony na innym komputerze – nie cofnięto')
+    await expect(line().undo()).rejects.toBeInstanceOf(UndoNotDone)
+    expect(s.rd.undoTemplateDays).toHaveBeenCalledTimes(2)
+  })
+
+  it('„coś trwało” w oknie z dnia, jaki widzi pasek (`dayRuns` – z końcami zamknięcia aplikacji), jak w kroku procesu głównego', async () => {
+    const s = stub({ runs: [{ block: 'x', start: 6 * 60 + 30, end: 6 * 60 + 50 }] })
+    await applyToDays(training, [THU], 'fill', { hours: 'plan', past: 'done' }, AT)
+    expect(s.rd.dayRuns).toHaveBeenCalledWith(THU)
+    expect(inPlan(s.files)).toEqual([id('wieczor')])
+    expect(line().text).toBe('„Trening” – 1 dzień: dodano 1 blok · pominięto 2 (w tym czasie coś trwało)')
+  })
+
+  it('keepBlocks: blok zostaje nieodwołany także przy liście odwołań; odpowiedź sesji – jak w pliku teraz („nie” nie wraca)', () => {
+    const ny = sessionBlockId(THU, 'ny')
+    const now: RawRecord = { schema: 1, date: THU, cancelled: [], sessions: {} }
+    const inverse: EditEntry = { rel: `days/2026/${THU}.json`, edits: [{ path: ['cancelled'], base: [], value: ['x'] }, { path: ['sessions', 'ny'], base: undefined, value: 'no' }] }
+    const e = keepBlocks(inverse, now, ['x', ny], THU)
+    const after = (e?.edits ?? []).reduce<RawRecord>((r, f) => setAt(r, f.path, f.value) as RawRecord, { ...now })
+    const f = dayFileFrom(after, THU)
+    expect(f.cancelled).not.toContain('x')
+    expect(f.sessions?.ny).toBeUndefined()
   })
 })

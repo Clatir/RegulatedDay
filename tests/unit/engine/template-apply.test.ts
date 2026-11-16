@@ -5,7 +5,8 @@
 import { describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { createDay, dayPlan, sessionBlockId, templateBlockId } from '@shared/engine/createDay'
-import { anchoredClosure, applyTemplate, asksMode, foregroundRuns, judgeApply, revokeTemplate, takeGoneBy, versionForDay, type ApplyDay, type ApplyTiming, type DayRun } from '@shared/engine/templateApply'
+import { anchoredClosure, applyTemplate, asksMode, backInFile, foregroundRuns, judgeApply, revokeTemplate, takeGoneBy, templateDoneUndo, versionForDay, withoutBlocks, type ApplyDay, type ApplyTiming, type DayRun } from '@shared/engine/templateApply'
+import type { AnyEvent } from '@shared/model/events'
 import { ALL_DAYS_YES, dayFileFrom, planBlock, type PlanBlock, type Template } from '@shared/model/plan'
 import type { SettingsChange } from '@shared/model/settings'
 
@@ -483,5 +484,53 @@ describe('runda 1 przeglądu (T1922–T1929)', () => {
     expect(planAfter(day, r.raw).find((b) => b.id === id(WED, 'rano'))!.startMin).toBe(at(6))
     const now = applyTemplate(later, day, 'fill', judgeApply(later, day, timing({ today: WED, nowMin: at(11), hours: 'now' })))
     expect((now.raw.blocks as Array<{ id: string; startMin: number }>).find((b) => b.id === id(WED, 'rano'))!.startMin).toBe(at(11))
+  })
+})
+
+describe('runda 2 przeglądu (T1950–T1955)', () => {
+  const empty: Template = { ...ordinary, versions: [{ ...ordinary.versions[0]!, blocks: [] }] }
+  const at = (h: number, m = 0) => h * 60 + m
+  const tid = (b: string) => templateBlockId(THU, 'trening', b)
+
+  it('dwa minione na siebie: pierwszy, który nie wchodzi do planu (kolizja, „Uzupełnij luki”), nie zatrzymuje drugiego', async () => {
+    const t: Template = { ...training, versions: [{ ...training.versions[0]!, blocks: [planBlock({ id: 'x', categoryId: 'inne', startMin: at(6), durationMin: 60, origin: 'template' }), planBlock({ id: 'y', categoryId: 'inne', startMin: at(6, 30), durationMin: 60, origin: 'template' })] }] }
+    // „moj” 06:00–06:30 (not begun) collides with „x” only.
+    const raw = { schema: 1, date: THU, blocks: [{ id: 'moj', categoryId: 'inne', startMin: at(6), durationMin: 30, fixed: false }] }
+    const day: ApplyDay = { ...dayOf(THU, raw, [], [empty, t]), runs: [] }
+    const j = judgeApply(t, day, { hours: 'plan', past: 'done', today: THU, nowMin: at(10) })
+    const r = applyTemplate(t, day, 'fill', j)
+    expect(r.done).toEqual([tid('y')])
+    expect(r).toMatchObject({ added: 1, skipped: 1, left: { ran: 0 } })
+  })
+
+  it('withoutBlocks: pole bloku, odwołanie i cała lista bloków / odwołań naraz (nowy plik) – bez tych bloków', () => {
+    const e = { rel: 'days/2026/x.json', edits: [{ path: ['blocks', '#a'], base: undefined, value: { id: 'a' } }, { path: ['cancelled', 'a'], base: true, value: undefined }, { path: ['blocks'], base: undefined, value: [{ id: 'a' }, { id: 'b' }] }, { path: ['cancelled'], base: undefined, value: ['a', 'c'] }, { path: ['wakeMin'], base: undefined, value: 360 }] }
+    expect(withoutBlocks(e, new Set(['a'])).edits).toEqual([{ path: ['blocks'], base: undefined, value: [{ id: 'b' }] }, { path: ['cancelled'], base: undefined, value: ['c'] }, { path: ['wakeMin'], base: undefined, value: 360 }])
+  })
+
+  it('backInFile: odwołanie z listy (starszy zapis) i „nie” sesji wracają tylko, gdy plik je ma', () => {
+    const raw = { schema: 1, date: THU, cancelled: ['a', 'b'], sessions: { ny: 'no' } }
+    const out = backInFile(raw, { id: 'a', origin: 'template', sourceId: 'a' })
+    expect(out.cancelled).toEqual({ b: true })
+    expect(backInFile(raw, { id: sessionBlockId(THU, 'ny'), origin: 'session', sourceId: 'ny' }).sessions).toEqual({})
+    // Nothing to take back: the file as it was (no empty map written).
+    const clean = { schema: 1, date: THU }
+    expect(backInFile(clean, { id: 'z', origin: 'template', sourceId: 'z' })).toBe(clean)
+  })
+
+  it('„Cofnij” faktów: zdarzenie bloku sprzed naszego startu (w kolejności logu) nie zatrzymuje bloku', () => {
+    const base = { c: 'pca', t: 0, v: 16, day: THU, dom: 'timer' as const }
+    const ev = (n: number, x: Record<string, unknown>) => ({ ...base, id: `pca-${n}`, n, l: n, ...x }) as unknown as AnyEvent
+    const events = [
+      ev(1, { k: 'block.cost', block: 'a', at: 1, costs: null }),
+      ev(5, { k: 'block.start', block: 'a', at: 2, bg: false, planned: {}, confirmUntil: null, how: 'plan' }),
+      ev(6, { k: 'block.end', block: 'a', at: 3, done: true, rule: null })
+    ]
+    const u = templateDoneUndo({ undone: new Set() }, events, ['pca-5', 'pca-6'], 'pca', 10)
+    expect(typeof u !== 'string' && [u.undone, u.kept]).toEqual([['a'], []])
+    // The same event after the start: the block stays as it is.
+    const later = [...events.slice(1), ev(7, { k: 'block.cost', block: 'a', at: 4, costs: null })]
+    const k = templateDoneUndo({ undone: new Set() }, later, ['pca-5', 'pca-6'], 'pca', 10)
+    expect(typeof k !== 'string' && [k.undone, k.kept]).toEqual([[], ['a']])
   })
 })

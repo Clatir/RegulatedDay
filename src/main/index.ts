@@ -924,6 +924,7 @@ function registerIpc(): void {
       plain(kept).map((k) => ({ day: String(k.day), blocks: strings(k.blocks) }))
     )
   )
+  handle(CH.dayRuns, (_e, day: unknown) => needHub().dayRuns(String(day)))
   handle(CH.unclosedDays, () => needHub().unclosedDays())
   handle(CH.computerList, () => needHub().computerList())
   // A folder picked in a window of Windows over the window that asked (the wizard's data folder, „Dane” in the settings).

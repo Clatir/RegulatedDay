@@ -48,6 +48,7 @@ import { templateBlockAlive, templateFrom } from '@shared/model/plan'
 import { BEHIND_QUESTION, type Outcome, type QueuedEdit } from './editQueue'
 import type { DayRead } from './eventLog'
 import { UnknownRecordError, type DataFolder, type EditIn, type TimerClick } from './folder'
+import type { DayRun } from '@shared/engine/templateApply'
 import { nodeFs, type DataFs } from './fsio'
 import { historyKey } from './records'
 import { seriesAnswer, seriesChange, seriesCreate, seriesEnd, seriesRemove, seriesUndo, type SeriesIo } from './series'
@@ -1024,7 +1025,7 @@ export class DataHub {
     const r = await this.need().applyTemplateDays(cleanEntries(entries), asks)
     this.changed()
     void this.service?.tick()
-    return { outcomes: r.outcomes.map(outcomeOut), facts: r.facts }
+    return { outcomes: r.outcomes ? r.outcomes.map(outcomeOut) : null, ...(r.why ? { why: r.why } : {}), facts: r.facts }
   }
 
   /** Whether „Cofnij” of „Zastosuj” may take its facts back (the blocks changed since stay). */
@@ -1039,6 +1040,11 @@ export class DataHub {
     if (!r.ok) return r
     void this.service?.tick()
     return { ...r, outcomes: r.outcomes.map(outcomeOut) }
+  }
+
+  /** The runs of a day's blocks in the foreground as the bar shows it (D547 – „coś trwało” of „Zastosuj” in the window). */
+  dayRuns(day: string): Promise<DayRun[] | null> {
+    return this.need().dayRuns(day)
   }
 
   async events(drafts: EventIn[]): Promise<void> {

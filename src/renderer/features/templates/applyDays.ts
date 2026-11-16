@@ -10,16 +10,18 @@
  * files and the facts back in one step (`undoTemplateDays`). Without a DOM.
  */
 import type { EditEntry, EditOutcome, RawRecord, TemplateApplyResult, TemplateDoneAsk, TemplateUndoAsk, TemplateUndoJudged, TemplateUndoResult } from '@shared/api'
-import { dayBlocks, dayRaw, isRaw, putRawBlock, setCancelled, type Raw } from '@shared/data/dayEdits'
+import { dayBlocks, dayRaw, isRaw, putRawBlock, setCancelled, setSessionAnswer, type Raw } from '@shared/data/dayEdits'
 import { editStands, inverseEdit, setAt } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
+import { sessionBlockId } from '@shared/engine/createDay'
 import { begunIds, stayingIds } from '@shared/engine/facts'
-import { applyTemplate, asksMode, foregroundRuns, judgeApply, noneLeft, revokeTemplate, type ApplyDay, type ApplyMode, type ApplyTiming, type DoneSkipWhy, type LeftCount } from '@shared/engine/templateApply'
+import { applyTemplate, asksMode, cancelledIn, foregroundRuns, judgeApply, noneLeft, revokeTemplate, withoutBlocks, type ApplyDay, type ApplyMode, type ApplyTiming, type DayRun, type DoneSkipWhy, type LeftCount } from '@shared/engine/templateApply'
 import { countLabel, plDate, plural } from '@shared/format'
 import { keptText } from '@shared/groupText'
 import type { Template } from '@shared/model/plan'
 import { logicalDayOf, logicalMinuteOf } from '@shared/time/day'
-import { editOf, isSaved, outcomeFate, readDayFiles, trySaveWith, type EditSender, type SendState } from '../../store/data'
+import { addDays } from '@shared/time/zone'
+import { editOf, outcomeFate, readDayFiles, trySaveWith, type EditSender, type SendState } from '../../store/data'
 import { plannedDay } from '../../store/day'
 import type { DayEdit } from '../../store/dayUndo'
 import { showGroupLine, UndoNotDone } from '../../store/groupLine'
@@ -58,9 +60,26 @@ async function inPortions<T, R>(items: readonly T[], n: number, fn: (x: T) => Pr
   return out
 }
 
+/**
+ * The runs in the foreground of today and yesterday as the main process judges them in its step (`dayRuns` – the day as the bar shows it,
+ * with the ends the app's close made, T1951); of an older day – its facts are all there is (nothing is laid over them).
+ */
+async function runsOf(date: string, facts: Parameters<typeof foregroundRuns>[0], at: number): Promise<DayRun[]> {
+  const today = logicalDayOf(at)
+  if (date !== today && date !== addDays(today, -1)) return foregroundRuns(facts, date)
+  try {
+    return (await window.rd.dayRuns(date)) ?? foregroundRuns(facts, date)
+  } catch {
+    return foregroundRuns(facts, date)
+  }
+}
+
 /** The days as the apply reads them, and the dates it cannot read now (its file, or its logs not read whole). */
 export async function readApplyDays(dates: readonly string[], at: number): Promise<{ days: ApplyDay[]; unreadable: string[] }> {
-  const read = await inPortions(dates, READ_AT_ONCE, (d) => plannedDay(d, at))
+  const read = await inPortions(dates, READ_AT_ONCE, async (d) => {
+    const p = await plannedDay(d, at)
+    return typeof p === 'string' ? p : { ...p, runs: await runsOf(d, p.facts, at) }
+  })
   const days: ApplyDay[] = []
   const unreadable: string[] = []
   dates.forEach((date, i) => {
@@ -68,7 +87,7 @@ export async function readApplyDays(dates: readonly string[], at: number): Promi
     if (typeof p === 'string') return void unreadable.push(date)
     const begun = begunIds(p.facts)
     const off = new Set([...stayingIds(p.facts)].filter((id) => !begun.has(id)))
-    days.push({ date, plan: p.ctx.plan, snapshot: p.ctx.snapshot, raw: p.file as ApplyDay['raw'], begun, off, runs: foregroundRuns(p.facts, date) })
+    days.push({ date, plan: p.ctx.plan, snapshot: p.ctx.snapshot, raw: p.file as ApplyDay['raw'], begun, off, runs: p.runs })
   })
   return { days, unreadable }
 }
@@ -110,9 +129,13 @@ export interface DaysDone {
   facts: Array<{ date: string; written: string[] }>
   /** Days closed (the ritual) or frozen that got blocks as done: their points counted again (D550). */
   closedDays: string[]
+  /** Days whose change met one on another computer: their blocks gone by kept out of it (T1950) – „zastosuj jeszcze raz”. */
+  changedElsewhere?: string[]
+  /** Days whose points are counted again at a later check (the grade could not be written now, T1952). */
+  regradeLater?: string[]
 }
 
-const none = (): DaysDone => ({ edits: [], days: 0, blocks: 0, cancelled: 0, skipped: 0, begun: 0, empty: 0, unreadable: [], read: 0, waiting: 0, refused: 0, left: noneLeft(), doneDays: [], asDone: 0, unscored: [], facts: [], closedDays: [] })
+const none = (): DaysDone => ({ edits: [], days: 0, blocks: 0, cancelled: 0, skipped: 0, begun: 0, empty: 0, unreadable: [], read: 0, waiting: 0, refused: 0, left: noneLeft(), doneDays: [], asDone: 0, unscored: [], facts: [], closedDays: [], changedElsewhere: [], regradeLater: [] })
 
 export interface DayChange {
   raw: RawRecord
@@ -178,21 +201,35 @@ export function doneAsks(rows: readonly DayRow[]): TemplateDoneAsk[] {
 }
 
 /**
- * What the main process did with the facts (`applyTemplateDays`), on the days saved only (one whose edit did not go in has none – the main
- * process took them back): the blocks done, the others „bez zaliczenia”, the closed days, the ids for „Cofnij”.
+ * What the main process did with the facts (`applyTemplateDays`): a day whose change met one on another computer had its blocks gone by kept
+ * out of its entry (`stripped` – they are neither counted nor taken back, T1950); of the days saved – the blocks done, the others „bez
+ * zaliczenia”, the closed days; the facts that stand (of any day – also one whose file did not go in after all) – for „Cofnij”.
  */
 export function scoreFacts(d: DaysDone, r: Pick<TemplateApplyResult, 'facts'>): DaysDone {
-  const saved = new Set(d.edits.map((e) => e.date))
-  const failed: string[] = []
   for (const f of r.facts) {
-    if (!saved.has(f.day)) continue
-    d.asDone += f.taken.length
-    d.unscored.push(...f.skipped.map((s) => s.why))
+    const i = d.edits.findIndex((e) => e.date === f.day)
+    if (f.asked) {
+      d.changedElsewhere!.push(f.day)
+      if (i < 0) continue
+      const stripped = new Set(f.stripped ?? [])
+      const e = d.edits[i]!
+      const entry = withoutBlocks(e.entry, stripped)
+      d.blocks -= stripped.size
+      d.doneDays = d.doneDays.filter((x) => x.date !== f.day)
+      if (!entry.edits.length) {
+        d.edits.splice(i, 1)
+        d.days--
+      } else d.edits[i] = { ...e, entry, made: e.made ? entry.edits.reduce<RawRecord>((r, x) => setAt(r, x.path, x.value) as RawRecord, {}) : null }
+      continue
+    }
+    if (i >= 0) {
+      d.asDone += f.taken.length
+      d.unscored.push(...f.skipped.map((s) => s.why))
+      if (f.closed && f.taken.length && !f.regradeFailed) d.closedDays.push(f.day)
+      if (f.regradeFailed && f.taken.length) d.regradeLater!.push(f.day)
+    }
     if (f.written.length) d.facts.push({ date: f.day, written: [...f.written] })
-    if (f.regradeFailed) failed.push(f.day)
-    else if (f.closed && f.taken.length) d.closedDays.push(f.day)
   }
-  if (failed.length) toast(`Bloki zapisano jako zrealizowane, ale punktów zamkniętego dnia nie przeliczono (${failed.map(plDate).join(', ')}) – spróbuj później jeszcze raz`, 'error', 10000)
   return d
 }
 
@@ -222,12 +259,13 @@ async function changeDays(dates: readonly string[], change: (day: ApplyDay) => D
 const daysWord = (n: number) => countLabel(n, 'dzień', 'dni', 'dni')
 const blocksWord = (n: number) => countLabel(n, 'blok', 'bloki', 'bloków')
 
-/** The tail of the line: days not read, waiting for an answer, refused. */
-function tail(d: Pick<DaysDone, 'unreadable' | 'waiting' | 'refused'>): string {
+/** The tail of the line: days not read, waiting for an answer, refused, changed on another computer (their blocks gone by left out). */
+function tail(d: Pick<DaysDone, 'unreadable' | 'waiting' | 'refused'> & Partial<Pick<DaysDone, 'changedElsewhere'>>): string {
   const parts: string[] = []
   if (d.waiting) parts.push(`${daysWord(d.waiting)} ${plural(d.waiting, 'czeka', 'czekają', 'czeka')} na odpowiedź`)
   if (d.refused) parts.push(`${daysWord(d.refused)} ${plural(d.refused, 'niezapisany', 'niezapisane', 'niezapisanych')}`)
   if (d.unreadable.length) parts.push(`nie odczytano: ${d.unreadable.map(plDate).join(', ')}`)
+  if (d.changedElsewhere?.length) parts.push(`${d.changedElsewhere.map(plDate).join(', ')}: zmieniony na innym komputerze – minione bez zaliczenia, zastosuj jeszcze raz`)
   return parts.map((p) => ` · ${p}`).join('')
 }
 
@@ -250,7 +288,7 @@ const closedText = (n: number): string => `${daysWord(n)} ${plural(n, 'był zamk
  */
 export function appliedText(
   name: string,
-  d: Pick<DaysDone, 'days' | 'blocks' | 'cancelled' | 'skipped' | 'unreadable' | 'waiting' | 'refused' | 'left' | 'asDone'> & Partial<Pick<DaysDone, 'unscored' | 'closedDays'>>
+  d: Pick<DaysDone, 'days' | 'blocks' | 'cancelled' | 'skipped' | 'unreadable' | 'waiting' | 'refused' | 'left' | 'asDone'> & Partial<Pick<DaysDone, 'unscored' | 'closedDays' | 'changedElsewhere'>>
 ): string {
   const done = d.asDone ? ` (w tym ${d.asDone} ${plural(d.asDone, 'zrealizowany', 'zrealizowane', 'zrealizowanych')})` : ''
   const parts = [`dodano ${blocksWord(d.blocks)}${done}`]
@@ -309,16 +347,23 @@ export function tell(d: DaysDone | null, line: (d: DaysDone) => string, why: (d:
 
 /**
  * The inverse of a day's edit that leaves `keep` – blocks with an event since the facts (D313) – in the day as they are: the file after
- * the inverse, with the blocks of `now` (the file now) put back and not cancelled. Null – nothing to change.
+ * the inverse, with the blocks of `now` (the file now) put back, not cancelled unless `now` cancels them (`cancelled` as a map or a list)
+ * and with the answer of their session as `now` has it (a „nie” is not brought back). Null – nothing to change.
  */
 export function keepBlocks(inverse: EditEntry, now: RawRecord | null, keep: readonly string[], date: string): EditEntry | null {
   const after = inverse.remove ? null : inverse.edits.reduce<RawRecord>((r, f) => setAt(r, f.path, f.value) as RawRecord, inverse.create ? {} : { ...(now ?? {}) })
   let raw = dayRaw(after as Raw | null, date)
   const was = dayRaw(now as Raw | null, date)
+  const answers = (x: Raw): Raw => (isRaw(x.sessions) ? x.sessions : {})
   for (const id of keep) {
     const b = dayBlocks(was).find((x) => isRaw(x) && x.id === id)
     if (b) raw = putRawBlock(raw, b as Raw)
-    if (isRaw(raw.cancelled) && raw.cancelled[id]) raw = setCancelled(raw, id, false)
+    if (cancelledIn(raw, id) && !cancelledIn(was, id)) raw = setCancelled(raw, id, false)
+    const session = Object.keys({ ...answers(was), ...answers(raw) }).find((s) => sessionBlockId(date, s) === id)
+    if (session && answers(raw)[session] !== answers(was)[session]) {
+      const a = answers(was)[session]
+      raw = setSessionAnswer(raw, session, a === 'yes' || a === 'no' ? a : null)
+    }
   }
   return editOf(paths.day(date), now, raw as RawRecord)
 }
@@ -326,8 +371,9 @@ export function keepBlocks(inverse: EditEntry, now: RawRecord | null, keep: read
 /**
  * „Cofnij” of „Zastosuj” with facts (D547): the main process says first which blocks stay as they are (an event of the block since – D313;
  * a refusal of any day – nothing is taken back, the line stays); then, in the window's turn, each day that still stands as the change left
- * it gets the inverse of its edit (keeping those blocks) and its facts go back with it – one step of the main process (`undoTemplateDays`).
- * A day changed since stays as it is, blocks and facts.
+ * it gets the inverse of its edit (keeping those blocks) and its facts go back with it – one step of the main process (`undoTemplateDays`);
+ * facts of a day whose plan was not written go back alone. A day changed since stays as it is, blocks and facts. A day the main process did
+ * not take back (its change met one on another computer – `asked`) stays in the line for another „Cofnij”; what was taken back leaves it.
  */
 async function undoApplied(d: DaysDone): Promise<string | void> {
   if (!d.facts.length) return undoDayEdits(d.edits)
@@ -343,7 +389,7 @@ async function undoApplied(d: DaysDone): Promise<string | void> {
   }
   if (!judged.ok) return fail(judged.why)
   const keptBy = new Map(judged.kept.map((k) => [k.day, k.blocks]))
-  let changed = 0
+  const changed: string[] = []
   let unreadable = false
   let asks: TemplateUndoAsk[] = []
   let told: Array<{ day: string; blocks: string[] }> = []
@@ -352,9 +398,15 @@ async function undoApplied(d: DaysDone): Promise<string | void> {
     async () => {
       const files = await readDayFiles(d.edits.map((e) => e.date))
       const back: EditEntry[] = []
-      changed = 0
+      changed.length = 0
       asks = []
       told = []
+      const ask = (day: string, entry: number | null) => {
+        const f = d.facts.find((x) => x.date === day)
+        if (!f) return
+        asks.push({ day, written: f.written, entry })
+        told.push({ day, blocks: keptBy.get(day) ?? [] })
+      }
       for (const e of d.edits) {
         if (!(e.date in files)) {
           unreadable = true
@@ -363,18 +415,17 @@ async function undoApplied(d: DaysDone): Promise<string | void> {
         const now = files[e.date] ?? null
         const inverse = editStands(e.entry, now, e.made) ? inverseEdit(e.entry, now, e.made) : null
         if (!inverse) {
-          changed++
+          changed.push(e.date)
           continue
         }
         const keep = keptBy.get(e.date) ?? []
         const entry = keep.length ? keepBlocks(inverse, now, keep, e.date) : inverse
-        const f = d.facts.find((x) => x.date === e.date)
-        if (f) {
-          asks.push({ day: e.date, written: f.written, entry: entry ? back.length : null })
-          told.push({ day: e.date, blocks: keep })
-        }
+        ask(e.date, entry ? back.length : null)
         if (entry) back.push(entry)
       }
+      for (const f of d.facts) if (!d.edits.some((e) => e.date === f.date)) ask(f.date, null)
+      // Only facts to take back (no file): the step goes without an edit of the files.
+      if (!back.length && asks.length) result = await window.rd.undoTemplateDays([], asks, told)
       return back
     },
     undefined,
@@ -388,16 +439,29 @@ async function undoApplied(d: DaysDone): Promise<string | void> {
   if (!out) throw new UndoNotDone()
   const r = result as TemplateUndoResult | null
   if (r && !r.ok) return fail(r.why)
-  if (!isSaved(out)) throw new Error('not saved')
-  if (r?.ok && r.regradeFailed.length) toast(`Punktów zamkniętego dnia nie przeliczono z powrotem (${r.regradeFailed.join('; ')}) – spróbuj później`, 'error', 10000)
+  if (r?.ok && r.regradeFailed.length) toast(`Punkty zamkniętego dnia przeliczą się przy następnym sprawdzeniu (${r.regradeFailed.join('; ')})`, 'info', 10000)
   const keptCount = judged.kept.reduce((n, k) => n + k.blocks.length, 0)
-  const words = [keptCount ? keptText(keptCount, 'block') : '', changed ? keptText(changed, 'day') : '', r?.ok && r.closed.length ? closedText(r.closed.length) : ''].filter(Boolean)
+  const words = [
+    keptCount ? keptText(keptCount, 'block') : '',
+    changed.length ? keptText(changed.length, 'day') : '',
+    r?.ok && r.waiting.length ? `${r.waiting.map(plDate).join(', ')}: czeka na odpowiedź – część zostaje` : '',
+    r?.ok && r.closed.length ? closedText(r.closed.length) : ''
+  ].filter(Boolean)
+  // What was taken back (or stays as it is since) leaves the line; a day not taken back stays for another „Cofnij”.
+  const again = new Set(r?.ok ? r.asked : [])
+  d.edits = d.edits.filter((e) => again.has(e.date))
+  d.facts = d.facts.filter((f) => again.has(f.date))
+  if (again.size) {
+    toast([`${[...again].map(plDate).join(', ')}: zmieniony na innym komputerze – nie cofnięto, „Cofnij” spróbuje jeszcze raz`, ...words].join(' · '), 'error', 10000)
+    throw new UndoNotDone()
+  }
   return words.length ? words.join(' · ') : undefined
 }
 
 /**
  * „Zastosuj”: `mode` for the days that ask (`askedDays`); the others fill the gaps. `choice` – today and the days gone by (D546). With blocks
- * to be done the edit goes with their facts in one step (`applyTemplateDays`); else as any edit.
+ * to be done the edit goes with their facts in one step (`applyTemplateDays`); else as any edit. The step refused after facts it could not
+ * take back – the line says they stand, with „Cofnij” for them.
  */
 export async function applyToDays(t: Template, dates: readonly string[], mode: ApplyMode, choice: ApplyChoice = DEFAULT_CHOICE, at = Date.now()): Promise<boolean> {
   const timing = timingAt(choice, at)
@@ -414,12 +478,21 @@ export async function applyToDays(t: Template, dates: readonly string[], mode: A
       const asks = doneAsks(rows)
       if (!asks.length) return (list) => window.rd.edit(list)
       return async (list) => {
-        result = await window.rd.applyTemplateDays(list, asks)
-        return result.outcomes
+        const r = await window.rd.applyTemplateDays(list, asks)
+        result = r
+        if (!r.outcomes) throw new Error(r.why ?? 'zmiana nie przeszła')
+        return r.outcomes
       }
     }
   )
-  if (d && !d.unknown && result) scoreFacts(d, result)
+  const r = result as TemplateApplyResult | null
+  if (!d && r && !r.outcomes) {
+    const stand = scoreFacts(none(), r)
+    if (stand.facts.length) showGroupLine('template', { text: `„${t.name}” – planu nie zapisano, ale zostały zaliczenia: ${stand.facts.map((f) => plDate(f.date)).join(', ')}`, undo: () => undoApplied(stand) })
+    return false
+  }
+  if (d && !d.unknown && r?.outcomes) scoreFacts(d, r)
+  if (d?.regradeLater?.length) toast(`Punkty zamkniętego dnia przeliczą się przy następnym sprawdzeniu (${d.regradeLater.map(plDate).join(', ')})`, 'info', 10000)
   return tell(d, (x) => appliedText(t.name, x), nothingAppliedText, undoApplied)
 }
 

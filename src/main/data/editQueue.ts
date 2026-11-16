@@ -219,6 +219,21 @@ export class EditQueue {
   }
 
   /**
+   * Whether `e` laid now on `cur` (the folder's record as `apply` reads it) would not go in whole (T1950): an earlier entry of its file is
+   * still in the queue (it would wait behind it), its record is gone (not made new), a removal meets a change, or a field meets a value
+   * changed elsewhere – the rules of `applyOneNow`.
+   */
+  wouldAsk(e: Pick<QueuedEdit, 'rel' | 'edits' | 'create' | 'remove' | 'base'>, cur: { status: 'ok'; value: Record<string, unknown> } | { status: 'missing' }): boolean {
+    if (this.entries.some((x) => x.rel === e.rel)) return true
+    if (cur.status === 'missing') return !e.create && !e.remove
+    if (e.remove) return e.base !== undefined && !sameContentAs(cur.value, e.base)
+    return e.edits.some((f) => {
+      const now = valueAt(cur.value, f.path)
+      return !deepEqual(now, f.value) && !deepEqual(now, f.base)
+    })
+  }
+
+  /**
    * The last outcome of an entry: stored while it stays queued; gone from the queue – applied (an earlier run, already
    * under way when it was added, laid it).
    */

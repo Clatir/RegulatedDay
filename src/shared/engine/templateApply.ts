@@ -25,7 +25,7 @@
  * of the day's blocks not begun only.
  */
 import { dayBlocks, dayRaw, isRaw, putBlock, setCancelled, setSessionAnswer, type Raw } from '../data/dayEdits'
-import { isKnown, type AnyEvent, type DaySnapshot } from '../model/events'
+import { compareEvents, isKnown, type AnyEvent, type DaySnapshot } from '../model/events'
 import { dayFileFrom, layerKept, PLAN_MAX, PLAN_MIN, sessionIdOf, templateVersionOn, type PlanBlock, type Template, type TemplateVersion } from '../model/plan'
 import { dayAnswer, entryDef, sessionEntries } from '../model/templateSessions'
 import { logicalDayOf, logicalMinuteOf, placeLogical } from '../time/day'
@@ -85,7 +85,7 @@ export interface ApplyJudged {
    * The template's blocks not in the day's plan, at the hours the timing gave: each with the day's blocks it overlaps (empty – it fits);
    * `done` – gone by, it goes in as done; `moved` – „od teraz” gave it another hour.
    */
-  missing: Array<{ block: PlanBlock; clash: PlanBlock[]; done: boolean; moved: boolean }>
+  missing: Array<{ block: PlanBlock; clash: PlanBlock[]; done: boolean; moved: boolean; span: { start: number; end: number } | null; bg: boolean }>
   /** How many blocks the template's version has for the day (0 – nothing to apply). */
   total: number
   /** The template's blocks left out before the plan is asked, by why (D547–D549). */
@@ -226,32 +226,38 @@ export function takeGoneBy(blocks: readonly GoneByBlock[], runs: readonly DayRun
 /** A block „od teraz” moves (D548): one of its own hour, neither fixed nor of the day's layers (a session, a lecture, a class). */
 const movesWithNow = (b: PlanBlock): boolean => b.startMin != null && b.anchor == null && !b.fixed && !layerKept(b)
 
+/** The file cancelled the block `id` (as a map, or as an older list of ids). */
+export const cancelledIn = (raw: Raw | null | undefined, id: string): boolean => (Array.isArray(raw?.cancelled) ? raw.cancelled.includes(id) : isRaw(raw?.cancelled) && !!raw.cancelled[id])
+
+/**
+ * A block of the snapshot the file took off, back as the day had it (D540, T1902): its cancel taken back, a „nie” the day answered its
+ * session taken back – only what the file has (`cancelled` as a map or a list). One rule for the hours the judgement reads and the file.
+ */
+export function backInFile(raw: Raw, b: Pick<PlanBlock, 'id' | 'origin' | 'sourceId'>): Raw {
+  let out = cancelledIn(raw, b.id) ? setCancelled(raw, b.id, false) : raw
+  if (b.origin === 'session' && b.sourceId && isRaw(out.sessions) && out.sessions[b.sourceId] === 'no') out = setSessionAnswer(out, b.sourceId, null)
+  return out
+}
+
 /**
  * The template's blocks as the day has them (or will have them once back): one in the plan – as the plan shows it; one of the snapshot the
- * file took off (cancelled, a session answered „nie”) – as `dayPlan` shows it once back (the shift of the wake, your change of it); one of
- * the template only (a copy) – as the template has it (the file's blocks do not move with the wake, D334). One axis with the main process,
- * which judges the facts on the plan after the change, and the hours „od teraz” starts from.
+ * file took off – as `dayPlan` shows it once back (`backInFile`: the shift of the wake, your change of it); one of the template only (a
+ * copy) – as the template has it (the file's blocks do not move with the wake, D334). One axis with the main process, which judges the
+ * facts on the plan after the change, and the hours „od teraz” starts from.
  */
 function asTheDayHasThem(cands: readonly PlanBlock[], day: ApplyDay): PlanBlock[] {
   const inPlan = new Map(day.plan.map((b) => [b.id, b]))
   const ofSnapshot = new Set(day.snapshot.blocks.map((b) => b.id))
   const back = cands.filter((b) => !inPlan.has(b.id) && ofSnapshot.has(b.id))
-  let restored = new Map<string, PlanBlock>()
-  if (back.length) {
-    let raw = dayRaw(day.raw, day.date)
-    for (const b of back) {
-      raw = setCancelled(raw, b.id, false)
-      if (b.origin === 'session' && b.sourceId && isRaw(raw.sessions) && raw.sessions[b.sourceId] === 'no') raw = setSessionAnswer(raw, b.sourceId, null)
-    }
-    restored = new Map(dayPlan(day.snapshot, dayFileFrom(raw, day.date)).map((b) => [b.id, b]))
-  }
+  const restored = back.length ? new Map(dayPlan(day.snapshot, dayFileFrom(back.reduce(backInFile, dayRaw(day.raw, day.date)), day.date)).map((b) => [b.id, b])) : new Map<string, PlanBlock>()
   return cands.map((b) => inPlan.get(b.id) ?? restored.get(b.id) ?? b)
 }
 
 /**
  * The template's missing blocks as the timing puts them (D546–D549): moved „od teraz” (today; `moved`); those that stay out – outside the
- * day once moved, gone by under „Nie dodawaj minionych”, gone by over a real run of another block in the foreground (`takeGoneBy`) – each
- * with what is anchored to it, for the same reason (it has no place without it); `done` – the blocks gone by that go in as done.
+ * day once moved, gone by under „Nie dodawaj minionych”, gone by over a real run of another block in the foreground – each with what is
+ * anchored to it, for the same reason (it has no place without it); `done` – the blocks gone by that may go in as done. Two of them on each
+ * other are judged once the plan has taken them (`applyTemplate` – `takeGoneBy` over the blocks that go in only).
  */
 function timed(cands: readonly PlanBlock[], missing: readonly PlanBlock[], day: ApplyDay, timing: ApplyTiming | null): { blocks: PlanBlock[]; done: Set<string>; moved: Set<string>; left: LeftCount } {
   const left = noneLeft()
@@ -292,9 +298,9 @@ function timed(cands: readonly PlanBlock[], missing: readonly PlanBlock[], day: 
   const done = new Set<string>()
   if (timing.past === 'skip') leave(goneBy.map((b) => b.id), 'past')
   else {
-    const t = takeGoneBy(goneBy, day.runs ?? [])
-    leave(t.ran, 'ran')
-    for (const id of t.taken) if (!why.has(id)) done.add(id)
+    const runs = day.runs ?? []
+    leave(goneBy.filter((b) => !b.bg && meets(runs, b.id, b)).map((b) => b.id), 'ran')
+    for (const b of goneBy) if (!why.has(b.id)) done.add(b.id)
   }
   for (const w of why.values()) left[w]++
   return { blocks: blocks.filter((b) => !why.has(b.id)), done, moved, left }
@@ -324,7 +330,7 @@ export function judgeApply(t: Template, day: ApplyDay, timing: ApplyTiming | nul
   const missing = missingBlocks.map((block) => {
     const s = spans.get(block.id)
     const asDone = done.has(block.id)
-    const x = { block, done: asDone, moved: moved.has(block.id) }
+    const x = { block, done: asDone, moved: moved.has(block.id), span: s ?? null, bg: inBackground(block, day.snapshot) }
     if (!s || inBackground(block, day.snapshot)) return { ...x, clash: [] }
     const clash = standing.filter((p) => {
       const q = spans.get(p.id)
@@ -375,6 +381,14 @@ export function applyTemplate(t: Template, day: ApplyDay, mode: ApplyMode, judge
   const blocks = judged.missing.map((x) => x.block)
   const gone = [...judged.missing.filter((x) => !take.has(x.block.id)).map((x) => x.block.id), ...blocks.flatMap((b) => (b.anchor && !byId.has(b.anchor) && !inPlan.has(b.anchor) ? [b.anchor] : []))]
   for (const id of anchoredClosure(blocks, gone)) take.delete(id)
+  // Two blocks gone by on each other (D547): judged among those that go in only – `takeGoneBy`, the rule the main process judges the
+  // facts by on the same blocks. One left out takes what is anchored to it along.
+  const goneBy = judged.missing.flatMap((x): GoneByBlock[] => (x.done && x.span && take.has(x.block.id) ? [{ id: x.block.id, ...x.span, bg: x.bg, anchor: x.block.anchor }] : []))
+  const left = { ...judged.left }
+  for (const id of anchoredClosure(blocks, takeGoneBy(goneBy, day.runs ?? []).ran)) {
+    if (!take.delete(id)) continue
+    left.ran++
+  }
   // Cancelled only for what is taken in the end.
   const cancel = new Set<string>()
   const off = new Set<string>()
@@ -384,16 +398,15 @@ export function applyTemplate(t: Template, day: ApplyDay, mode: ApplyMode, judge
   }
   let raw = dayRaw(day.raw, day.date)
   for (const id of cancel) raw = setCancelled(raw, id, true)
-  const cancelled = isRaw(raw.cancelled) ? raw.cancelled : Array.isArray(raw.cancelled) ? Object.fromEntries(raw.cancelled.map((x) => [String(x), true])) : {}
   for (const id of take) {
     const { block: b, moved } = byId.get(id)!
-    if (b.origin === 'session' && b.sourceId && isRaw(raw.sessions) && raw.sessions[b.sourceId] === 'no') raw = setSessionAnswer(raw, b.sourceId, null)
-    // Cancelled before (a block of the snapshot, or a copy „Nadpisz” / „Odwołaj” left in the file): back – only then is `cancelled` written.
-    if (cancelled[b.id]) raw = setCancelled(raw, b.id, false)
+    // Cancelled before (a block of the snapshot, or a copy „Nadpisz” / „Odwołaj” left in the file), a session answered „nie”: back as
+    // the day had it – only then is `cancelled` written.
+    raw = backInFile(raw, b)
     if (!asSnap.has(b.id) || moved) raw = putBlock(raw, b)
   }
   const done = judged.missing.filter((x) => x.done && take.has(x.block.id)).map((x) => x.block.id)
-  return { raw, added: take.size, cancelled: off.size, skipped: judged.missing.length - take.size, left: judged.left, done }
+  return { raw, added: take.size, cancelled: off.size, skipped: judged.missing.length - take.size - (left.ran - judged.left.ran), left, done }
 }
 
 /** Why a block asked to be done was not (D547): over a run, begun or taken off, not gone by now, not in the plan. */
@@ -483,7 +496,8 @@ export function templateDoneUndo(
   const out = { undone: [] as string[], kept: [] as string[] }
   for (const [block, p] of pairs) {
     const own = [p.start!, p.end!]
-    const later = events.some((e) => isKnown(e) && (e as Logged).block === block && e.k !== 'undo' && !own.includes(e as Logged) && !undone.has(e.id))
+    // Only what came after its start, in the log's order (`compareEvents` – a cancel or an undone start of before is no change since).
+    const later = events.some((e) => isKnown(e) && (e as Logged).block === block && e.k !== 'undo' && !own.includes(e as Logged) && !undone.has(e.id) && compareEvents(e, p.start!) > 0)
     if (later) {
       out.kept.push(block)
       continue
@@ -494,6 +508,29 @@ export function templateDoneUndo(
     out.undone.push(block)
   }
   return { drafts, ...out }
+}
+
+/** The block a field of a day's edit writes (`blocks.#<id>…`, `cancelled.<id>`), else null. */
+export function blockOfField(path: readonly string[]): string | null {
+  if (path[0] === 'blocks' && path[1]?.startsWith('#')) return path[1].slice(1)
+  if (path[0] === 'cancelled' && path.length === 2) return path[1]!
+  return null
+}
+
+/**
+ * A day's edit without what it writes of `ids` (their blocks and their cancels) – field by field, and out of a whole list of blocks or
+ * map / list of cancels it writes at once (a new file, a file without them before); its other fields as they are.
+ */
+export function withoutBlocks<E extends { edits: ReadonlyArray<{ path: readonly string[]; value?: unknown }> }>(e: E, ids: ReadonlySet<string>): E {
+  const edits = e.edits.flatMap((f) => {
+    if (ids.has(blockOfField(f.path) ?? '')) return []
+    if (f.path.length !== 1) return [f]
+    if (f.path[0] === 'blocks' && Array.isArray(f.value)) return [{ ...f, value: f.value.filter((x) => !(isRaw(x) && ids.has(String(x.id)))) }]
+    if (f.path[0] === 'cancelled' && Array.isArray(f.value)) return [{ ...f, value: f.value.filter((x) => !ids.has(String(x))) }]
+    if (f.path[0] === 'cancelled' && isRaw(f.value)) return [{ ...f, value: Object.fromEntries(Object.entries(f.value).filter(([k]) => !ids.has(k))) }]
+    return [f]
+  })
+  return { ...e, edits: edits as unknown as E['edits'] }
 }
 
 export interface Revoked {

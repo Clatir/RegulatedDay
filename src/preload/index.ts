@@ -79,6 +79,7 @@ const api: RdApi = {
   applyTemplateDays: (entries, asks) => ipcRenderer.invoke(CH.applyTemplateDays, entries, asks),
   judgeTemplateUndo: (asks) => ipcRenderer.invoke(CH.judgeTemplateUndo, asks),
   undoTemplateDays: (entries, asks, kept) => ipcRenderer.invoke(CH.undoTemplateDays, entries, asks, kept),
+  dayRuns: (day) => ipcRenderer.invoke(CH.dayRuns, day),
   unclosedDays: () => ipcRenderer.invoke(CH.unclosedDays),
   computerList: () => ipcRenderer.invoke(CH.computerList),
   exportCsv: (from, to) => ipcRenderer.invoke(CH.exportCsv, from, to),
