@@ -519,3 +519,33 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1747 | Dzień z pytaniem przy „Cofnij” – cofnięty, czeka na odpowiedź, bez ponowienia |
 | T1748 | `outcomeFate` (`store/data.ts`) – jedno odczytanie wyniku edycji dla zmian grupowych, `saveAnswer` i `weekMove` |
 | T1749 | `stayedPlace` – jawna flaga miejsca w tekście „został …”; pisownia „niezapisany” łącznie |
+| T1750 | `pushApart` z `placed`: nietknięty blok o tym samym starcie co postawiony blok grupy idzie za nim (remis = zajęte miejsce); zostaje tylko blok zaczynający się wcześniej |
+| T1751 | Logika przeciągania grupy w `engine/groupDrag.ts` (`judgeDrag`, `draggedDays`, `dragPreview`), zapis w `plan/groupDrag.ts` |
+| T1752 | Różnica przeciągnięcia = start upuszczenia chwyconego − start jego kafelka; pozostałe bloki liczone od swojego miejsca na osi |
+| T1753 | Słowa „został – …”: już trwa, już zrobiony, zaparkowany, odwołany, sesja, wykład, zjazd, zakotwiczony, w swoim dniu, bez godziny, minął, dzień minął, poza dniem, poza widokiem, nie ma w planie |
+| T1754 | Przeciągnięcie przez dni – jedna edycja, dni przyjmujące bloki (właściciele) najpierw, reszta czeka na wszystkich właścicieli |
+| T1755 | „Cofnij” przeciągnięcia przez dni przywraca dni połączone przeniesieniem razem albo wcale; dzień nieczytelny – nic, linia zostaje |
+| T1756 | Kopia grupy nie bierze zakotwiczonych (liczone „zakotwiczony”); oryginały stoją przy rozsuwaniu jak bloki stałe |
+| T1757 | Przeciągana grupa nie staje „równolegle” obok innego bloku (bez strefy D492) |
+| T1758 | Przeciągnięcie, w którym nic nie pojechało – bez zapisu i linii, komunikat w rogu |
+| T1759 | Esc odwołuje przeciąganie grupy w fazie przechwytywania (nie czyści zaznaczenia); przeciąganie jednego bloku na osi bez zmian |
+| T1760 | „Tydzień”: w trakcie przeciągania grupy pasma miejsc (`week-group-drop`), przenoszone kafelki przyciemnione |
+| T1761 | Czasownik „Skopiowano” dla kopii grupy |
+| T1762 | `templateShift` liczy podgląd na żądanie; `templateGroupCopy` dla kopii grupy w szablonie |
+| T1763 | „Cofnij” przeciągnięcia w obrębie dnia działa jak „Przesuń o” z menu – po polach |
+| T1764 | Esc przy wciśniętym bloku grupy odwołuje gest także przed progiem 4 px; klik po nim wyciszony |
+| T1765 | Pasma i przyciemnienie w „Tygodniu” z tej samej oceny co zapis (`judgeDrag`) – zakotwiczony ma pasmo za kotwicą |
+| T1766 | Kopie zaznaczonej grupy równoległej zostają grupą (dzień i szablon) |
+| T1767 | Chwycony blok, który zostaje, po upuszczeniu wraca od razu |
+| T1768 | Podgląd w „Szablonach” rysuje zakotwiczone jako jadące z grupą |
+| T1769 | Wspólne pomocniki (`withPushedStarts`, `followsMoving`, `patchedPlan`, `stands`), jedno kodowanie id kopii (`copyKeyOf`) |
+| T1770 | Kopia części grupy równoległej bez korzenia – pierwszy z części jest korzeniem kopii |
+| T1771 | Esc grupy przed progiem w „Tygodniu” jak na osi (bez czyszczenia zaznaczenia, klik wyciszony) |
+| T1772 | „Cofnij” przeciągnięcia w obrębie dnia pamięta cofnięte dni i ponawia tylko resztę |
+| T1773 | Przeniesienie grupy liczy „dziś” i dni w turze zapisu |
+| T1774 | Dni grupy w „Tygodniu” liczone przy pierwszym ruchu ponad próg, równolegle |
+| T1775 | Podgląd grupy w „Tygodniu” liczony tylko przy zmianie kolumny, startu, Ctrl albo policzenia dni |
+| T1776 | Trzymanie po upuszczeniu z podglądu miejsca upuszczenia (liczonego od razu), nie z ostatniego renderu |
+| T1777 | Wyciszenie kliku po Esc nigdy nie dotyczy kliku z klawiatury; gaśnie po puszczeniu, utracie przechwycenia albo naciśnięciu |
+| T1778 | Podgląd przeciągania grupy liczony z planu, bez budowania plików |
+| T1779 | `DragJudged.delta` niesie różnicę przeciągnięcia |
