@@ -136,6 +136,12 @@ function axisStart(l: Lookup, id: string, today: string): number | null {
 /** `axisStart` for one block (a lookup of its own – for many blocks use `shiftedDay`, which makes one). */
 export const axisStartOf = (day: GroupDay, id: string, today: string): number | null => axisStart(lookupOf(day), id, today)
 
+/** `axisStart` of many blocks of one day – one lookup for all of them (by id; null – no start on the axis). */
+export function axisStartsOf(day: GroupDay, ids: readonly string[], today: string): Map<string, number | null> {
+  const l = lookupOf(day)
+  return new Map(ids.map((id) => [id, axisStart(l, id, today)]))
+}
+
 /** Where the axis shows a block's end (its index): today a block of the forecast where it puts it, else its plan. */
 function endIdxOf(l: Lookup, info: BlockInfo, today: boolean): number | null {
   const placed = today ? l.placed.get(info.id) : undefined
@@ -244,7 +250,7 @@ function plannedStartOf(plan: ReadonlyMap<string, PlanBlock>, id: string): numbe
 }
 
 /** The selected block whose anchor chain reaches a block in `moving` (it follows its anchor, D424). */
-function followsMoving(plan: ReadonlyMap<string, PlanBlock>, id: string, moving: ReadonlySet<string>): boolean {
+export function followsMoving(plan: ReadonlyMap<string, PlanBlock>, id: string, moving: ReadonlySet<string>): boolean {
   let a = plan.get(id)?.anchor ?? null
   for (let depth = 0; a != null && depth < 40; depth++) {
     if (moving.has(a)) return true
@@ -441,15 +447,20 @@ export function groupPush(day: GroupDay, after: readonly PlanBlock[], moved: Rea
 }
 
 /** The plan and the day's file with the pushed starts (D367), each over the block as the file holds it then. */
-function withPushedStarts(raw: Raw, date: string, plan: readonly PlanBlock[], pushed: readonly PushedBlock[]): { raw: Raw; plan: PlanBlock[] } {
-  const starts = new Map(pushed.map((p) => [p.id, p.startMin]))
+export function withPushedStarts(raw: Raw, date: string, plan: readonly PlanBlock[], pushed: readonly PushedBlock[]): { raw: Raw; plan: PlanBlock[] } {
   let r = raw
   const byId = new Map(plan.map((b) => [b.id, b]))
   for (const p of pushed) {
     const b = byId.get(p.id)
     if (b) r = patchedBlock(r, date, b, { startMin: p.startMin })
   }
-  return { raw: r, plan: plan.map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b)) }
+  return { raw: r, plan: pushedPlan(plan, pushed) }
+}
+
+/** The plan with the pushed starts (D367) – the plan half of `withPushedStarts` (a preview, a template's version: no day's file). */
+export function pushedPlan(plan: readonly PlanBlock[], pushed: ReadonlyArray<Pick<PushedBlock, 'id' | 'startMin'>>): PlanBlock[] {
+  const starts = new Map(pushed.map((p) => [p.id, p.startMin]))
+  return plan.map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b))
 }
 
 /** A change of the day's file and the plan after it; `pushed` – the blocks it pushed apart (D367). */

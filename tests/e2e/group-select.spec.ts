@@ -3,7 +3,9 @@
  * A, C, D, E i napis „Zaznaczone: 4”; klik B → tylko B i panel; Esc zamyka panel i zdejmuje obwódkę; Ctrl+klik bez ruchu nie kopiuje, Ctrl+przeciągnięcie
  * kopiuje (D513); prawy przycisk na zaznaczonym – menu „Zmień N bloków”, Esc je zamyka. „Tydzień”: Ctrl+klik dwóch bloków z różnych dni nie otwiera dnia.
  * Kalendarz: Ctrl+klik pierwszego dnia, Shift+klik siódmego, prawy przycisk → „Wolne”: linia „Zmieniono 7 dni · Cofnij”, „Cofnij” przywraca.
- * (Działania menu bloków są jeszcze zaślepką – tu tylko menu.)
+ * (Działania menu bloków są jeszcze zaślepką – tu tylko menu.) Przeciąganie grupy (D531): na osi jutra dwa zaznaczone o godzinę później (w trakcie
+ * drugi na nowym miejscu, kolejny rozsunięty), linia „Przeniesiono 2 bloki · Cofnij”, „Cofnij” przywraca; w „Tygodniu” dwa bloki wtorku na czwartek –
+ * miejsce drugiego widać w trakcie, oba dni jedną zmianą, „Cofnij” przywraca oba.
  */
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -176,6 +178,112 @@ test('Kalendarz: Ctrl+klik pierwszego dnia, Shift+klik siódmego, prawy przycisk
       await page.getByTestId('group-line-calendar-undo').click()
       await expect.poll(() => days.map(typeOf), { timeout: 15_000 }).toEqual(Array(7).fill(null))
       await expect(page.getByTestId('group-line-calendar')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('przeciąganie grupy (D531): oś jutra – dwa zaznaczone o godzinę później, kolejny rozsunięty; „Cofnij” przywraca', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-group-drag-day-'))
+  const { today } = seedAwake(dataDir, [])
+  // Tomorrow evening (after any session of its template): A 18:00, B 19:00, C 20:15 – half an hour each.
+  const tomorrow = addDays(today, 1)
+  const blocks = [
+    { id: 'a', categoryId: 'inne', startMin: 18 * 60, durationMin: 30, fixed: false, name: 'A' },
+    { id: 'b', categoryId: 'inne', startMin: 19 * 60, durationMin: 30, fixed: false, name: 'B' },
+    { id: 'c', categoryId: 'inne', startMin: 20 * 60 + 15, durationMin: 30, fixed: false, name: 'C' }
+  ]
+  write(dataDir, paths.day(tomorrow), { schema: 1, date: tomorrow, wakeMin: 12 * 60, blocks })
+  const startOf = (id: string) => blocksOf(dataDir, tomorrow).find((b) => b.id === id)?.startMin
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('day-next').click()
+      const tile = (id: string) => page.getByTestId(`block-${id}`)
+      await expect(tile('c')).toBeVisible({ timeout: 30_000 })
+      await tile('a').evaluate((el) => el.scrollIntoView({ block: 'center' }))
+      await tile('a').click({ modifiers: ['Control'] })
+      await tile('b').click({ modifiers: ['Control'] })
+      await expect(page.getByTestId('axis-selection')).toContainText('Zaznaczone: 2')
+
+      // A held an hour lower (1.1 px a minute): B stands at its new place dashed, C pushed on.
+      const box = (await tile('a').boundingBox())!
+      const x = box.x + box.width / 2
+      const y = box.y + 10
+      await page.mouse.move(x, y)
+      await page.mouse.down()
+      await page.mouse.move(x, y + 12, { steps: 3 })
+      await page.mouse.move(x, y + 66, { steps: 6 })
+      await expect(tile('b')).toHaveAttribute('data-group-moved', 'true')
+      await expect(tile('c')).toHaveAttribute('data-pushed', 'true')
+      await page.mouse.up()
+      await expect.poll(() => [startOf('a'), startOf('b')], { timeout: 15_000 }).toEqual([19 * 60, 20 * 60])
+      expect(startOf('c')!).toBeGreaterThanOrEqual(20 * 60 + 30)
+      await expect(page.getByTestId('group-line-today')).toContainText('Przeniesiono 2 bloki')
+      await page.getByTestId('group-line-today-undo').click()
+      await expect.poll(() => [startOf('a'), startOf('b'), startOf('c')], { timeout: 15_000 }).toEqual([18 * 60, 19 * 60, 20 * 60 + 15])
+      await expect(page.getByTestId('group-line-today')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('przeciąganie grupy (D531): „Tydzień” – dwa bloki wtorku na czwartek, miejsce drugiego widać w trakcie; „Cofnij” przywraca oba dni', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-group-drag-week-'))
+  const { today } = seedAwake(dataDir, [])
+  // The next week: none of its days gone, none today.
+  const tue = addDays(mondayOf(today), 8)
+  const thu = addDays(tue, 2)
+  write(dataDir, paths.day(tue), {
+    schema: 1,
+    date: tue,
+    blocks: [
+      { id: 'w1', categoryId: 'inne', startMin: 19 * 60, durationMin: 60, fixed: false },
+      { id: 'w2', categoryId: 'inne', startMin: 20 * 60 + 30, durationMin: 30, fixed: false }
+    ]
+  })
+  write(dataDir, paths.day(thu), { schema: 1, date: thu, blocks: [{ id: 't1', categoryId: 'inne', startMin: 19 * 60 + 30, durationMin: 30, fixed: false }] })
+  const startsOn = (date: string) => Object.fromEntries(blocksOf(dataDir, date).map((b) => [b.id, b.startMin]))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-week').click()
+      await page.getByTestId('week-mode-week').click()
+      await page.getByTestId('week-next').click()
+      const first = page.getByTestId(`week-block-${tue}-w1`)
+      const second = page.getByTestId(`week-block-${tue}-w2`)
+      await expect(first).toBeVisible({ timeout: 30_000 })
+      await first.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+      await first.click({ modifiers: ['Control'] })
+      await second.click({ modifiers: ['Control'] })
+      await expect(page.getByTestId('week-selection')).toContainText('Zaznaczone: 2')
+
+      // W1 held at the same hour of Thursday: the band of W2 stands in Thursday's column too.
+      const box = (await first.boundingBox())!
+      const col = (await page.getByTestId(`week-col-${thu}`).boundingBox())!
+      const y = box.y + 6
+      await page.mouse.move(box.x + box.width / 2, y)
+      await page.mouse.down()
+      await page.mouse.move(box.x + box.width / 2 + 10, y, { steps: 3 })
+      await page.mouse.move(col.x + col.width / 2, y, { steps: 8 })
+      const band = page.getByTestId('week-group-drop')
+      await expect(band).toHaveAttribute('data-of', `${tue}|w2`)
+      await expect(band).toHaveAttribute('data-start', String(20 * 60 + 30))
+      await page.mouse.up()
+      await expect.poll(() => startsOn(thu), { timeout: 15_000 }).toEqual({ t1: 20 * 60, w1: 19 * 60, w2: 20 * 60 + 30 })
+      expect(startsOn(tue)).toEqual({})
+      await expect(page.getByTestId('group-line-week')).toContainText('Przeniesiono 2 bloki')
+      await page.getByTestId('group-line-week-undo').click()
+      await expect.poll(() => startsOn(tue), { timeout: 15_000 }).toEqual({ w1: 19 * 60, w2: 20 * 60 + 30 })
+      expect(startsOn(thu)).toEqual({ t1: 19 * 60 + 30 })
     })
     expect(errors).toEqual([])
   } finally {

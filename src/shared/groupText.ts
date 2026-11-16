@@ -26,7 +26,7 @@ const NOUNS: Record<GroupKind, Noun> = {
 export const groupCount = (n: number, kind: GroupKind = 'block'): string => countLabel(n, NOUNS[kind].one, NOUNS[kind].few, NOUNS[kind].many)
 
 /** The verbs of the line (impersonal, as „Przesunięto N bloków”). */
-export const VERB = { changed: 'Zmieniono', moved: 'Przeniesiono', planned: 'Zaplanowano', removed: 'Usunięto' } as const
+export const VERB = { changed: 'Zmieniono', moved: 'Przeniesiono', planned: 'Zaplanowano', removed: 'Usunięto', copied: 'Skopiowano' } as const
 
 /** What the line says besides the count. */
 export interface GroupLineParts {

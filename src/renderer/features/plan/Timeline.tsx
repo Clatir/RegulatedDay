@@ -8,11 +8,14 @@
  * and end (D366); the column of hours counts as the axis for both. While a block is dragged, the blocks it pushes apart
  * stand at their new places (D367, `pushPreview`); dropped onto the right part of another block, it stands beside it (D492,
  * `parallelPreview` – „Równolegle z …”). Ctrl held when it is let go (D513, `onCopy`): the block stays, its copy stands there – the
- * cursor has „+” and a dashed tile shows the copy while Ctrl is held.
+ * cursor has „+” and a dashed tile shows the copy while Ctrl is held. A block of a selection of two and more (D531, `groupDrag`) drags the
+ * whole group: every selected block moves by the same difference, each drawn at its new place dashed round while it is held, Esc ends it with
+ * nothing changed; with Ctrl – the group's copy.
  */
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
+import type { DragPreview } from '@shared/engine/groupDrag'
 import type { TileCost as TileCostInfo } from '@shared/model/blockCosts'
 import type { Costs } from '@shared/model/categories'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
@@ -232,6 +235,19 @@ interface Drag {
   onto: string | null
   /** Ctrl is held (D513): dropped so, the block stays and its copy goes to the hour (never beside another block). */
   copy: boolean
+  /** A block of a selection of two and more dragged by its body (D531): the whole group goes (never beside another block). */
+  group: boolean
+}
+
+/**
+ * D531: the drag of a block of the selection of many (two and more) is the group's. `has` – the block is in such a selection; `preview` – where
+ * the group (`moved`, the grabbed one too), the blocks it pushes apart (`pushed`) and the copies (`copies`, Ctrl) would stand with every selected
+ * block `minutes` later (earlier) – the grabbed one's drop less where its tile stood – null: nothing moves; `drop` – let go there.
+ */
+export interface TimelineGroupDrag {
+  has: (id: string) => boolean
+  preview: (id: string, minutes: number, copy: boolean) => DragPreview | null
+  drop: (id: string, minutes: number, copy: boolean) => void
 }
 
 /**
@@ -280,6 +296,7 @@ export function Timeline({
   parallelPreview,
   onParallel,
   onCopy,
+  groupDrag,
   attached,
   onAttachDrop,
   onCosts,
@@ -354,6 +371,8 @@ export function Timeline({
    * will stand (none – under the pointer); the block itself is never drawn pushed (a copy never changes it). Left out – Ctrl changes nothing.
    */
   onCopy?: (id: string, startMin: number) => void
+  /** D531: the drag of a selected block of a selection of two and more moves (with Ctrl – copies) the group; left out – every drag is one block's. */
+  groupDrag?: TimelineGroupDrag
   /**
    * A block's end waiting for a confirmation (D365: a running block's extension past the boundary): the block is drawn
    * down to `endMin` (its added part dashed), `node` – „Potwierdź · Anuluj” – stands at that edge. Gone: the block is at its end.
@@ -385,6 +404,29 @@ export function Timeline({
   }
   // The click that ends a drag selects nothing.
   const dropped = useRef(false)
+  // D531 (T1764): the click after a group's drag ended by Esc is no click either – to it, or to the next press (whatever comes first).
+  const escaped = useRef<(() => void) | null>(null)
+  useEffect(() => () => escaped.current?.(), [])
+  const muteAfterEscape = () => {
+    escaped.current?.()
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const off = () => {
+      window.removeEventListener('pointerdown', off, true)
+      window.removeEventListener('pointerup', release, true)
+      window.removeEventListener('lostpointercapture', release, true)
+      if (timer) clearTimeout(timer)
+      escaped.current = null
+    }
+    // T1777: the click of this press comes right after its release – the mute ends after it, also when the release is outside the window (no
+    // click comes) or the capture is lost; the next press ends it too.
+    const release = () => {
+      timer ??= setTimeout(off, 0)
+    }
+    window.addEventListener('pointerdown', off, true)
+    window.addEventListener('pointerup', release, true)
+    window.addEventListener('lostpointercapture', release, true)
+    escaped.current = off
+  }
   // Where the last press on a tile went down (a click that is far from it ends a drag – D527).
   const pressed = useRef<{ x: number; y: number } | null>(null)
   // The tile a file or a link is dragged over (D410).
@@ -416,15 +458,27 @@ export function Timeline({
       const copy = copyOn(d, e)
       if (copy !== d.copy) setDrag({ ...d, copy, onto: copy ? null : d.onto })
     }
+    // D531 (T1764): Esc while a group is held – moved or not yet past the 4 px – ends its gesture with nothing changed; it is the drag's alone
+    // (heard first, in the capture phase): it never clears the selection under it, and the click after it is muted.
+    const escape = (e: KeyboardEvent) => {
+      const d = dragRef.current
+      if (e.key !== 'Escape' || !d || d.dropped || !d.group) return
+      e.preventDefault()
+      e.stopPropagation()
+      setDrag(null)
+      muteAfterEscape()
+    }
     window.addEventListener('pointerup', end)
     window.addEventListener('pointercancel', end)
     window.addEventListener('keydown', key)
     window.addEventListener('keyup', key)
+    window.addEventListener('keydown', escape, true)
     return () => {
       window.removeEventListener('pointerup', end)
       window.removeEventListener('pointercancel', end)
       window.removeEventListener('keydown', key)
       window.removeEventListener('keyup', key)
+      window.removeEventListener('keydown', escape, true)
     }
   }, [holding])
   // The range of the axis (and so the place a click or a drag creates a block in) is that of ALL the day's blocks, the hidden ones too
@@ -470,20 +524,44 @@ export function Timeline({
   // Kept after the drop until the day shows it (the hold): the pushed blocks stay drawn where the drop puts them.
   const onto = drag?.moved ? drag.onto : null
   const hint = drag && onto ? hintOf(drag.id, onto) : null
-  const pushKey = drag?.moved && pushPreview && !drag.onto ? `${drag.id}|${drag.edge ?? ''}|${drag.start}|${drag.end}|${drag.from}|${drag.fromEnd}|${drag.copy}` : null
+  const pushKey = drag?.moved && pushPreview && !drag.onto && !drag.group ? `${drag.id}|${drag.edge ?? ''}|${drag.start}|${drag.end}|${drag.from}|${drag.fromEnd}|${drag.copy}` : null
   const pushedByMove = useMemo(
     () => (pushKey && drag ? (previewOf.current?.(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }, drag.copy) ?? null) : null),
     // The drag's place is in the key; a new count of the day brings new items.
     [pushKey, items]
   )
-  const pushed = onto ? (hint?.pushed ?? null) : pushedByMove
+  // D531: a group – every selected block at its new place and what they push apart, counted once for each place of the drag; once let go it
+  // stays as it was (the day counted again after the save would move it a second time) until the day shows the drop.
+  const groupOf = useRef(groupDrag)
+  groupOf.current = groupDrag
+  const groupLast = useRef<{ key: string; preview: DragPreview | null } | null>(null)
+  const groupKeyOf = (d: Pick<Drag, 'id' | 'start' | 'from'>, copy: boolean) => `${d.id}|${d.start - d.from}|${copy}`
+  /** The preview of the group at the drag's place `d` (counted once for each place – the last one kept). */
+  const groupPreviewAt = (d: Pick<Drag, 'id' | 'start' | 'from'>, copy: boolean): DragPreview | null => {
+    const key = groupKeyOf(d, copy)
+    if (groupLast.current?.key !== key) groupLast.current = { key, preview: groupOf.current?.preview(d.id, d.start - d.from, copy) ?? null }
+    return groupLast.current.preview
+  }
+  const groupKey = drag?.moved && drag.group ? groupKeyOf(drag, drag.copy) : null
+  const groupShown = useMemo(
+    () => {
+      if (!groupKey || !drag) return (groupLast.current = null)
+      if (drag.dropped) return groupLast.current?.preview ?? null
+      return groupPreviewAt(drag, drag.copy)
+    },
+    // The drag's place is in the key; a new count of the day brings new items – not once it is let go.
+    [groupKey, drag?.dropped ? null : items]
+  )
+  const groupPushed = useMemo(() => (groupShown ? new Map([...groupShown.pushed, ...groupShown.moved]) : null), [groupShown])
+  const pushed = onto ? (hint?.pushed ?? null) : drag?.group ? groupPushed : pushedByMove
   // Where the dragged block is drawn: under the pointer, where it will stand (`pushPreview` with its own id), or beside the
   // block it is dropped onto (D492).
   const dragShown: BlockSpan | null = drag ? shownSpan(drag, hint, pushed) : null
 
   // D513: a copy being dragged – the block stays at its place among the others (a copy never changes it: never drawn pushed), a
-  // dashed tile of the copy goes with the pointer.
+  // dashed tile of the copy goes with the pointer (D531: of every copy of the group, where it will stand).
   const copying = drag != null && drag.moved && drag.copy
+  const groupCopies = copying && drag.group ? (groupShown?.copies ?? null) : null
   /** Where a tile is drawn now: dragged, pushed apart by the drag, waiting for a confirmation of its end, or at its place. */
   const spanOf = (i: TimelineItem) => {
     const dragged = drag?.id === i.id && drag.moved && !drag.copy
@@ -515,11 +593,13 @@ export function Timeline({
   }
 
   /** D513: the drag `d` makes a copy – Ctrl held (`e`: the last event of the pointer or of the key), the body dragged, a copy taken here. */
-  const copyOn = (d: Drag, e: { ctrlKey: boolean }): boolean => !!onCopy && d.edge == null && e.ctrlKey
+  const copyOn = (d: Drag, e: { ctrlKey: boolean }): boolean => (!!onCopy || d.group) && d.edge == null && e.ctrlKey
   /** D513: the copy where it would stand while it is held – a dashed tile with its name and hours (the block stays at its place). */
   const copyGhost = (i: TimelineItem | undefined, at: BlockSpan) =>
     i && (
       <div
+        key={`copy-${i.id}`}
+        data-of={i.id}
         className="pointer-events-none absolute right-0 left-0 z-20 overflow-hidden rounded-[3px] border border-dashed px-1.5 text-left leading-tight shadow-lg"
         style={{ top: y(at.startMin), height: Math.max(MIN_H, (at.endMin - at.startMin) * PPM - 1), background: blockFill(i.color, brightness), borderColor: i.color }}
         data-testid="copy-ghost"
@@ -579,6 +659,11 @@ export function Timeline({
             dropped.current = false
             return
           }
+          // A click of the keyboard (no pointer) is never muted.
+          if (escaped.current && e.detail > 0) {
+            escaped.current()
+            return
+          }
           // D527: a press that moved this far is a drag, not a click – also on a tile that cannot be dragged (it has no drag to say so); a click of the
           // keyboard (no pointer) is always one.
           const from = pressed.current
@@ -599,7 +684,8 @@ export function Timeline({
           dropped.current = false
           e.currentTarget.setPointerCapture(e.pointerId)
           const limits = (edge === 'end' && i.resize === 'end' ? edgeLimits?.(i.id) : null) ?? {}
-          setDrag({ id: i.id, pointer: e.pointerId, y0: e.clientY, edge, from: i.startMin, fromEnd: i.endMin, start: i.startMin, end: i.endMin, limits, exact: edge === 'end' && i.movable !== true, moved: false, dropped: false, onto: null, copy: !!onCopy && edge == null && e.ctrlKey })
+          const group = edge == null && !!groupDrag?.has(i.id)
+          setDrag({ id: i.id, pointer: e.pointerId, y0: e.clientY, edge, from: i.startMin, fromEnd: i.endMin, start: i.startMin, end: i.endMin, limits, exact: edge === 'end' && i.movable !== true, moved: false, dropped: false, onto: null, copy: (!!onCopy || group) && edge == null && e.ctrlKey, group })
         }}
         onPointerMove={(e) => {
           const d = dragRef.current
@@ -617,12 +703,35 @@ export function Timeline({
                   })()
           // D492: the body over the right part of another tile – a drop onto it; with Ctrl held (D513) – a copy to the hour, never beside.
           const copy = copyOn(d, e)
-          const over = d.edge == null && !copy ? ontoAt(d.id, e.clientX, e.clientY) : null
+          const over = d.edge == null && !copy && !d.group ? ontoAt(d.id, e.clientX, e.clientY) : null
           if (!d.moved || span.startMin !== d.start || span.endMin !== d.end || over !== d.onto || copy !== d.copy) setDrag({ ...d, moved: true, start: span.startMin, end: span.endMin, onto: over, copy })
         }}
         onPointerUp={(e) => {
           const d = dragRef.current
           if (!d || d.id !== i.id || d.pointer !== e.pointerId || d.dropped) return
+          // D531: a group let go – every selected block by the difference (with Ctrl – copied); the group stays drawn where it goes until the
+          // day shows the grabbed one moved (or the hold runs out). The same place – nothing.
+          if (d.group) {
+            const minutes = d.start - d.from
+            const copy = copyOn(d, e)
+            if (!d.moved || minutes === 0) setDrag(null)
+            else {
+              // T1776: the preview of the very place it is let go at (a release in the frame of the last move has no render of it yet) – what it holds.
+              const shown = groupPreviewAt(d, copy)
+              groupDrag?.drop(i.id, minutes, copy)
+              // The grabbed block stays where it is (its rule leaves it, T1767), or a copy: nothing to hold – back at once.
+              if (copy || !shown?.moved.has(d.id)) setDrag(null)
+              else {
+                const held = { ...d, copy, dropped: true }
+                setDrag(held)
+                setTimeout(() => dragRef.current === held && setDrag(null), DROP_HOLD_MS)
+              }
+            }
+            if (!d.moved) return
+            dropped.current = true
+            setTimeout(() => (dropped.current = false), 0)
+            return
+          }
           // Where it will stand: as drawn now (`dragShown`), under the pointer otherwise.
           const at = drag?.id === d.id && dragShown ? dragShown : { startMin: d.start, endMin: d.end }
           // D513: let go with Ctrl held – a copy at that hour (the block stays: nothing to hold); at its own place – nothing.
@@ -692,6 +801,8 @@ export function Timeline({
         data-hidden-calendar={i.hiddenIn}
         data-waiting={waiting ? 'true' : undefined}
         data-pushed={pushedTo ? 'true' : undefined}
+        // D531: a block of the group dragged with the grabbed one, at its new place.
+        data-group-moved={drag?.group && !drag.copy && drag.id !== i.id && groupShown?.moved.has(i.id) ? 'true' : undefined}
         data-dim={i.dim ? 'on' : undefined}
         data-drop={dropOver === i.id ? 'on' : undefined}
         {...(onAttachDrop && i.attach !== undefined ? tileDrop(i.id, onAttachDrop, dropOver, setDropOver) : {})}
@@ -772,7 +883,8 @@ export function Timeline({
         ))}
         <div className="absolute inset-y-0 right-1.5 left-1.5">
           {items.map((i) => box(i))}
-          {copying && dragShown && copyGhost(items.find((x) => x.id === drag.id), dragShown)}
+          {copying && !drag.group && dragShown && copyGhost(items.find((x) => x.id === drag.id), dragShown)}
+          {groupCopies && [...groupCopies].map(([of, at]) => copyGhost(items.find((x) => x.id === of), at))}
           {draft && (
             <div
               className="absolute right-0 left-0 z-10 cursor-default overflow-hidden rounded-[3px] border border-dashed px-1.5 text-left leading-tight"

@@ -269,6 +269,26 @@ describe('D367 – zapisany start = pokazany start (przesunięcie i przeniesieni
     }
   }
 
+  it('postawiony blok grupy dokładnie na starcie nietkniętego bloku – zajęte miejsce: ten idzie za nim (T1750); „Przenieś na dzień” i „Przesuń o”', () => {
+    // „y” lands at 12:00 of the target, where „t” starts: „t” is written behind it, „y” is shown where it is written.
+    const from = [flex('x', '11:00', 60), flex('y', '12:00', 60)]
+    const to = [flex('t', '12:00', 30)]
+    const src = dayOf(scenario(from), '08:00', ['x', 'y'])
+    const there = dayOf(scenario(to, { date: NEXT }), '08:00', ['t'])
+    const m = movedDays({ from: src, to: there, fromRaw: fileOf(DATE, from), toRaw: fileOf(NEXT, to), take: ['x', 'y'], toDate: NEXT, stay: stayRuleOf(src.state.facts, src.ctx.snapshot.settings) })
+    expect(startsOf(m.target, NEXT)).toEqual({ t: lm('13:00'), x: lm('11:00'), y: lm('12:00') })
+    const shown = computeDay({ ...there.ctx, plan: dayFileFrom(m.target, NEXT).blocks })
+    expect(shown.forecast.find((p) => p.block.id === 'y')!.from).toBe(idxOfLogical(shown.grid, lm('12:00')))
+    // Within the day: „b” shifted onto the start of „p”, „a” (the first) before it.
+    const plan = [flex('a', '10:00', 30), flex('b', '11:00', 30), flex('p', '11:30', 30)]
+    const d = dayOf(scenario(plan), '08:00', ['a', 'b', 'p'])
+    expect(startsOf(shiftedDay(d, fileOf(DATE, plan), ['a', 'b'], 30, '2026-10-27').raw)).toEqual({ a: lm('10:30'), b: lm('11:30'), p: lm('12:00') })
+    // A block that really starts before the placed one stays before it (T1710).
+    const before = [flex('a', '10:00', 30), flex('b', '11:00', 30), flex('p', '11:25', 30)]
+    const e = dayOf(scenario(before), '08:00', ['a', 'b', 'p'])
+    expect(startsOf(shiftedDay(e, fileOf(DATE, before), ['a', 'b'], 30, '2026-10-27').raw)).toEqual({ a: lm('10:30'), b: lm('11:30'), p: lm('11:25') })
+  })
+
   it('blok nietknięty przez zmianę zostaje przed postawionym – ten stoi później tylko o bufor przejścia', () => {
     // „p” (Inne) between the two shifted blocks, „q” (Analiza) right after it: 5 min of transition – q stands at 12:05, p stays at 11:00.
     const plan = [flex('a', '10:00', 30), flex('p', '11:00', 60), flex('q', '12:30', 30, { categoryId: 'analiza' })]

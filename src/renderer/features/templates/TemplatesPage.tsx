@@ -53,6 +53,7 @@ import { sampleDay, templateDayOf, versionFrom } from './templateDay'
 import { SessionFields } from './SessionFields'
 import { templateAdd, templateCopy, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
 import { copyTemplateBlock } from '../plan/blockCopy'
+import { dragTemplateGroup, templateDragPreview } from '../plan/groupDrag'
 import { COPY_SPAN_ID } from '../today/dayPush'
 import { freshAfter, removeTemplate, removeTemplateBlock } from './templateActions'
 
@@ -432,6 +433,12 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
             onCopy={(id, startMin) => {
               const b = version.blocks.find((x) => x.id === id)
               if (b) void copyTemplateBlock({ templateId: template.id, from, day: model, block: b, startMin, name: blockName(b, names) })
+            }}
+            // D531: a selected block of two and more drags the group of the version – the same difference for each (with Ctrl – its copy).
+            groupDrag={{
+              has: (id) => group.sel.count >= 2 && group.sel.isSelected(id),
+              preview: (_id, minutes, copy) => templateDragPreview(model, byPlanId, group.sel.selected, minutes, copy),
+              drop: (_id, minutes, copy) => void dragTemplateGroup({ templateId: template.id, from }, group.sel.selected, minutes, copy)
             }}
             // D367: while a block is dragged, the blocks it pushes apart at their new places (D513: a copy's too, and where it will stand).
             pushPreview={(id, span, edge, shown, copy) => {
