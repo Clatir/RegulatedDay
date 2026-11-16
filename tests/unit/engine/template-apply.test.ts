@@ -5,8 +5,8 @@
 import { describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { createDay, dayPlan, sessionBlockId, templateBlockId } from '@shared/engine/createDay'
-import { applyTemplate, asksMode, judgeApply, revokeTemplate, versionForDay, type ApplyDay } from '@shared/engine/templateApply'
-import { ALL_DAYS_YES, dayFileFrom, planBlock, type Template } from '@shared/model/plan'
+import { anchoredClosure, applyTemplate, asksMode, foregroundRuns, judgeApply, revokeTemplate, takeGoneBy, versionForDay, type ApplyDay, type ApplyTiming, type DayRun } from '@shared/engine/templateApply'
+import { ALL_DAYS_YES, dayFileFrom, planBlock, type PlanBlock, type Template } from '@shared/model/plan'
 import type { SettingsChange } from '@shared/model/settings'
 
 const holidays = (m: Parameters<typeof marketDay>[0], d: string) => marketDay(m, d)
@@ -278,5 +278,210 @@ describe('poprawki po drugim przeglądzie', () => {
   it('kopia do dnia bez odwołań nie pisze pustej mapy „cancelled”', () => {
     const r = applyTemplate(training, dayOf(THU), 'fill')
     expect(r.raw.cancelled).toBeUndefined()
+  })
+})
+
+describe('D546–D549 – dziś i dni minione', () => {
+  const empty: Template = { ...ordinary, versions: [{ ...ordinary.versions[0]!, blocks: [] }] }
+  /** Thursday without the ordinary template's routine: nothing of the day collides with „Trening” but what a test puts there. */
+  const clean = (date: string, raw: Record<string, unknown> | null = null, runs: DayRun[] = []): ApplyDay => ({ ...dayOf(date, raw, [], [empty, training]), runs })
+  const at = (h: number, m = 0) => h * 60 + m
+  const timing = (o: Partial<ApplyTiming> & { nowMin: number }): ApplyTiming => ({ hours: 'plan', past: 'done', today: THU, ...o })
+  const run = (t: Template, day: ApplyDay, tm: ApplyTiming | null, mode: 'fill' | 'overwrite' = 'fill') => {
+    const j = judgeApply(t, day, tm)
+    return { j, r: applyTemplate(t, day, mode, j) }
+  }
+  const startOf = (day: ApplyDay, raw: Record<string, unknown>, blockId: string) => planAfter(day, raw).find((b) => b.id === blockId)?.startMin
+  const own = (id: string, startMin: number, durationMin: number, o: Partial<PlanBlock> = {}) => planBlock({ id, categoryId: 'inne', startMin, durationMin, origin: 'template', ...o })
+  const tpl = (blocks: PlanBlock[]): Template => ({ ...training, versions: [{ ...training.versions[0]!, blocks }] })
+  const tid = (b: string) => templateBlockId(THU, 'trening', b)
+
+  it('dziś wg planu, „Dodaj jako zrealizowane”: minione w godzinach szablonu i do faktów, dalsze – niezaczęte', () => {
+    const day = clean(THU)
+    const { r } = run(training, day, timing({ nowMin: at(10) }))
+    expect(r).toMatchObject({ added: 3, skipped: 0, left: { past: 0, ran: 0, outOfDay: 0 } })
+    expect([...r.done].sort()).toEqual([id(THU, 'po'), id(THU, 'rano')].sort())
+    expect(startOf(day, r.raw, id(THU, 'rano'))).toBe(6 * 60)
+    expect(startOf(day, r.raw, id(THU, 'wieczor'))).toBe(21 * 60)
+  })
+
+  it('dziś wg planu, „Nie dodawaj minionych”: minione poza planem, policzone', () => {
+    const day = clean(THU)
+    const { r } = run(training, day, timing({ nowMin: at(10), past: 'skip' }))
+    expect(r).toMatchObject({ added: 1, done: [], left: { past: 2, ran: 0, outOfDay: 0 } })
+    const ids = planAfter(day, r.raw).map((b) => b.id)
+    expect(ids).toContain(id(THU, 'wieczor'))
+    expect(ids).not.toContain(id(THU, 'rano'))
+    expect(ids).not.toContain(id(THU, 'po'))
+  })
+
+  it('blok, który wg planu właśnie trwa, nie jest miniony – dochodzi niezaczęty', () => {
+    expect(run(training, clean(THU), timing({ nowMin: at(6, 30) })).r).toMatchObject({ added: 3, done: [] })
+    // 07:05: „rano” (06:00–07:00) minął, „po” (07:00–07:15, za kotwicą) trwa.
+    const { r } = run(training, clean(THU), timing({ nowMin: at(7, 5) }))
+    expect(r).toMatchObject({ added: 3, done: [id(THU, 'rano')] })
+  })
+
+  it('miniony nachodzący na rzeczywisty bieg innego bloku – pominięty (fakty mają pierwszeństwo), zakotwiczony do niego też', () => {
+    const day = clean(THU, null, [{ block: 'moj', start: at(6, 30), end: at(6, 50) }])
+    const { r } = run(training, day, timing({ nowMin: at(10) }))
+    expect(r).toMatchObject({ added: 1, done: [], left: { past: 0, ran: 2, outOfDay: 0 } })
+    expect(planAfter(day, r.raw).map((b) => b.id)).not.toContain(id(THU, 'rano'))
+  })
+
+  it('bieg bloku w tle nie liczy się jako „coś trwało”; trwający bieg sięga do teraz', () => {
+    const facts = {
+      blocks: new Map([
+        ['tlo', { runs: [{ from: 150, to: 170, bg: true }] }],
+        ['pierwszy', { runs: [{ from: 150, to: 170, bg: false }, { from: 300, to: Number.POSITIVE_INFINITY, bg: false }] }]
+      ])
+    } as unknown as Parameters<typeof foregroundRuns>[0]
+    expect(foregroundRuns(facts, THU)).toEqual([
+      { block: 'pierwszy', start: at(6, 30), end: at(6, 50) },
+      { block: 'pierwszy', start: at(9), end: Number.POSITIVE_INFINITY }
+    ])
+  })
+
+  it('dwa minione bloki szablonu na siebie – zrealizowany tylko pierwszy', () => {
+    const t = tpl([own('x', at(6), 60), own('y', at(6, 30), 60)])
+    const { r } = run(t, clean(THU), timing({ nowMin: at(10) }))
+    expect(r).toMatchObject({ done: [tid('x')], left: { ran: 1 } })
+  })
+
+  it('od teraz: offset dodatni – pierwszy elastyczny zaczyna się teraz, odstępy i kolejność zostają, zakotwiczony za kotwicą', () => {
+    const day = clean(THU)
+    const { r } = run(training, day, timing({ nowMin: at(11), hours: 'now' }))
+    expect(r).toMatchObject({ added: 3, done: [], left: { past: 0, ran: 0, outOfDay: 0 } })
+    expect(startOf(day, r.raw, id(THU, 'rano'))).toBe(at(11))
+    expect(startOf(day, r.raw, id(THU, 'wieczor'))).toBe(at(26))
+    const po = planAfter(day, r.raw).find((b) => b.id === id(THU, 'po'))!
+    expect([po.startMin, po.anchor]).toEqual([null, id(THU, 'rano')])
+  })
+
+  it('od teraz: offset ujemny; blok stały zostaje na swojej godzinie', () => {
+    const t = tpl([own('a', at(18), 30), own('f', at(19), 30, { fixed: true }), own('b', at(20), 30)])
+    const day = clean(THU)
+    const { r } = run(t, day, timing({ nowMin: at(11), hours: 'now' }))
+    expect([startOf(day, r.raw, tid('a')), startOf(day, r.raw, tid('b')), startOf(day, r.raw, tid('f'))]).toEqual([at(11), at(13), at(19)])
+  })
+
+  it('od teraz: stały blok, który już minął, podlega wyborowi „Minione bloki”', () => {
+    const t = tpl([own('f', at(6), 30, { fixed: true }), own('a', at(8), 30)])
+    const skip = run(t, clean(THU), timing({ nowMin: at(11), hours: 'now', past: 'skip' })).r
+    expect(skip).toMatchObject({ added: 1, done: [], left: { past: 1 } })
+    const done = run(t, clean(THU), timing({ nowMin: at(11), hours: 'now' })).r
+    expect(done).toMatchObject({ added: 2, done: [tid('f')] })
+  })
+
+  it('od teraz: blok, który wychodzi poza dobę planu, jest pominięty – zakotwiczony do niego też', () => {
+    const t = tpl([
+      own('a', at(6), 30),
+      own('w', at(22), 60),
+      own('z', at(22, 30), 60),
+      planBlock({ id: 'za', categoryId: 'inne', anchor: 'z', durationMin: 30, origin: 'template' }),
+      own('n', at(23, 30), 15)
+    ])
+    const day = clean(THU)
+    const { r } = run(t, day, timing({ nowMin: at(11), hours: 'now' }))
+    // +5 h: „w” 03:00–04:00 mieści się do końca doby; „z” 03:30–04:30 wychodzi za nią (z „za”); „n” zaczynałby się 04:30 następnej nocy.
+    expect(r).toMatchObject({ added: 2, left: { past: 0, ran: 0, outOfDay: 3 } })
+    expect(startOf(day, r.raw, tid('a'))).toBe(at(11))
+    expect(startOf(day, r.raw, tid('w'))).toBe(at(27))
+  })
+
+  it('od teraz: sesja szablonu zostaje na swojej godzinie', () => {
+    const withNy = tpl([
+      ...training.versions[0]!.blocks,
+      planBlock({ id: 'ny2', categoryId: 'sesja', startMin: 15 * 60 + 30, durationMin: 390, fixed: false, origin: 'template', session: { zone: 'America/New_York', markets: ['NYSE'], days: [...ALL_DAYS_YES] } })
+    ])
+    const startIn = (tm: ApplyTiming | null, b = sessionBlockId(THU, 'ny2')) => judgeApply(withNy, clean(THU), tm).missing.find((m) => m.block.id === b)?.block.startMin
+    expect(startIn(null)).toBeTypeOf('number')
+    expect(startIn(timing({ nowMin: at(11), hours: 'now' }))).toBe(startIn(null))
+    // The template's flexible block moves in the same apply.
+    expect(startIn(timing({ nowMin: at(11), hours: 'now' }), id(THU, 'rano'))).toBe(at(11))
+  })
+
+  it('kolizja (D541) liczona na godzinach po wyborze', () => {
+    const raw = { schema: 1, date: THU, blocks: [{ id: 'moj', categoryId: 'inne', startMin: at(11, 15), durationMin: 30, fixed: false }] }
+    expect(asksMode(judgeApply(training, clean(THU, raw), timing({ nowMin: at(11) })))).toBe(false)
+    expect(asksMode(judgeApply(training, clean(THU, raw), timing({ nowMin: at(11), hours: 'now' })))).toBe(true)
+  })
+
+  it('dzień miniony: „Nie dodawaj minionych” – nic; „Dodaj jako zrealizowane” – wszystkie bloki jako zrealizowane (D549)', () => {
+    const later = '2026-11-20'
+    const skip = run(training, clean(THU), timing({ today: later, nowMin: at(10), past: 'skip' })).r
+    expect(skip).toMatchObject({ added: 0, done: [], left: { past: 3 } })
+    const done = run(training, clean(THU), timing({ today: later, nowMin: at(5) })).r
+    expect(done).toMatchObject({ added: 3, left: { past: 0, ran: 0, outOfDay: 0 } })
+    expect([...done.done].sort()).toEqual([id(THU, 'po'), id(THU, 'rano'), id(THU, 'wieczor')].sort())
+  })
+
+  it('dzień przyszły – godziny szablonu i nic minionego, niezależnie od wyboru', () => {
+    const day = clean(THU)
+    const { r } = run(training, day, timing({ today: '2026-11-18', nowMin: at(23), hours: 'now', past: 'skip' }))
+    expect(r).toMatchObject({ added: 3, done: [], left: { past: 0, ran: 0, outOfDay: 0 } })
+    expect(startOf(day, r.raw, id(THU, 'rano'))).toBe(6 * 60)
+  })
+})
+
+describe('runda 1 przeglądu (T1922–T1929)', () => {
+  const empty: Template = { ...ordinary, versions: [{ ...ordinary.versions[0]!, blocks: [] }] }
+  const at = (h: number, m = 0) => h * 60 + m
+  const timing = (o: Partial<ApplyTiming> & { nowMin: number }): ApplyTiming => ({ hours: 'plan', past: 'done', today: THU, ...o })
+
+  it('anchoredClosure: ziarna i wszystko zakotwiczone do nich, także przez inne (ziarno spoza listy też)', () => {
+    const blocks = [planBlock({ id: 'a', categoryId: 'inne', startMin: 360, durationMin: 10 }), planBlock({ id: 'b', categoryId: 'inne', anchor: 'a', durationMin: 10 }), planBlock({ id: 'c', categoryId: 'inne', anchor: 'b', durationMin: 10 }), planBlock({ id: 'd', categoryId: 'inne', anchor: 'x', durationMin: 10 })]
+    expect([...anchoredClosure(blocks, ['b'])].sort()).toEqual(['b', 'c'])
+    expect([...anchoredClosure(blocks, ['x'])].sort()).toEqual(['d', 'x'])
+    expect([...anchoredClosure(blocks, [])]).toEqual([])
+  })
+
+  it('takeGoneBy: kolejność godzin, bieg na pierwszym planie i blok wzięty wcześniej zatrzymują, tło – nie; zakotwiczony do pominiętego – pominięty', () => {
+    const g = (id: string, start: number, end: number, o: Partial<{ bg: boolean; anchor: string }> = {}) => ({ id, start, end, bg: o.bg ?? false, anchor: o.anchor ?? null })
+    const r = takeGoneBy([g('late', 500, 520), g('early', 360, 420), g('over', 400, 430), g('tlo', 400, 430, { bg: true }), g('za', 430, 440, { anchor: 'over' }), g('run', 600, 610)], [{ block: 'x', start: 605, end: 606 }])
+    expect(r.taken).toEqual(['early', 'tlo', 'late'])
+    expect(r.ran.sort()).toEqual(['over', 'run', 'za'])
+  })
+
+  it('miniony koliduje z planowanymi godzinami bloków niezaczętych, nie z planowanymi godzinami bloku, który już się odbył (D547)', () => {
+    const raw = { schema: 1, date: THU, blocks: [{ id: 'moj', categoryId: 'inne', startMin: at(6), durationMin: 60, fixed: false }] }
+    // „moj” zaplanowany 06:00–07:00, odbył się 11:30–12:00: jego planowane godziny nie kolidują, bieg też nie.
+    const begun: ApplyDay = { ...dayOf(THU, raw, ['moj'], [empty, training]), runs: [{ block: 'moj', start: at(11, 30), end: at(12) }] }
+    const j = judgeApply(training, begun, timing({ nowMin: at(13) }))
+    expect(asksMode(j)).toBe(false)
+    expect(applyTemplate(training, begun, 'fill', j).done).toContain(id(THU, 'rano'))
+    // Niezaczęty w tych godzinach – kolizja jak dotąd.
+    const notBegun: ApplyDay = { ...dayOf(THU, raw, [], [empty, training]), runs: [] }
+    expect(asksMode(judgeApply(training, notBegun, timing({ nowMin: at(13) })))).toBe(true)
+  })
+
+  it('blok migawki wraca w godzinach dnia (przesunięcie pobudki) – te same godziny ocenia proces główny', () => {
+    const wed = dayOf(WED)
+    const wake = wed.snapshot.templateWakeMin + 60
+    // Własny dzień szablonu z pobudką o godzinę później i odwołanym „rano”: dzień pokazałby go 07:00–08:00, nie 06:00–07:00.
+    const raw = { schema: 1, date: WED, wakeMin: wake, cancelled: { [id(WED, 'rano')]: true } }
+    const day: ApplyDay = { ...dayOf(WED, raw), runs: [{ block: 'x', start: at(6, 30), end: at(6, 50) }] }
+    const tm = timing({ today: WED, nowMin: at(10) })
+    const j = judgeApply(training, day, tm)
+    expect(j.missing.find((m) => m.block.id === id(WED, 'rano'))!.block.startMin).toBe(at(7))
+    const r = applyTemplate(training, day, 'fill', j)
+    expect(r.done).toContain(id(WED, 'rano'))
+    // Wraca odwołaniem odwołania – bez wpisu w pliku, więc pobudka dalej go przesuwa.
+    expect(r.raw.blocks).toBeUndefined()
+    expect(planAfter(day, r.raw).find((b) => b.id === id(WED, 'rano'))!.startMin).toBe(at(7))
+  })
+
+  it('blok migawki trafia do pliku tylko, gdy „od teraz” zmieniło mu godzinę – nowsza wersja szablonu nie nadpisuje dnia', () => {
+    const v1 = training.versions[0]!
+    const v2 = { ...v1, from: '2026-11-01', blocks: v1.blocks.map((b) => (b.id === 'rano' ? { ...b, startMin: at(6, 30) } : b)) }
+    const later: Template = { ...training, versions: [v1, v2] }
+    // Dzień zrobiony z pierwszej wersji (06:00), szablon ma już drugą (06:30).
+    const raw = { schema: 1, date: WED, cancelled: { [id(WED, 'rano')]: true } }
+    const day = dayOf(WED, raw, [], [ordinary, { ...training, versions: [v1] }])
+    const r = applyTemplate(later, day, 'fill', judgeApply(later, day, null))
+    expect(r.raw.blocks).toBeUndefined()
+    expect(planAfter(day, r.raw).find((b) => b.id === id(WED, 'rano'))!.startMin).toBe(at(6))
+    const now = applyTemplate(later, day, 'fill', judgeApply(later, day, timing({ today: WED, nowMin: at(11), hours: 'now' })))
+    expect((now.raw.blocks as Array<{ id: string; startMin: number }>).find((b) => b.id === id(WED, 'rano'))!.startMin).toBe(at(11))
   })
 })

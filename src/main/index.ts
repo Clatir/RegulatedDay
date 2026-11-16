@@ -910,6 +910,20 @@ function registerIpc(): void {
     kind === 'park' || kind === 'cancel' ? needHub().groupLog(String(day), kind, strings(ids)) : { ok: false, why: 'nieznana zmiana', confirm: null, written: [], taken: [], skipped: [] }
   )
   handle(CH.undoGroupLog, (_e, day: unknown, ids: unknown) => needHub().undoGroupLog(String(day), strings(ids)))
+  // D547, D550: „Zastosuj szablon” – the days' files and the facts of its blocks gone by in one step, and its „Cofnij”.
+  const plain = (v: unknown): Array<Record<string, unknown>> => (Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object') : [])
+  const entryAt = (v: unknown): number | null => (Number.isInteger(v) && (v as number) >= 0 ? (v as number) : null)
+  handle(CH.applyTemplateDays, (_e, entries: unknown, asks: unknown) =>
+    needHub().applyTemplateDays(Array.isArray(entries) ? (entries as EditEntry[]) : [], plain(asks).flatMap((a) => (entryAt(a.entry) == null ? [] : [{ day: String(a.day), ids: strings(a.ids), entry: entryAt(a.entry)! }])))
+  )
+  handle(CH.judgeTemplateUndo, (_e, asks: unknown) => needHub().judgeTemplateUndo(plain(asks).map((a) => ({ day: String(a.day), written: strings(a.written) }))))
+  handle(CH.undoTemplateDays, (_e, entries: unknown, asks: unknown, kept: unknown) =>
+    needHub().undoTemplateDays(
+      Array.isArray(entries) ? (entries as EditEntry[]) : [],
+      plain(asks).map((a) => ({ day: String(a.day), written: strings(a.written), entry: entryAt(a.entry) })),
+      plain(kept).map((k) => ({ day: String(k.day), blocks: strings(k.blocks) }))
+    )
+  )
   handle(CH.unclosedDays, () => needHub().unclosedDays())
   handle(CH.computerList, () => needHub().computerList())
   // A folder picked in a window of Windows over the window that asked (the wizard's data folder, „Dane” in the settings).

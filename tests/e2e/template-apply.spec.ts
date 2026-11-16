@@ -3,8 +3,11 @@
  * dodaje tylko drugi; kolejne „Zastosuj” na jutro nie pyta (dzień ma już bloki szablonu); „Wybierz dni…” z datą wpisaną ośmioma cyframi
  * (pole pokazuje DD-MM-RRRR) i zakresem dwóch dni → „Nadpisz plan” odwołuje własny blok, oba dni mają cały szablon; „Cofnij” w linii przywraca;
  * „Odwołaj w…” → „Jutro” zdejmuje bloki szablonu. Wieczór po 22:30 – po każdej sesji, nic nie zależy od godziny testu.
+ * „Dziś” (D546–D548): okno godzin i minionych z domyślnymi wyborami, „Anuluj”; wg planu – bloki minione jako zrealizowane (start „według
+ * planu” i koniec zrobiony w logu dnia), „Cofnij” cofa fakty i bloki; od teraz – pierwszy blok zaczyna się teraz (poza początkiem i końcem
+ * doby logicznej, gdzie test się pomija).
  */
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from '@playwright/test'
@@ -12,8 +15,9 @@ import { paths } from '../../src/shared/data/paths'
 import { templateBlockId } from '../../src/shared/engine/createDay'
 import { templateJson } from '../../src/shared/model/defaults'
 import { dayFileFrom, planBlock, type Template } from '../../src/shared/model/plan'
+import { logicalMinuteOf } from '../../src/shared/time/day'
 import { addDays } from '../../src/shared/time/zone'
-import { launch, withMainLog } from './app'
+import { launch, logicalToday, withMainLog } from './app'
 import { seedAwake } from './seedAwake'
 
 type Json = Record<string, unknown>
@@ -120,6 +124,125 @@ test('szablon: Zastosuj do jutra (pytanie, luki), bez pytania drugi raz, zakres 
       await page.getByTestId('template-revoke-tomorrow').click()
       await expect(page.getByTestId('group-line-template')).toContainText('odwołany')
       await expect.poll(() => ids(tomorrow)).toEqual(['moj'])
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+/** The events of a day's logs (every computer's file), as written. */
+const logOf = (dir: string, date: string): Json[] => {
+  const d = join(dir, 'log', date.slice(0, 4), date)
+  let names: string[] = []
+  try {
+    names = readdirSync(d).filter((n) => n.endsWith('.jsonl'))
+  } catch {
+    return []
+  }
+  return names.flatMap((n) =>
+    readFileSync(join(d, n), 'utf8')
+      .split('\n')
+      .filter((l) => l.trim())
+      .flatMap((l) => {
+        try {
+          return [JSON.parse(l) as Json]
+        } catch {
+          return []
+        }
+      })
+  )
+}
+
+test('szablon: Zastosuj do dziś – okno godzin i minionych (domyślnie wg planu i jako zrealizowane), Cofnij, potem od teraz', async () => {
+  const nowMin = () => Math.floor(logicalMinuteOf(logicalToday(), Date.now()))
+  // Both blocks gone by at the template's hours, both within the day once moved to now (and the day not changing under the test).
+  test.skip(nowMin() < 4 * 60 + 40 || nowMin() > 27 * 60 + 20, 'początek albo koniec doby logicznej')
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-template-today-'))
+  const { today } = seedAwake(dataDir, [])
+  const morning: Template = {
+    id: 'poranek',
+    name: 'Poranek',
+    // Another type than today's (an ordinary day): never the day's own template.
+    dayType: 'weekend',
+    weekdays: [6],
+    archived: false,
+    versions: [
+      {
+        from: '2026-01-01',
+        budgetMin: null,
+        maxMin: null,
+        blocks: [
+          planBlock({ id: 'r1', categoryId: 'inne', startMin: 4 * 60, durationMin: 10, name: 'Rano', origin: 'template' }),
+          planBlock({ id: 'r2', categoryId: 'inne', startMin: 4 * 60 + 15, durationMin: 10, name: 'Potem', origin: 'template' })
+        ]
+      }
+    ]
+  }
+  write(dataDir, paths.record('template', morning.id), templateJson(morning))
+  const id = (b: string) => templateBlockId(today, 'poranek', b)
+  const starts = () => {
+    const f = fileOf(dataDir, today)
+    return Object.fromEntries(f.blocks.filter((b) => !f.cancelled.includes(b.id)).map((b) => [b.id, b.startMin]))
+  }
+  const facts = () => logOf(dataDir, today).filter((e) => (e.k === 'block.start' || e.k === 'block.end') && [id('r1'), id('r2')].includes(String(e.block)))
+  const undone = () => new Set(logOf(dataDir, today).filter((e) => e.k === 'undo').map((e) => String(e.target)))
+
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-templates').click()
+      await page.getByTestId('template-item').filter({ hasText: 'Poranek' }).click()
+      await expect(page.getByTestId('template-name')).toHaveValue('Poranek')
+
+      // „Dziś” – okno z domyślnymi wyborami; „Anuluj” niczego nie zmienia.
+      await page.getByTestId('template-apply').click()
+      await page.getByTestId('template-apply-today').click()
+      const confirm = page.getByTestId('template-apply-confirm')
+      await expect(confirm).toContainText('Zastosuj „Poranek” do dziś')
+      await expect(confirm.getByTestId('template-apply-confirm-hours-plan')).toBeChecked()
+      await expect(confirm.getByTestId('template-apply-confirm-hours-now')).not.toBeChecked()
+      await expect(confirm.getByTestId('template-apply-confirm-past-done')).toBeChecked()
+      await expect(confirm.getByTestId('template-apply-confirm-past-skip')).not.toBeChecked()
+      await confirm.getByRole('button', { name: 'Anuluj' }).click()
+      await expect(confirm).toBeHidden()
+      expect(starts()[id('r1')]).toBeUndefined()
+
+      // „Zastosuj” wg planu: oba bloki w godzinach szablonu, zrealizowane – start „według planu” i koniec zrobiony w logu dnia.
+      await page.getByTestId('template-apply').click()
+      await page.getByTestId('template-apply-today').click()
+      await page.getByTestId('template-apply-confirm-ok').click()
+      await expect(page.getByTestId('group-line-template')).toContainText('dodano 2 bloki (w tym 2 zrealizowane)')
+      await expect.poll(() => starts()).toMatchObject({ [id('r1')]: 4 * 60, [id('r2')]: 4 * 60 + 15 })
+      await expect.poll(() => facts().map((e) => [e.k, e.block, e.how ?? e.done])).toEqual([
+        ['block.start', id('r1'), 'plan'],
+        ['block.end', id('r1'), true],
+        ['block.start', id('r2'), 'plan'],
+        ['block.end', id('r2'), true]
+      ])
+
+      // „Cofnij”: fakty cofnięte, bloki poza planem.
+      await page.getByTestId('group-line-template-undo').click()
+      await expect.poll(() => facts().every((e) => undone().has(String(e.id)))).toBe(true)
+      await expect.poll(() => starts()[id('r1')]).toBeUndefined()
+
+      // Od teraz: pierwszy blok zaczyna się teraz, drugi 15 min po nim; nic minionego, nic nowego w logu.
+      await page.getByTestId('template-apply').click()
+      await page.getByTestId('template-apply-today').click()
+      await page.getByTestId('template-apply-confirm-hours-now').check()
+      const before = nowMin()
+      await page.getByTestId('template-apply-confirm-ok').click()
+      await expect(page.getByTestId('group-line-template')).toContainText('dodano 2 bloki')
+      await expect(page.getByTestId('group-line-template')).not.toContainText('zrealizowan')
+      const after = nowMin()
+      await expect.poll(() => starts()[id('r1')]).toBeDefined()
+      const r1 = starts()[id('r1')]!
+      expect(r1).toBeGreaterThanOrEqual(before)
+      expect(r1).toBeLessThanOrEqual(after)
+      expect(starts()[id('r2')]).toBe(r1 + 15)
+      expect(facts()).toHaveLength(4)
     })
     expect(errors).toEqual([])
   } finally {

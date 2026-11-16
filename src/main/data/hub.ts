@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { AddLinkResult, AttachPrepared, AttachResult, AttachmentOpen, CaseDays, CloseResult, GroupLogResult, GroupLogUndone, QuickAddResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
+import type { AddLinkResult, AttachPrepared, AttachResult, AttachmentOpen, CaseDays, CloseResult, GroupLogResult, GroupLogUndone, QuickAddResult, TemplateApplyResult, TemplateDoneAsk, TemplateUndoAsk, TemplateUndoJudged, TemplateUndoResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import { blockFactsOf, type CasesRitual } from '@shared/engine/cases'
 import { newId } from '@shared/model/ids'
@@ -47,7 +47,7 @@ import { seriesFrom } from '@shared/model/series'
 import { templateBlockAlive, templateFrom } from '@shared/model/plan'
 import { BEHIND_QUESTION, type Outcome, type QueuedEdit } from './editQueue'
 import type { DayRead } from './eventLog'
-import { UnknownRecordError, type DataFolder, type TimerClick } from './folder'
+import { UnknownRecordError, type DataFolder, type EditIn, type TimerClick } from './folder'
 import { nodeFs, type DataFs } from './fsio'
 import { historyKey } from './records'
 import { seriesAnswer, seriesChange, seriesCreate, seriesEnd, seriesRemove, seriesUndo, type SeriesIo } from './series'
@@ -186,6 +186,19 @@ export function within(dir: string, root: string): boolean {
   const r = relative(resolve(root), resolve(dir))
   return r === '' || (r !== '..' && !r.startsWith(`..${sep}`) && !isAbsolute(r))
 }
+
+/** The edits a window sent, as the queue takes them: only records a window may edit, every field path a list of strings. */
+function cleanEntries(entries: readonly EditEntry[]): EditIn[] {
+  return entries.map((e) => {
+    const c = classify(e.rel)
+    if (!c || c.conflict || c.kind === 'log' || c.kind === 'presence' || c.kind === 'grades') throw new Error(`nie można edytować ${e.rel}`)
+    const after = Array.isArray(e.after) ? e.after.filter((i): i is number => Number.isInteger(i)) : []
+    return { rel: c.canonical, edits: e.edits.map((x) => ({ path: x.path.map(String), base: x.base, value: x.value })), create: e.create === true, remove: e.remove === true, ...(e.remove === true && e.base !== undefined ? { base: e.base } : {}), ...(after.length ? { after } : {}) }
+  })
+}
+
+/** What became of an edit, as a window reads it. */
+const outcomeOut = (o: Outcome & { routineCostKept?: true }): EditOutcome => ({ status: o.status, ...(o.status === 'waiting' ? { why: o.why } : {}), ...(o.routineCostKept ? { routineCostKept: true as const } : {}) })
 
 export class DataHub {
   status: DataView['status'] = 'none'
@@ -1001,16 +1014,31 @@ export class DataHub {
   }
 
   async edit(entries: EditEntry[]): Promise<EditOutcome[]> {
-    const f = this.need()
-    const clean = entries.map((e) => {
-      const c = classify(e.rel)
-      if (!c || c.conflict || c.kind === 'log' || c.kind === 'presence' || c.kind === 'grades') throw new Error(`nie można edytować ${e.rel}`)
-      const after = Array.isArray(e.after) ? e.after.filter((i): i is number => Number.isInteger(i)) : []
-      return { rel: c.canonical, edits: e.edits.map((x) => ({ path: x.path.map(String), base: x.base, value: x.value })), create: e.create === true, remove: e.remove === true, ...(e.remove === true && e.base !== undefined ? { base: e.base } : {}), ...(after.length ? { after } : {}) }
-    })
-    const out = await f.edit(clean)
+    const out = await this.need().edit(cleanEntries(entries))
     this.changed()
-    return out.map((o) => ({ status: o.status, ...(o.status === 'waiting' ? { why: o.why } : {}), ...(o.routineCostKept ? { routineCostKept: true as const } : {}) }))
+    return out.map(outcomeOut)
+  }
+
+  /** „Zastosuj szablon” in one step (D547): the facts of the blocks gone by and the edit of the days' files. */
+  async applyTemplateDays(entries: EditEntry[], asks: TemplateDoneAsk[]): Promise<TemplateApplyResult> {
+    const r = await this.need().applyTemplateDays(cleanEntries(entries), asks)
+    this.changed()
+    void this.service?.tick()
+    return { outcomes: r.outcomes.map(outcomeOut), facts: r.facts }
+  }
+
+  /** Whether „Cofnij” of „Zastosuj” may take its facts back (the blocks changed since stay). */
+  judgeTemplateUndo(asks: Array<{ day: string; written: string[] }>): Promise<TemplateUndoJudged> {
+    return this.need().judgeTemplateUndo(asks)
+  }
+
+  /** „Cofnij” of „Zastosuj” in one step: files, then facts. */
+  async undoTemplateDays(entries: EditEntry[], asks: TemplateUndoAsk[], kept: Array<{ day: string; blocks: string[] }>): Promise<TemplateUndoResult> {
+    const r = await this.need().undoTemplateDays(cleanEntries(entries), asks, kept)
+    this.changed()
+    if (!r.ok) return r
+    void this.service?.tick()
+    return { ...r, outcomes: r.outcomes.map(outcomeOut) }
   }
 
   async events(drafts: EventIn[]): Promise<void> {

@@ -3,19 +3,22 @@
  * month (`MonthGrid`: a click – that day, Ctrl+click – one more or one less, Shift+click – the range from the last one, a drag – a range)
  * with the fields „Od” and „Do” (DD-MM-RRRR; eight digits become a date at once – `typedDmy`). „Zastosuj” on days without blocks of the
  * template whose blocks collide with the plan asks once: „Uzupełnij luki” or „Nadpisz plan” (D541); days with blocks of the template
- * fill the gaps without asking.
+ * fill the gaps without asking. With today or a day gone by among the days the window „Zastosuj „…” do dziś” comes first (D546): the
+ * hours of today („Wg planu” / „W czasie rzeczywistym – od teraz”, only with today) and the blocks gone by („Dodaj jako zrealizowane” /
+ * „Nie dodawaj minionych”), both at their first choice at each opening; the question of collisions is then asked at the hours chosen.
  */
 import { useRef, useState } from 'react'
 import { daysFromTo, dmy, parseDmy, typedDmy } from '@shared/dateInput'
 import { countLabel, plDate } from '@shared/format'
 import type { Template } from '@shared/model/plan'
+import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { ContextMenu, menuPoint } from '../../components/ContextMenu'
 import { Dialog } from '../../components/Dialog'
 import { useBusy } from '../../lib/busy'
 import { toast } from '../../store/ui'
 import { MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from '../calendar/MonthGrid'
-import { APPLY_DAYS_MAX, applyToDays, askedDays, revokeInDays } from './applyDays'
+import { APPLY_DAYS_MAX, applyToDays, askedDays, asksTiming, DEFAULT_CHOICE, revokeInDays, timingTitle, type ApplyChoice } from './applyDays'
 
 type Kind = 'apply' | 'revoke'
 
@@ -25,11 +28,27 @@ export function TemplateDaysButton({ template, today, kind }: { template: Templa
   const button = useRef<HTMLButtonElement>(null)
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const [picking, setPicking] = useState(false)
-  const [asking, setAsking] = useState<{ dates: string[]; asked: string[] } | null>(null)
+  // The days of the window of today's hours and the day that was today when it opened (D546) – the engine takes it at the same click.
+  const [timing, setTiming] = useState<{ dates: string[]; today: string } | null>(null)
+  const [asking, setAsking] = useState<{ dates: string[]; asked: string[]; choice: ApplyChoice } | null>(null)
   const [busy, run] = useBusy()
   const tomorrow = addDays(today, 1)
 
-  /** The chosen days: „Odwołaj” at once, „Zastosuj” after the question when a day asks it. True – done (or nothing to do), the window may close. */
+  /** „Zastosuj” at the hours chosen: after the question when a day asks it (D541). True – done (or nothing to do), the window may close. */
+  const apply = async (list: string[], choice: ApplyChoice) => {
+    const asked = await askedDays(template, list, choice)
+    if (asked.length) {
+      setAsking({ dates: list, asked, choice })
+      return true
+    }
+    return applyToDays(template, list, 'fill', choice)
+  }
+
+  /**
+   * The chosen days: „Odwołaj” at once, „Zastosuj” – with today or a day gone by among them after the window of their hours (D546). Today
+   * is the logical day of the click (as the engine takes it – `timingAt`), not the one the page was drawn with: after 04:00 they agree.
+   * True – done (or nothing to do), the window may close.
+   */
   const go = (dates: readonly string[]) =>
     run(async () => {
       const list = [...new Set(dates)].sort()
@@ -40,17 +59,18 @@ export function TemplateDaysButton({ template, today, kind }: { template: Templa
       }
       // A day that cannot be read is said by the save (`plannedDay` never throws); the save says its own failures.
       if (kind === 'revoke') return revokeInDays(template, list)
-      const asked = await askedDays(template, list)
-      if (asked.length) {
-        setAsking({ dates: list, asked })
+      const now = logicalDayOf(Date.now())
+      if (asksTiming(list, now)) {
+        setTiming({ dates: list, today: now })
         return true
       }
-      return applyToDays(template, list, 'fill')
+      return apply(list, DEFAULT_CHOICE)
     })
 
+  /** „Dziś” and „Jutro” of the click's logical day (the menu's words are of the page). */
   const items = [
-    { label: `Dziś (${plDate(today)})`, onPick: () => void go([today]), testId: `template-${kind}-today` },
-    { label: `Jutro (${plDate(tomorrow)})`, onPick: () => void go([tomorrow]), testId: `template-${kind}-tomorrow` },
+    { label: `Dziś (${plDate(today)})`, onPick: () => void go([logicalDayOf(Date.now())]), testId: `template-${kind}-today` },
+    { label: `Jutro (${plDate(tomorrow)})`, onPick: () => void go([addDays(logicalDayOf(Date.now()), 1)]), testId: `template-${kind}-tomorrow` },
     { label: 'Wybierz dni…', onPick: () => setPicking(true), testId: `template-${kind}-pick` }
   ]
   const verb = kind === 'apply' ? 'Zastosuj' : 'Odwołaj'
@@ -83,6 +103,20 @@ export function TemplateDaysButton({ template, today, kind }: { template: Templa
           testId={`template-${kind}-days`}
         />
       )}
+      {timing && (
+        <TimingDialog
+          name={template.name}
+          dates={timing.dates}
+          today={timing.today}
+          busy={busy}
+          onClose={() => setTiming(null)}
+          onPick={(choice) =>
+            void run(async () => {
+              if (await apply(timing.dates, choice)) setTiming(null)
+            })
+          }
+        />
+      )}
       {asking && (
         <ModeDialog
           name={template.name}
@@ -92,12 +126,80 @@ export function TemplateDaysButton({ template, today, kind }: { template: Templa
           onClose={() => setAsking(null)}
           onPick={(mode) =>
             void run(async () => {
-              if (await applyToDays(template, asking.dates, mode)) setAsking(null)
+              if (await applyToDays(template, asking.dates, mode, asking.choice)) setAsking(null)
             })
           }
         />
       )}
     </>
+  )
+}
+
+/** One option of a group of the window of today's hours: a radio with its words and, below them, what it does. */
+function Option({ name, checked, onPick, label, hint, testId }: { name: string; checked: boolean; onPick: () => void; label: string; hint?: string; testId: string }) {
+  return (
+    <label className="flex cursor-pointer items-start gap-2 text-[13px]">
+      <input type="radio" name={name} className="mt-[3px]" checked={checked} onChange={onPick} data-testid={testId} />
+      <span>
+        {label}
+        {hint && <span className="block text-[12px] text-muted">{hint}</span>}
+      </span>
+    </label>
+  )
+}
+
+/**
+ * „Zastosuj „…” do dziś” (D546): with today or a day gone by among the chosen days, before the question of collisions – the hours of today
+ * (only with today) and the blocks gone by; each opening starts at „Wg planu” and „Dodaj jako zrealizowane”.
+ */
+function TimingDialog({ name, dates, today, busy, onClose, onPick }: { name: string; dates: readonly string[]; today: string; busy: boolean; onClose: () => void; onPick: (choice: ApplyChoice) => void }) {
+  const [hours, setHours] = useState<ApplyChoice['hours']>(DEFAULT_CHOICE.hours)
+  const [past, setPast] = useState<ApplyChoice['past']>(DEFAULT_CHOICE.past)
+  const withToday = dates.includes(today)
+  return (
+    <Dialog
+      title={timingTitle(name, dates, today)}
+      // While it saves, neither Esc nor the backdrop closes it – the save says what became of it.
+      onClose={() => !busy && onClose()}
+      data-testid="template-apply-confirm"
+      actions={
+        <>
+          <button type="button" className="btn" disabled={busy} onClick={onClose} data-testid="template-apply-confirm-cancel">
+            Anuluj
+          </button>
+          <button type="button" className="btn btn-accent" disabled={busy} onClick={() => onPick({ hours, past })} data-testid="template-apply-confirm-ok">
+            Zastosuj
+          </button>
+        </>
+      }
+    >
+      {withToday && (
+        <fieldset className="flex flex-col gap-1.5" data-testid="template-apply-confirm-hours">
+          <legend className="mb-1 text-[12.5px] text-muted">Godziny dziś</legend>
+          <Option name="template-apply-hours" checked={hours === 'plan'} onPick={() => setHours('plan')} label="Wg planu – godziny szablonu" testId="template-apply-confirm-hours-plan" />
+          <Option
+            name="template-apply-hours"
+            checked={hours === 'now'}
+            onPick={() => setHours('now')}
+            label="W czasie rzeczywistym – od teraz"
+            hint="Pierwszy blok elastyczny zaczyna się teraz, pozostałe zachowują odstępy; sesje, wykłady, zajęcia i bloki stałe zostają."
+            testId="template-apply-confirm-hours-now"
+          />
+        </fieldset>
+      )}
+      <fieldset className="flex flex-col gap-1.5" data-testid="template-apply-confirm-past">
+        <legend className="mb-1 text-[12.5px] text-muted">Minione bloki</legend>
+        <Option
+          name="template-apply-past"
+          checked={past === 'done'}
+          onPick={() => setPast('done')}
+          label="Dodaj jako zrealizowane"
+          hint="Liczą się jak zrobione; pomijam te, w których czasie coś trwało."
+          testId="template-apply-confirm-past-done"
+        />
+        <Option name="template-apply-past" checked={past === 'skip'} onPick={() => setPast('skip')} label="Nie dodawaj minionych" testId="template-apply-confirm-past-skip" />
+      </fieldset>
+    </Dialog>
   )
 }
 
@@ -108,11 +210,11 @@ function ModeDialog({ name, asked, total, busy, onClose, onPick }: { name: strin
   return (
     <Dialog
       title={`Bloki „${name}” kolidują z planem`}
-      onClose={onClose}
+      onClose={() => !busy && onClose()}
       data-testid="template-apply-mode"
       actions={
         <>
-          <button type="button" className="btn" onClick={onClose}>
+          <button type="button" className="btn" disabled={busy} onClick={onClose} data-testid="template-apply-mode-cancel">
             Anuluj
           </button>
           <button type="button" className="btn" disabled={busy} onClick={() => onPick('overwrite')} data-testid="template-apply-overwrite">
