@@ -257,7 +257,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] ZG6 Zaznaczanie bloków na osi „Dziś” i w „Szablonach”: Ctrl bez ruchu zaznacza, z ruchem kopiuje (1.28.0)
    - [ ] ZG7 „Tydzień” i „3 dni”: Ctrl+klik zaznacza bez otwierania dnia, Shift+klik przez dni (1.28.0)
    - [ ] ZG8 Del na zaznaczeniu ≥ 2 – jedno pytanie „Usunąć N …?” (1.28.0)
-   <!-- ZG9 Menu bloków – działania i ZG10 Przeciąganie grupy bloków: dopisze główna sesja po Z4-B i Z6 -->
+   - [ ] ZG9 Menu bloków – działania w „Dziś”, „Szablonach” i „Tygodniu”, pomijanie i „Cofnij” (1.28.0)
+   - [ ] ZG10 Przeciąganie grupy bloków o ten sam czas i dni; z Ctrl – kopia grupy (1.28.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -2847,7 +2848,19 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Oczekiwany efekt:** jedno pytanie „Usunąć 3 sprawy?” albo „Usunąć 3 bloki?” (Enter usuwa, Esc anuluje); sprawy znikają jedną zmianą z linią „Usunięto 3 sprawy · Cofnij”; przy jednym zaznaczonym elemencie pytanie jak dotąd o ten jeden; z fokusem na elemencie spoza zaznaczenia – Del dotyczy tylko jego; w polu tekstowym Del kasuje tekst.
 - **Nie przechodzi, gdy:** pytanie wraca dla każdego elementu osobno; Del w polu usuwa zaznaczone; Esc usuwa.
 
-<!-- ZG9 Menu bloków – działania (Z4-B) i ZG10 Przeciąganie grupy bloków (Z6): dopisze główna sesja po scaleniu -->
+#### ZG9 Menu bloków – działania, pomijanie i „Cofnij” (D528, D529)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/group-run.test.ts`, `tests/web/group-days.test.ts`, `tests/web/group-actions.test.ts`, `tests/unit/engine/group-edit.test.ts`, `tests/fs/group-edit.test.ts`, `tests/e2e/group-select.spec.ts` (menu na osi jutra i w „Tygodniu”). Ty: rzut oka, a odwołanie i parkowanie – na dzisiejszym planie.
+- **Jak sprawdzić:** w „Dziś” zaznacz cztery bloki, w tym jeden zaczęty; prawy przycisk → „Podkategoria” → inna; potem „Cofnij” w linii. Zaznacz dwa niezaczęte bloki → „Przesuń o…” → „później 15 min”. Zaznacz dwa bloki → „Przenieś na dzień…” → jutro. Zaznacz dwa bloki dziś → „Zaparkuj”, potem „Cofnij”. W „Tygodniu” zaznacz bloki w trzech dniach → „Wariant” → inny → „Cofnij”. W „Szablonach” zaznacz dwa bloki wersji → „Koszt…”.
+- **Oczekiwany efekt:** linia „Zmieniono 3 bloki · pominięto 1: zaczęty · Cofnij” (z „najniższa energia A → B”, gdy energia dnia się zmieniła); „Cofnij” przywraca tylko podkategorię, inne pola zostają. Przesunięcie: bloki o 15 min później, kolejne rozsunięte, w linii „przesunięto N bloków”. Przeniesienie: bloki na jutro o tych samych godzinach, jutro rozsunięte. Parkowanie: bloki zaparkowane, „Cofnij” przywraca je do planu. „Tydzień”: trzy dni zmienione jedną zmianą, jedno „Cofnij” przywraca wszystkie. Pozycja, której żaden blok nie przyjmie (np. „Zaparkuj” dla bloków jutra), jest wyłączona z powodem w podpowiedzi. Blok serii zmienia się tylko tego dnia („bloki serii – tylko te dni”).
+- **Nie przechodzi, gdy:** zaczęty blok zmienia podkategorię mimo pominięcia; „Cofnij” przywraca też pola zmienione po drodze ręcznie; zmiana w kilku dniach wymaga kilku „Cofnij”; blok serii zmienia się w całej serii.
+
+#### ZG10 Przeciąganie grupy bloków; z Ctrl – kopia grupy (D531)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/group-drag.test.ts`, `tests/web/group-drag.test.ts`, `tests/e2e/group-select.spec.ts` (oś jutra +1 h, „Tydzień” na inny dzień), `tests/e2e/copy.spec.ts`, `tests/e2e/week.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” (jutro) zaznacz dwa bloki Ctrl+klikiem i przeciągnij jeden z nich o godzinę; powtórz z Ctrl; zacznij przeciągać i naciśnij Esc. W „Tygodniu” zaznacz bloki z poniedziałku i przeciągnij jeden na środę; w zaznaczeniu zostaw też blok zaczęty albo z dnia minionego. W „Szablonach” przeciągnij dwa zaznaczone bloki.
+- **Oczekiwany efekt:** w trakcie wszystkie zaznaczone stoją na nowych miejscach (oś – przerywane obwódki, „Tydzień” – pasma); po puszczeniu jadą o ten sam czas i dni, kolejne bloki się rozsuwają, linia „Przeniesiono 2 bloki · Cofnij”, jedno „Cofnij” przywraca wszystkie dni. Z Ctrl oryginały zostają, a w miejscu upuszczenia stają kopie („Skopiowano 2 bloki”). Esc odwołuje bez zmian i zostawia zaznaczenie. Blok zaczęty albo z dnia minionego zostaje na miejscu i jest policzony („1 został – już trwa”). Pojedyncze przeciąganie niezaznaczonego bloku działa jak dotąd.
+- **Nie przechodzi, gdy:** jedzie tylko chwycony blok; kopia rusza oryginały; zapisana godzina różni się od pokazanej po upuszczeniu; Esc zostawia zmianę albo czyści zaznaczenie.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
