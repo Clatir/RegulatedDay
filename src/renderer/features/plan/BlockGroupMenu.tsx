@@ -1,10 +1,10 @@
 /**
  * The menu „Zmień 4 bloki” of the right button (D528) and the two windows it opens: the cost of the blocks („Koszt…” – the four numbers of the tile's
  * window, with „Jak podkategoria”) and the day to move them to („Przenieś na dzień…”). The entries are `blockMenu` (pure); every pick goes to
- * `runGroupAction`. One component for the axes of „Dziś” and „Szablony” and the columns of „Tydzień” and „3 dni”: the screen says which blocks the
+ * `runBlockGroup`. One component for the axes of „Dziś” and „Szablony” and the columns of „Tydzień” and „3 dni”: the screen says which blocks the
  * ids are (`blocksOf`) and what to choose from (`ctx`).
  */
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { groupCount } from '@shared/groupText'
 import { addDays } from '@shared/time/zone'
 import { COST_MAX, COST_MIN, costNumber, costStep } from '@shared/model/blockCosts'
@@ -14,7 +14,8 @@ import { Dialog } from '../../components/Dialog'
 import { DateField } from '../../components/fields'
 import type { GroupView } from '../../store/groupLine'
 import { POOL_COLOR, POOL_NAME } from './energyDraw'
-import { blockMenu, blockMenuTitle, runGroupAction, type MenuBlock, type MenuCtx } from './groupMenu'
+import { blockMenu, blockMenuTitle, type GroupWhere, type MenuBlock, type MenuCtx } from './groupMenu'
+import { runBlockGroup } from './groupRun'
 
 type Window = { kind: 'cost' | 'move'; ids: string[] }
 
@@ -25,7 +26,8 @@ export function BlockGroupMenu({
   blocksOf,
   ctx,
   today,
-  moveFrom
+  moveFrom,
+  where
 }: {
   view: GroupView
   menu: { ids: readonly string[]; at: { x: number; y: number } } | null
@@ -36,9 +38,27 @@ export function BlockGroupMenu({
   today: string
   /** The day of the blocks (the one the window of „Przenieś na dzień…” starts from the day after) – none in „Tydzień”. */
   moveFrom?: string
+  /** Where the blocks are (the day of „Dziś”, the version of a template) – none in „Tydzień” (the keys say it). */
+  where?: GroupWhere
 }) {
   const [window, setWindow] = useState<Window | null>(null)
   const blocks = window ? blocksOf(window.ids) : []
+  // The entries counted for the menu opened (the engine's verdicts of the selection – one pass, T1720) and again only when what they come from
+  // changes: the day or the template's version (`where`), the view, the view's data (`ctx` – its `judge` holds the model) and the blocks
+  // (`blocksOf`); the screens keep those stable between their renders.
+  const whereKey = where == null ? '' : 'date' in where ? where.date : `${where.templateId}|${where.from}`
+  const items = useMemo(
+    () =>
+      menu
+        ? blockMenu(blocksOf(menu.ids), ctx, {
+            action: (a) => void runBlockGroup(view, menu.ids, a, where),
+            cost: () => setWindow({ kind: 'cost', ids: [...menu.ids] }),
+            moveTo: () => setWindow({ kind: 'move', ids: [...menu.ids] })
+          })
+        : [],
+    // `where` by its value (`whereKey`): a screen may make the object anew at a render.
+    [menu, view, whereKey, ctx, blocksOf]
+  )
   return (
     <>
       {menu && (
@@ -47,11 +67,7 @@ export function BlockGroupMenu({
           at={menu.at}
           onClose={onClose}
           testId="block-menu"
-          items={blockMenu(blocksOf(menu.ids), ctx, {
-            action: (a) => void runGroupAction(view, menu.ids, a),
-            cost: () => setWindow({ kind: 'cost', ids: [...menu.ids] }),
-            moveTo: () => setWindow({ kind: 'move', ids: [...menu.ids] })
-          })}
+          items={items}
         />
       )}
       {window?.kind === 'cost' && (
@@ -61,7 +77,7 @@ export function BlockGroupMenu({
           onClose={() => setWindow(null)}
           onApply={(costs) => {
             setWindow(null)
-            void runGroupAction(view, window.ids, { kind: 'cost', costs })
+            void runBlockGroup(view, window.ids, { kind: 'cost', costs }, where)
           }}
         />
       )}
@@ -73,7 +89,7 @@ export function BlockGroupMenu({
           onClose={() => setWindow(null)}
           onMove={(date) => {
             setWindow(null)
-            void runGroupAction(view, window.ids, { kind: 'moveTo', date })
+            void runBlockGroup(view, window.ids, { kind: 'moveTo', date }, where)
           }}
         />
       )}

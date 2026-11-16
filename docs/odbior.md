@@ -249,6 +249,15 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] CI3 Check-in: dwa pytania o ciało, ciało w wyniku (1.27.0)
    - [ ] CI4 „Dziś”: czwarty pas „C”; ocena względna w pasku z „ciało”, bez sygnału ciała (1.27.0)
    - [ ] CI5 Drzemka po aktualizacji ma ciało −3, Twoja podkategoria ciało 0 (1.27.0)
+   - [ ] ZG1 Zaznaczanie spraw: Ctrl+klik, Shift+klik, Ctrl+A, Esc i napis „Zaznaczone: N · czas · energia” (1.28.0)
+   - [ ] ZG2 Menu spraw „Zmień N spraw” i linia „… · Cofnij” (1.28.0)
+   - [ ] ZG3 „Zaplanuj…” grupy spraw z oknem „Od której?” (1.28.0)
+   - [ ] ZG4 Przeciągnięcie zaznaczonych spraw z panelu na oś; z Ctrl – kopie (1.28.0)
+   - [ ] ZG5 Kalendarz: Ctrl+klik, Shift+klik, menu „Zmień N dni”, linia z „Cofnij” (1.28.0)
+   - [ ] ZG6 Zaznaczanie bloków na osi „Dziś” i w „Szablonach”: Ctrl bez ruchu zaznacza, z ruchem kopiuje (1.28.0)
+   - [ ] ZG7 „Tydzień” i „3 dni”: Ctrl+klik zaznacza bez otwierania dnia, Shift+klik przez dni (1.28.0)
+   - [ ] ZG8 Del na zaznaczeniu ≥ 2 – jedno pytanie „Usunąć N …?” (1.28.0)
+   <!-- ZG9 Menu bloków – działania i ZG10 Przeciąganie grupy bloków: dopisze główna sesja po Z4-B i Z6 -->
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -2779,6 +2788,66 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** na tym komputerze (1.25) zmień koszt rutyny przy zaczętym bloku; drugi komputer ma jeszcze 1.24.
 - **Oczekiwany efekt:** drugi komputer proponuje instalację nowej wersji; jego dane się nie psują.
 - **Nie przechodzi, gdy:** błąd na drugim komputerze albo utrata kosztu rutyny.
+
+### ZG – zaznaczanie grupowe i zmiany grupowe (1.28.0, D527–D531)
+
+#### ZG1 Zaznaczanie spraw (D527)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/selection.test.ts`, `tests/web/use-selection.test.ts`, `tests/web/cases-select.test.ts` (strona „Sprawy” i panel przy osi), `tests/e2e/cases.spec.ts` (Ctrl+klik dwóch spraw). Ty: rzut oka.
+- **Jak sprawdzić:** w „Sprawach” dodaj pięć zadań do „Skrzynki” (A–E). Ctrl+klik A i C, potem Shift+klik E; klik B; Ctrl+A; Esc. Ctrl+klik spraw z różnych list. To samo w panelu „Sprawy” przy osi „Dziś”.
+- **Oczekiwany efekt:** Ctrl+klik A i C, Shift+klik E zaznacza A, C, D, E (obwódka); klik B – tylko B; Ctrl+A zaznacza całą listę, w której jest ostatnio kliknięta sprawa; Shift+klik daje zakres tylko w obrębie jednej listy, Ctrl+klik łączy sprawy z różnych list; Esc czyści zaznaczenie. Przy dwóch i więcej nad listami stoi „Zaznaczone: 4 · 3 h 20 min · energia −18 G · −6 E · −4 B · −2 C” (liczba, szacunki, koszt w punktach czterech pul; zużycie z minusem, regeneracja z plusem). Klik w pole sprawy (tytuł, szacunek, przyciski) nie zmienia zaznaczenia; zmiana widoku („Macierz” i z powrotem) je czyści.
+- **Nie przechodzi, gdy:** Shift+klik gubi A albo zaznacza przez kilka list; Ctrl+A zaznacza wszystkie listy naraz; napis stoi przy jednej sprawie albo nie ma części „energia”; Esc nie czyści.
+
+#### ZG2 Menu spraw „Zmień N spraw” i linia z „Cofnij” (D528, D529)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/cases-select.test.ts`, `tests/web/cases-group.test.ts`, `tests/unit/engine/cases-group.test.ts`, `tests/fs/cases-group.test.ts`, `tests/web/context-menu.test.ts`, `tests/web/group-line.test.ts`, `tests/e2e/cases.spec.ts` (przeniesienie na „Dziś”). Ty: rzut oka.
+- **Jak sprawdzić:** zaznacz trzy sprawy w „Skrzynce” (dwa zadania i prośbę), prawy przycisk (albo Shift+F10 / klawisz menu na wierszu z fokusem) → „Przenieś na listę” → „Dziś”; potem „Kategoria” (podkategoria z listy), „Szacunek” (wpisz 1:30 i Enter), „Zrobione” i „Przywróć”; w linii kliknij „Cofnij”.
+- **Oczekiwany efekt:** menu „Zmień 3 sprawy” jest oknem aplikacji (nie systemowym); ✓ przy liście, na której są wszystkie, „—” przy tej, na której jest część; pozycja, która nie pasuje do żadnej, jest wyłączona z podpowiedzią. Po zmianie nad listą stoi „Przeniesiono 3 sprawy · Cofnij” (15 min; kolejna zmiana zastępuje linię); kategoria z prośbą w zaznaczeniu daje „Zmieniono 2 sprawy · pominięto 1: prośba”. „Cofnij” przywraca tylko zmienione pola wszystkich naraz; sprawa zmieniona od tego czasu zostaje, jaka jest, z komunikatem „… zmienione od tego czasu – zostały”. Prawy przycisk na niezaznaczonej zaznacza tylko ją; w polu tekstowym nie otwiera menu aplikacji; Esc zamyka menu.
+- **Nie przechodzi, gdy:** otwiera się menu systemowe; zmiana nie pokazuje linii z „Cofnij”; „Cofnij” nadpisuje sprawę zmienioną w międzyczasie albo cofa pola, których nie zmieniono; prośba dostaje kategorię.
+
+#### ZG3 „Zaplanuj…” grupy spraw (D530)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/cases-select.test.ts` (okno „Od której?”), `tests/web/cases-group.test.ts`, `tests/fs/cases-group.test.ts`, `tests/e2e/cases.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** zaznacz trzy sprawy z szacunkami 30, 15 i 30 min, prawy przycisk → „Zaplanuj…”; w oknie „Od której?” zostaw dzień (dziś), wpisz 14:00 i naciśnij Enter. Potem w „Dziś” kliknij „Cofnij” w linii.
+- **Oczekiwany efekt:** okno ma dzień (domyślnie dziś) i godzinę podpowiedzianą jako początek najbliższego wolnego miejsca od teraz; bloki stają o 14:00, 14:30 i 14:45 w kolejności listy, a kolejne bloki dnia są rozsunięte (D367); linia „Zaplanowano 3 sprawy · Cofnij” (z „najniższa energia 52 → 44”, gdy dzień ma prognozę energii i zmiana ją zmienia). „Cofnij” zdejmuje wszystkie bloki jednym ruchem, sprawy wracają na listy. Zrobione sprawy się nie planują (przy samych zrobionych pozycja jest wyłączona).
+- **Nie przechodzi, gdy:** bloki nakładają się albo stoją w innej kolejności niż lista; „Cofnij” zostawia część bloków; klik „Zaplanuj” gubi wpisaną godzinę.
+
+#### ZG4 Przeciągnięcie zaznaczonych spraw z panelu na oś (D530)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/cases-select.test.ts` (panel, duch), `tests/web/cases-group.test.ts` (upuszczenie grupy, z Ctrl), `tests/fs/cases-group.test.ts`, `tests/e2e/copy.spec.ts` (jedna sprawa z Ctrl). Ty: rzut oka.
+- **Jak sprawdzić:** w panelu „Sprawy” przy osi „Dziś” zaznacz trzy sprawy (Ctrl+klik) i przeciągnij jedną z nich na oś (np. 10:00). Powtórz z Ctrl wciśniętym przy puszczeniu. Potem przeciągnij sprawę niezaznaczoną.
+- **Oczekiwany efekt:** duch mówi „3 sprawy” (z Ctrl „+ 3 sprawy”); pierwsza sprawa stoi w miejscu upuszczenia, kolejne zaraz za nią w kolejności listy; linia „Zaplanowano 3 sprawy · Cofnij”. Z Ctrl powstają kopie (linia „Skopiowano 3 sprawy”), a oryginały zostają na listach. Niezaznaczona (albo jedna zaznaczona) sprawa leci sama, jak dotąd.
+- **Nie przechodzi, gdy:** z zaznaczenia leci tylko jedna sprawa; z Ctrl oryginały znikają z list; bloki stają w jednym miejscu.
+
+#### ZG5 Kalendarz: zaznaczanie dni i zmiany grupowe (D527–D529)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/calendar-selection.test.ts`, `tests/web/day-undo.test.ts`, `tests/fs/window-edits.test.ts` (pobudka grupy), `tests/e2e/group-select.spec.ts` („Kalendarz”). Ty: rzut oka.
+- **Jak sprawdzić:** „Kalendarz” → następny miesiąc: Ctrl+klik 7., Shift+klik 13., prawy przycisk → „Typ dnia” → „Wolne”; w linii „Cofnij”. Potem zaznacz kilka dni, w menu wpisz „Pobudka” (7:30, Enter). Spróbuj Shift+strzałek, Ctrl+A, Esc, zwykłego kliknięcia dnia i zmiany miesiąca z zaznaczeniem.
+- **Oczekiwany efekt:** siedem dni z obwódką, w pasku działań „Zaznaczone dni: 7”; menu „Zmień 7 dni” z ✓ / „—” przy typie; po zmianie linia „Zmieniono 7 dni · Cofnij” (minione i dzisiejszy pominięte: „· pominięto 2: miniony, dzisiejszy”). „Cofnij” przywraca typ wszystkich naraz; dzień zmieniony od tego czasu zostaje z komunikatem. Shift+← → rozszerza o dzień, Shift+↑ ↓ o tydzień, Ctrl+A zaznacza dni pokazanego miesiąca, Esc czyści; zwykły klik otwiera dzień jak dotąd i nie rusza zaznaczenia; zaznaczenie przeżywa zmianę miesiąca. Pasek działań działa jak dotąd.
+- **Nie przechodzi, gdy:** zwykły klik zmienia zaznaczenie; linia stoi przy zmianie jednego dnia; „Cofnij” cofa dzień zmieniony w międzyczasie; zakres Shift gubi dni między miesiącami.
+
+#### ZG6 Zaznaczanie bloków na osi „Dziś” i w „Szablonach” (D527, D528)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/axis-select.test.ts`, `tests/web/group-menu.test.ts`, `tests/web/use-selection.test.ts`, `tests/web/timeline-copy.test.ts`, `tests/e2e/group-select.spec.ts` (oś), `tests/e2e/copy.spec.ts`. Ty: rzut oka (menu: pozycje, a działania – ZG9).
+- **Jak sprawdzić:** w „Dziś” (albo na jutrzejszym planie) miej pięć bloków A–E. Ctrl+klik A i C, Shift+klik E; klik B; Esc; Ctrl+klik dwóch bloków; Ctrl+przeciągnięcie bloku; prawy przycisk na zaznaczonym; Ctrl+A; Shift+strzałki. To samo na osi w „Szablonach”.
+- **Oczekiwany efekt:** A, C, D, E mają obwódkę i nad osią stoi „Zaznaczone: 4 · 2 h · energia …”; klik B zaznacza tylko B i otwiera jego panel; Esc zamyka panel i zdejmuje zaznaczenie jednego bloku (drugi Esc trafia do okna jak dawniej); grupa dwóch i więcej zostaje po zamknięciu panelu, Esc ją czyści. Ctrl+klik bez ruchu tylko zaznacza (nie kopiuje i nie otwiera panelu), a Ctrl+przeciągnięcie (4 px i więcej) kopiuje jak dotąd (D513). Prawy przycisk (albo Shift+F10) na zaznaczonym otwiera „Zmień N bloków” – podkategoria i wariant z ✓ / „—”, koszt, rutyna, „Przesuń o…”, „Przenieś na dzień…”, odwołaj, zaparkuj, usuń (w „Szablonach” bez trzech ostatnich działań dnia; wyłączone z podpowiedzią, gdy nie pasują do żadnego); na niezaznaczonym – tylko ten blok; Esc zamyka menu. Ctrl+A zaznacza bloki osi tylko z fokusem na osi lub bez fokusu – nie w polu ani w panelu „Sprawy”.
+- **Nie przechodzi, gdy:** Ctrl+klik otwiera panel albo kopiuje; Ctrl+przeciągnięcie tylko zaznacza; obwódka zostaje na jednym bloku po zamknięciu panelu; Ctrl+A w polu tekstowym zaznacza bloki; w „Szablonach” menu ma odwołanie albo parkowanie.
+
+#### ZG7 „Tydzień” i „3 dni”: zaznaczanie bloków (D527, D528)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/week-select.test.ts`, `tests/web/day-grid.test.ts`, `tests/e2e/group-select.spec.ts` („Tydzień”), `tests/e2e/week.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Tygodniu” (i w „3 dniach”) Ctrl+klik blok wtorku i blok czwartku; Shift+klik blok piątku; zwykły klik na bloku; Ctrl+A; Esc; prawy przycisk; przeciągnij blok (też z Ctrl).
+- **Oczekiwany efekt:** Ctrl+klik zaznacza blok bez otwierania dnia (obwódka, nad kolumnami „Zaznaczone: 2”); Shift+klik zaznacza zakres w kolejności czasu przez dni (dzień, potem początek); zwykły klik otwiera dzień z blokiem jak dotąd; Ctrl+A zaznacza cały widok, Esc czyści; inny tydzień, zakres „3 dni” albo tryb zaczyna bez zaznaczenia; prawy przycisk otwiera „Zmień N bloków” z pozycjami dnia. Przeciąganie i kopiowanie bloku (Ctrl) działa jak dotąd.
+- **Nie przechodzi, gdy:** Ctrl+klik otwiera dzień; zaznaczenie zostaje po zmianie tygodnia; Shift zaznacza po kolumnach zamiast po czasie.
+
+#### ZG8 Del na zaznaczeniu ≥ 2 (D528)
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/cases-select.test.ts` (sprawy), `tests/web/axis-select.test.ts` i `tests/web/week-select.test.ts` (pytanie dla bloków), `tests/web/delete-key.test.ts`, `tests/e2e/delete-key.spec.ts`. Samo usunięcie bloków grupy – ZG9. Ty: rzut oka.
+- **Jak sprawdzić:** zaznacz trzy sprawy i naciśnij Del; potem trzy bloki w „Dziś” i Del; zaznacz jedną sprawę albo jeden blok i Del; w polu tekstowym Del.
+- **Oczekiwany efekt:** jedno pytanie „Usunąć 3 sprawy?” albo „Usunąć 3 bloki?” (Enter usuwa, Esc anuluje); sprawy znikają jedną zmianą z linią „Usunięto 3 sprawy · Cofnij”; przy jednym zaznaczonym elemencie pytanie jak dotąd o ten jeden; z fokusem na elemencie spoza zaznaczenia – Del dotyczy tylko jego; w polu tekstowym Del kasuje tekst.
+- **Nie przechodzi, gdy:** pytanie wraca dla każdego elementu osobno; Del w polu usuwa zaznaczone; Esc usuwa.
+
+<!-- ZG9 Menu bloków – działania (Z4-B) i ZG10 Przeciąganie grupy bloków (Z6): dopisze główna sesja po scaleniu -->
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 

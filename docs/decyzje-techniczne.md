@@ -499,3 +499,23 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1713 | „Przesuń o” bloku pokazanego za końcem doby liczy od jego minuty; „później” – „poza dniem” |
 | T1714 | „Cofnij” odwołania/parkowania grupy liczy jako przywrócone tylko bloki, które wracają do planu; zdjęte innym zdarzeniem – kept |
 | T1715 | Powtórzone id odrzuca silnik (jedna granica), IPC tylko filtruje typy |
+| T1730 | Wykonawca zmian grupowych bloków w `plan/groupRun.ts` (`runBlockGroup`), `where` – dzień „Dziś” albo szablon z datą wersji; ekrany importują go wprost (T1741, bez rejestru) |
+| T1731 | `changeDaysGroup` – zmiana bloków wielu dni jedną edycją z jednym „Cofnij”; „Dziś” to przypadek jednego dnia |
+| T1732 | Linia bloków – czasownik według działania (Zmieniono, Przeniesiono, Usunięto, Odwołano, Zaparkowano), dopisek „przesunięto N bloków”, gdy zmiana rozsunęła inne |
+| T1733 | Wyłączenia w menu bloków z oceny silnika na modelu widoku; w kolumnach „Tygodnia” – stany bloków i „tylko dziś” dla odwołania i parkowania |
+| T1734 | Odmówione „Cofnij” zostawia linię do ponowienia (`UndoNotDone`, bez drugiego komunikatu) |
+| T1735 | Każdy dzień zmiany grupowej rozliczany po swoim wpisie; dni z pytaniem i odrzucone – dopisek „1 dzień czeka na odpowiedź” / „1 dzień niezapisany” |
+| T1736 | Niepełne „Cofnij” pamięta cofnięte dni i ponawia tylko resztę |
+| T1737 | Zakończone dziś bloki przy usuwaniu grupy otwierają się z powrotem tylko przy odmowie wpisu dzisiejszego; gdy się nie otworzą – komunikat jak dla jednego bloku |
+| T1738 | Dzień docelowy przeniesienia, którego nie da się policzyć, dostaje bloki bez rozsuwania (jak „Przenieś na…” jednego); bloki celu oceniane na nim |
+| T1739 | Energia linii z dnia zapisanego i zmienionego (dziś, inaczej jedyny) |
+| T1740 | `ruleVerdicts` – jedna ocena menu na otwarcie; przeliczenie przy zmianie dnia, widoku albo danych |
+| T1741 | Bez rejestru `groupRunner` – bezpośredni import `runBlockGroup` |
+| T1742 | Zmiana bez „Cofnij” mówi swój tekst w rogu okna |
+| T1743 | „został w swoim dniu” bez myślnika, jak w linii „Tygodnia” |
+| T1744 | Do linii i „Cofnij” wchodzą tylko części faktycznie zapisane |
+| T1745 | Przy przeniesieniu decyduje zapis dnia docelowego, liczą się zapisane źródła; cel zapisany bez żadnego źródła – linia z „Cofnij” celu i „N dni niezapisanych” |
+| T1746 | Koszt zaczętego bloku zapisuje się zdarzeniem niezależnie od pliku dnia; zdarzenie niezapisane – sam komunikat „Nie zapisano” |
+| T1747 | Dzień z pytaniem przy „Cofnij” – cofnięty, czeka na odpowiedź, bez ponowienia |
+| T1748 | `outcomeFate` (`store/data.ts`) – jedno odczytanie wyniku edycji dla zmian grupowych, `saveAnswer` i `weekMove` |
+| T1749 | `stayedPlace` – jawna flaga miejsca w tekście „został …”; pisownia „niezapisany” łącznie |

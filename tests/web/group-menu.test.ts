@@ -1,12 +1,12 @@
 /**
  * The menu „Zmień N bloków” and the helpers of the selection of blocks (D527, D528) without a DOM: the entries (✓ for the value all of the selected have,
  * „—” for some; the variants of the one subcategory they share; an entry that fits none disabled with its reason), „Przesuń o…” (later / earlier by 5,
- * 15, 30, 60 min and a number of the hand), a template without the day's actions, the keys of the blocks of several days, the line over the selection,
- * and the placeholder of the runner (Z4-A joins it).
+ * 15, 30, 60 min and a number of the hand), a template without the day's actions, the keys of the blocks of several days, the line over the selection and
+ * the engine's verdicts asked once per menu (T1720).
  */
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MenuEntry } from '@renderer/components/ContextMenu'
-import { blockKey, blockMenu, blockMenuTitle, blockSummary, byStart, groupRunner, parseBlockKey, removeBlocksTarget, runGroupAction, weekOrder, type BlockMenuOn, type GroupAction, type MenuBlock, type MenuCtx } from '@renderer/features/plan/groupMenu'
+import { blockKey, blockMenu, blockMenuTitle, blockSummary, byStart, parseBlockKey, removeBlocksTarget, weekOrder, type BlockMenuOn, type GroupAction, type MenuBlock, type MenuCtx } from '@renderer/features/plan/groupMenu'
 import { commonCosts } from '@renderer/features/plan/BlockGroupMenu'
 import { stateOfWeek } from '@renderer/features/week/weekSelect'
 import { useUi } from '@renderer/store/ui'
@@ -140,6 +140,19 @@ describe('Przesuń o…, Przenieś na dzień…, Odwołaj, Zaparkuj, Usuń', () 
   })
 })
 
+describe('pozycje według silnika (T1720)', () => {
+  it('jedno pytanie o werdykty reguł na otwarcie menu – nie po jednym na pozycję', () => {
+    const judge = vi.fn(() => ({ fields: { take: 2, skipped: [] }, cost: { take: 2, skipped: [] }, routine: { take: 0, skipped: ['nie rutyna' as const, 'nie rutyna' as const] }, place: { take: 0, skipped: ['zaczęty' as const, 'zaczęty' as const] }, day: { take: 2, skipped: [] } }))
+    const entries = blockMenu([b('a'), b('b')], { ...CTX, judge }, ON)
+    expect(judge).toHaveBeenCalledTimes(1)
+    expect(judge).toHaveBeenCalledWith(['a', 'b'])
+    expect(item(entries, 'block-menu-shift').disabled).toBe('Żaden blok nie jest niezaczęty')
+    expect(item(entries, 'block-menu-moveto').disabled).toBe('Żaden blok nie jest niezaczęty')
+    expect(item(entries, 'block-menu-cancel').disabled).toBeUndefined()
+  })
+
+})
+
 describe('okno kosztu i stany bloków tygodnia', () => {
   it('okno kosztu zaczyna od kosztu pierwszego zaznaczonego bloku – także przy różnych kosztach; bez kosztu – zera', () => {
     const a = { head: 4, emotions: 0, senses: 0, body: 1 }
@@ -156,7 +169,7 @@ describe('okno kosztu i stany bloków tygodnia', () => {
   })
 })
 
-describe('tytuł, Del, klucze, napis, zaślepka', () => {
+describe('tytuł, Del, klucze, napis', () => {
   it('tytuł i pytanie Del po polsku: „Zmień 4 bloki”, „Usunąć 5 bloków?”', () => {
     expect(blockMenuTitle(4)).toBe('Zmień 4 bloki')
     expect(blockMenuTitle(1)).toBe('Zmień 1 blok')
@@ -182,16 +195,5 @@ describe('tytuł, Del, klucze, napis, zaślepka', () => {
     expect(blockSummary(tiles, true)).toBe('Zaznaczone: 2 · 1 h 30 min · energia −2 G · −1 E · −1 B · 0 C')
     expect(blockSummary(tiles, false)).toBe('Zaznaczone: 2 · 1 h 30 min')
     expect(blockSummary(tiles.slice(0, 1), true)).toBeNull()
-  })
-
-  it('zaślepka biegacza (do czasu Z4-A) mówi, że zmiana nie jest podłączona; podmieniona funkcja dostaje widok, id i akcję', () => {
-    const was = groupRunner.run
-    runGroupAction('today', ['a'], { kind: 'park' })
-    expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['Zmiana grupowa bloków jeszcze nie jest podłączona.'])
-    const seen: unknown[] = []
-    groupRunner.run = (view, ids, action) => void seen.push([view, ids, action])
-    runGroupAction('week', ['2026-11-16|a'], { kind: 'shift', minutes: -5 })
-    groupRunner.run = was
-    expect(seen).toEqual([['week', ['2026-11-16|a'], { kind: 'shift', minutes: -5 }]])
   })
 })

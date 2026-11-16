@@ -2,7 +2,7 @@
 /**
  * Selecting many blocks in the columns of „Tydzień” and „3 dni” (D527, D528): Ctrl+click selects a block without opening its day (a plain click
  * still opens it), Shift+click the range in the order of time through the days (the day, then the start), Shift+arrows, Ctrl+A for the whole view,
- * Esc; the ring of every selected block, the line over the columns, the menu of the right button „Zmień N bloków” (its picks go to `runGroupAction`
+ * Esc; the ring of every selected block, the line over the columns, the menu of the right button „Zmień N bloków” (its picks go to `runBlockGroup`
  * with the keys `date|id`), Del for two or more; the drag of a block (a move, a copy with Ctrl) is as it was.
  */
 import { act, createElement } from 'react'
@@ -16,12 +16,18 @@ import { weekStart } from '@shared/time/day'
 import { DeleteDialog } from '@renderer/components/DeleteDialog'
 import { installDeleteKey } from '@renderer/lib/deleteKey'
 import { installEscape } from '@renderer/lib/escape'
-import { groupRunner, parseBlockKey, type GroupAction } from '@renderer/features/plan/groupMenu'
+import { parseBlockKey, type GroupAction } from '@renderer/features/plan/groupMenu'
 import { WeekPage } from '@renderer/features/week/WeekPage'
 import { useData } from '@renderer/store/data'
 import { useDaysView, useWeekView } from '@renderer/store/horizon'
 import { useUi } from '@renderer/store/ui'
 
+// The change of a pick: caught (the screens call `runBlockGroup` of `groupRun.ts`).
+const { runs } = vi.hoisted(() => ({ runs: [] as Array<{ view: string; ids: readonly string[]; action: unknown }> }))
+vi.mock('@renderer/features/plan/groupRun', async (orig) => ({
+  ...(await orig<typeof import('@renderer/features/plan/groupRun')>()),
+  runBlockGroup: vi.fn(async (view: string, ids: readonly string[], action: unknown) => void runs.push({ view, ids: [...ids], action }))
+}))
 vi.mock('@renderer/store/horizon', () => ({ useWeekView: vi.fn(), useDaysView: vi.fn(), useGoalsView: vi.fn(() => ({ view: null, failed: false })), useMonthView: vi.fn() }))
 
 const TODAY = '2026-11-18'
@@ -56,7 +62,6 @@ let root: Root | null = null
 let host: HTMLElement | null = null
 let offEsc: () => void
 let offDel: () => void
-const runs: Array<{ view: string; ids: readonly string[]; action: GroupAction }> = []
 
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -67,7 +72,6 @@ beforeEach(() => {
   offEsc = installEscape()
   offDel = installDeleteKey()
   runs.length = 0
-  groupRunner.run = (view, ids, action) => void runs.push({ view, ids: [...ids], action })
   useData.setState({ rd: rdFrom({ schema: 1 }), view: { today: TODAY, allDay: [], computers: [] } as unknown as DataView, allDay: [] })
   useUi.setState({ page: 'week', day: null, pick: null, toasts: [] })
   vi.mocked(useWeekView).mockImplementation((date) => {
@@ -184,18 +188,24 @@ describe('menu prawego przycisku i Del na blokach kolumn (D528)', () => {
     expect(marked()).toEqual([K(TUE, 't2')])
   })
 
-  it('Shift+F10; pozycje dnia są (Odwołaj, Zaparkuj, Przenieś na dzień…), pick trafia do `runGroupAction` z kluczami date|id', async () => {
+  it('Shift+F10; pozycje dnia są (Odwołaj, Zaparkuj, Przenieś na dzień…) – odwołać i zaparkować można dzisiejsze; pick trafia do `runBlockGroup` z kluczami date|id', async () => {
     await mount()
     await click(cell(MON, 'm1'), { ctrlKey: true })
     await click(cell(MON, 'm2'), { ctrlKey: true })
     cell(MON, 'm2').focus()
     key(cell(MON, 'm2'), 'F10', { shiftKey: true })
     expect(q('block-menu')!.getAttribute('aria-label')).toBe('Zmień 2 bloki')
-    expect(q('block-menu-cancel')).not.toBeNull()
-    expect(q('block-menu-park')).not.toBeNull()
     expect(q('block-menu-moveto')).not.toBeNull()
+    // Only blocks of another day: „Odwołaj” and „Zaparkuj” are today's (the timer's) – off, with the reason.
+    for (const id of ['block-menu-cancel', 'block-menu-park']) expect(q(id)!.getAttribute('aria-disabled')).toBe('true')
+    expect(q('block-menu-park')!.getAttribute('title')).toBe('Odwołać i zaparkować można tylko dzisiejsze bloki')
+    key(document.body, 'Escape')
+    await click(cell(WED, 'w1'), { ctrlKey: true })
+    cell(WED, 'w1').focus()
+    key(cell(WED, 'w1'), 'F10', { shiftKey: true })
+    expect(q('block-menu')!.getAttribute('aria-label')).toBe('Zmień 3 bloki')
     await pick('block-menu-park')
-    expect(runs).toEqual([{ view: 'week', ids: [K(MON, 'm1'), K(MON, 'm2')], action: { kind: 'park' } }])
+    expect(runs).toEqual([{ view: 'week', ids: [K(MON, 'm1'), K(MON, 'm2'), K(WED, 'w1')], action: { kind: 'park' } }])
   })
 
   it('Del przy zaznaczeniu ≥ 2: jedno pytanie „Usunąć N bloków?”, `remove` dla wszystkich', async () => {

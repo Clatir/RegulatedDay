@@ -4,8 +4,8 @@
  * tooltip), the question of Del („Usunąć 4 bloków?”), the line over the selection („Zaznaczone: 4 · 3 h 20 min · energia …”) and the keys of the
  * blocks of several days („Tydzień”, „3 dni”).
  *
- * The change itself is not here: every pick of the menu goes through `runGroupAction(view, ids, action)` – the one place the logic of the group
- * changes (Z4-A) is joined to the screens. Until it is, `groupRunner.run` only says so.
+ * The change itself is not here: every pick of the menu goes to `runBlockGroup(view, ids, action, where)` (`groupRun.ts`) – the one place the logic
+ * of the group changes (Z4-A) is joined to the screens.
  */
 import type { CategoryKind, Costs } from '@shared/model/categories'
 import { parseDuration } from '@shared/format'
@@ -15,8 +15,7 @@ import { routineMinutes } from '@shared/model/routines'
 import { triState } from '@shared/selection'
 import type { MenuEntry } from '../../components/ContextMenu'
 import type { DeleteTarget } from '../../lib/deleteKey'
-import type { GroupView } from '../../store/groupLine'
-import { toast } from '../../store/ui'
+import type { MenuRule, RuleVerdict } from '@shared/engine/groupEdit'
 import { groupedCategoryOptions, type Names } from './blockView'
 
 /** What a group change of blocks asks for (D528): each is applied to every selected block it fits, the rest is left and counted in the line (D529). */
@@ -37,14 +36,8 @@ export type GroupAction =
   | { kind: 'park' }
   | { kind: 'remove' }
 
-/**
- * The place the group changes of blocks are joined to the screens (Z4-A puts its function here): `ids` are the selected blocks of `view` – the
- * ids of the blocks of a day or a template version; in „Tydzień” and „3 dni” the keys `blockKey(date, id)`.
- */
-export const groupRunner: { run: (view: GroupView, ids: readonly string[], action: GroupAction) => void | Promise<unknown> } = {
-  run: () => void toast('Zmiana grupowa bloków jeszcze nie jest podłączona.', 'info')
-}
-export const runGroupAction = (view: GroupView, ids: readonly string[], action: GroupAction): void | Promise<unknown> => groupRunner.run(view, ids, action)
+/** Where the blocks of an axis are: the day of „Dziś”, the version of a template („Tydzień” and „3 dni” – in the keys of the blocks). */
+export type GroupWhere = { date: string } | { templateId: string; from: string }
 
 /** The id the selection of the columns of several days gives a block: its day and its id (an id may repeat from day to day). */
 export const blockKey = (date: string, id: string): string => `${date}|${id}`
@@ -68,7 +61,16 @@ export interface MenuBlock {
   state: MenuState
   /** Its hour may be changed (`movable`: own hour, not begun, not a session, a lecture, nor a class of a „zjazd”, not passed). */
   movable: boolean
+  /** A block of another day than today (the columns of „Tydzień”): „Odwołaj” and „Zaparkuj” are today's actions (the timer's). */
+  notToday?: boolean
 }
+
+/**
+ * How the rules of the menu's entries take the selected blocks – the engine's `ruleVerdicts` on the view's model, once for the menu opened: how
+ * many each takes and the reason of each one it leaves out (D529). None (no model of the view – the columns of „Tydzień”): the states of
+ * `MenuBlock` decide (T1720).
+ */
+export type MenuJudge = (ids: readonly string[]) => Partial<Record<MenuRule, RuleVerdict>>
 
 /** The things the menu offers to choose from. */
 export interface MenuCtx {
@@ -81,6 +83,8 @@ export interface MenuCtx {
   routines: ReadonlyArray<{ id: string; name: string; minutes: number }>
   /** A template's block: no day actions (cancel, park, move to a day). */
   template?: boolean
+  /** The engine's judgement of the selection (see `MenuJudge`); left out – the states of the blocks. */
+  judge?: MenuJudge
 }
 
 /** What the menu does besides the plain actions: the two that need a window of their own. */
@@ -106,6 +110,31 @@ const NONE_MOVABLE = 'Żaden blok nie ma godziny, którą da się przesunąć (z
 const ALL_PAST = 'Wszystkie wybrane bloki już minęły'
 const ALL_OFF = 'Wszystkie wybrane bloki są już zdjęte z planu (zaparkowane albo odwołane)'
 const NONE_OPEN = 'Żaden z wybranych bloków nie jest do zrobienia (zaczęte, minione albo zdjęte z planu)'
+const NOT_TODAY = 'Odwołać i zaparkować można tylko dzisiejsze bloki'
+const ROUTINE_ONLY = 'Rutynę wybierzesz tylko blokom podkategorii z rodzaju „rutyna”'
+
+/** The words of a menu's entry none of the blocks takes, by the one reason they all have (`SkipWhy` of the engine). */
+const WHY_TEXT: Readonly<Record<string, string>> = {
+  zaczęty: NONE_BEGUN,
+  miniony: ALL_PAST,
+  zdjęty: ALL_OFF,
+  'nie dziś': NOT_TODAY,
+  skończony: 'Wszystkie wybrane bloki już się skończyły',
+  'nie rutyna': ROUTINE_ONLY,
+  'nie ma': 'Tych bloków nie ma już w planie dnia'
+}
+
+/**
+ * Why a rule takes none of the selected blocks by the engine's verdict (undefined – it takes one, or no verdict): the reason they all share in words,
+ * the blocks without an hour to move (`place`), else the reasons, once each.
+ */
+function verdictWhy(v: RuleVerdict | undefined, place = false): string | undefined {
+  if (!v || v.take > 0) return undefined
+  const whys = [...new Set(v.skipped)]
+  if (whys.length === 1 && WHY_TEXT[whys[0]!]) return WHY_TEXT[whys[0]!]
+  if (place) return NONE_MOVABLE
+  return whys.length ? `Żaden z wybranych bloków jej nie przyjmie (${whys.join(', ')})` : 'Żaden z wybranych bloków jej nie przyjmie'
+}
 
 /** Why no selected block is open (the change of the hour, cancelling and parking fit only those): the reason that says what they all are. */
 function noneOpenWhy(blocks: readonly MenuBlock[]): string {
@@ -131,8 +160,17 @@ export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockM
   const variants = categories.length === 1 ? ctx.variantsOf(categories[0]!) : []
   const routineBlocks = blocks.filter((b) => ctx.kindOf(b.categoryId) === 'routine')
   const open = blocks.filter((b) => b.state === 'open')
+  const ids = blocks.map((b) => b.id)
   const noneWhy = noneOpenWhy(blocks)
-  const moveWhy = !open.length ? noneWhy : !open.some((b) => b.movable) ? NONE_MOVABLE : undefined
+  const statesMove = !open.length ? noneWhy : !open.some((b) => b.movable) ? NONE_MOVABLE : undefined
+  const statesDay = !open.length ? noneWhy : !open.some((b) => !b.notToday) ? NOT_TODAY : undefined
+  // The engine's verdicts on the view's model, one pass (T1720); without them – the states of the blocks.
+  const v = ctx.judge?.(ids)
+  const moveWhy = v ? verdictWhy(v.place, true) : statesMove
+  const dayWhy = v ? verdictWhy(v.day) : statesDay
+  const fieldWhy = verdictWhy(v?.fields)
+  const costWhy = verdictWhy(v?.cost)
+  const routineWhy = verdictWhy(v?.routine)
 
   const shiftBy = (sign: 1 | -1, name: string, testId: string): MenuEntry => ({
     label: name,
@@ -153,41 +191,46 @@ export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockM
     ]
   })
 
+  const categoryEntry: MenuEntry = fieldWhy
+    ? { label: 'Podkategoria', disabled: fieldWhy, testId: 'block-menu-category' }
+    : {
+        label: 'Podkategoria',
+        testId: 'block-menu-category',
+        submenu: ctx.groups.map(
+          (g): MenuEntry => ({
+            label: g.label,
+            testId: `block-menu-group-${g.group}`,
+            submenu: g.options.map((o): MenuEntry => ({ label: o.label, ...checked(blocks.map((b) => b.categoryId === o.value)), onPick: () => on.action({ kind: 'category', categoryId: o.value, variantId: null }), testId: `block-menu-category-${o.value}` }))
+          })
+        )
+      }
+  const variantWhy = categories.length !== 1 ? 'Bloki mają różne podkategorie – wariant wybierzesz dla jednej' : (fieldWhy ?? (!variants.length ? 'Ta podkategoria nie ma wariantów' : undefined))
+  const variantEntry: MenuEntry = variantWhy
+    ? { label: 'Wariant', disabled: variantWhy, testId: 'block-menu-variant' }
+    : {
+        label: 'Wariant',
+        testId: 'block-menu-variant',
+        submenu: [
+          { label: 'Bez wariantu', ...checked(blocks.map((b) => b.variantId == null)), onPick: () => on.action({ kind: 'variant', variantId: null }), testId: 'block-menu-variant-none' },
+          ...variants.map((v): MenuEntry => ({ label: v.name, ...checked(blocks.map((b) => b.variantId === v.id)), onPick: () => on.action({ kind: 'variant', variantId: v.id }), testId: `block-menu-variant-${v.id}` }))
+        ]
+      }
+  const routineDisabled = !routineBlocks.length ? ROUTINE_ONLY : routineWhy
+  const routineEntry: MenuEntry = routineDisabled
+    ? { label: 'Rutyna', disabled: routineDisabled, testId: 'block-menu-routine' }
+    : {
+        label: 'Rutyna',
+        testId: 'block-menu-routine',
+        submenu: [
+          { label: 'Bez rutyny', ...checked(routineBlocks.map((b) => b.routine == null)), onPick: () => on.action({ kind: 'routine', routine: null, minutes: null }), testId: 'block-menu-routine-none' },
+          ...ctx.routines.map((r): MenuEntry => ({ label: r.name, ...checked(routineBlocks.map((b) => b.routine === r.id)), onPick: () => on.action({ kind: 'routine', routine: r.id, minutes: r.minutes > 0 ? r.minutes : null }), testId: `block-menu-routine-${r.id}` }))
+        ]
+      }
   const entries: MenuEntry[] = [
-    {
-      label: 'Podkategoria',
-      testId: 'block-menu-category',
-      submenu: ctx.groups.map(
-        (g): MenuEntry => ({
-          label: g.label,
-          testId: `block-menu-group-${g.group}`,
-          submenu: g.options.map((o): MenuEntry => ({ label: o.label, ...checked(blocks.map((b) => b.categoryId === o.value)), onPick: () => on.action({ kind: 'category', categoryId: o.value, variantId: null }), testId: `block-menu-category-${o.value}` }))
-        })
-      )
-    },
-    categories.length !== 1
-      ? { label: 'Wariant', disabled: 'Bloki mają różne podkategorie – wariant wybierzesz dla jednej', testId: 'block-menu-variant' }
-      : !variants.length
-        ? { label: 'Wariant', disabled: 'Ta podkategoria nie ma wariantów', testId: 'block-menu-variant' }
-        : {
-            label: 'Wariant',
-            testId: 'block-menu-variant',
-            submenu: [
-              { label: 'Bez wariantu', ...checked(blocks.map((b) => b.variantId == null)), onPick: () => on.action({ kind: 'variant', variantId: null }), testId: 'block-menu-variant-none' },
-              ...variants.map((v): MenuEntry => ({ label: v.name, ...checked(blocks.map((b) => b.variantId === v.id)), onPick: () => on.action({ kind: 'variant', variantId: v.id }), testId: `block-menu-variant-${v.id}` }))
-            ]
-          },
-    { label: 'Koszt…', onPick: on.cost, testId: 'block-menu-cost' },
-    routineBlocks.length
-      ? {
-          label: 'Rutyna',
-          testId: 'block-menu-routine',
-          submenu: [
-            { label: 'Bez rutyny', ...checked(routineBlocks.map((b) => b.routine == null)), onPick: () => on.action({ kind: 'routine', routine: null, minutes: null }), testId: 'block-menu-routine-none' },
-            ...ctx.routines.map((r): MenuEntry => ({ label: r.name, ...checked(routineBlocks.map((b) => b.routine === r.id)), onPick: () => on.action({ kind: 'routine', routine: r.id, minutes: r.minutes > 0 ? r.minutes : null }), testId: `block-menu-routine-${r.id}` }))
-          ]
-        }
-      : { label: 'Rutyna', disabled: 'Rutynę wybierzesz tylko blokom podkategorii z rodzaju „rutyna”', testId: 'block-menu-routine' },
+    categoryEntry,
+    variantEntry,
+    costWhy ? { label: 'Koszt…', disabled: costWhy, testId: 'block-menu-cost' } : { label: 'Koszt…', onPick: on.cost, testId: 'block-menu-cost' },
+    routineEntry,
     { kind: 'separator' },
     moveWhy
       ? { label: 'Przesuń o…', disabled: moveWhy, testId: 'block-menu-shift' }
@@ -196,8 +239,8 @@ export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockM
   if (!ctx.template) {
     entries.push(
       moveWhy ? { label: 'Przenieś na dzień…', disabled: moveWhy, testId: 'block-menu-moveto' } : { label: 'Przenieś na dzień…', onPick: on.moveTo, testId: 'block-menu-moveto' },
-      open.length ? { label: 'Odwołaj', onPick: () => on.action({ kind: 'cancel' }), testId: 'block-menu-cancel' } : { label: 'Odwołaj', disabled: noneWhy, testId: 'block-menu-cancel' },
-      open.length ? { label: 'Zaparkuj', onPick: () => on.action({ kind: 'park' }), testId: 'block-menu-park' } : { label: 'Zaparkuj', disabled: noneWhy, testId: 'block-menu-park' }
+      dayWhy ? { label: 'Odwołaj', disabled: dayWhy, testId: 'block-menu-cancel' } : { label: 'Odwołaj', onPick: () => on.action({ kind: 'cancel' }), testId: 'block-menu-cancel' },
+      dayWhy ? { label: 'Zaparkuj', disabled: dayWhy, testId: 'block-menu-park' } : { label: 'Zaparkuj', onPick: () => on.action({ kind: 'park' }), testId: 'block-menu-park' }
     )
   }
   entries.push({ kind: 'separator' }, { label: 'Usuń', onPick: () => on.action({ kind: 'remove' }), testId: 'block-menu-remove' })

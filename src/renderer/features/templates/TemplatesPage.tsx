@@ -9,7 +9,7 @@
  * stays on the page for 15 min, or until the template changes again. Below the templates: the list of series (D381, D401) –
  * each with its rule in words, edited and ended there (`SeriesEditor`); Ctrl K finds a series as one record.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { RawRecord } from '@shared/api'
 import { deepEqual } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
@@ -37,6 +37,7 @@ import { GroupLine } from '../../components/GroupLine'
 import { BlockEditor } from '../plan/BlockEditor'
 import { menuCtxOf } from '../plan/groupMenu'
 import { useAxisGroup } from '../plan/useAxisGroup'
+import { judgeBlocks } from '../plan/groupRun'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis } from '../plan/dayItems'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
@@ -259,6 +260,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const axis = useMemo(() => dayAxis(model, names, null, null, true), [model, names])
   // Template blocks have the day's derived ids: the block of the version is found by its source (a session by its entry, D511).
   const byPlanId = useMemo(() => axisSources(model.ctx.plan, version.blocks), [model, version.blocks])
+  // The day's id of each block of the version (the judgement of the menu counts on the day, T1720).
+  const dayIdOf = useMemo(() => new Map([...byPlanId].map(([dayId, of]) => [of, dayId])), [byPlanId])
   // D410: the attachments of the version's blocks (those of the template, by the block's id in it) – 📎N on the tile, a drop of files on it.
   const attachments = useData((s) => s.attachments)
   const attachPlace = useMemo<BlockPlace>(() => ({ scope: 'template', templateId: template.id }), [template.id])
@@ -273,6 +276,10 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   // day's actions); only the template's own blocks are selected (the sessions and lectures of the sample day are no blocks of it); scope: the version.
   const menuCtx = useMemo(() => menuCtxOf(names, true), [names])
   const own = useMemo(() => items.filter((i) => version.blocks.some((b) => b.id === i.id)), [items, version.blocks])
+  // T1720: the entries by the engine's rules on the day the version makes (the ids of the version are the day's by their source); stable while
+  // the version's day is – the menu opened counts its entries again only when it changes.
+  const judge = useCallback((ids: readonly string[]) => judgeBlocks(model, ids.map((id) => dayIdOf.get(id) ?? id), ''), [model, dayIdOf])
+  const where = useMemo(() => ({ templateId: template.id, from }), [template.id, from])
   const group = useAxisGroup({
     view: 'template',
     tiles: own,
@@ -281,7 +288,9 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     scope: `${template.id}|${from}`,
     today,
     energy: rd.general.modules.energy,
-    ctx: menuCtx
+    ctx: menuCtx,
+    where,
+    judge
   })
   /** A block opened in the panel is the one selected (a plain click, a new block); the panel closed takes a selection of one with it (D527). */
   const open = (id: string | null) => {

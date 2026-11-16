@@ -24,10 +24,10 @@ import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { copyAttachments, removeAttachments } from '../../store/attachments'
 import { change, DAY_UNREADABLE, type CaseUndoFile } from '../../store/cases'
-import { editOf, isSaved, rawRecord, readDayFiles, trySaveWith, useData, type SendState } from '../../store/data'
+import { editOf, isSaved, outcomeFate, rawRecord, readDayFiles, trySaveWith, useData, type SendState } from '../../store/data'
 import { countedDay, type DayModel } from '../../store/day'
 import { takeBackDays, type DayEdit } from '../../store/dayUndo'
-import { showGroupLine, type GroupView } from '../../store/groupLine'
+import { showGroupLine, UndoNotDone, type GroupView } from '../../store/groupLine'
 import { toast } from '../../store/ui'
 import { dayPlace } from '../attachments/attachView'
 import { changeTemplateGroup, type TemplateGroupTarget } from '../templates/templateGroup'
@@ -37,6 +37,8 @@ import { axisSources } from '../templates/sessionChoices'
 import { onUnsettled } from '../today/dayPush'
 import { energyOptions } from '../today/groupActions'
 import { moveUncountedText, moveUnreadableText, statusOf, type WeekMoveStatus } from '../week/weekMove'
+import { undoUnreadableText } from '../week/weekActions'
+import { unwrittenDaysText } from './groupRun'
 import { stands } from './blockCopy'
 
 /** Said when „Cofnij” of a drag cannot read a day it would take back: nothing is taken back, the line stays (another try). */
@@ -207,59 +209,61 @@ async function moveGroup(o: DayGroupDrag): Promise<GroupDragDone> {
   return done
 }
 
-/** Said when „Cofnij” took back only some of the days: the line stays – the next „Cofnij” takes back the rest. */
-export const DRAG_UNDO_PART = 'nie wszystkie dni dało się teraz cofnąć – spróbuj jeszcze raz'
-
 /**
- * „Cofnij” of a drag within its day (T1763) – the one of „Przesuń o” (`groupActions.ts` `undoEdit`): each block whose fields still stand as the drag
- * left them gets them back (one edit of each day's file), one changed since stays (D313, counted – `keptText`); a day's file gone since – all
- * of it stays. Only the days saved count (T1772): a day taken back (written, waiting for the folder, or asked about – it waits for your answer)
- * is remembered and never sent again; one not taken back (nothing sent, a broken file) is tried again by the next „Cofnij” (this one throws: the
- * line stays). A day that cannot be read now – nothing is taken back.
+ * „Cofnij” of a drag within its day (T1763) – the one of „Przesuń o” (`groupActions.ts` `undoEditDays`, one rule – T1772): each block whose fields
+ * still stand as the drag left them gets them back (one edit of the days' files), one changed since stays (D313, counted – `keptText`); a day's
+ * file gone since – all of it stays. It remembers what it did: a day taken back (saved) is counted once and never sent again; one whose entry met a
+ * question waits for your answer – not counted, never sent again (said beside: `unwrittenDaysText`); one refused or not readable now is left for
+ * the next „Cofnij”, which does only it – this one throws `UndoNotDone` (the save or the toast said why: the line stays).
  */
 function shiftedUndo(items: ReadonlyArray<{ date: string; undo: readonly FieldsUndo[] }>): () => Promise<string | void> {
-  const done = new Set<string>()
+  const left = new Map(items.map((i) => [i.date, i]))
   let kept = 0
+  let waiting = 0
   return async () => {
-    const left = items.filter((i) => !done.has(i.date))
-    let unreadable = false
-    const sent: Array<{ date: string; kept: number }> = []
-    const nothing = new Map<string, number>()
+    const todo = [...left.values()]
+    const state: SendState = { afterSend: false }
+    const sent: string[] = []
+    const counts = new Map<string, number>()
+    const notRead: string[] = []
     const out = await trySaveWith(async () => {
       sent.length = 0
-      nothing.clear()
-      const files = await readDayFiles(left.map((i) => i.date))
-      if (left.some((i) => !(i.date in files))) {
-        unreadable = true
-        return []
-      }
+      counts.clear()
+      notRead.length = 0
+      const files = await readDayFiles(todo.map((i) => i.date))
       const entries: EditEntry[] = []
-      for (const i of left) {
+      for (const i of todo) {
+        // A day that cannot be read now: left for the next „Cofnij”.
+        if (!(i.date in files)) {
+          notRead.push(i.date)
+          continue
+        }
         const now = files[i.date] ?? null
         const u = now ? undoFields(now, i.date, i.undo) : null
+        counts.set(i.date, u ? u.kept.length : i.undo.length)
         const e = now && u ? editOf(paths.day(i.date), now, u.raw) : null
         if (e) {
           entries.push(e)
-          sent.push({ date: i.date, kept: u!.kept.length })
-        } else nothing.set(i.date, u ? u.kept.length : i.undo.length)
+          sent.push(i.date)
+        }
       }
       return entries
-    })
-    if (unreadable) throw new Error(DRAG_UNDO_UNREADABLE)
-    if (out == null) throw new Error('Cofnięcie nie zostało zapisane')
-    // A day with nothing to write: nothing of it stands as the drag left it – counted once.
-    for (const [date, n] of nothing) {
-      done.add(date)
-      kept += n
+    }, state)
+    for (const i of todo) {
+      const n = counts.get(i.date)
+      if (n == null) continue
+      // A day with nothing to write is done, whatever became of the others' send.
+      const k = sent.indexOf(i.date)
+      const fate = k < 0 ? 'saved' : out == null ? (state.afterSend ? 'asked' : 'refused') : outcomeFate(out[k])
+      if (fate === 'refused') continue
+      left.delete(i.date)
+      if (fate === 'asked') waiting++
+      else kept += n
     }
-    out.forEach((r, k) => {
-      const x = sent[k]
-      if (!x || r.status === 'broken') return
-      done.add(x.date)
-      kept += x.kept
-    })
-    if (left.some((i) => !done.has(i.date))) throw new Error(DRAG_UNDO_PART)
-    return kept ? keptText(kept) : undefined
+    if (out != null && notRead.length) toast(undoUnreadableText(notRead), 'error', 6000)
+    if (left.size) throw new UndoNotDone()
+    const said = [...(kept ? [keptText(kept)] : []), ...unwrittenDaysText({ waitingDays: waiting })]
+    return said.length ? said.join(' · ') : undefined
   }
 }
 
@@ -298,8 +302,12 @@ async function undoDays(days: readonly DayEdit[], links: readonly string[][], so
     const after = first.map((_, i) => i)
     return [...first, ...then.map((e) => (after.length ? { ...e, after } : e))]
   })
-  if (unreadable) throw new Error(DRAG_UNDO_UNREADABLE)
-  if (!isSaved(out)) throw new Error('Cofnięcie nie zostało zapisane')
+  // Nothing taken back (a day not readable now, the save refused – said by its toast): the line stays for another try.
+  if (unreadable) {
+    toast(DRAG_UNDO_UNREADABLE, 'error', 6000)
+    throw new UndoNotDone()
+  }
+  if (!isSaved(out)) throw new UndoNotDone()
   return kept ? keptText(kept) : undefined
 }
 
@@ -414,7 +422,7 @@ async function undoCopies(undo: readonly CaseUndoFile[], counts: ReadonlyMap<str
     }
     return null
   })
-  if (!r.saved) throw new Error('Cofnięcie nie zostało zapisane')
+  if (!r.saved) throw new UndoNotDone()
   // Only the copies of the days taken back: the others' blocks stay with their files.
   const live = added.filter((id) => {
     const raw = rawRecord(attachmentRel(id))
@@ -450,8 +458,10 @@ async function moveTemplateGroup(t: TemplateGroupTarget, ids: readonly string[],
     undo: undo
       ? async () => {
           const u = await undo()
-          if (!u.saved) throw new Error('Cofnięcie nie zostało zapisane')
-          return u.kept ? keptText(u.kept) : undefined
+          if (!u.saved) throw new UndoNotDone()
+          // What stayed (changed since), the days whose taking back waits for your answer – as the menu's „Cofnij” says it (`sayGroupDone`).
+          const said = [...(u.kept ? [keptText(u.kept)] : []), ...unwrittenDaysText({ waitingDays: u.waitingDays })]
+          return said.length ? said.join(' · ') : undefined
         }
       : null
   }
@@ -526,7 +536,7 @@ async function copyTemplateGroup(t: TemplateGroupTarget, ids: readonly string[],
         back = true
         return null
       })
-      if (!u.saved) throw new Error('Cofnięcie nie zostało zapisane')
+      if (!u.saved) throw new UndoNotDone()
       if (!back) return keptText(moved)
       const live = added.filter((id) => {
         const raw = rawRecord(attachmentRel(id))

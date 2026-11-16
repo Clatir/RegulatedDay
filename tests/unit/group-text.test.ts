@@ -35,6 +35,11 @@ describe('linia po zmianie grupowej (bez „Cofnij” – to przycisk osobno)', 
     expect(stayedText(['już trwa', 'zaparkowany'])).toBe('2 zostały – już trwa, zaparkowany')
     expect(stayedText(['a', 'a', 'a', 'a', 'a'])).toBe('5 zostało – a')
     expect(stayedText([])).toBeNull()
+    // Where it stayed, not why (said by the flag, never read from the words) – as the line of a move of one block: „został w swoim dniu”.
+    expect(stayedText(['w swoim dniu'], 'block', { place: true })).toBe('1 został w swoim dniu')
+    expect(groupLineText({ verb: VERB.moved, n: 2, stayed: ['w swoim dniu'], stayedPlace: true })).toBe('Przeniesiono 2 bloki · 1 został w swoim dniu')
+    expect(stayedText(['w trakcie'])).toBe('1 został – w trakcie')
+    expect(stayedText(['już trwa', 'w swoim dniu'])).toBe('2 zostały – już trwa, w swoim dniu')
   })
 
   it('energia: „najniższa energia 52 → 44”, tylko gdy się zmieniła', () => {

@@ -18,7 +18,7 @@ import { plDateWithWeekday } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
 import { logicalDayOf } from '@shared/time/day'
 import { countedDay, type DayModel } from '../../store/day'
-import { editOf, isSaved, trySaveWith, useData, withOwner, type SendState } from '../../store/data'
+import { editOf, isSaved, trySaveWith, useData, withOwner, type SendState, outcomeFate } from '../../store/data'
 import { hiddenBlocksAmong } from '../calendars/calendarFilter'
 import { MOVE_GONE_TEXT, movedDay, stayedOf, type Stayed, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
 import { blockNow, putChange, withPushed, type PushedStart } from '../today/dayActions'
@@ -113,8 +113,8 @@ export async function moveWeekBlock(m: WeekMove, at = Date.now()): Promise<WeekM
 export function statusOf(out: readonly EditOutcome[] | null, state: SendState): WeekMoveStatus {
   if (out == null) return state.afterSend ? 'pending' : 'failed'
   if (isSaved(out)) return 'saved'
-  const asked = out.some((o) => o.status === 'conflict' || o.status === 'removedElsewhere' || o.status === 'changedElsewhere')
-  return out.some((o) => o.status === 'broken') && !asked && !out.some((o) => o.status === 'applied') ? 'failed' : 'pending'
+  const asked = out.some((o) => outcomeFate(o) === 'asked')
+  return out.some((o) => outcomeFate(o) === 'refused') && !asked && !out.some((o) => o.status === 'applied') ? 'failed' : 'pending'
 }
 
 /**

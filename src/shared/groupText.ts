@@ -39,6 +39,8 @@ export interface GroupLineParts {
   skipped?: readonly string[]
   /** One reason per element that stayed where it was (D531: „już trwa”): „1 został – już trwa”. */
   stayed?: readonly string[]
+  /** The reasons of `stayed` say where they stayed, not why (a block that does not move to another day: „1 został w swoim dniu”). */
+  stayedPlace?: boolean
   /** The lowest energy of the day before and after (D529) – only when the change touched a day with a forecast. */
   energy?: { from: number; to: number } | null
   /** The selection held blocks of a series: they changed as „Tylko to” (D529). */
@@ -50,12 +52,16 @@ const unique = (xs: readonly string[]): string[] => [...new Set(xs)]
 /** „pominięto 2: zaczęty, sesja”; null for none. */
 export const skippedText = (reasons: readonly string[]): string | null => (reasons.length ? `pominięto ${reasons.length}: ${unique(reasons).join(', ')}` : null)
 
-/** „1 został – już trwa”, „2 zostały – już trwa, zaparkowany” (blocks: D531), „1 została – …” for a case; null for none. */
-export function stayedText(reasons: readonly string[], kind: GroupKind = 'block'): string | null {
+/**
+ * „1 został – już trwa”, „2 zostały – już trwa, zaparkowany” (blocks: D531), „1 została – …” for a case; null for none. `place` – the reasons say
+ * where they stayed, not why: „1 został w swoim dniu” (as the line of a move of one block, `weekText`).
+ */
+export function stayedText(reasons: readonly string[], kind: GroupKind = 'block', o: { place?: boolean } = {}): string | null {
   if (!reasons.length) return null
   const n = reasons.length
   const verb = NOUNS[kind].feminine ? plural(n, 'została', 'zostały', 'zostało') : plural(n, 'został', 'zostały', 'zostało')
-  return `${n} ${verb} – ${unique(reasons).join(', ')}`
+  const why = unique(reasons)
+  return o.place && why.length === 1 ? `${n} ${verb} ${why[0]}` : `${n} ${verb} – ${why.join(', ')}`
 }
 
 /** „najniższa energia 52 → 44”. */
@@ -69,7 +75,7 @@ export function groupLineText(l: GroupLineParts): string {
   const parts = [`${l.verb ?? VERB.changed} ${groupCount(l.n, l.kind)}`]
   const skipped = skippedText(l.skipped ?? [])
   if (skipped) parts.push(skipped)
-  const stayed = stayedText(l.stayed ?? [], l.kind)
+  const stayed = stayedText(l.stayed ?? [], l.kind, { place: l.stayedPlace === true })
   if (stayed) parts.push(stayed)
   if (l.energy && Math.round(l.energy.from) !== Math.round(l.energy.to)) parts.push(energyChangeText(l.energy.from, l.energy.to))
   if (l.series) parts.push(SERIES_NOTE)

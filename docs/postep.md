@@ -65,12 +65,12 @@ Autowznowienie po limicie: zadanie cron w sesji (co ok. 35 min) czyta ten wpis. 
 | Z1 | scalone 35b7148 (15.11 23:10) | przegląd high 9 uwag poprawionych, T1541–T1555; `installer-close.test.ts` pada lokalnie w obu drzewach (środowisko, PowerShell) – sprawdzi CI |
 | Z2 | scalone 15b2e2c (16.11 00:00) | A + B, dwa przeglądy high (10 + 11 uwag), T1560–T1577; E2E Spraw i Del lokalnie zielone |
 | Z3 | scalone a0a8042 (15.11 23:40) | przegląd high 10 uwag poprawionych, T1580–T1589; klik w dzień dalej go otwiera (zakres od Ctrl+klik) |
-| Z4 | A – runda 3 xhigh (9 uwag, ostatnia) w toku w `C:/CC-Projekty/RD-z4`; B cz. 1 (zaznaczanie osi i „Tygodnia”, menu z zaślepką `groupRunner`) scalone e9b9f74; B cz. 2 – podpięcie `runGroupAction` do logiki A | |
-| Z5 | zaznaczanie w „Tygodniu” i „3 dniach” w e9b9f74; działania wielodniowe przy podpięciu Z4-B cz. 2 | |
-| Z6 | czeka na Z4-A | przeciąganie grupy – logika `wykonawca-opus`, interfejs `wykonawca-sonnet`; E2E ciągu Z (group-select.spec.ts) w toku |
+| Z4 | scalone w całości 105cbb4 (16.11 02:35): A, B cz. 1, B cz. 2; trzy rundy xhigh na A i na B cz. 2 | uwagi na później: „Cofnij” usunięcia z pytaniem dziś otwiera blok przed odpowiedzią; linia „Przeniesiono 0 bloków · 2 dni niezapisane” (oba źródła odrzucone) |
+| Z5 | scalone razem z Z4 (105cbb4) | |
+| Z6 | gotowe w `C:/CC-Projekty/RD-z6` (T1750–T1762, poprawka liftsIn – remis startu); runda 1 xhigh 15 uwag – poprawki w toku; po scaleniu Z4 – merge paczki do z6 | |
 | Z7 | czeka | wersja, CHANGELOG, odbiór, Setup, PR, wydanie |
 
-**Przyjęte bez użytkownika (pokazać po powrocie):** (lista rośnie w trakcie)
+**Przyjęte bez użytkownika (pokazać po powrocie):** klik w Kalendarzu dalej otwiera dzień (zakres od Ctrl+klik, T1585); „Przywróć” sprawy → Skrzynka (T1562); grupa spraw planowana w kolejności ekranu (T1570); linia zmian w oknie, nie w pasku pulpitu (T1541); czasowniki „Odwołano”, „Zaparkowano”, „Skopiowano”, dopisek „przesunięto N bloków”; dopiski „N dzień czeka na odpowiedź” / „N … nie zapisany”; podkategoria / wariant / rutyna pomijają zaczęty, sesje i wykłady zmieniane (T1591); „Przesuń o” dziś od miejsca kafelka (T1592); grupa nie staje „równolegle” obok innego bloku (T1757); Esc odwołuje przeciąganie grupy.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;

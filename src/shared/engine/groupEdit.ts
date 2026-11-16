@@ -318,8 +318,7 @@ export function judgeGroup(day: GroupDay, ids: readonly string[], a: GroupAction
   }
   if (a.k === 'cancel' || a.k === 'park') {
     for (const b of picked) {
-      const f = state.facts.blocks.get(b.id)
-      const why: SkipWhy | null = date < today ? 'miniony' : date > today ? 'nie dziś' : f?.startedAt != null ? 'zaczęty' : f?.parkedAt != null || f?.cancelledAt != null ? 'zdjęty' : null
+      const why = dayActionWhy(day, b.id, today)
       if (why) skip(b, why)
       else out.take.push(b.id)
     }
@@ -360,6 +359,58 @@ export function judgeGroup(day: GroupDay, ids: readonly string[], a: GroupAction
   }
   const order = new Map(ctx.plan.map((b, i) => [b.id, i]))
   out.along.sort((x, y) => order.get(x)! - order.get(y)!)
+  return out
+}
+
+/** Why a block is no block of today's actions „Odwołaj” / „Zaparkuj” (the timer's): another day, begun, taken off. */
+function dayActionWhy(day: GroupDay, id: string, today: string): SkipWhy | null {
+  const date = day.ctx.date
+  const f = day.state.facts.blocks.get(id)
+  return date < today ? 'miniony' : date > today ? 'nie dziś' : f?.startedAt != null ? 'zaczęty' : f?.parkedAt != null || f?.cancelledAt != null ? 'zdjęty' : null
+}
+
+/** The rules of the menu's entries (D528): the fields of the panel, the tile's cost, the routine, a new place (a shift, a move), the day's actions. */
+export type MenuRule = 'fields' | 'cost' | 'routine' | 'place' | 'day'
+
+/** How many of the selected blocks a rule takes, and the reason of each one it leaves out. */
+export interface RuleVerdict {
+  take: number
+  skipped: SkipWhy[]
+}
+
+/**
+ * Whether a rule of the menu takes any of the selected blocks (D528, T1720: an entry none takes is off, with the reasons) – one pass over the
+ * blocks with one lookup of the day, whatever the value picked later (a block that has it already is taken: the rule does not stop it). A new
+ * place counts a block anchored to one that moves (it goes with it); a template has no actions of a day (`dayActions` false).
+ */
+export function ruleVerdicts(day: GroupDay, ids: readonly string[], today: string, o: { dayActions?: boolean } = {}): Partial<Record<MenuRule, RuleVerdict>> {
+  const l = lookupOf(day)
+  const wanted = new Set(ids)
+  const picked = day.ctx.plan.filter((b) => wanted.has(b.id))
+  const gone = [...wanted].filter((id) => !l.plan.has(id)).map((): SkipWhy => 'nie ma')
+  const verdict = (why: (b: PlanBlock) => SkipWhy | null): RuleVerdict => {
+    const skipped = [...gone]
+    let take = 0
+    for (const b of picked) {
+      const w = why(b)
+      if (w) skipped.push(w)
+      else take++
+    }
+    return { take, skipped }
+  }
+  // A new place: the rule of a drag; an anchored block counts when what it follows moves.
+  const placeWhys = new Map(picked.map((b) => [b.id, placeWhy(l, b.id, today)]))
+  const moving = new Set(picked.filter((b) => placeWhys.get(b.id) == null).map((b) => b.id))
+  const out: Partial<Record<MenuRule, RuleVerdict>> = {
+    fields: verdict((b) => fieldWhy(l, b, { k: 'category', categoryId: b.categoryId, variantId: b.variantId }, today)),
+    cost: verdict((b) => fieldWhy(l, b, { k: 'cost', costs: null }, today)),
+    routine: verdict((b) => fieldWhy(l, b, { k: 'routine', routine: null, minutes: 0 }, today)),
+    place: verdict((b) => {
+      const w = placeWhys.get(b.id) ?? null
+      return w === 'zakotwiczony' && followsMoving(l.plan, b.id, moving) ? null : w
+    })
+  }
+  if (o.dayActions !== false) out.day = verdict((b) => dayActionWhy(day, b.id, today))
   return out
 }
 
@@ -613,11 +664,20 @@ export function movedDays(o: { from: GroupDay; to: GroupDay | null; fromRaw: Raw
   const src = dayRaw(source, fromDate)
   const brought = dayRaw(bring, o.toDate)
   if (!o.to) return { source: src, bring: brought, target: brought, moved, stayers, pushed: [] }
+  const p = pushedInto(o.to, brought, o.toDate, moved, o.onUnsettled)
+  return { source: src, bring: brought, target: p.target, moved, stayers, pushed: p.pushed }
+}
+
+/**
+ * The target of a move with the blocks `moved` brought into its file (`brought` – one move or several, from several days): its flexible blocks
+ * on the places taken pushed apart (D367, `groupPush` – the moved ones hold their hours), each over the block as the file holds it then.
+ */
+export function pushedInto(to: GroupDay, brought: Raw, toDate: string, moved: readonly string[], onUnsettled?: () => void): { target: Raw; pushed: PushedBlock[] } {
   const ids = new Set(moved)
-  const there = dayFileFrom(brought, o.toDate).blocks.filter((b) => ids.has(b.id))
-  const after = there.reduce((p, b) => withBlock(p, b), [...o.to.ctx.plan])
-  const pushed = groupPush(o.to, after, ids, { onUnsettled: o.onUnsettled })
-  return { source: src, bring: brought, target: withPushedStarts(brought, o.toDate, after, pushed).raw, moved, stayers, pushed }
+  const there = dayFileFrom(brought, toDate).blocks.filter((b) => ids.has(b.id))
+  const after = there.reduce((p, b) => withBlock(p, b), [...to.ctx.plan])
+  const pushed = groupPush(to, after, ids, { onUnsettled })
+  return { target: withPushedStarts(brought, toDate, after, pushed).raw, pushed }
 }
 
 /**
