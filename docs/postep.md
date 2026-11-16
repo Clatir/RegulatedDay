@@ -63,6 +63,16 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
      odwołane); `inPortions` → `mapLimit` (`src/main/datastore/concurrency.ts`) przenieść do shared; reguła `off` budowana w
      oknie, a `ofTemplate`/odwołanie liczą bloki odwołane w logu; `readApplyDays` – trzecia kopia `countedAll`; `parseDmy` osobno
      od `parseDate`; `tests/fs/horizon.test.ts` niestabilny przy pełnym obciążeniu („tydzień i cele naraz”).
+   - **Sesja 8e (16.11) – „Dziś” w godzinach szablonu (D546–D552, T1911–T1929, T1950–T1961):** zgłoszenie: dziś szablon lądował
+     od chwili dodania (prognoza przesuwa minione elastyczne na „teraz”). Okno potwierdzenia dla dziś i dni minionych: „Godziny dziś”
+     (wg planu / od teraz – cały szablon przesunięty, stałe zostają) i „Minione bloki” (dodaj jako zrealizowane – fakty jak „Odbyło
+     się” / nie dodawaj); dzień zamknięty – punkty przeliczone (D550); bez folderu wpis czeka, zaliczenia po zapisie (D552, `owed.json`).
+     Zapis pliku i faktów jednym krokiem procesu głównego (`applyTemplateDays`, `EditQueue.applyStep`, `whole`). Cztery rundy
+     `/code-review` xhigh (D551 – nowy limit: trzy rundy, czwarta po high). Odbiór SZ4–SZ9. Commity 510e1f3, 6d78aeb, d96ac75, 9f2af7a; wydane 16.11 (PR #99, `main` ec848de, run 43890197333).
+   - Uwagi na później (8e): `Outcome` przy rd.json zapisywanym raz (znika z `wrote`, sprawdzić przy nowym użyciu `whole`);
+     podwójne `takeIn` w `judgeApply`/`applyTemplate`; `settleOwed` przyjmuje `read.away` (fakty przy niepełnym logu);
+     `docs/decyzje-techniczne.md` 196/200 KB – przenieść T1000–T1099 do osobnego pliku; `screens.spec.ts:67` („bar-place-1-bottom-left”)
+     pada lokalnie przy obecnym układzie monitorów.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
