@@ -92,3 +92,10 @@ describe('runda 1 – „bez zaliczenia” i dni zamknięte (D547, D550)', () =>
     )
   })
 })
+
+describe('runda 4 – okno dni zostaje, gdy dzień nie został zapisany', () => {
+  it('linia dla zapisanych, ale okno wyboru dni zostaje otwarte (do ponownego „Zastosuj”)', () => {
+    expect(tell(done({ days: 1, blocks: 2, notSaved: [{ date: '2026-11-19', why: 'changed' }] }), () => 'linia', () => 'nic')).toBe(false)
+    expect(tell(done({ days: 1, blocks: 2 }), () => 'linia', () => 'nic')).toBe(true)
+  })
+})

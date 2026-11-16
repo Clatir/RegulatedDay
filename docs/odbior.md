@@ -267,6 +267,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] SZ6 Dziś „od teraz” – przesunięcie szablonu, stałe i sesje zostają (1.29.0)
    - [ ] SZ7 Dni minione – „Nie dodawaj minionych” / „Dodaj jako zrealizowane” (1.29.0)
    - [ ] SZ8 Dzień zamknięty – punkty przeliczone; „Cofnij” z blokiem zmienionym od tego czasu (1.29.0)
+   - [ ] SZ9 Folder niedostępny – zaliczenia dopisują się po zapisie; „Cofnij” czekającej zmiany (1.29.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -2870,7 +2871,7 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Oczekiwany efekt:** w trakcie wszystkie zaznaczone stoją na nowych miejscach (oś – przerywane obwódki, „Tydzień” – pasma); po puszczeniu jadą o ten sam czas i dni, kolejne bloki się rozsuwają, linia „Przeniesiono 2 bloki · Cofnij”, jedno „Cofnij” przywraca wszystkie dni. Z Ctrl oryginały zostają, a w miejscu upuszczenia stają kopie („Skopiowano 2 bloki”). Esc odwołuje bez zmian i zostawia zaznaczenie. Blok zaczęty albo z dnia minionego zostaje na miejscu i jest policzony („1 został – już trwa”). Pojedyncze przeciąganie niezaznaczonego bloku działa jak dotąd.
 - **Nie przechodzi, gdy:** jedzie tylko chwycony blok; kopia rusza oryginały; zapisana godzina różni się od pokazanej po upuszczeniu; Esc zostawia zmianę albo czyści zaznaczenie.
 
-### SZ – szablon w wybrane dni (1.29.0, D540–D550)
+### SZ – szablon w wybrane dni (1.29.0, D540–D552)
 
 #### SZ1 „Zastosuj do…” szablonu (D540, D541)
 - [ ] Odebrane
@@ -2927,6 +2928,13 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** w Historii zapamiętaj punkty dnia minionego zamkniętego rytuałem (najlepiej już zamrożonego); „Wybierz dni…” – ten dzień, „Dodaj jako zrealizowane”; zajrzyj do punktów; „Cofnij”. Potem dziś: „Dziś” z blokiem minionym, popraw jego czas w rytuale albo przedłuż go, „Cofnij” w linii szablonu.
 - **Oczekiwany efekt:** linia „… · 1 dzień był zamknięty – punkty przeliczono”, punkty i ocena dnia zmieniają się zgodnie z dodanymi blokami (passa liczy się od nowa); „Cofnij” przywraca punkty sprzed zmiany. Blok poprawiony od tego czasu zostaje z ✓ i komunikat „1 blok zmieniony od tego czasu – został”, reszta wraca. Blok, którego aplikacja nie zaliczyła, stoi w planie, a linia mówi „N bez zaliczenia (powód)”. Dzień zmieniony w międzyczasie na drugim komputerze (np. pobudka) – nic z szablonu w nim nie zostaje, linia „<data>: nie zapisano (plik zajęty albo zmieniony na innym komputerze) – zastosuj jeszcze raz”.
 - **Nie przechodzi, gdy:** punkty dnia zamkniętego się nie zmieniają albo zmieniają się po „Cofnij” inaczej niż przed zmianą; „Cofnij” zdejmuje blok, który od tego czasu poprawiłeś; „Cofnij”, którego nie da się wykonać w jednym dniu, cofa część dni.
+
+#### SZ9 Folder niedostępny – zaliczenia po zapisie (D552)
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/template-done.test.ts`, `tests/fs/queue-step.test.ts`, `tests/web/template-apply-days.test.ts`.
+- **Jak sprawdzić:** wyłącz OneDrive albo odłącz folder danych (albo otwórz plik dnia minionego w programie, który go blokuje); „Wybierz dni…” – ten dzień, „Dodaj jako zrealizowane”; potem przywróć folder i odczekaj kilkanaście sekund; drugi raz to samo, ale przed powrotem folderu kliknij „Cofnij”.
+- **Oczekiwany efekt:** linia „… · 1 dzień czeka na folder – zaliczenia dopiszą się po zapisie”; po powrocie folderu bloki są w dniu z ✓, a dzień zamknięty ma przeliczone punkty. „Cofnij” przed powrotem – po powrocie dzień bez bloków i bez ✓.
+- **Nie przechodzi, gdy:** po powrocie folderu bloki są bez ✓ albo ✓ bez bloków; po „Cofnij” coś z szablonu zostaje w dniu.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 

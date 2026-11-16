@@ -55,7 +55,7 @@ afterEach(() => {
 })
 
 type Facts = TemplateApplyResult['facts'][number]
-function stub(o: { facts?: Partial<Facts>; apply?: Error; judged?: TemplateUndoJudged; withdrawn?: boolean; stranded?: boolean; undoAsked?: boolean; stayed?: string[]; runs?: DayRun[] } = {}) {
+function stub(o: { facts?: Partial<Facts>; apply?: Error; judged?: TemplateUndoJudged; withdrawn?: string; pending?: boolean; undoAsked?: boolean; stayed?: string[]; runs?: DayRun[] } = {}) {
   const files: Record<string, RawRecord | null> = {}
   const lay = (entries: EditEntry[]) =>
     entries.map((e) => {
@@ -69,15 +69,16 @@ function stub(o: { facts?: Partial<Facts>; apply?: Error; judged?: TemplateUndoJ
     edit: vi.fn(async (entries: EditEntry[]) => lay(entries)),
     applyTemplateDays: vi.fn(async (entries: EditEntry[]) => {
       if (o.apply) throw o.apply
-      if (o.stranded) return { outcomes: null, why: 'kolejka nie przyjęła zmiany', facts: [{ day: THU, written: WRITTEN, taken: [], skipped: [], closed: false, regradeFailed: null }] }
-      if (o.withdrawn) return { outcomes: entries.map(() => ({ status: 'withdrawn' as const })), facts: [{ day: THU, written: [], taken: [], skipped: [], closed: false, regradeFailed: null, notSaved: true }] }
+      if (o.withdrawn) return { outcomes: entries.map(() => ({ status: 'withdrawn' as const, why: o.withdrawn })), facts: [{ day: THU, written: [], taken: [], skipped: [], closed: false, regradeFailed: null }] }
+      // Waiting for the folder: this computer sees the change already (its queue), the folder does not.
+      if (o.pending) return { outcomes: lay(entries).map(() => ({ status: 'waiting' as const, why: 'plik zajęty' })), facts: [{ day: THU, written: [], taken: [], skipped: [], closed: false, regradeFailed: null, pending: 'pca-q1' }] }
       return { outcomes: lay(entries), facts: [{ day: THU, written: WRITTEN, taken: [id('rano'), id('po')], skipped: [], closed: false, regradeFailed: null, ...o.facts }] }
     }),
     judgeTemplateUndo: vi.fn(async () => o.judged ?? { ok: true as const, kept: [{ day: THU, blocks: [] }] }),
     undoTemplateDays: vi.fn(async (entries: EditEntry[]) =>
       o.undoAsked
-        ? { ok: true as const, outcomes: entries.map(() => ({ status: 'withdrawn' as const })), undone: [], notUndone: [THU], closed: [], regradeLater: [] }
-        : { ok: true as const, outcomes: lay(entries), undone: [{ day: THU, blocks: [], stayed: o.stayed ?? [] }], notUndone: [], closed: [], regradeLater: [] }
+        ? { ok: true as const, outcomes: entries.map(() => ({ status: 'withdrawn' as const, why: 'changed' })), undone: [], notUndone: [THU], closed: [], regradeLater: [], regradeFailed: [] }
+        : { ok: true as const, outcomes: lay(entries), undone: [{ day: THU, blocks: [], stayed: o.stayed ?? [] }], notUndone: [], closed: [], regradeLater: [], regradeFailed: [] }
     ),
     dayRuns: vi.fn(async () => o.runs ?? []),
     dataView: async () => ({ today: THU }) as DataView
@@ -97,7 +98,7 @@ describe('„Zastosuj” dziś – plik i fakty jednym krokiem (D547)', () => {
     const s = stub()
     expect(await applyToDays(training, [THU], 'fill', { hours: 'plan', past: 'done' }, AT)).toBe(true)
     expect(s.rd.edit).not.toHaveBeenCalled()
-    expect(s.rd.applyTemplateDays).toHaveBeenCalledWith([expect.objectContaining({ rel: expect.stringContaining(THU) })], [{ day: THU, ids: [id('rano'), id('po')], entry: 0 }])
+    expect(s.rd.applyTemplateDays).toHaveBeenCalledWith([expect.objectContaining({ rel: expect.stringContaining(THU) })], [{ day: THU, ids: [id('rano'), id('po')], entry: 0, template: 'trening', choice: { hours: 'plan', past: 'done' } }])
     expect(inPlan(s.files).sort()).toEqual([id('po'), id('rano'), id('wieczor')].sort())
     expect(line().text).toBe('„Trening” – 1 dzień: dodano 3 bloki (w tym 2 zrealizowane)')
     await line().undo()
@@ -146,12 +147,26 @@ describe('„Zastosuj” dziś – plik i fakty jednym krokiem (D547)', () => {
 })
 
 describe('runda 2 (T1950–T1955)', () => {
-  it('dzień, którego zmiany proces główny nie zapisał (wycofał w całości): nic w planie, okno zostaje, „zastosuj jeszcze raz”', async () => {
-    const s = stub({ withdrawn: true })
+  it('dzień, którego zmiany kolejka nie przyjęła (zmiana na innym komputerze): nic w planie, okno zostaje, powód w tekście', async () => {
+    const s = stub({ withdrawn: 'changed' })
     expect(await applyToDays(training, [THU], 'fill', { hours: 'plan', past: 'done' }, AT)).toBe(false)
     expect(inPlan(s.files)).toEqual([])
     expect(useGroupLine.getState().lines.template).toBeUndefined()
-    expect(useUi.getState().toasts.map((t) => t.text)).toContain('Nic nie zapisano · 19.11.2026: nie zapisano (plik zajęty albo zmieniony na innym komputerze) – zastosuj jeszcze raz')
+    expect(useUi.getState().toasts.map((t) => t.text)).toContain('Nic nie zapisano · 19.11.2026: nie zapisano (zmieniony na innym komputerze) – zastosuj jeszcze raz')
+  })
+
+  it('plik uszkodzony: tekst o przywróceniu z Historii', async () => {
+    stub({ withdrawn: 'broken' })
+    await applyToDays(training, [THU], 'fill', { hours: 'plan', past: 'done' }, AT)
+    expect(useUi.getState().toasts.map((t) => t.text).join(' ')).toContain('19.11.2026: nie zapisano – Plik jest uszkodzony')
+  })
+
+  it('D552: dzień czeka na folder – linia mówi, że zaliczenia dopiszą się po zapisie; „Cofnij” wycofuje czekający wpis', async () => {
+    const s = stub({ pending: true })
+    expect(await applyToDays(training, [THU], 'fill', { hours: 'plan', past: 'done' }, AT)).toBe(true)
+    expect(line().text).toBe('„Trening” – 1 dzień: dodano 3 bloki · 1 dzień czeka na folder – zaliczenia dopiszą się po zapisie')
+    await line().undo()
+    expect(s.rd.undoTemplateDays).toHaveBeenCalledWith(expect.any(Array), [{ day: THU, written: [], entry: 0, pending: 'pca-q1' }], [{ day: THU, blocks: [] }])
   })
 
   it('„Cofnij”: blok, który po odwrotności został w planie (zmiana z innego komputera), liczony jako „został”', async () => {
@@ -160,19 +175,11 @@ describe('runda 2 (T1950–T1955)', () => {
     expect(await line().undo()).toBe('1 blok zmieniony od tego czasu – został')
   })
 
-  it('krok odmówił, ale zaliczeń nie dało się cofnąć: linia mówi, że zostały, „Cofnij” zdejmuje same fakty', async () => {
-    const s = stub({ stranded: true })
-    expect(await applyToDays(training, [THU], 'fill', { hours: 'plan', past: 'done' }, AT)).toBe(false)
-    expect(line().text).toBe('„Trening” – planu nie zapisano, ale zostały zaliczenia: 19.11.2026')
-    await line().undo()
-    expect(s.rd.undoTemplateDays).toHaveBeenCalledWith([], [{ day: THU, written: WRITTEN, entry: null }], [{ day: THU, blocks: [] }])
-  })
-
   it('„Cofnij”, którego dzień proces główny nie cofnął (zmiana z innego komputera): linia zostaje, kolejne „Cofnij” próbuje tego dnia', async () => {
     const s = stub({ undoAsked: true })
     await applyToDays(training, [THU], 'fill', { hours: 'plan', past: 'done' }, AT)
     await expect(line().undo()).rejects.toBeInstanceOf(UndoNotDone)
-    expect(useUi.getState().toasts.map((t) => t.text).join(' ')).toContain('nie cofnięto (plik zajęty albo zmieniony na innym komputerze)')
+    expect(useUi.getState().toasts.map((t) => t.text).join(' ')).toContain('nie cofnięto')
     await expect(line().undo()).rejects.toBeInstanceOf(UndoNotDone)
     expect(s.rd.undoTemplateDays).toHaveBeenCalledTimes(2)
   })

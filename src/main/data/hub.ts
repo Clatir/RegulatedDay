@@ -47,7 +47,7 @@ import { seriesFrom } from '@shared/model/series'
 import { templateBlockAlive, templateFrom } from '@shared/model/plan'
 import { BEHIND_QUESTION, type Outcome, type QueuedEdit } from './editQueue'
 import type { DayRead } from './eventLog'
-import { UnknownRecordError, type DataFolder, type EditIn, type TimerClick } from './folder'
+import { UnknownRecordError, type DataFolder, type EditIn, type StepOutcome, type TimerClick } from './folder'
 import type { DayRun } from '@shared/engine/templateApply'
 import { nodeFs, type DataFs } from './fsio'
 import { historyKey } from './records'
@@ -199,7 +199,7 @@ function cleanEntries(entries: readonly EditEntry[]): EditIn[] {
 }
 
 /** What became of an edit, as a window reads it. */
-const outcomeOut = (o: (Outcome & { routineCostKept?: true }) | { id: string; status: 'withdrawn' }): EditOutcome => ({ status: o.status, ...(o.status === 'waiting' ? { why: o.why } : {}), ...('routineCostKept' in o && o.routineCostKept ? { routineCostKept: true as const } : {}) })
+const outcomeOut = (o: StepOutcome): EditOutcome => ({ status: o.status, ...(o.status === 'waiting' || o.status === 'withdrawn' ? { why: o.why } : {}), ...('routineCostKept' in o && o.routineCostKept ? { routineCostKept: true as const } : {}) })
 
 export class DataHub {
   status: DataView['status'] = 'none'
@@ -1020,20 +1020,20 @@ export class DataHub {
     return out.map(outcomeOut)
   }
 
-  /** „Zastosuj szablon” in one step (D547): the facts of the blocks gone by and the edit of the days' files. */
+  /** „Zastosuj szablon” in one step (D547, D552): the edit of the days' files and the facts of the blocks gone by (now or once laid). */
   async applyTemplateDays(entries: EditEntry[], asks: TemplateDoneAsk[]): Promise<TemplateApplyResult> {
     const r = await this.need().applyTemplateDays(cleanEntries(entries), asks)
     this.changed()
     void this.service?.tick()
-    return { outcomes: r.outcomes ? r.outcomes.map(outcomeOut) : null, ...(r.why ? { why: r.why } : {}), facts: r.facts }
+    return { outcomes: r.outcomes.map(outcomeOut), facts: r.facts }
   }
 
   /** Whether „Cofnij” of „Zastosuj” may take its facts back (the blocks changed since stay). */
-  judgeTemplateUndo(asks: Array<{ day: string; written: string[] }>): Promise<TemplateUndoJudged> {
+  judgeTemplateUndo(asks: Array<{ day: string; written: string[]; pending?: string }>): Promise<TemplateUndoJudged> {
     return this.need().judgeTemplateUndo(asks)
   }
 
-  /** „Cofnij” of „Zastosuj” in one step: files, then facts. */
+  /** „Cofnij” of „Zastosuj” in one step: a waiting entry taken out, the inverses, then the facts. */
   async undoTemplateDays(entries: EditEntry[], asks: TemplateUndoAsk[], kept: Array<{ day: string; blocks: string[] }>): Promise<TemplateUndoResult> {
     const r = await this.need().undoTemplateDays(cleanEntries(entries), asks, kept)
     this.changed()

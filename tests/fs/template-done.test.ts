@@ -71,7 +71,7 @@ describe('D547 – plik i fakty jednym krokiem', () => {
     await ranX(m)
     m.at(10 * 60)
     const r = await m.folder.applyTemplateDays([entryOf(DAY, [b('a', 360, 60), b('b', 420, 60), b('c', 720, 60)])], [{ day: DAY, ids: ['a', 'b', 'c'], entry: 0 }])
-    expect(r.outcomes!.map((o) => o.status)).toEqual(['applied'])
+    expect(r.outcomes.map((o) => o.status)).toEqual(['applied'])
     expect(r.facts).toEqual([expect.objectContaining({ day: DAY, taken: ['a'], skipped: expect.arrayContaining([{ id: 'b', why: 'ran' }, { id: 'c', why: 'notPast' }]), closed: false })])
     const ofA = (await events(m.folder)).filter((e) => e.block === 'a')
     expect(ofA.map((e) => [e.k, e.at, e.how ?? e.done])).toEqual([
@@ -82,41 +82,66 @@ describe('D547 – plik i fakty jednym krokiem', () => {
     expect(fileIds()).toEqual(expect.arrayContaining(['a', 'b', 'c']))
   })
 
-  it('edycja odrzucona po zapisie faktów: fakty wszystkich dni cofnięte, wynik mówi, co stoi (nic) – bez wyjątku', async () => {
+  it('edycja odrzucona przed kolejką (nowy plik tam, gdzie jest): nic nie zapisane – ani pliki, ani fakty, ani zapamiętane zaliczenia', async () => {
     const m = await make()
     m.at(10 * 60)
-    // BEFORE takes its facts first; then a new file where one is (DAY): the queue refuses the whole edit.
-    const r = await m.folder.applyTemplateDays([entryOf(BEFORE, [b('p', 20 * 60, 60)]), entryOf(DAY, [b('a', 360, 60)], { create: true })], [{ day: BEFORE, ids: ['p'], entry: 0 }, { day: DAY, ids: ['a'], entry: 1 }])
-    expect(r.outcomes).toBeNull()
-    expect(r.why).toBeTruthy()
-    expect(r.facts.map((f) => [f.day, f.written, f.taken])).toEqual([[BEFORE, [], []], [DAY, [], []]])
-    expect(foldFacts(gridOf(BEFORE), await events(m.folder, BEFORE)).blocks.get('p')?.startedAt ?? null).toBeNull()
-    expect(foldFacts(gridOf(DAY), await events(m.folder)).blocks.get('a')?.startedAt ?? null).toBeNull()
+    const p = m.folder.applyTemplateDays([entryOf(BEFORE, [b('p', 20 * 60, 60)]), entryOf(DAY, [b('a', 360, 60)], { create: true })], [{ day: BEFORE, ids: ['p'], entry: 0 }, { day: DAY, ids: ['a'], entry: 1 }])
+    await expect(p).rejects.toThrow()
+    expect((await events(m.folder, BEFORE)).filter((e) => e.block === 'p')).toEqual([])
     expect(fileIds()).toEqual(['x'])
     expect(fileIds(BEFORE)).toEqual([])
+    expect(m.folder.queue.pending).toEqual([])
   })
 
-  it('plik dnia nieczytelny przy zapisie: ten dzień wycofany w całości (bez bloków i faktów), inny dzień stoi w całości', async () => {
-    // DAY goes first; BEFORE's file cannot be read: its entry waits – taken out of the queue, nothing of it stays.
+  it('D552: plik dnia zajęty – wpis zostaje w kolejce, zaliczenia dopisują się w turze kolejki, która go kładzie; inny dzień stoi od razu', async () => {
+    // DAY goes now; BEFORE's file cannot be written: its entry waits for the folder.
     const beforeAbs = join(dataDir, paths.day(BEFORE))
-    const held: DataFs = {
+    let held = true
+    const fsHeld: DataFs = {
       ...nodeFs,
-      read: async (abs) => {
-        if (abs === beforeAbs) throw Object.assign(new Error('plik zajęty'), { code: 'EBUSY' })
-        return nodeFs.read(abs)
+      writeAtomic: async (abs, data) => {
+        if (held && abs === beforeAbs) throw Object.assign(new Error('plik zajęty'), { code: 'EBUSY' })
+        return nodeFs.writeAtomic(abs, data)
       }
     }
-    const m = await make({ fs: held })
+    const m = await make({ fs: fsHeld })
     m.at(10 * 60)
     const r = await m.folder.applyTemplateDays([entryOf(DAY, [b('a', 360, 60)]), entryOf(BEFORE, [b('p', 20 * 60, 60)])], [{ day: DAY, ids: ['a'], entry: 0 }, { day: BEFORE, ids: ['p'], entry: 1 }])
-    expect(r.outcomes!.map((o) => o.status)).toEqual(['applied', 'withdrawn'])
-    expect(r.facts.map((f) => [f.day, f.taken, !!f.notSaved])).toEqual([[DAY, ['a'], false], [BEFORE, [], true]])
+    expect(r.outcomes.map((o) => o.status)).toEqual(['applied', 'waiting'])
+    expect(r.facts.map((f) => [f.day, f.taken, !!f.pending])).toEqual([[DAY, ['a'], false], [BEFORE, [], true]])
     expect((await events(m.folder, BEFORE)).filter((e) => e.block === 'p')).toEqual([])
-    expect(m.folder.queue.pending).toEqual([])
-    expect(fileIds()).toContain('a')
+    expect(m.folder.queue.pending.map((e) => e.rel)).toEqual([paths.day(BEFORE)])
+    // The folder is back: the run of the queue that lays the entry writes its facts, on the plan the folder holds.
+    held = false
+    await m.folder.edit([])
+    expect(fileIds(BEFORE)).toContain('p')
+    expect((await events(m.folder, BEFORE)).filter((e) => e.block === 'p').map((e) => e.k)).toEqual(['block.start', 'block.end'])
   })
 
-  it('wpis, który spotkał zmianę z innego komputera: wycofany z kolejki, to, co z niego weszło, przywrócone – dzień jak przed zmianą, bez faktów', async () => {
+  it('D552: „Cofnij” dnia, którego wpis wciąż czeka – wpis wycofany, zaliczeń nie ma i nie będzie', async () => {
+    const beforeAbs = join(dataDir, paths.day(BEFORE))
+    let held = true
+    const fsHeld: DataFs = {
+      ...nodeFs,
+      writeAtomic: async (abs, data) => {
+        if (held && abs === beforeAbs) throw Object.assign(new Error('plik zajęty'), { code: 'EBUSY' })
+        return nodeFs.writeAtomic(abs, data)
+      }
+    }
+    const m = await make({ fs: fsHeld })
+    m.at(10 * 60)
+    const r = await m.folder.applyTemplateDays([entryOf(BEFORE, [b('p', 20 * 60, 60)])], [{ day: BEFORE, ids: ['p'], entry: 0 }])
+    const pending = r.facts[0]!.pending!
+    const u = await m.folder.undoTemplateDays([inverseOf(BEFORE, [b('p', 20 * 60, 60)])], [{ day: BEFORE, written: [], entry: 0, pending }], [{ day: BEFORE, blocks: [] }])
+    expect(u.ok && u.undone).toEqual([{ day: BEFORE, blocks: [], stayed: [] }])
+    expect(m.folder.queue.pending).toEqual([])
+    held = false
+    await m.folder.edit([])
+    expect(fileIds(BEFORE)).toEqual([])
+    expect((await events(m.folder, BEFORE)).filter((e) => e.block === 'p')).toEqual([])
+  })
+
+  it('wpis, który spotkał zmianę z innego komputera: nie zapisuje nic (w całości albo wcale), wycofany w tej samej turze, z powodem; bez faktów', async () => {
     const m = await make()
     m.at(10 * 60)
     // Another computer set the wake meanwhile: the window's entry changes it from what it saw (none) – a question about that field.
@@ -124,8 +149,9 @@ describe('D547 – plik i fakty jednym krokiem', () => {
     writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ ...raw, wakeMin: 7 * 60 }))
     const e = entryOf(DAY, [b('a', 360, 60), b('c', 720, 60)])
     const r = await m.folder.applyTemplateDays([{ ...e, edits: [...e.edits, { path: ['wakeMin'], base: undefined, value: 6 * 60 }] }], [{ day: DAY, ids: ['a'], entry: 0 }])
-    expect(r.outcomes!.map((o) => o.status)).toEqual(['withdrawn'])
-    expect(r.facts[0]).toMatchObject({ day: DAY, notSaved: true, written: [], taken: [] })
+    expect(r.outcomes).toEqual([expect.objectContaining({ status: 'withdrawn', why: 'changed' })])
+    expect(r.facts[0]).toMatchObject({ day: DAY, written: [], taken: [] })
+    expect(r.facts[0]!.pending).toBeUndefined()
     expect((await events(m.folder)).filter((x) => x.block === 'a')).toEqual([])
     expect(fileIds()).toEqual(['x'])
     expect(m.folder.queue.pending).toEqual([])
@@ -331,23 +357,14 @@ describe('runda 2 – „Cofnij” i ocena od nowa', () => {
     spy.mockRestore()
   })
 
-  it('plik dnia czeka na folder (zapis się nie udał): wpis wycofany, dzień bez bloków i bez faktów', async () => {
-    const beforeAbs = join(dataDir, paths.day(BEFORE))
-    const held: DataFs = {
-      ...nodeFs,
-      writeAtomic: async (abs, data) => {
-        if (abs === beforeAbs) throw Object.assign(new Error('plik zajęty'), { code: 'EBUSY' })
-        return nodeFs.writeAtomic(abs, data)
-      }
-    }
-    const m = await make({ fs: held })
+  it('odwrotność, która spotkała zmianę: powód w wyniku („Cofnij” mówi właściwy tekst)', async () => {
+    const m = await make()
     m.at(10 * 60)
-    const r = await m.folder.applyTemplateDays([entryOf(BEFORE, [b('p', 20 * 60, 60)])], [{ day: BEFORE, ids: ['p'], entry: 0 }])
-    expect(r.outcomes!.map((o) => o.status)).toEqual(['withdrawn'])
-    expect(r.facts[0]).toMatchObject({ notSaved: true, written: [] })
-    expect((await events(m.folder, BEFORE)).filter((e) => e.block === 'p')).toEqual([])
-    expect(fileIds(BEFORE)).toEqual([])
-    expect(await m.folder.dayFile(BEFORE, true)).toMatchObject({ blocks: [] })
+    const r = await m.folder.applyTemplateDays([entryOf(DAY, [b('a', 360, 60)])], [{ day: DAY, ids: ['a'], entry: 0 }])
+    const raw = JSON.parse(readFileSync(join(dataDir, paths.day(DAY)), 'utf8')) as { blocks: Array<Record<string, unknown>> }
+    writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ ...raw, blocks: raw.blocks.map((x) => (x.id === 'a' ? { ...x, durationMin: 45 } : x)) }))
+    const u = await m.folder.undoTemplateDays([inverseOf(DAY, [b('a', 360, 60)])], [{ day: DAY, written: r.facts[0]!.written, entry: 0 }], [{ day: DAY, blocks: [] }])
+    expect(u.ok && u.outcomes).toEqual([expect.objectContaining({ status: 'withdrawn', why: 'changed' })])
   })
 })
 
@@ -378,10 +395,23 @@ describe('runda 3 – ocena od nowa (D550)', () => {
     m.at(10 * 60)
     m.folder.append({ day: BEFORE, dom: 'game', k: 'day.freeze', at: m.clock.now, how: 'timeout', know: {}, missing: [], grade: {} })
     const r = await m.folder.applyTemplateDays([entryOf(BEFORE, [b('p', 20 * 60, 60)])], [{ day: BEFORE, ids: ['p'], entry: 0 }])
+    expect(r.facts[0]).toMatchObject({ regradeLater: false })
     expect(r.facts[0]!.regradeFailed).toBeTruthy()
     expect(readFileSync(regradeFile(), 'utf8')).toBe('{ to nie jest JSON')
     const u = await m.folder.undoTemplateDays([inverseOf(BEFORE, [b('p', 20 * 60, 60)])], [{ day: BEFORE, written: r.facts[0]!.written, entry: 0 }], [{ day: BEFORE, blocks: [] }])
-    expect(u.ok && [u.closed, u.regradeLater]).toEqual([[], [BEFORE]])
+    expect(u.ok && [u.closed, u.regradeLater, u.regradeFailed]).toEqual([[], [], [BEFORE]])
+  })
+
+  it('dane gry nieczytelne przy ocenie: krok nie jest odrzucany, dzień czeka na późniejszą ocenę', async () => {
+    const m = await make()
+    m.at(10 * 60)
+    m.folder.append({ day: BEFORE, dom: 'game', k: 'day.freeze', at: m.clock.now, how: 'timeout', know: {}, missing: [], grade: {} })
+    const inner = m.folder as unknown as { gameInputs: (...a: unknown[]) => Promise<unknown> }
+    const spy = vi.spyOn(inner, 'gameInputs').mockRejectedValue(new Error('rd.json nieczytelny'))
+    const r = await m.folder.applyTemplateDays([entryOf(BEFORE, [b('p', 20 * 60, 60)])], [{ day: BEFORE, ids: ['p'], entry: 0 }])
+    spy.mockRestore()
+    expect(r.facts[0]).toMatchObject({ taken: ['p'], regradeLater: true })
+    expect(JSON.parse(readFileSync(regradeFile(), 'utf8'))).toEqual({ days: [BEFORE] })
   })
 
   it('dzień z listy, którego plik czeka w kolejce – nie oceniany, dopóki plik nie wejdzie do folderu', async () => {

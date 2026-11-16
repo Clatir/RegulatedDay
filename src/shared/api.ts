@@ -478,7 +478,10 @@ export interface EditEntry {
  * What became of one entry of an edit; `routineCostKept` – a routine's record written with another cost whose `routine.cost` the journal
  * did not take (T1446): today's begun blocks of it count the cost they had (the window says so).
  */
-/** `withdrawn` – an entry of a step that writes a day whole or not at all (`applyTemplateDays`) taken out of the queue again: nothing of it stays. */
+/**
+ * `withdrawn` – an entry of a step that writes a day whole or not at all (`applyTemplateDays`) taken out of the queue again: nothing of it
+ * stays; its `why` – `changed` (on another computer), `removed`, `broken`, `behind` (a question before it).
+ */
 export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting' | 'withdrawn'; why?: string; routineCostKept?: true }
 
 /**
@@ -568,12 +571,16 @@ export interface TemplateDoneAsk {
   day: string
   ids: string[]
   entry: number
+  /** What the facts are owed to, kept with them while the entry waits for the folder (D552). */
+  template?: string
+  choice?: { hours: 'plan' | 'now'; past: 'done' | 'skip' }
 }
 
 /**
  * What „Zastosuj szablon” did on a day (D547, D550): `written` – the ids of its facts (for „Cofnij”), `taken` – the blocks done, `skipped`
  * – those asked and not done, with why; `closed` – the day was closed (the ritual) or frozen: its points counted again; `regradeFailed` –
- * frozen, and its grade could not be written again now (why).
+ * frozen, and its grade could not be written again now (why; `regradeLater` – a later check does it); `pending` – its entry waits for the folder
+ * (D552: the queue's id – the facts are written once it is laid).
  */
 export interface TemplateDayDone {
   day: string
@@ -582,15 +589,13 @@ export interface TemplateDayDone {
   skipped: Array<{ id: string; why: DoneSkipWhy }>
   closed: boolean
   regradeFailed?: string | null
-  /** Its entry did not go into the folder (a question, a file held, refused): taken out of the queue, nothing of it stays, no facts (T1956). */
-  notSaved?: boolean
+  regradeLater?: boolean
+  pending?: string
 }
 
-/** „Zastosuj szablon” in one step (D547): what became of each entry (as `edit`), and the facts of each day asked. */
+/** „Zastosuj szablon” in one step (D547): what became of each entry (as `edit`; `withdrawn` with why), and the facts of each day asked. */
 export interface TemplateApplyResult {
-  /** Null – the edit did not go (`why`); `facts` then say what still stands (facts that could not be taken back). */
-  outcomes: EditOutcome[] | null
-  why?: string
+  outcomes: EditOutcome[]
   facts: TemplateDayDone[]
 }
 
@@ -599,6 +604,8 @@ export interface TemplateUndoAsk {
   day: string
   written: string[]
   entry: number | null
+  /** The day's entry of „Zastosuj” (the queue's id) while it waited for the folder (D552). */
+  pending?: string
 }
 
 /** Whether „Cofnij” may take the facts back: the blocks of each day that stay as they are (another event since, D313), or a refusal. */
@@ -609,7 +616,7 @@ export type TemplateUndoJudged = { ok: true; kept: Array<{ day: string; blocks: 
  * – their facts stay), the days not taken back (`notUndone` – their inverse did not go in), the closed days counted again, those later.
  */
 export type TemplateUndoResult =
-  | { ok: true; outcomes: EditOutcome[]; undone: Array<{ day: string; blocks: string[]; stayed: string[] }>; notUndone: string[]; closed: string[]; regradeLater: string[] }
+  | { ok: true; outcomes: EditOutcome[]; undone: Array<{ day: string; blocks: string[]; stayed: string[] }>; notUndone: string[]; closed: string[]; regradeLater: string[]; regradeFailed: string[] }
   | { ok: false; why: string }
 
 export interface FolderProbe {
@@ -905,7 +912,7 @@ export interface RdApi {
    */
   applyTemplateDays(entries: EditEntry[], asks: TemplateDoneAsk[]): Promise<TemplateApplyResult>
   /** Whether „Cofnij” of „Zastosuj” may take its facts back, and which blocks stay as they are (changed since). */
-  judgeTemplateUndo(asks: Array<{ day: string; written: string[] }>): Promise<TemplateUndoJudged>
+  judgeTemplateUndo(asks: Array<{ day: string; written: string[]; pending?: string }>): Promise<TemplateUndoJudged>
   /** „Cofnij” of „Zastosuj” in one step: every day judged first (`kept` as told, else nothing), then the files, then the facts. */
   undoTemplateDays(entries: EditEntry[], asks: TemplateUndoAsk[], kept: Array<{ day: string; blocks: string[] }>): Promise<TemplateUndoResult>
   /** The runs of a day's blocks in the foreground as the bar shows it (with the ends the app's close made) – „coś trwało” of „Zastosuj” (null – not readable now). */
