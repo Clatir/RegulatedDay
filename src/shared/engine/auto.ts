@@ -193,6 +193,21 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
     if (back && back.use < plannedEnd) return { at: back.use, rule: 'firstUse' }
     return c.inp.now >= plannedEnd ? { at: plannedEnd, rule: AWAY_PLAN_RULE } : null
   }
+  // „Jednym ciągiem” (D553, T1962): every other block away from the computer – begun by itself or by a click – ends at the
+  // return, at the latest at its planned end (with its pauses, `plannedEndOf`; not after the bedtime) – done, without a
+  // question; the next one begins by itself then (`awayStarts`). Its end by the plan taken back by „Cofnij”: the rules below.
+  if (state.settings.awayChain) {
+    // A block begun after the bedtime (by a click) keeps its planned end – never one before its start.
+    const byPlanEnd = atOf(state.grid, plannedEndOf(state, info, f))
+    const bedtime = atOf(state.grid, state.bedtime.effective)
+    const plannedEnd = bedtime > start ? Math.min(byPlanEnd, bedtime) : byPlanEnd
+    const byPlan = awayEndEvent(c.date, info.id, { at: plannedEnd, rule: AWAY_CHAIN_RULE })
+    if (!state.facts.undone.has(byPlan.id)) {
+      const back = firstUseAfter(activity, f.group != null ? runFromOf(state.grid, f) : start, AWAY_GAP_MIN)
+      if (back && back.use < plannedEnd) return { at: back.use, rule: 'firstUse' }
+      return c.inp.now >= plannedEnd ? { at: plannedEnd, rule: AWAY_CHAIN_RULE } : null
+    }
+  }
   // A regeneration the app began by itself (D475) has the same limit (T1139): a long absence is no hours of rest.
   // So does a block of home requests (T1152).
   const autoRegen = (info.isRegen || info.isRequestCat) && begunByItself
@@ -223,6 +238,24 @@ export const GROUP_PLAN_RULE = 'groupPlan'
 export const AWAY_PLAN_RULE = 'awayPlan'
 
 /**
+ * The end of a block away from the computer at its planned end with „jednym ciągiem” on (D553, T1962): done, on its own
+ * row with „Cofnij”, without the question after the return (D555) nor a row in the ritual (T1965).
+ */
+export const AWAY_CHAIN_RULE = 'awayChain'
+
+/**
+ * When a stretch without input `x` tells you are away within a block's time from `lo` (ms), or null: once
+ * `AWAY_START_MIN` of it has passed from `lo` (T1138) – or, with „jednym ciągiem” on (D554, T1963), for a stretch that began
+ * before `lo` and is `AWAY_START_MIN` long already, once `AWAY_GAP_MIN` of it has passed from `lo` (you left before: the
+ * chain goes on at once; a return within those 2 min is no first use of a block begun then).
+ */
+export function awayKnownAt(x: { from: number; to: number }, lo: number, chain: boolean): number | null {
+  if (chain && x.from < lo && x.to - x.from >= AWAY_START_MIN * MIN && x.to - lo >= AWAY_GAP_MIN * MIN) return Math.max(lo + AWAY_GAP_MIN * MIN, x.from + AWAY_START_MIN * MIN)
+  const from = Math.max(x.from, lo)
+  return x.to - from >= AWAY_START_MIN * MIN ? from + AWAY_START_MIN * MIN : null
+}
+
+/**
  * The rest of a parallel group begun with a block that began by itself (D499, T1197): each start or resume on its own row
  * (`groupStart`, „Cofnij”); a resumed one sent behind (`block.fg`) – an id of its own, no row (T1204).
  */
@@ -234,8 +267,9 @@ function groupAutoStarts(inp: AutoInput, lead: string, at: number): AutoEvent[] 
 
 /** The automatic end of a block away from the computer by `awayEnd` (one id for the rule and the check that waits for it). */
 const awayEndEvent = (date: string, block: string, away: { at: number; rule: string }): AutoEvent =>
-  // A commute ended „według planu” is done explicitly (D483, D484 – `fin`, T1121); the first use, the limit, the bedtime – not.
-  auto(date, away.rule, { k: 'block.end', block, at: away.at, done: null, rule: away.rule, ...(away.rule === AWAY_PLAN_RULE ? { fin: true } : {}) })
+  // A commute ended „według planu” is done explicitly (D483, D484 – `fin`, T1121), so is a block of a chain (D553); the first
+  // use, the limit, the bedtime – not.
+  auto(date, away.rule, { k: 'block.end', block, at: away.at, done: null, rule: away.rule, ...(away.rule === AWAY_PLAN_RULE || away.rule === AWAY_CHAIN_RULE ? { fin: true } : {}) })
 
 /** The context the rules of running blocks judge in (outside `autoActions`, which builds its own). */
 function ctxOf(inp: AutoInput, t: TimerNow): Ctx {
@@ -274,6 +308,7 @@ function awayStarts(inp: AutoInput, t: TimerNow, fixedFgAt: number): AutoEvent[]
   for (const r of state.facts.requests) if (r.to !== OPEN) free = Math.max(free, at(r.to))
   for (const d of state.facts.disconnect) if (d.to !== OPEN) free = Math.max(free, at(d.to))
   const bedtime = at(state.bedtime.effective)
+  const chain = state.settings.awayChain
   const candidates = state.blocks.filter(awayOwnHour).sort((a, b) => a.start! - b.start! || (a.id < b.id ? -1 : 1))
   for (const b of candidates) {
     const f = state.facts.blocks.get(b.id)
@@ -282,11 +317,11 @@ function awayStarts(inp: AutoInput, t: TimerNow, fixedFgAt: number): AutoEvent[]
     const lo = Math.max(at(b.start!), free)
     const hi = Math.min(at(b.start! + b.durationMin), bedtime)
     // The first stretch without input from `lo` long enough to tell you left (an open one up to now).
-    const away = activity.idle.find((x) => x.to - Math.max(x.from, lo) >= AWAY_START_MIN * MIN && Math.max(x.from, lo) < hi)
+    const away = activity.idle.find((x) => Math.max(x.from, lo) < hi && awayKnownAt(x, lo, chain) != null)
     if (!away) continue
     const from = Math.max(away.from, lo)
     // Due once the gap is known (its threshold passed) – and a fixed block taking the foreground then or before comes first.
-    const known = from + AWAY_START_MIN * MIN
+    const known = awayKnownAt(away, lo, chain)!
     if (known > inp.now || known > inp.gate || from >= fixedFgAt) continue
     const id = derivedId(date, 'auto', 'awayStart', 'block.start', b.id, at(b.start!))
     if (state.facts.undone.has(id)) continue
@@ -626,7 +661,7 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
   // Automatic ends that a later log shows wrong (input within the threshold, an earlier first use): undone, and the rule
   // judges the block again (spec „log, który przyjdzie później i pokaże wejście w tym progu, go unieważnia”).
   for (const a of state.facts.autos) {
-    if (a.k !== 'block.end' || !a.block || !['idle', 'firstUse', 'limit', 'absence', 'lastInput', AWAY_PLAN_RULE].includes(a.rule)) continue
+    if (a.k !== 'block.end' || !a.block || !['idle', 'firstUse', 'limit', 'absence', 'lastInput', AWAY_PLAN_RULE, AWAY_CHAIN_RULE].includes(a.rule)) continue
     const f = state.facts.blocks.get(a.block)
     const info = byId.get(a.block)
     if (!f || !info || f.endId !== a.id) continue
@@ -643,9 +678,12 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
         continue
       }
       still = idleEnd(c, info, open)?.at ?? null
-    } else if (a.rule === 'firstUse' || a.rule === 'limit' || a.rule === AWAY_PLAN_RULE) {
+    } else if (a.rule === 'firstUse' || a.rule === 'limit' || a.rule === AWAY_PLAN_RULE || a.rule === AWAY_CHAIN_RULE) {
       const r = awayEnd(c, info, open)
       still = r && r.rule === a.rule ? r.at : null
+      // „Jednym ciągiem” (T1966): the new end (an earlier first use) is written in the same pass – the next block of the chain,
+      // begun from the end that goes back, never runs beside a block open again until the next pass.
+      if (a.rule === AWAY_CHAIN_RULE && r && r.rule !== a.rule && due(r.at) && take([revalidate('later log'), awayEndEvent(date, a.block, r)])) continue
     } else if (a.rule === 'absence') {
       still = absencesOf(state, activity, info, open).some((x) => idxOf(state.grid, Math.max(x.away, at(f.startedAt ?? 0))) === f.endedAt) ? at(f.endedAt!) : null
     } else {
@@ -661,6 +699,8 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     if (a.k !== 'block.start' || a.rule !== 'awayStart' || !a.block || state.facts.undone.has(a.id) || !awayStartUndoable(state, a)) continue
     const from = at(a.at)
     if (activity.idle.some((x) => x.from <= from + MIN && x.to - from >= AWAY_START_MIN * MIN)) continue
+    // „Jednym ciągiem” (T1963): a start right after you left earlier – the stretch it began by holds it.
+    if (state.settings.awayChain && activity.idle.some((x) => awayKnownAt(x, from, true) != null && x.from < from)) continue
     const f = state.facts.blocks.get(a.block)
     const end = f?.endId ? state.facts.autos.find((x) => x.id === f.endId) : undefined
     // The rest of its group begun with it goes back too (T1204).

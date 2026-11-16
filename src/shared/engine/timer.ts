@@ -17,6 +17,7 @@ import { isBoundaryWork, ownHourBlock, plannedSpan, setsWorkEndBlock, startPlann
 import type { DayContext, DayState } from './day'
 import { workedUntilOf } from './explain'
 import { OPEN, compareOrder, endShiftOf, type EventOrder, isRunning, type AutoAction, isRunningRequest, lastRunEnd, ranMinutes, resumedWith, runShift, workSince, type BlockFact } from './facts'
+import { activityOf, firstUseAfter } from './activity'
 import { atOf, idxOf } from './grid'
 import { groupOf } from './parallel'
 
@@ -351,6 +352,29 @@ export function untouched(state: DayState, block: string): boolean {
     if (f.runs[i - 1]!.to !== r.from || !state.facts.autos.some((x) => x.k === 'block.fg' && x.rule === 'groupFront' && x.block === block && x.at === r.from)) return false
   }
   return f.endedAt == null ? f.runs.at(-1)!.to === OPEN : state.facts.autos.some((x) => x.id === f.endId)
+}
+
+/**
+ * „Jednym ciągiem” (D555, T1964): what goes back with a block's end by the plan (`awayChain`, `a`) – every block the app
+ * began by itself from that end up to your return (`awayStart`, with the rest of its group and its automatic end, the next
+ * ones of the chain too): the block goes on to the return or its limit, so they would run beside it. Null – one of them
+ * changed since its start (the chain stays as it is).
+ */
+export function awayChainUndo(ctx: Pick<DayContext, 'events'>, state: DayState, a: AutoAction, now: number): AutoAction[] | null {
+  const f = a.block ? state.facts.blocks.get(a.block) : undefined
+  if (a.rule !== 'awayChain' || a.k !== 'block.end' || !f || f.startedAt == null) return []
+  // The return the block's usual end counts (`awayEnd`: the first use after 2 min without input from its start or last run).
+  const from = atOf(state.grid, f.group != null ? (f.runs.at(-1)?.from ?? f.startedAt) : f.startedAt)
+  const back = firstUseAfter(activityOf(ctx.events, state.grid.start, now), from)
+  const out: AutoAction[] = []
+  for (const x of state.facts.autos) {
+    if (x.k !== 'block.start' || x.rule !== 'awayStart' || !x.block || x.block === a.block || x.at < a.at || state.facts.undone.has(x.id)) continue
+    if (back && atOf(state.grid, x.at) >= back.use) continue
+    if (!untouched(state, x.block)) return null
+    const end = state.facts.blocks.get(x.block)?.endId
+    out.push(x, ...state.facts.autos.filter((y) => y.id === end), ...groupStartsWith(state, x))
+  }
+  return out
 }
 
 export function awayStartUndoable(state: DayState, a: AutoAction): boolean {
@@ -866,6 +890,12 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       if (a.rule === 'awayStart' && a.k === 'block.start') {
         if (!awayStartUndoable(state, a)) return no('tego już nie cofniesz – blok zmienił się po starcie')
         pair = [...state.facts.autos.filter((x) => x.k === 'block.end' && x.block === a.block && state.facts.blocks.get(a.block!)?.endId === x.id), ...groupStartsWith(state, a)]
+      }
+      // „Jednym ciągiem” (D555): an end by the plan goes back with the blocks the app began after it before your return.
+      if (a.rule === 'awayChain' && a.k === 'block.end') {
+        const chained = awayChainUndo(ctx, state, a, at)
+        if (chained == null) return no('tego już nie cofniesz – kolejny blok zmienił się po starcie')
+        pair = chained
       }
       // A fixed start's pause and that start go back together, either way, while the fixed block runs and the flexible one
       // stands in that pause (the flexible block goes on as before, the fixed one stays unstarted – it can be started by

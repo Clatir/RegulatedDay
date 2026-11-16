@@ -112,6 +112,11 @@ export interface RulesSettings {
   reminders: Reminders
   idleThresholdMin: number
   absenceQuestionMin: number
+  /**
+   * „Bloki poza komputerem jednym ciągiem” (D553): a block away from the computer ends at the return, at the latest at its
+   * planned end – done, without a question – and the next one begins by itself at once (`auto.ts`). Off by default.
+   */
+  awayChain: boolean
   signalEffects: { glassesSenses: number; rockingAll: number; questionsEmotions: number }
 }
 
@@ -158,6 +163,7 @@ export const DEFAULT_SETTINGS: RulesSettings = {
   reminders: { morningAfterWakeMin: 30, morningBeforeFixedMin: 20, ritualBeforeBedMin: 30 },
   idleThresholdMin: 10,
   absenceQuestionMin: 30,
+  awayChain: false,
   signalEffects: { glassesSenses: 10, rockingAll: 5, questionsEmotions: 10 }
 }
 
@@ -450,6 +456,7 @@ export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SET
     },
     idleThresholdMin: int(r.idleThresholdMin, RANGES.idleThresholdMin, fallback.idleThresholdMin),
     absenceQuestionMin: int(r.absenceQuestionMin, RANGES.absenceQuestionMin, fallback.absenceQuestionMin),
+    awayChain: typeof r.awayChain === 'boolean' ? r.awayChain : fallback.awayChain,
     signalEffects: {
       glassesSenses: int(sig.glassesSenses, RANGES.signalEffect, fallback.signalEffects.glassesSenses),
       rockingAll: int(sig.rockingAll, RANGES.signalEffect, fallback.signalEffects.rockingAll),

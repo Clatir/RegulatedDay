@@ -1228,6 +1228,21 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   gdy do efektywnej pory snu nikt nie użyje komputera, od samego końca. Regeneracja zakończona przy pierwszym użyciu
   komputera uruchamia czekający blok stały tak jak odpowiedź „skończył się o…”, a koniec o porze snu nie dotyczy
   regeneracji, na którą czeka blok stały (rozdział Bloki).
+- **Bloki poza komputerem jednym ciągiem (D553–D556, ustawienie w „Pytaniach w ciągu dnia”, domyślnie wyłączone):** każdy
+  blok „poza komputerem” z planu (posiłek, rutyna, sprawy domowe, prośby domowe, regeneracja, słuchanie z dala od
+  komputera; zaczęty sam albo kliknięciem; poza dojazdem i zajęciami stacjonarnymi, które mają swoje reguły) kończy się
+  przy pierwszym użyciu komputera po co najmniej 2 min bez wejścia, a najpóźniej o swoim planowanym końcu (z pauzami, nie
+  po porze snu) – jako skończony, bez limitu 30 min ponad plan. Następny blok poza komputerem zaczyna się wtedy sam, od
+  razu: gdy odszedłeś przed jego godziną (co najmniej 10 min bez wejścia), wystarczą 2 min jego czasu bez wejścia
+  (D554); przerwa w planie między blokami zostaje – następny zaczyna się o swojej godzinie. Powrót w trakcie bloku kończy
+  go jak dotąd, z krótkim pytaniem „trwał do teraz · skończył się o…”. Koniec według planu nie ma pytania po powrocie ani
+  wiersza w rytuale: każdy start i koniec jest na liście „zrobione automatycznie” („Posiłek skończony o 12:30 (według
+  planu, jednym ciągiem)”) z „Cofnij” (D555). „Cofnij” takiego końca cofa też bloki, które aplikacja zaczęła po nim przed
+  Twoim powrotem (nie zaczną się już same tego dnia), a blok kończy się według zwykłych reguł (pierwsze użycie, limit);
+  gdy któryś z nich zmieniłeś po starcie, „Cofnij” odmawia. Późniejszy log z wejściem w czasie bloku zastępuje koniec
+  według planu końcem przy pierwszym użyciu. Przykład: posiłek 12:00–12:30 i spacer 12:30–13:30, odejście 11:50, powrót
+  14:00 – posiłek 12:00–12:30, spacer 12:30–13:30, oba skończone, bez pytania; powrót o 13:00 – spacer do 13:00 z
+  pytaniem; bez ustawienia – posiłek do 13:00 (limit), spacer się nie zaczyna.
 - Gdy aplikacja była zamknięta albo się zawiesiła przy biegnącym bloku, przy starcie zadaje te same pytania, z odpowiedzią „skończył się przy wyłączeniu” jako pierwszą.
 - **Użycie komputera** to ciąg wejścia trwający co najmniej 30 s: co 5 s sprawdzana jest bezczynność systemu, próbka z
   bezczynnością poniżej 5 s jest wejściem (wejście to to, co Windows liczy jako aktywność: mysz, klawiatura, dotyk,
@@ -2189,6 +2204,7 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
 | Skutki sygnałów | okulary i zatyczki: bodźce −10; więcej bujania: głowa, emocje i bodźce −5 (ciało nie, D522); drażnią pytania: emocje −10 | 0–30 | wspólne, z datą obowiązywania |
 | Próg bezczynności (nadgodziny i koniec bloku bez zobaczonego „Dalej?”, D231; z wejścia, a program symulujący ruch myszy podtrzymuje blok) | 10 min | 5–60 min | wspólne, z datą obowiązywania |
 | Pytanie o nieobecność | po 30 min | 10–120 min | wspólne, z datą obowiązywania |
+| Bloki poza komputerem jednym ciągiem (D553) | wyłączone | włączone, wyłączone | wspólne, z datą obowiązywania |
 | Pasek pulpitu pod oknami (D229) i jego miejsce, pulsowanie paska przy 5 i 0 min (D225), tryb sesji, tryb zajęć | włączony, lewy dolny róg, wyłączone, tak, tak | — | ten komputer |
 | Zawsze na wierzchu (D291) | wyłączone | wyłączone, pasek pulpitu, pasek pulpitu i panel ikony | ten komputer |
 | Powiadomienia Windows i dźwięki dla każdego zdarzenia (także świętowania), głośność | powiadomienia włączone tylko według D230, dźwięk wyłączony, głośność 50% | 0–100% | ten komputer |

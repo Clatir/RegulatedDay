@@ -27,6 +27,26 @@ export interface NumberField {
   group: FieldGroup
 }
 
+/** A dated setting that is on or off (rd.json „settings”), drawn in its group after the fields with a number. */
+export interface ToggleField {
+  key: string
+  path: string[]
+  label: string
+  hint: string
+  group: FieldGroup
+}
+
+/** „Bloki poza komputerem jednym ciągiem” (D553–D556): off by default. */
+export const TOGGLE_FIELDS: readonly ToggleField[] = [
+  {
+    key: 'awayChain',
+    path: ['awayChain'],
+    label: 'Bloki poza komputerem jednym ciągiem',
+    hint: 'Gdy nikogo nie ma przy komputerze, każdy blok poza komputerem (posiłek, rutyna, sprawy domowe, spacer…) kończy się o swoim planowanym końcu i od razu zaczyna się następny – bez pytania po powrocie; każdy start i koniec jest na liście „zrobione automatycznie” z „Cofnij”. Powrót w trakcie bloku kończy go jak dotąd.',
+    group: 'timer'
+  }
+]
+
 export type FieldGroup = 'dayTypes' | 'sleep' | 'boundary' | 'plan' | 'energy' | 'reminders' | 'timer' | 'care' | 'cases'
 
 export const FIELD_GROUP_NAMES: Record<FieldGroup, string> = {
