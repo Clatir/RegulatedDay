@@ -25,7 +25,7 @@ import { ROUTINE_LINE_MIN, routinesDue } from './engine/routineCheck'
 import { TASK_ANSWERS, TASK_LINE_MIN, taskLineText, taskQuestions } from './engine/cases'
 import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
-import { awayChainUndo, awayStartUndoable, endsAtOf, fixedStartPair, laterWork, plannedEndOf, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
+import { awayEndUndo, awayStartUndoable, endsAtOf, fixedStartPair, laterWork, plannedEndOf, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
 import { workedUntilOf } from './engine/explain'
 import { namedById, type NamedBlock } from './blockName'
 import { namingOf } from './engine/context'
@@ -412,7 +412,7 @@ export function engineView(i: EngineInput): WidgetView {
   // „Zrobione automatycznie” (D350): the actions as the plan said them (a fixed block's start, an end by the plan) in one
   // row that unfolds into them, each with „Cofnij”; what changes the counting of time – a flexible block's pause at a fixed
   // start too – and the rest each in a row of its own.
-  const autoItem = (a: (typeof state.facts.autos)[number]) => ({ id: a.id, text: autoText(a, a.block ? nameOf(a.block) : '', clockOf(at(a.at))), undo: !INFO_RULES.has(a.rule) && (fixedStartPair(state, a)?.alive ?? true) && awayStartUndoable(state, a) && (a.rule !== 'awayChain' || awayChainUndo(state, i.activity, a) != null) })
+  const autoItem = (a: (typeof state.facts.autos)[number]) => ({ id: a.id, text: autoText(a, a.block ? nameOf(a.block) : '', clockOf(at(a.at))), undo: !INFO_RULES.has(a.rule) && (fixedStartPair(state, a)?.alive ?? true) && awayStartUndoable(state, a) && awayEndUndo(state, i.activity, a) != null })
   const asPlanned = (a: (typeof state.facts.autos)[number]) => (a.rule === 'fixedStart' && a.k !== 'block.pause') || a.rule === 'plan'
   const planned = state.facts.autos.filter(asPlanned)
   const groups = planned.length ? [{ id: 'plan', text: `bloki stałe według planu: ${planned.length}`, items: planned.map(autoItem).reverse() }] : []

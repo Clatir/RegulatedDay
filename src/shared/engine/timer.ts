@@ -19,6 +19,7 @@ import { workedUntilOf } from './explain'
 import { OPEN, compareOrder, endShiftOf, type EventOrder, isRunning, type AutoAction, isRunningRequest, lastRunEnd, ranMinutes, resumedWith, runShift, workSince, type BlockFact } from './facts'
 import { activityOf, firstUseAfter, type Activity } from './activity'
 import { atOf, idxOf } from './grid'
+import { derivedId } from '../model/ids'
 import { groupOf } from './parallel'
 
 /** „Przedłuż” of a fixed block works up to this long after its planned end (spec „Timer”, D227). */
@@ -354,21 +355,36 @@ export function untouched(state: DayState, block: string): boolean {
   return f.endedAt == null ? f.runs.at(-1)!.to === OPEN : state.facts.autos.some((x) => x.id === f.endId)
 }
 
+/** The automatic ends of a block away from the computer that a return, a limit, the bedtime or the plan gave (T1970). */
+export const AWAY_AUTO_ENDS: ReadonlySet<string> = new Set(['firstUse', 'limit', 'bedtime', 'awayPlan', 'awayChain'])
+
 /**
- * „Jednym ciągiem” (D555, T1964): what goes back with a block's end by the plan (`awayChain`, `a`) – every block the app
- * began by itself from that end up to your return (`awayStart`, with the rest of its group and its automatic end, the next
- * ones of the chain too): the block goes on to the return or its limit, so they would run beside it. Null – one of them
- * changed since its start, or another block ran in front then (a fixed one, a click – T1968): the chain stays as it is.
- * `activity` – the one the caller judges with (the bar's, the leader's).
+ * What goes back with an automatic end `a` of a block away from the computer (`AWAY_AUTO_ENDS`; D555, T1964, T1970) – every
+ * block the app began by itself from that end up to your next return (`awayStart`, with the rest of its group and its
+ * automatic end, the next ones of a chain too): the block goes on to that return or its limit, so they would run beside
+ * it. Null – one of them changed since its start, or something else ran in front then (a fixed block, a click, a request,
+ * „Odcinam się” – T1968, T1969): the end stays. `activity` – the one the caller judges with (the bar's, the leader's).
  */
-export function awayChainUndo(state: DayState, activity: Activity, a: AutoAction): AutoAction[] | null {
+export function awayEndUndo(state: DayState, activity: Activity, a: AutoAction): AutoAction[] | null {
   const f = a.block ? state.facts.blocks.get(a.block) : undefined
-  if (a.rule !== 'awayChain' || a.k !== 'block.end' || !f || f.startedAt == null) return []
-  // The return the block's usual end counts (`awayEnd`: the first use after 2 min without input from its start or last run).
+  const info = a.block ? state.blocks.find((b) => b.id === a.block) : undefined
+  if (a.k !== 'block.end' || !AWAY_AUTO_ENDS.has(a.rule) || !f || !info || f.startedAt == null || f.endId !== a.id || placeOf(info.rules, info.variantId) !== 'away') return []
+  // The return the block's usual end counts (`awayEnd`: the first use after 2 min without input from its start or last run) –
+  // not this end's, nor one you took back (`liveFirstUse`).
   const from = atOf(state.grid, f.group != null ? (f.runs.at(-1)?.from ?? f.startedAt) : f.startedAt)
-  const back = firstUseAfter(activity, from)
+  let back: number | null = null
+  for (let after = from, i = 0; i < 100; i++) {
+    const b = firstUseAfter(activity, after)
+    if (!b) break
+    const id = derivedId(state.grid.date, 'auto', 'firstUse', 'block.end', a.block!, b.use)
+    if (id !== a.id && !state.facts.undone.has(id)) {
+      back = b.use
+      break
+    }
+    after = Math.max(b.use, after + 1)
+  }
   // In minutes: a block clicked in the minute of the return ran after it (T1969).
-  const backIdx = back ? idxOf(state.grid, back.use) : null
+  const backIdx = back != null ? idxOf(state.grid, back) : null
   const before = (idx: number) => idx >= a.at && (backIdx == null || idx < backIdx)
   const out: AutoAction[] = []
   const going = new Set<string>()
@@ -389,6 +405,13 @@ export function awayChainUndo(state: DayState, activity: Activity, a: AutoAction
   }
   if (state.facts.requests.some((r) => before(r.from)) || state.facts.disconnect.some((d) => before(d.from))) return null
   return out
+}
+
+/** „Cofnij” that judges your return (`awayEndUndo`): the caller passes its activity to `timerAction` (T1970). */
+export function undoNeedsActivity(state: DayState, act: TimerAction): boolean {
+  if (act.a !== 'undo') return false
+  const a = state.facts.autos.find((x) => x.id === act.target)
+  return !!a && a.k === 'block.end' && AWAY_AUTO_ENDS.has(a.rule)
 }
 
 export function awayStartUndoable(state: DayState, a: AutoAction): boolean {
@@ -905,12 +928,13 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
         if (!awayStartUndoable(state, a)) return no('tego już nie cofniesz – blok zmienił się po starcie')
         pair = [...state.facts.autos.filter((x) => x.k === 'block.end' && x.block === a.block && state.facts.blocks.get(a.block!)?.endId === x.id), ...groupStartsWith(state, a)]
       }
-      // „Jednym ciągiem” (D555): an end by the plan goes back with the blocks the app began after it before your return.
-      if (a.rule === 'awayChain' && a.k === 'block.end') {
+      // An automatic end of a block away from the computer goes back with the blocks the app began after it before your return
+      // (D555, T1970) – the block reopened never runs beside them.
+      if (undoNeedsActivity(state, act)) {
         // The caller's activity (this computer's own observation too); without it – from the day's log alone.
-        const chained = awayChainUndo(state, activity ?? activityOf(ctx.events, state.grid.start, at), a)
+        const chained = awayEndUndo(state, activity ?? activityOf(ctx.events, state.grid.start, at), a)
         if (chained == null) return no('tego już nie cofniesz – po tym końcu kolejny blok zmienił się albo biegło coś innego')
-        pair = chained
+        pair = [...pair, ...chained]
       }
       // A fixed start's pause and that start go back together, either way, while the fixed block runs and the flexible one
       // stands in that pause (the flexible block goes on as before, the fixed one stays unstarted – it can be started by

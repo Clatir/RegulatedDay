@@ -28,7 +28,7 @@ import { dayContextOf } from '@shared/engine/context'
 import { computeDay, newSegments, type DayContext, type DayState } from '@shared/engine/day'
 import { NO_POWER, powerNeedOf, type PowerNeed } from '@shared/engine/power'
 import { requestAction, type RequestAction } from '@shared/engine/requests'
-import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerDraft } from '@shared/engine/timer'
+import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerDraft, undoNeedsActivity } from '@shared/engine/timer'
 import { dayStart, weekStart } from '@shared/time/day'
 import { goalsDates, goalsProgress, type GoalsView } from '@shared/engine/goals'
 import { daysViewOf, unknownDay, weekDates, weekViewOf, whenOf, type DaysView, type HorizonDay, type WeekView } from '@shared/engine/week'
@@ -2350,8 +2350,9 @@ export class DataFolder {
       const { day: _d, probe, ...act } = click
       void _d
       // Requests („zrobione teraz”, urgent, after the fact, „Koniec”) and the rest of the timer.
-      // „Cofnij” of an end by the chain judges your return (T1968): the leader's activity, this computer's observation too.
-      const activity = act.a === 'undo' && state.facts.autos.some((x) => x.id === act.target && x.rule === 'awayChain') ? await this.activityFor(day, read, now) : undefined
+      // „Cofnij” of an automatic end away from the computer judges your return (T1968, T1970): the leader's activity, this
+      // computer's observation too.
+      const activity = act.a !== 'requestNow' && act.a !== 'requestEnd' && act.a !== 'requestAfter' && undoNeedsActivity(state, act as TimerAction) ? await this.activityFor(day, read, now) : undefined
       const r = act.a === 'requestNow' || act.a === 'requestEnd' || act.a === 'requestAfter' ? requestAction(state, act as RequestAction, now) : timerAction(ctx, state, act as TimerAction, now, activity)
       if (r.ok && r.events.length && !probe) await this.writeOn(day, laid, r.events, chosen.before)
       return r

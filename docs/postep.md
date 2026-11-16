@@ -84,13 +84,16 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
      startu czeka na otwartą przerwę, CSV, `RULES_VERSION` 17, prowadzący sprawdza od razu po zapisie (`nextCheckAt`).
    - Przegląd 2 (xhigh, 15 uwag) → T1969: kolejny powrót po cofniętym pierwszym użyciu (także bez ustawienia), powrót zrywa
      ciąg, „Cofnij” liczone dla bieżącego startu, regeneracja do planowanego końca, prośba i „Odcinam się” w oknie „Cofnij”.
+   - Przegląd 3 (xhigh, 13 uwag, nakładanie bloków – high) → T1970, D557: „Cofnij” i sprawdzanie każdego automatycznego końca
+     poza komputerem cofa późniejsze starty (`awayEndUndo`), dojazd z `liveFirstUse`, ciąg zrywa tylko użycie. Czwarta runda (D551).
    - Przyjęte bez pytania (rekomendacje, użytkownik: „Podejmuj decyzje w oparciu o rekomendacje”): D553–D556 jak w pytaniach;
      przełącznik w sekcji „Pytania w ciągu dnia” (tak nazywa się grupa `timer`); koniec ciągu bez wiersza w rytuale; „Cofnij”
      cofa też kolejne bloki ciągu; dojazd poza zmianą startu; bloki ciągu poza trafnym szacowaniem i kalibracją (koniec automatyczny).
    - Uwagi na później: jeden rejestr reguł końca (fin, pytanie, rytuał, CSV, sprawdzanie – dziś 6 list); wspólny pomocnik gałęzi
      dojazdu i ciągu w `awayEnd`; bez ustawienia cofnięte pierwsze użycie zwraca w kółko ten sam koniec (przed 1.30); brak testu
      regeneracji z `fixedHeld` w ciągu; prowadzący po uśpieniu – starty i końce ciągu po kolei co ~1 s; pętla `freeIdx` przy
-     `groupFront` to kopia `freeSince`; DSL bez sekund – brak testu „klik w minucie powrotu” na starym kodzie.
+     `groupFront` to kopia `freeSince`; DSL bez sekund – brak testu „klik w minucie powrotu” na starym kodzie; koniec ciągu cofnięty późniejszym logiem, a potem Twoje
+     „Cofnij” powrotu – limit zamiast planowanego końca (inaczej niż gdy log był na czas).
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;

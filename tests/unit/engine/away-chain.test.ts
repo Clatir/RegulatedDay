@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { activityOf } from '@shared/engine/activity'
-import { autoActions, awayKnownAt, nextCheckAt, questionsOf, type AutoEvent } from '@shared/engine/auto'
+import { autoActions, awayKnownAt, chainEndOf, nextCheckAt, questionsOf, type AutoEvent } from '@shared/engine/auto'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
 import { ritualRows } from '@shared/engine/ritual'
 import { autoText, engineView } from '@shared/engineView'
@@ -158,8 +158,11 @@ describe('ciąg bloków poza komputerem (D553, D554)', () => {
     expect(awayKnownAt({ from: 7 * MIN, to: 30 * MIN }, 10 * MIN, 10 * MIN)).toBe(17 * MIN)
     // Back within 2 min of the hour: it does not begin.
     expect(awayKnownAt({ from: 0, to: 11 * MIN }, 10 * MIN, 10 * MIN)).toBeNull()
-    // Left after the chain's end (you came back in between): its 10 min, from the hour (T1969).
-    expect(awayKnownAt({ from: 12 * MIN, to: 40 * MIN }, 15 * MIN, 10 * MIN)).toBe(25 * MIN)
+    // After a chain's end only while no computer was used since (T1970).
+    const act = (unused: Array<{ from: number; to: number }>) => ({ unused }) as unknown as Parameters<typeof chainEndOf>[1]
+    expect(chainEndOf({ at: 10 * MIN, chain: true }, act([{ from: 0, to: 40 * MIN }]), 15 * MIN)).toBe(10 * MIN)
+    expect(chainEndOf({ at: 10 * MIN, chain: true }, act([{ from: 0, to: 12 * MIN }, { from: 13 * MIN, to: 40 * MIN }]), 15 * MIN)).toBeNull()
+    expect(chainEndOf({ at: 10 * MIN, chain: false }, act([{ from: 0, to: 40 * MIN }]), 15 * MIN)).toBeNull()
   })
 
   it('późniejszy log z wejściem w czasie bloku cofa koniec według planu – koniec przy pierwszym użyciu (T465)', () => {
@@ -354,6 +357,74 @@ describe('poprawki po przeglądzie, runda 2 (T1969)', () => {
     run(s, '12:55', '13:31')
     s.observe('13:20', '13:21', 'pcb').using('13:20', '13:21', 'pcb')
     expect(leader(s, '13:32').map((e) => e.autoRule)).toEqual(['revalidate', 'firstUse'])
+  })
+})
+
+describe('poprawki po przeglądzie, runda 3 (T1970)', () => {
+  /** No block runs twice in front at one minute. */
+  const noOverlap = (s: Scenario, time: string) => {
+    const runs = [...s.state(time).facts.blocks.values()].flatMap((f) => f.runs.filter((r) => !r.bg).map((r) => ({ id: f.id, from: r.from, to: r.to ?? Number.POSITIVE_INFINITY })))
+    for (const a of runs) for (const b of runs) if (a !== b && a.id !== b.id) expect(a.from < b.to && b.from < a.to, `${a.id} i ${b.id}`).toBe(false)
+  }
+
+  it('„Cofnij” pierwszego użycia, które zastąpiło koniec ciągu: spacer zaczęty od starego końca też wraca', () => {
+    const s = used([meal(), walk()], '11:50', '14:00')
+    run(s, '11:55', '12:33')
+    s.observe('12:20', '12:21', 'pcb').using('12:20', '12:21', 'pcb')
+    run(s, '12:34', '14:01')
+    const end = s.state('14:05').facts.autos.find((a) => a.rule === 'firstUse' && a.block === 'm')!
+    expect(click(s, '14:05', { a: 'undo', target: end.id }).ok).toBe(true)
+    run(s, '14:06', '14:10')
+    noOverlap(s, '14:11')
+  })
+
+  it('cofnięte pierwsze użycie przed końcem ciągu: „Cofnij” końca ciągu bierze spacer z sobą', () => {
+    const s = used([meal(), walk()], '11:50', '14:00')
+    s.observe('12:20', '12:21', 'pcb').using('12:20', '12:21', 'pcb')
+    run(s, '11:55', '12:21')
+    const use = s.state('12:22').facts.autos.find((a) => a.rule === 'firstUse' && a.block === 'm')
+    if (use) click(s, '12:22', { a: 'undo', target: use.id })
+    run(s, '12:23', '14:01')
+    const end = s.state('14:05').facts.autos.find((a) => a.rule === 'awayChain' && a.block === 'm')!
+    expect(click(s, '14:05', { a: 'undo', target: end.id }).ok).toBe(true)
+    run(s, '14:06', '14:10')
+    noOverlap(s, '14:11')
+    expect(s.state('14:11').facts.blocks.get('w')?.startedAt ?? null).toBeNull()
+  })
+
+  it('bez ustawienia: „Cofnij” pierwszego użycia posiłku cofa spacer zaczęty po nim sam', () => {
+    const s = used([meal(), walk()], '11:50', '12:20', false)
+    s.gap('12:21', '14:00')
+    run(s, '11:55', '14:01')
+    const end = s.state('14:05').facts.autos.find((a) => a.rule === 'firstUse' && a.block === 'm')!
+    expect(click(s, '14:05', { a: 'undo', target: end.id }).ok).toBe(true)
+    run(s, '14:06', '14:10')
+    noOverlap(s, '14:11')
+  })
+
+  it('dojazd: po cofniętym pierwszym użyciu kończy się według planu', () => {
+    const s = used([block({ id: 'd', cat: 'dojazd', variant: 'dojazd', at: '13:00', min: 30 })], '12:50', '13:10', false)
+    s.gap('13:11', null)
+    run(s, '12:55', '13:11')
+    const end = s.state('13:12').facts.autos.find((a) => a.rule === 'firstUse' && a.block === 'd')!
+    expect(click(s, '13:12', { a: 'undo', target: end.id }).ok).toBe(true)
+    expect(run(s, '13:13', '13:31')).toEqual(['awayPlan d 13:30'])
+  })
+
+  it('dotknięcie myszy (wejście bez użycia) nie zrywa ciągu', () => {
+    const s = day([meal(), walk('12:45')]).observe('07:00', null).gap('11:50', '12:35', { kind: 'input' }).gap('12:36', null, { kind: 'input' }).gap('11:50', null, { kind: 'use' })
+    expect(run(s, '11:55', '12:47')).toEqual(['awayStart m 12:00', 'awayChain m 12:30', 'awayStart w 12:45'])
+  })
+
+  it('„Cofnij” cofnięcia: koniec ciągu wraca i zostaje', () => {
+    const s = used([meal(), walk()], '11:50', '14:00')
+    run(s, '11:55', '14:01')
+    const end = s.state('14:05').facts.autos.find((a) => a.rule === 'awayChain' && a.block === 'm')!
+    click(s, '14:05', { a: 'undo', target: end.id })
+    const undo = s.contextAt(s.at('14:06')).events.find((e) => e.k === 'undo' && (e as { target?: string }).target === end.id)!
+    s.write([{ k: 'undo', at: s.at('14:07'), target: undo.id, reason: 'user' }], s.at('14:07'))
+    run(s, '14:08', '14:10')
+    expect(s.state('14:11').facts.blocks.get('m')?.endRule).toBe('awayChain')
   })
 })
 
