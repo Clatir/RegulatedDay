@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { activityOf } from '@shared/engine/activity'
-import { autoActions, awayKnownAt, chainEndOf, nextCheckAt, questionsOf, type AutoEvent } from '@shared/engine/auto'
+import { autoActions, awayKnownAt, chainEndOf, chainKnownAt, nextCheckAt, questionsOf, type AutoEvent } from '@shared/engine/auto'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
 import { ritualRows } from '@shared/engine/ritual'
 import { autoText, engineView } from '@shared/engineView'
@@ -150,16 +150,14 @@ describe('ciąg bloków poza komputerem (D553, D554)', () => {
     expect(run(s, '21:40', '22:30')).toEqual(['awayStart e 21:45', 'awayChain e 22:00'])
   })
 
-  it('pierwszy blok ciągu: odejście sprzed jego godziny wystarcza po 2 min (T1963)', () => {
-    const x = { from: 0, to: 15 * MIN }
-    expect(awayKnownAt(x, 10 * MIN, 10 * MIN)).toBe(12 * MIN)
-    expect(awayKnownAt(x, 10 * MIN, null)).toBeNull()
-    // Left only 3 min before: still 10 min of the stretch first.
-    expect(awayKnownAt({ from: 7 * MIN, to: 30 * MIN }, 10 * MIN, 10 * MIN)).toBe(17 * MIN)
-    // Back within 2 min of the hour: it does not begin.
-    expect(awayKnownAt({ from: 0, to: 11 * MIN }, 10 * MIN, 10 * MIN)).toBeNull()
-    // After a chain's end only while no computer was used since (T1970).
+  it('po końcu ciągu: 2 min bez użycia wystarczą (T1963, T1971); bez ciągu – 10 min przerwy w wejściu', () => {
     const act = (unused: Array<{ from: number; to: number }>) => ({ unused }) as unknown as Parameters<typeof chainEndOf>[1]
+    expect(chainKnownAt(act([{ from: 0, to: 15 * MIN }]), 10 * MIN, 10 * MIN)).toBe(12 * MIN)
+    // Back within 2 min of the hour: it does not begin.
+    expect(chainKnownAt(act([{ from: 0, to: 11 * MIN }]), 10 * MIN, 10 * MIN)).toBeNull()
+    expect(awayKnownAt({ from: 0, to: 15 * MIN }, 10 * MIN)).toBeNull()
+    expect(awayKnownAt({ from: 7 * MIN, to: 30 * MIN }, 10 * MIN)).toBe(20 * MIN)
+    // After a chain's end only while no computer was used since (T1970).
     expect(chainEndOf({ at: 10 * MIN, chain: true }, act([{ from: 0, to: 40 * MIN }]), 15 * MIN)).toBe(10 * MIN)
     expect(chainEndOf({ at: 10 * MIN, chain: true }, act([{ from: 0, to: 12 * MIN }, { from: 13 * MIN, to: 40 * MIN }]), 15 * MIN)).toBeNull()
     expect(chainEndOf({ at: 10 * MIN, chain: false }, act([{ from: 0, to: 40 * MIN }]), 15 * MIN)).toBeNull()
@@ -281,7 +279,7 @@ describe('poprawki po przeglądzie (T1968)', () => {
 })
 
 describe('poprawki po przeglądzie, runda 2 (T1969)', () => {
-  it('„Cofnij” pierwszego użycia, które zastąpiło koniec ciągu po późniejszym logu: blok kończy się według zwykłych reguł', () => {
+  it('„Cofnij” pierwszego użycia, które zastąpiło koniec ciągu po późniejszym logu: koniec według planu wraca (jak przy logu na czas, T1971)', () => {
     const s = used([meal(), walk('13:00')], '11:50', '14:00')
     run(s, '11:55', '12:31')
     s.observe('12:20', '12:21', 'pcb').using('12:20', '12:21', 'pcb')
@@ -289,7 +287,7 @@ describe('poprawki po przeglądzie, runda 2 (T1969)', () => {
     const end = s.state('14:05').facts.autos.find((a) => a.rule === 'firstUse' && a.block === 'm')!
     expect(click(s, '14:05', { a: 'undo', target: end.id }).ok).toBe(true)
     run(s, '14:06', '14:08')
-    expect(s.state('14:09').facts.blocks.get('m')).toMatchObject({ endRule: 'limit' })
+    expect(s.state('14:09').facts.blocks.get('m')).toMatchObject({ endRule: 'awayChain', finished: true })
   })
 
   it('po cofniętym pierwszym użyciu liczy się następny powrót', () => {
@@ -383,7 +381,8 @@ describe('poprawki po przeglądzie, runda 3 (T1970)', () => {
     s.observe('12:20', '12:21', 'pcb').using('12:20', '12:21', 'pcb')
     run(s, '11:55', '12:21')
     const use = s.state('12:22').facts.autos.find((a) => a.rule === 'firstUse' && a.block === 'm')
-    if (use) click(s, '12:22', { a: 'undo', target: use.id })
+    expect(use).toBeDefined()
+    expect(click(s, '12:22', { a: 'undo', target: use!.id }).ok).toBe(true)
     run(s, '12:23', '14:01')
     const end = s.state('14:05').facts.autos.find((a) => a.rule === 'awayChain' && a.block === 'm')!
     expect(click(s, '14:05', { a: 'undo', target: end.id }).ok).toBe(true)
@@ -392,14 +391,13 @@ describe('poprawki po przeglądzie, runda 3 (T1970)', () => {
     expect(s.state('14:11').facts.blocks.get('w')?.startedAt ?? null).toBeNull()
   })
 
-  it('bez ustawienia: „Cofnij” pierwszego użycia posiłku cofa spacer zaczęty po nim sam', () => {
+  it('bez ustawienia „Cofnij” końca jak w 1.29: bez cofania bloków po nim (T1971)', () => {
     const s = used([meal(), walk()], '11:50', '12:20', false)
     s.gap('12:21', '14:00')
     run(s, '11:55', '14:01')
     const end = s.state('14:05').facts.autos.find((a) => a.rule === 'firstUse' && a.block === 'm')!
-    expect(click(s, '14:05', { a: 'undo', target: end.id }).ok).toBe(true)
-    run(s, '14:06', '14:10')
-    noOverlap(s, '14:11')
+    const r = click(s, '14:05', { a: 'undo', target: end.id })
+    expect(r.ok && r.events.map((e) => e.k)).toEqual(['undo'])
   })
 
   it('dojazd: po cofniętym pierwszym użyciu kończy się według planu', () => {
@@ -425,6 +423,31 @@ describe('poprawki po przeglądzie, runda 3 (T1970)', () => {
     s.write([{ k: 'undo', at: s.at('14:07'), target: undo.id, reason: 'user' }], s.at('14:07'))
     run(s, '14:08', '14:10')
     expect(s.state('14:11').facts.blocks.get('m')?.endRule).toBe('awayChain')
+  })
+})
+
+describe('poprawki po przeglądzie, runda 4 (T1971)', () => {
+  it('cofnięty limit: blok kończy się przy powrocie, nie zostaje otwarty', () => {
+    const s = used([meal()], '11:50', '14:00', false)
+    run(s, '11:55', '14:01')
+    const end = s.state('14:05').facts.autos.find((a) => a.rule === 'limit' && a.block === 'm')!
+    expect(click(s, '14:05', { a: 'undo', target: end.id }).ok).toBe(true)
+    expect(run(s, '14:06', '14:08')).toEqual(['firstUse m 14:00'])
+  })
+
+  it('powrót cofnięty sprawdzeniem prowadzącego zostaje powrotem po Twoim „Cofnij” wcześniejszego', () => {
+    const s = used([block({ id: 'g', cat: 'regeneracja', at: '12:00', min: 60 })], '11:50', '13:00', false)
+    run(s, '11:55', '13:02')
+    s.observe('12:40', '12:41', 'pcb').using('12:40', '12:41', 'pcb')
+    run(s, '13:03', '13:05')
+    const early = s.state('13:06').facts.autos.find((a) => a.rule === 'firstUse' && a.block === 'g')!
+    expect(click(s, '13:06', { a: 'undo', target: early.id }).ok).toBe(true)
+    expect(run(s, '13:07', '13:09')).toEqual(['firstUse g 13:00'])
+  })
+
+  it('dotknięcie myszy tuż po końcu ciągu nie opóźnia startu następnego bloku', () => {
+    const s = day([meal(), walk()]).observe('07:00', null).gap('11:50', '12:31', { kind: 'input' }).gap('12:32', null, { kind: 'input' }).gap('11:50', null, { kind: 'use' })
+    expect(run(s, '11:55', '12:32')).toEqual(['awayStart m 12:00', 'awayChain m 12:30', 'awayStart w 12:30'])
   })
 })
 

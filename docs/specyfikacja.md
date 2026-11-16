@@ -1244,8 +1244,8 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   gdy któryś z nich zmieniłeś po starcie albo w tym czasie zaczął się inny blok (np. stały), „Cofnij” odmawia (lista go
   nie pokazuje). „Cofnij” końca przy pierwszym użyciu (nie wróciłeś) – liczy się następny powrót, najpóźniej planowany koniec. Późniejszy
   log z wejściem w czasie bloku zastępuje koniec według planu końcem przy pierwszym użyciu. Ciąg zrywa tylko użycie
-  komputera (samo dotknięcie myszy nie). Tak samo (D557, także bez ustawienia) „Cofnij” każdego automatycznego końca
-  bloku poza komputerem cofa bloki zaczęte po nim same przed powrotem albo odmawia. Przykład: posiłek 12:00–12:30
+  komputera (samo dotknięcie myszy nie). Tak samo (D557) „Cofnij” każdego automatycznego końca bloku
+  poza komputerem zaczętego przy włączonym ustawieniu cofa bloki zaczęte po nim same przed powrotem albo odmawia. Przykład: posiłek 12:00–12:30
   i spacer 12:30–13:30, odejście 11:50, powrót 14:00 – posiłek 12:00–12:30, spacer 12:30–13:30, oba skończone, bez
   pytania; powrót o 13:00 – spacer do 13:00 z pytaniem; bez ustawienia – posiłek do 13:00 (limit), spacer 13:00–14:00
   z pytaniem.
