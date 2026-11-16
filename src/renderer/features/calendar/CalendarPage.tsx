@@ -1,13 +1,15 @@
 /**
  * Kalendarz (D295): the month as a grid – every day in its type's colour with its marks („zjazd”, free, a holiday, an
- * early close of the market, the week of the session shift, its own wake); several dates are selected by dragging or
- * with Ctrl and get a type or a wake at once; a click on a day opens its plan.
+ * early close of the market, the week of the session shift, its own wake); several dates are selected by dragging, with Ctrl or Shift
+ * (`useSelection`, D527: Shift+arrows, Ctrl+A for the month, Esc) and get a type or a wake at once – from the bar or from the menu of the
+ * right button (D528); a change of two days or more says „Zmieniono N dni · Cofnij” (D529); a click on a day opens its plan.
  * Every day also shows up to three bars of its all-day events, fixed blocks and flexible blocks, „+N” for all the rest it holds
  * and the dot of its load (D418, D422, D429 – `useMonthView`, `monthCellView`).
  * „Wczytaj PDF zjazdów” (D357) reads a schedule into a preview you correct; only „Zapisz” writes the days, its toast has
  * „Cofnij”.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { groupCount, groupLineText } from '@shared/groupText'
 import type { RawRecord, ZjazdSaveResult, ZjazdUndoDay } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
 import { dayRaw } from '@shared/data/dayEdits'
@@ -29,9 +31,14 @@ import { calendarSieve } from '@shared/model/calendars'
 import { useCalendarFilter } from '../calendars/calendarFilter'
 import { CalendarChips } from '../calendars/CalendarChips'
 import { useVisibleAllDayIn } from '../calendars/visibleViews'
+import { ContextMenu } from '../../components/ContextMenu'
 import { TimeField } from '../../components/fields'
-import { dayFilesNow, editNotice, editOf, isSaved, trySaveWith, useData } from '../../store/data'
+import { GroupLine } from '../../components/GroupLine'
+import { dayFilesNow, editNotice, editOf, isSaved, readDayFiles, trySaveWith, useData } from '../../store/data'
 import { useBusy } from '../../lib/busy'
+import { useSelection } from '../../lib/useSelection'
+import { showGroupLine } from '../../store/groupLine'
+import { movedDay, type WeekPushedDay } from '../../store/weekPush'
 import { useMonthView } from '../../store/horizon'
 import { useMachine } from '../../store/machine'
 import { openDay, toast, undoToast } from '../../store/ui'
@@ -40,20 +47,46 @@ import { DAY_TYPE_COLORS, holidayMarks } from './dayTypes'
 import { emptyMonthDay, monthCellView, visibleMonthDay } from './monthCellView'
 import { gridDates, MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from './MonthGrid'
 import { questionsText, savedText, skippedLines, undoneText, unchangedText } from './zjazdyDraft'
+import { undoDayEdits } from './dayGroup'
+import { dayMenu, type MenuDay } from './dayMenu'
 import { runInTurn } from './zjazdyRun'
 import { closeZjazdy, keepZjazdy, openZjazdy, useZjazdy } from './zjazdyStore'
 import { ZjazdyPreviewPanel } from './ZjazdyPreview'
+
+/** The dates of `grid` – the days from its first to its last – widened over `reach` (the first and the last selected day) when it lies outside. */
+function daysBetween(grid: readonly string[], reach: { lo: string; hi: string } | null): readonly string[] {
+  const lo = reach && reach.lo < grid[0]! ? reach.lo : grid[0]!
+  const hi = reach && reach.hi > grid.at(-1)! ? reach.hi : grid.at(-1)!
+  if (lo === grid[0] && hi === grid.at(-1)) return grid
+  const out: string[] = []
+  for (let d = lo; d <= hi; d = addDays(d, 1)) out.push(d)
+  return out
+}
 
 export function CalendarPage() {
   const { rd, seriesPlans, stamp, routines, requests, templates } = useData()
   const today = useData((s) => s.view?.today ?? '')
   const brightness = useMachine((s) => s.prefs.brightness)
   const [month, setMonth] = useState(monthOf(today))
-  const [sel, setSel] = useState<Set<string>>(new Set())
   const [files, setFiles] = useState<Record<string, RawRecord | null>>({})
   const importing = useZjazdy((s) => s.preview != null)
   const [wake, setWake] = useState<number | null>(null)
   const dates = useMemo(() => gridDates(month), [month])
+  // The selection of days (D527): kept across months (a day of another month stays selected), Ctrl+A takes the days of the month shown.
+  const monthDates = useMemo(() => dates.filter((d) => d.startsWith(month)), [dates, month])
+  // The order of Shift+click and Shift+arrows: the days by date from the grid's first to its last – and over every selected day outside the
+  // grid (another month), so a range reaches over months as it always did.
+  const [reach, setReach] = useState<{ lo: string; hi: string } | null>(null)
+  const order = useMemo(() => daysBetween(dates, reach), [dates, reach])
+  const selection = useSelection({ order, all: monthDates, arrows: 'grid', prune: false, enabled: !importing })
+  useEffect(() => {
+    const ids = selection.selected
+    const next = ids.length ? { lo: ids.reduce((a, b) => (b < a ? b : a)), hi: ids.reduce((a, b) => (b > a ? b : a)) } : null
+    setReach((prev) => (prev?.lo === next?.lo && prev?.hi === next?.hi ? prev : next))
+  }, [selection.selected])
+  // The menu of the right button: its days, where, and the files of the days the grid has not read (a selected day of another month).
+  const [menu, setMenu] = useState<{ dates: readonly string[]; at: { x: number; y: number }; read: Record<string, RawRecord | null> } | null>(null)
+  const menuAsked = useRef(0)
   // The blocks (all of them, D429) and the load of each day of the month (D418), counted by the main process; the days of the neighbouring
   // months on the grid have their all-day events only.
   const { view: monthView } = useMonthView(month)
@@ -83,14 +116,34 @@ export function CalendarPage() {
   }, [dates, stamp])
   const fileOf = (d: string) => (files[d] ? dayFileFrom(files[d], d) : null)
   const [busy, run] = useBusy()
-  /** The days' files changed by `next`, each in its turn from the file as it is then (T517); one save at a time. */
-  const saveDays = (dates: readonly string[], next: (raw: RawRecord, date: string) => RawRecord) =>
-    run(() =>
+  /** The menu opens once the files of its days are known: the ✓ and „—” are of the days as they are, whichever month they are in. */
+  const openMenu = (ids: readonly string[], at: { x: number; y: number }) => {
+    const asked = ++menuAsked.current
+    const missing = ids.filter((d) => !(d in files))
+    if (!missing.length) return setMenu({ dates: ids, at, read: {} })
+    readDayFiles(missing)
+      .catch(() => ({}) as Record<string, RawRecord | null>)
+      .then((read) => asked === menuAsked.current && setMenu({ dates: ids, at, read }))
+  }
+  /**
+   * The days' files changed by `next`, each in its turn from the file as it is then (T517); one save at a time. With the days that really
+   * changed and what each edit was (for the „Cofnij” of a group).
+   */
+  const saveDays = (dates: readonly string[], next: (raw: RawRecord, date: string) => RawRecord) => {
+    let done: WeekPushedDay[] = []
+    return run(() =>
       trySaveWith(async () => {
         const now = await dayFilesNow(dates, (d) => files[d] ?? null)
-        return dates.map((d) => editOf(paths.day(d), now[d] ?? null, next(dayRaw(now[d], d), d)))
+        done = []
+        return dates.map((d) => {
+          const after = next(dayRaw(now[d], d), d)
+          const edit = editOf(paths.day(d), now[d] ?? null, after)
+          done.push(...movedDay(d, edit, after))
+          return edit
+        })
       })
-    ).then((out) => out ?? null)
+    ).then((out) => ({ out: out ?? null, days: done }))
+  }
 
   const info = (d: string) => {
     const s = settingsOn(rd.settings, d)
@@ -117,26 +170,52 @@ export function CalendarPage() {
    * during the day with its proposals) and a day gone keeps the type of its plan – a type in their files would change
    * nothing the engine counts (A7-03).
    */
-  const setType = async (t: DayTypeId | null) => {
-    const all = [...sel].sort()
+  const setType = async (t: DayTypeId | null, from: readonly string[] = selection.selected) => {
+    const all = [...from].sort()
     const list = all.filter((d) => d > today)
-    if (list.length < all.length)
-      toast(
-        all.includes(today) ? 'Typ dzisiejszego dnia zmienisz w „Dziś” (przycisk typu u góry) – z propozycjami zmiany w trakcie dnia. Dni minione mają typ z planu z rana.' : 'Dni minione mają typ z planu z rana – zmieniają się tylko dni od jutra.',
-        'info',
-        10_000,
-        all.includes(today) ? { label: 'Otwórz Dziś', run: () => openDay(null) } : undefined
-      )
-    if (!list.length) return
+    // The days left out are said once: by the line of the group when it comes (D529), else by this toast.
+    const said = () => {
+      if (list.length < all.length)
+        toast(
+          all.includes(today) ? 'Typ dzisiejszego dnia zmienisz w „Dziś” (przycisk typu u góry) – z propozycjami zmiany w trakcie dnia. Dni minione mają typ z planu z rana.' : 'Dni minione mają typ z planu z rana – zmieniają się tylko dni od jutra.',
+          'info',
+          10_000,
+          all.includes(today) ? { label: 'Otwórz Dziś', run: () => openDay(null) } : undefined
+        )
+    }
+    if (!list.length) return said()
     // A type that is no „zjazd” takes a day's import away in the same edit (its classes, the commute it moved).
-    if (!isSaved(await saveDays(list, (r, d) => zjazdTypeRaw(r, d, t)))) return
-    setSel(new Set())
+    const { out, days } = await saveDays(list, (r, d) => zjazdTypeRaw(r, d, t))
+    // Two days or more changed: the line of the group with its „Cofnij” (D529) – the days left out counted with their reasons.
+    if (isSaved(out) && days.length >= 2) showGroupLine('calendar', { text: groupLineText({ n: days.length, kind: 'day', skipped: all.filter((d) => d <= today).map((d) => (d === today ? 'dzisiejszy' : 'miniony')) }), undo: () => undoDayEdits(days) })
+    else said()
+    if (!isSaved(out)) return
+    selection.clear()
   }
 
-  const setWakeOf = async (v: number | null) => {
-    // The blocks you placed move with the wake, once (D334); one „Cofnij” for all the days.
-    if (await run(() => setWakeOnDays([...sel].filter((d) => d >= today), today, (d) => files[d] ?? null, v))) setSel(new Set())
+  const setWakeOf = async (v: number | null, from: readonly string[] = selection.selected) => {
+    // The blocks you placed move with the wake, once (D334); one „Cofnij” for all the days – the line of the group (D529) for two days or more.
+    const past = from.filter((d) => d < today)
+    const group = ({ changed, undo }: { changed: number; undo: () => Promise<string | void> }) => showGroupLine('calendar', { text: groupLineText({ n: changed, kind: 'day', skipped: past.map(() => 'miniony') }), undo })
+    if (await run(() => setWakeOnDays(from.filter((d) => d >= today), today, (d) => files[d] ?? null, v, group))) selection.clear()
   }
+
+  // The actions of the menu are always the page's latest (the items live in a memo).
+  const actions = useRef({ setType, setWakeOf })
+  actions.current = { setType, setWakeOf }
+  const menuActions = useMemo(() => ({ setType: (t: DayTypeId | null, ids: readonly string[]) => void actions.current.setType(t, ids), setWake: (v: number | null, ids: readonly string[]) => void actions.current.setWakeOf(v, ids) }), [])
+  /** What each day of the menu is, from the grid's files and the ones read for the menu – once per change, not per item. */
+  const menuDays = useMemo(() => {
+    if (!menu) return null
+    const src = { ...files, ...menu.read }
+    return new Map<string, MenuDay>(
+      menu.dates.map((d) => {
+        const own = src[d] ? dayFileFrom(src[d], d) : null
+        return [d, { type: own?.dayType ?? settingsOn(rd.settings, d).weekTypes[weekday(d) - 1]!, own: own?.dayType != null, wake: own?.wakeMin ?? null }]
+      })
+    )
+  }, [menu, files, rd])
+  const menuEntries = useMemo(() => (menu && menuDays ? dayMenu(menu.dates, menuDays, today, busy, menuActions) : null), [menu, menuDays, today, busy, menuActions])
 
   /** „Wczytaj PDF zjazdów”: a file picked in the dialog of Windows, read into the preview; nothing is saved (D357). */
   const readPdf = () =>
@@ -227,11 +306,12 @@ export function CalendarPage() {
             </span>
           </div>
           <CalendarChips hiddenCount={hiddenBlocks + hiddenEvents} />
+          <GroupLine view="calendar" />
           <MonthGrid
             month={month}
             today={today}
-            selected={sel}
-            onSelect={setSel}
+            selection={selection}
+            onContext={openMenu}
             onOpen={(d) => openDay(d)}
             cell={(d) => {
               const i = info(d)
@@ -249,28 +329,29 @@ export function CalendarPage() {
             }}
           />
           <div className="flex flex-wrap items-center gap-2 rounded border border-line bg-panel px-3 py-2" data-testid="calendar-actions">
-            <span className="text-[12px] text-muted">Zaznaczone dni: {sel.size} (przeciągnij albo klikaj z Ctrl; zwykłe kliknięcie otwiera plan dnia)</span>
+            <span className="text-[12px] text-muted" data-testid="calendar-selection">Zaznaczone dni: {selection.count} (przeciągnij albo klikaj z Ctrl; zwykłe kliknięcie otwiera plan dnia)</span>
             <span className="flex-1" />
             {DAY_TYPES.map((t) => (
-              <button key={t} type="button" className="btn" disabled={!sel.size || busy} onClick={() => void setType(t)} data-testid={`calendar-type-${t}`}>
+              <button key={t} type="button" className="btn" disabled={!selection.count || busy} onClick={() => void setType(t)} data-testid={`calendar-type-${t}`}>
                 {DAY_TYPE_NAMES[t]}
               </button>
             ))}
-            <button type="button" className="btn" disabled={!sel.size || busy} onClick={() => void setType(null)} data-testid="calendar-type-default">
+            <button type="button" className="btn" disabled={!selection.count || busy} onClick={() => void setType(null)} data-testid="calendar-type-default">
               Typ z tygodnia
             </button>
             <span className="inline-flex items-center gap-1.5">
               <TimeField value={wake} range={RANGES.wakeMin} onCommit={setWake} shellClassName="w-[76px]" aria-label="Pobudka zaznaczonych dni" placeholder="pobudka" />
-              <button type="button" className="btn" disabled={!sel.size || wake == null || busy} onClick={() => void setWakeOf(wake)}>
+              <button type="button" className="btn" disabled={!selection.count || wake == null || busy} onClick={() => void setWakeOf(wake)}>
                 Ustaw pobudkę
               </button>
-              <button type="button" className="btn" disabled={!sel.size || busy} onClick={() => void setWakeOf(null)}>
+              <button type="button" className="btn" disabled={!selection.count || busy} onClick={() => void setWakeOf(null)}>
                 Pobudka z typu
               </button>
             </span>
           </div>
         </>
       )}
+      {menu && menuEntries && <ContextMenu title={`Zmień ${groupCount(menu.dates.length, 'day')}`} at={menu.at} items={menuEntries} onClose={() => setMenu(null)} testId="calendar-menu" />}
     </div>
   )
 }

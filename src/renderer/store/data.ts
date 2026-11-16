@@ -279,17 +279,37 @@ export function trySaveWith(make: () => Promise<ReadonlyArray<EditEntry | null>>
   return inTurn(() => send(make, state))
 }
 
+/** The most days one `dayFiles` answers (the main process reads no more at once): a longer list goes in these portions. */
+export const DAY_FILES_MAX = 62
+
+/** The files of `dates` as `window.rd.dayFiles` gives them, read in portions of `DAY_FILES_MAX`; a day missing from the answer cannot be read now. */
+export async function readDayFiles(dates: readonly string[]): Promise<Record<string, RawRecord | null>> {
+  const out: Record<string, RawRecord | null> = {}
+  for (let i = 0; i < dates.length; i += DAY_FILES_MAX) Object.assign(out, await window.rd.dayFiles(dates.slice(i, i + DAY_FILES_MAX)))
+  return out
+}
+
 /**
  * The days' files as this computer sees them now (the folder's with the edits still queued); a file that cannot be read
  * now is the one the window saw (`seen`) – its edit waits until it can be read, as the day says.
  */
 export async function dayFilesNow(dates: readonly string[], seen: (date: string) => RawRecord | null): Promise<Record<string, RawRecord | null>> {
-  const files = await window.rd.dayFiles([...dates])
+  const files = await readDayFiles(dates)
   return Object.fromEntries(dates.map((d) => [d, d in files ? (files[d] ?? null) : seen(d)]))
 }
 
+/**
+ * What became of one edit (T931): `saved` – written, or waiting for the folder; `asked` – it met a change on another computer and became a
+ * question (your answer may still write it); `refused` – nothing was written and nothing will be (a broken file; no answer for it).
+ */
+export type OutcomeFate = 'saved' | 'asked' | 'refused'
+export function outcomeFate(o: EditOutcome | undefined): OutcomeFate {
+  const s = o?.status
+  return s === 'applied' || s === 'waiting' ? 'saved' : s === 'conflict' || s === 'removedElsewhere' || s === 'changedElsewhere' ? 'asked' : 'refused'
+}
+
 /** One edit saved – written, or waiting for the folder; no answer for it is no save. */
-const outcomeSaved = (o: EditOutcome | undefined): boolean => o?.status === 'applied' || o?.status === 'waiting'
+const outcomeSaved = (o: EditOutcome | undefined): boolean => outcomeFate(o) === 'saved'
 
 /** Saved – written, or waiting for the folder – never a question, a broken file or an error. */
 export const isSaved = (out: readonly EditOutcome[] | null): boolean => out != null && out.every(outcomeSaved)
@@ -305,7 +325,7 @@ export type SaveAnswer = boolean | 'asked'
 export function saveAnswer(out: readonly EditOutcome[] | null, state?: SendState): SaveAnswer {
   // No answer: nothing was sent (refused), or it was and the result is not known (the folder may have it).
   if (out == null) return state?.afterSend === true ? 'asked' : false
-  if (out.some((o) => o.status === 'broken')) return false
+  if (out.some((o) => outcomeFate(o) === 'refused')) return false
   return isSaved(out) ? true : 'asked'
 }
 /** As `saveAnswer`, and something was written: an edit of a record that is gone (an empty answer) is refused. */

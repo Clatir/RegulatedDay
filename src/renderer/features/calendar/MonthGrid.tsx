@@ -1,6 +1,9 @@
 /**
  * A month as a grid (D295): weeks from Monday, every day a cell with its colour and marks; several dates are selected
  * by dragging or with Ctrl (Shift extends from the last one), a plain click on a day opens it (when the host wants that).
+ * A host that keeps its selection with `useSelection` (D527, the calendar) gives it as `selection`: the clicks, the drag and the right button
+ * go through its model (anchor, the part kept before a Shift range, Ctrl+A, Shift+arrows, Esc are the hook's); the others (the wizard, the
+ * copy of a day) keep `selected` / `onSelect`.
  * A host may give the day's all-day events (D405): the first one with its colour's dot and „+N” for the rest, read only – or the
  * detail of the day (D418, D422: up to three miniature bars, „+N” for all the rest, the dot of the load), which takes their place.
  */
@@ -8,7 +11,9 @@ import { useRef, useState, type ReactNode } from 'react'
 import type { AllDayEvent } from '@shared/model/allDay'
 import { ALL_DAY_COLOR_HEX, PALETTE } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
+import { menuBind } from '../../components/ContextMenu'
 import { cx } from '../../components/ui'
+import type { SelectionApi } from '../../lib/useSelection'
 import { monthLabel } from '../allday/allDayText'
 import type { MonthCellView } from './monthCellView'
 
@@ -44,18 +49,29 @@ export function gridDates(month: string): string[] {
   return out
 }
 
+/** How the grid keeps its selection: a set the host owns, or the hook's model (then the right button and the menu key ask the host for its menu). */
+type Picking =
+  | { selected: ReadonlySet<string>; onSelect: (dates: Set<string>) => void; selection?: undefined; onContext?: undefined }
+  | {
+      selection: SelectionApi
+      /** The right button (or Shift+F10, the menu key) on a day: the dates the menu is for (the whole selection, or only that day) and where to open it. */
+      onContext?: (dates: readonly string[], at: { x: number; y: number }) => void
+      selected?: undefined
+      onSelect?: undefined
+    }
+
 export function MonthGrid({
   month,
   selected,
   onSelect,
+  selection,
+  onContext,
   onOpen,
   cell,
   today,
   ...rest
-}: {
+}: Picking & {
   month: string
-  selected: ReadonlySet<string>
-  onSelect: (dates: Set<string>) => void
   /** A plain click: open the day (otherwise the click selects it). */
   onOpen?: (date: string) => void
   cell: (date: string) => {
@@ -73,6 +89,8 @@ export function MonthGrid({
   const dates = gridDates(month)
   const [drag, setDrag] = useState<{ from: string; base: Set<string> } | null>(null)
   const last = useRef<string | null>(null)
+  /** A drag of the selection model has entered another day (so it is a range, not a click). */
+  const ranged = useRef(false)
   const range = (a: string, b: string) => {
     const [x, y] = a <= b ? [a, b] : [b, a]
     const out: string[] = []
@@ -90,7 +108,7 @@ export function MonthGrid({
         {dates.map((d) => {
           const c = cell(d)
           const inMonth = d.startsWith(month)
-          const sel = selected.has(d)
+          const sel = selection ? selection.isSelected(d) : selected.has(d)
           const ev = monthLabel(c.events ?? [])
           return (
             <button
@@ -99,8 +117,17 @@ export function MonthGrid({
               data-testid={`day-${d}`}
               aria-pressed={sel}
               title={[c.title, ev?.title].filter(Boolean).join('\n') || undefined}
+              {...(selection && onContext ? menuBind((at) => onContext(selection.onItemContext(d), at)) : {})}
               onMouseDown={(e) => {
                 if (e.button !== 0) return
+                if (selection) {
+                  // The model: Ctrl – toggles the day, Shift – the range from the anchor. A plain press only may start a drag: it changes nothing
+                  // until the pointer enters another day (a click opens the day and leaves the selection as it is).
+                  if (e.shiftKey || e.ctrlKey) return void selection.onItemClick(d, e)
+                  ranged.current = false
+                  setDrag({ from: d, base: new Set() })
+                  return
+                }
                 if (e.shiftKey && last.current) {
                   onSelect(new Set([...selected, ...range(last.current, d)]))
                   return
@@ -117,15 +144,25 @@ export function MonthGrid({
                 last.current = d
               }}
               onMouseEnter={() => {
-                if (!drag || drag.from === d) return
-                onSelect(new Set([...drag.base, ...range(drag.from, d)]))
+                if (!drag) return
+                if (selection) {
+                  // The first other day entered starts the range from the day pressed; back on that day the range is only it again.
+                  if (drag.from === d) return void (ranged.current && selection.onItemClick(d, { ctrlKey: false, shiftKey: false }))
+                  if (!ranged.current) {
+                    ranged.current = true
+                    selection.onItemClick(drag.from, { ctrlKey: false, shiftKey: false })
+                  }
+                  return void selection.onItemClick(d, { ctrlKey: false, shiftKey: true })
+                }
+                if (drag.from === d) return
+                onSelect!(new Set([...drag.base, ...range(drag.from, d)]))
               }}
               onMouseUp={(e) => {
                 if (!drag || e.ctrlKey || e.shiftKey) return
-                if (drag.from === d) {
-                  // A plain click: open the day, or select only it.
+                // A plain click (no range was dragged): open the day, or select only it.
+                if (drag.from === d && !(selection && ranged.current)) {
                   if (onOpen) onOpen(d)
-                  else onSelect(new Set([d]))
+                  else if (!selection) onSelect!(new Set([d]))
                 }
                 setDrag(null)
               }}

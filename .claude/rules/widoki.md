@@ -45,6 +45,7 @@ T950–T955, T960–T969, T980–T986 (część A; D426), T936–T939 (ekrany).
   `weekPushLineText` – „Przeniesiono: … · … został – już trwa · przesunięto N bloków” (T915, T951; powód zostania – `stayedText`, T965).
 - Pola bloku: `moveTarget` niesie surowy blok (T901), kroki (`stepsDone`), `movedTo` dla bloku szablonu i serii; własne
   załączniki widzi po id (`sameOwner`), załączniki szablonu – nie (blok staje się Twój, jak „Przenieś na…”).
+- Grupa (D531): przeciągnięty zaznaczony blok z ≥ 2 – `dragDayGroup` (wszystkie o tę samą różnicę dni i minut, jedna zmiana; reguły `zmiany-grupowe.md`).
 - Ctrl przy puszczeniu (D513) – kopia zamiast przeniesienia: `copyDayBlock` (oryginał i dzień źródłowy bez zmian, kopia z
   rozsunięciem dnia docelowego – oryginał stoi jak blok stały, jedno „Cofnij” w dymku); szczegóły – reguły `kopia.md`.
 

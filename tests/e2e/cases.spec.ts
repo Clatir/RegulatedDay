@@ -667,3 +667,41 @@ test('Sprawy: „Powtarzaj” codziennie – reguła przy zadaniu; „Zrobione�
     await app.close()
   }
 })
+
+test('Sprawy: Ctrl+klik dwóch spraw, prawy przycisk → „Przenieś na listę” → „Dziś” – linia „Przeniesiono 2 sprawy”, napis „Zaznaczone: 2”, „Cofnij” przywraca Skrzynkę (D527–D529)', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-select-'))
+  const { today } = seedAwake(dataDir, [])
+  for (const [i, id] of ['t1', 't2', 't3'].entries()) putRecord(dataDir, newTask(id, Date.now() - i * 1000, today, { title: `Zadanie ${i + 1}`, estimateMin: 30 })!)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-requests').click()
+      const row = (id: string) => page.locator(`[data-testid="case-row"][data-case="${id}"]`)
+      await expect(row('t1')).toBeVisible()
+      // A click on the row's free part selects it; Ctrl+click joins another; the line over the lists counts them.
+      await row('t1').click({ position: { x: 4, y: 4 } })
+      await row('t2').click({ position: { x: 4, y: 4 }, modifiers: ['Control'] })
+      await expect(page.locator('[data-testid="case-row"][data-selected="true"]')).toHaveCount(2)
+      await expect(page.getByTestId('cases-selection')).toContainText('Zaznaczone: 2 · 1 h')
+      // The right button on a selected row: „Zmień 2 sprawy” (the application's own menu).
+      await row('t2').click({ button: 'right', position: { x: 4, y: 4 } })
+      const menu = page.getByTestId('context-menu')
+      await expect(menu).toContainText('Zmień 2 sprawy')
+      await menu.getByTestId('cases-menu-list').click()
+      await page.getByTestId('cases-menu-list-today').click()
+      await expect(page.getByTestId('group-line-cases')).toContainText('Przeniesiono 2 sprawy')
+      await expect.poll(() => records(dataDir).map((r) => [r.id, r.list]).sort()).toEqual([['t1', 'today'], ['t2', 'today'], ['t3', 'inbox']])
+      await page.getByTestId('group-line-cases-undo').click()
+      await expect.poll(() => records(dataDir).map((r) => [r.id, r.list]).sort()).toEqual([['t1', 'inbox'], ['t2', 'inbox'], ['t3', 'inbox']])
+      await expect(page.getByTestId('group-line-cases')).toHaveCount(0)
+      // Esc clears the selection.
+      await page.keyboard.press('Escape')
+      await expect(page.locator('[data-testid="case-row"][data-selected="true"]')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

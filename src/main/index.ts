@@ -902,7 +902,14 @@ function registerIpc(): void {
   handle(CH.ritual, (_e, day: unknown) => needHub().ritual(String(day)))
   handle(CH.ritualAnswer, (_e, day: unknown, row: unknown, choice: unknown, value: unknown, item: unknown) => needHub().ritualAnswer(String(day), String(row), String(choice), ritualValue(value), typeof item === 'string' ? item : null))
   handle(CH.closeDay, (_e, day: unknown, how: unknown) => needHub().closeDay(String(day), String(how) as CloseHow))
-  handle(CH.undoClose, (_e, day: unknown, ids: unknown) => needHub().undoClose(String(day), Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : []))
+  // The ids a window sends (of events, of blocks): only strings – a repeat is the engine's to drop (`groupLogDrafts`, `closeUndoEvents`).
+  const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+  handle(CH.undoClose, (_e, day: unknown, ids: unknown) => needHub().undoClose(String(day), strings(ids)))
+  // D528, D529: „Odwołaj” / „Zaparkuj” of a group of blocks and its „Cofnij”.
+  handle(CH.groupLog, (_e, day: unknown, kind: unknown, ids: unknown) =>
+    kind === 'park' || kind === 'cancel' ? needHub().groupLog(String(day), kind, strings(ids)) : { ok: false, why: 'nieznana zmiana', confirm: null, written: [], taken: [], skipped: [] }
+  )
+  handle(CH.undoGroupLog, (_e, day: unknown, ids: unknown) => needHub().undoGroupLog(String(day), strings(ids)))
   handle(CH.unclosedDays, () => needHub().unclosedDays())
   handle(CH.computerList, () => needHub().computerList())
   // A folder picked in a window of Windows over the window that asked (the wizard's data folder, „Dane” in the settings).

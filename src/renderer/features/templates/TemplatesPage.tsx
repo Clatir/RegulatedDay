@@ -9,7 +9,7 @@
  * stays on the page for 15 min, or until the template changes again. Below the templates: the list of series (D381, D401) –
  * each with its rule in words, edited and ended there (`SeriesEditor`); Ctrl K finds a series as one record.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { RawRecord } from '@shared/api'
 import { deepEqual } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
@@ -19,23 +19,25 @@ import { durationLabel, logicalClock, plDate, WEEKDAY_SHORT } from '@shared/form
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { templateJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
-import { planBlock, templateFrom, templateVersionOn, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
+import { planBlock, templateFrom, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { currentSeries } from '@shared/model/series'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn } from '@shared/model/settings'
 import { SERIES_MARK, seriesText } from '@shared/seriesText'
-import { placeLogical } from '@shared/time/day'
-import { addDays, weekday } from '@shared/time/zone'
+import { addDays } from '@shared/time/zone'
 import { UNDO_LINE_MS } from '@shared/widget'
 import { DateField, TextField } from '../../components/fields'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
 import { isSaved, saveRecord, storedAnswer, tryUpdateRecord, updateRecord, useData, type SaveAnswer, type SendState } from '../../store/data'
-import { countDay } from '../../store/day'
 import { useNewShortcut } from '../../lib/escape'
 import { removeTarget, useDeleteResolver, useDeleteSelected } from '../../lib/deleteKey'
 import { takeFoundPick, useUi } from '../../store/ui'
 import { attachTransfer } from '../attachments/attachDrop'
 import { withAttachCounts } from '../attachments/attachView'
+import { GroupLine } from '../../components/GroupLine'
 import { BlockEditor } from '../plan/BlockEditor'
+import { menuCtxOf } from '../plan/groupMenu'
+import { useAxisGroup } from '../plan/useAxisGroup'
+import { judgeBlocks } from '../plan/groupRun'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis } from '../plan/dayItems'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
@@ -47,10 +49,12 @@ import { stepsAnswer } from '../steps/stepsUi'
 import { changeTemplateSteps } from '../../store/steps'
 import { SettingNumber } from '../settings/SettingNumber'
 import { templateBlockPatch } from '@shared/model/templateSessions'
-import { axisSources, axisVersion, previewChanges } from './sessionChoices'
+import { axisSources } from './sessionChoices'
+import { sampleDay, templateDayOf, versionFrom } from './templateDay'
 import { SessionFields } from './SessionFields'
 import { templateAdd, templateCopy, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
 import { copyTemplateBlock } from '../plan/blockCopy'
+import { dragTemplateGroup, templateDragPreview } from '../plan/groupDrag'
 import { COPY_SPAN_ID } from '../today/dayPush'
 import { freshAfter, removeTemplate, removeTemplateBlock } from './templateActions'
 
@@ -192,15 +196,12 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   // The block the search picked (only one of the version shown – the one in force from tomorrow).
   useEffect(() => {
     if (!openBlock) return
-    setSelected(openBlock)
+    open(openBlock)
     onBlockOpened()
   }, [openBlock])
   const rel = paths.record('template', template.id)
   // The same objects while nothing they come from changes: the day, its axis and the memo of the drag's preview stay.
-  const version = useMemo(() => {
-    const inForce = templateVersionOn(template, from)
-    return template.versions.find((v) => v.from === from) ?? (inForce ? { ...inForce, from } : { from, blocks: [], budgetMin: null, maxMin: null })
-  }, [template, from])
+  const version = useMemo(() => versionFrom(template, from), [template, from])
   const settings = useMemo(() => settingsOn(rd.settings, from), [rd.settings, from])
   const names: Names = useMemo(() => ({ rd, settings, routines, requests }), [rd, settings, routines, requests])
 
@@ -251,23 +252,16 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   }
 
   // The day this version would make: the first date from the chosen one with its weekday, counted by the engine.
-  const sample = useMemo(() => {
-    for (let i = 0; i < 7; i++) {
-      const d = addDays(from, i)
-      if (!template.weekdays.length || template.weekdays.includes(weekday(d))) return d
-    }
-    return from
-  }, [from, template.weekdays])
-  const model = useMemo(() => {
-    // D515, T1455: every session of the version on the axis, whole, whatever the sample's weekday and early closes; the shift
-    // of the clocks moves it and the wake (D372) – `axisVersion`. The template as written (T1450 – `previewChanges`).
-    const t: Template = { ...template, versions: [{ ...axisVersion(version, sample), from: '2000-01-01' }] }
-    return countDay(sample, { date: sample, dayFile: { schema: 1, date: sample, dayType: template.dayType }, nextFile: null, prevFile: null, events: [], complete: true, unknown: false, away: false }, { changes: previewChanges(rd.settings), templates: [t], lectures, series: [], routines }, placeLogical(sample, 4 * 60), false)
-  }, [template, version, sample, rd.settings, lectures, routines])
+  const sample = useMemo(() => sampleDay(template, from), [from, template])
+  // D515, T1455: every session of the version on the axis, whole, whatever the sample's weekday and early closes; the shift of the
+  // clocks moves it and the wake (D372). The template as written (T1450) – one rule with a change counted in its turn (`templateDay.ts`).
+  const model = useMemo(() => templateDayOf(template, version, sample, { changes: rd.settings, lectures, routines }), [template, version, sample, rd.settings, lectures, routines])
   // D512: the cost on every tile (`planCosts`), its window only on the template's own blocks.
   const axis = useMemo(() => dayAxis(model, names, null, null, true), [model, names])
   // Template blocks have the day's derived ids: the block of the version is found by its source (a session by its entry, D511).
   const byPlanId = useMemo(() => axisSources(model.ctx.plan, version.blocks), [model, version.blocks])
+  // The day's id of each block of the version (the judgement of the menu counts on the day, T1720).
+  const dayIdOf = useMemo(() => new Map([...byPlanId].map(([dayId, of]) => [of, dayId])), [byPlanId])
   // D410: the attachments of the version's blocks (those of the template, by the block's id in it) – 📎N on the tile, a drop of files on it.
   const attachments = useData((s) => s.attachments)
   const attachPlace = useMemo<BlockPlace>(() => ({ scope: 'template', templateId: template.id }), [template.id])
@@ -278,6 +272,32 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     return withAttachCounts(own, (id) => blocks.get(id) ?? null, attachPlace, attachments)
   }, [axis, byPlanId, version.blocks, attachPlace, attachments])
   const block = version.blocks.find((b) => b.id === selected) ?? null
+  // D527, D528: the selection of many blocks of the version (Ctrl+click, Shift+click, Shift+arrows, Ctrl+A, the menu of the right button – without the
+  // day's actions); only the template's own blocks are selected (the sessions and lectures of the sample day are no blocks of it); scope: the version.
+  const menuCtx = useMemo(() => menuCtxOf(names, true), [names])
+  const own = useMemo(() => items.filter((i) => version.blocks.some((b) => b.id === i.id)), [items, version.blocks])
+  // T1720: the entries by the engine's rules on the day the version makes (the ids of the version are the day's by their source); stable while
+  // the version's day is – the menu opened counts its entries again only when it changes.
+  const judge = useCallback((ids: readonly string[]) => judgeBlocks(model, ids.map((id) => dayIdOf.get(id) ?? id), ''), [model, dayIdOf])
+  const where = useMemo(() => ({ templateId: template.id, from }), [template.id, from])
+  const group = useAxisGroup({
+    view: 'template',
+    tiles: own,
+    plan: version.blocks,
+    present: version.blocks.map((b) => b.id),
+    scope: `${template.id}|${from}`,
+    today,
+    energy: rd.general.modules.energy,
+    ctx: menuCtx,
+    where,
+    judge
+  })
+  /** A block opened in the panel is the one selected (a plain click, a new block); the panel closed takes a selection of one with it (D527). */
+  const open = (id: string | null) => {
+    setSelected(id)
+    if (id != null) group.selectOnly(id)
+    else group.release()
+  }
   // The cursor in „Nazwa” once (T1027): forgotten when its panel has shown (or another block is picked) – coming back to it does not set it again.
   const shownId = block?.id ?? null
   useEffect(() => setFresh((f) => freshAfter(f, selected, shownId)), [selected, shownId])
@@ -299,9 +319,11 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   }
   // D462: Del on the selected template (its row of the list, clicked) or its selected block (a tile, or the panel open) removes it, as „Usuń” does.
   useDeleteResolver('template', (id) => (id === template.id ? removeTarget(template.name, remove) : null))
-  const removeBlockOf = (b: PlanBlock) => removeTemplateBlock(template.id, from, b, blockName(b, names)).then(() => setSelected(null))
-  useDeleteResolver('block', (id) => (block && block.id === id ? removeTarget(blockName(block, names), () => removeBlockOf(block)) : null))
-  useDeleteSelected(block ? removeTarget(blockName(block, names), () => removeBlockOf(block)) : null)
+  const removeBlockOf = (b: PlanBlock) => removeTemplateBlock(template.id, from, b, blockName(b, names)).then(() => open(null))
+  const singleTarget = block ? removeTarget(blockName(block, names), () => removeBlockOf(block)) : null
+  // D528: two or more selected – one question „Usunąć 4 bloki?” (the focused tile must be one of them).
+  useDeleteResolver('block', (id) => (group.removeTarget ? (group.sel.isSelected(id) ? group.removeTarget : null) : block && block.id === id ? singleTarget : null))
+  useDeleteSelected(group.removeTarget ?? singleTarget)
 
   return (
     <div className="flex min-h-0 flex-1" data-testid="template-editor">
@@ -378,15 +400,25 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
               </button>
             </div>
           )}
+          <GroupLine view="template" />
+          {group.line}
           <Timeline
             items={items}
+            marked={group.marked}
+            onContext={(id, at) => version.blocks.some((b) => b.id === id) && group.onContext(id, at)}
             onAttachDrop={(id, dt) => {
               const owner = ownerToAdd(version.blocks.find((b) => b.id === id) ?? null, attachPlace)
               if (owner) void attachTransfer(owner, dt)
             }}
             markers={axis.markers}
             selected={selected}
-            onSelect={(id) => setSelected(version.blocks.some((b) => b.id === id) ? id : null)}
+            onSelect={(id, mods) => {
+              const mine = version.blocks.some((b) => b.id === id)
+              // D527: Ctrl and Shift only select (the panel stays as it is); a plain click opens the block.
+              if (mine && !group.onSelect(id, mods)) return
+              if (!mine && (mods.ctrl || mods.shift)) return
+              open(mine ? id : null)
+            }}
             // D512: the window of a tile's cost – the template block's own cost, in the version from the date shown (no series).
             onCosts={(id, costs) => patchBlock(id, { costs })}
             onMove={(id, startMin) => {
@@ -411,6 +443,12 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
               const b = version.blocks.find((x) => x.id === id)
               if (b) void copyTemplateBlock({ templateId: template.id, from, day: model, block: b, startMin, name: blockName(b, names) })
             }}
+            // D531: a selected block of two and more drags the group of the version – the same difference for each (with Ctrl – its copy).
+            groupDrag={{
+              has: (id) => group.sel.count >= 2 && group.sel.isSelected(id),
+              preview: (_id, minutes, copy) => templateDragPreview(model, byPlanId, group.sel.selected, minutes, copy),
+              drop: (_id, minutes, copy) => void dragTemplateGroup({ templateId: template.id, from }, group.sel.selected, minutes, copy)
+            }}
             // D367: while a block is dragged, the blocks it pushes apart at their new places (D513: a copy's too, and where it will stand).
             pushPreview={(id, span, edge, shown, copy) => {
               if (copy) {
@@ -429,7 +467,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
               void saveChange(templateAdd(model, b)).then((saved) => {
                 if (!saved) return
                 setFresh(b.id)
-                setSelected(b.id)
+                open(b.id)
               })
             }}
             from={axis.from}
@@ -438,6 +476,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           />
         </div>
       </div>
+      {group.overlay}
       {block && (
         <BlockEditor
           key={block.id}
@@ -453,7 +492,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           session={<SessionFields block={block} blocks={version.blocks} kind={settings.categories[block.categoryId]?.kind} weekdays={template.weekdays} onChange={(patch) => void patchBlock(block.id, patch)} />}
           // D440: the list without boxes – every day made from the template starts with none ticked.
           steps={<StepsEditor steps={block.steps} lengthMin={block.durationMin} ticks={false} onOp={async (op) => stepsAnswer(op, await changeTemplateSteps(template.id, from, block.id, op))} />}
-          onClose={() => setSelected(null)}
+          onClose={() => open(null)}
           actions={
             // D415: out of the version from the date shown, with its attachments when no later version keeps it; „Cofnij”.
             <button type="button" className="btn" onClick={() => void removeBlockOf(block)} data-testid="template-block-remove">

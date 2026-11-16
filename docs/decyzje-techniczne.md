@@ -415,3 +415,138 @@ w `docs/decyzje-techniczne*.md`. Nowa decyzja wskazuje, którą zastępuje; zast
 | T1538 | Migawka dnia (`day.create`, `day.reissue`, `day.snapshot`) to pełne ustawienia (`settingsFrom(…, { whole: true })`): wariant bez kosztu albo miejsca jest „jak podkategoria”, nigdy z wartością startową (`fv`). Warstwy ustawień datowanych (`settingsOn`) zostają przy „brak = jak przedtem” (lista sprzed D510). Migawki sprzed D510 zawsze miały koszty i miejsca wariantów startowych, więc dla nich wynik bez zmian. Błąd sprzed 1.27 (horyzont, statystyki, ocena i symulowany `day.snapshot` w `typeChange` idą tą drogą) |
 | T1539 | Koszt własny bloków migawki zawsze przez `ownCostsFrom` (zakres `RANGES.cost`), także z ciałem: koszt spoza zakresu to brak kosztu |
 | T1540 | E2E przeciągania w „3 dniach” chwyta kafelek w lewej części: etykieta kosztu kafelka obok innego bloku pokazuje się po najechaniu w prawym górnym rogu (D501), a po D524 sięga dalej niż środek półszerokiego kafelka; naciśnięcie na nią otwiera okienko kosztu, nie przeciągnięcie |
+| T1541 | Linia zmian grupowych (D529) stoi w oknie – nad osią „Dziś”, na stronie szablonu, nad kolumnami „Tygodnia” i „3 dni”, w Sprawach i w Kalendarzu – a nie w pasku pulpitu: zmianę robisz w oknie, więc tam jest „Cofnij”; pasek pulpitu i `main/widget.ts` bez zmian (D229, T354), rozsunięcie z tej samej zmiany nie dostaje drugiej linii w pasku |
+| T1542 | `Selection.ids` zawsze w kolejności `order` ekranu; id spoza tej kolejności (sprawa z innej listy) stoją po nich |
+| T1543 | Warstwa Esc `base` (`useEscapeLayer(open, close, true)`) leży pod zwykłymi warstwami bez względu na chwilę rejestracji – panel otwarty tym samym kliknięciem zamyka się pierwszy, drugi Esc czyści zaznaczenie |
+| T1544 | Prawy przycisk – jedna reguła `contextSelect` / `onItemContext` w `useSelection` (element spoza zaznaczenia zostaje jedynym zaznaczonym) dla wszystkich ekranów ciągu Z |
+| T1545 | Menu pod prawym przyciskiem rejestruje się przez `onModal` (skróty strony, Del i Ctrl+A czekają), zamyka się przy przewinięciu i zmianie rozmiaru okna; fokus wraca do elementu otwarcia, o ile wybór nie otworzył okna |
+| T1546 | `POOL_LETTER` w `shared/model/categories.ts`, `energyDraw` go reeksportuje |
+| T1547 | W linii zmian grupowych rzeczownik zawsze stoi („Zmieniono 3 bloki · pominięto 1: zaczęty”, „Przeniesiono 3 bloki · 1 został – już trwa”); część „najniższa energia” tylko, gdy wartości po zaokrągleniu się różnią |
+| T1548 | Cofanie, które rzuci wyjątek, zostawia linię (do ponowienia) i pokazuje komunikat „Nie udało się cofnąć zmiany” |
+| T1549 | Komunikat po „Cofnij” o elementach zmienionych w międzyczasie: „2 bloki zmienione od tego czasu – zostały” (sprawy w rodzaju żeńskim) |
+| T1550 | Suma kosztu w napisie „Zaznaczone: …” zaokrąglana raz, po zsumowaniu (koszt/h × minuty / 60), połówki od zera, „−0” jako „0”; element bez kosztu dokłada tylko czas |
+| T1551 | `useSelection` ma `scope` (zmiana – puste zaznaczenie, liczone w renderze) i `when` (który z kilku widoków na stronie bierze Ctrl+A, Shift+strzałki i Esc) |
+| T1552 | Warstwa Esc ma `applies(e)`; warstwa, która nie pasuje (np. zaznaczenie bez fokusu), przepuszcza Esc dalej |
+| T1553 | Menu zatrzymuje zdarzenia (klawisze, mysz, dwuklik, prawy przycisk) przed drzewem Reacta elementu otwarcia (portal) i samo obsługuje Esc przez `handleEscape` |
+| T1554 | Linia zmian grupowych nie znika w trakcie cofania; po nieudanym – zostaje do końca terminu albo dostaje nowe 15 min; koniec liczony `until − Date.now()` |
+| T1555 | Rola `status` tylko na tekście linii, więc „Cofnij” liczy się jako klik poza otwartym menu i okienkiem |
+| T1560 | Zmiany grupowe Spraw w osobnych plikach `engine/casesGroup.ts` i `store/casesGroup.ts`; działania jednej sprawy bez zmian |
+| T1561 | „Cofnij” grupy Spraw działa po polach rekordu: sprawa, której zmienione pole ma już inną wartość, zostaje cała (`kept`); plik dnia wraca w całości i tylko, gdy stoi tak, jak go zostawiła zmiana (`daysKept`) |
+| T1562 | „Przywróć” zrobionej sprawy odsyła do Skrzynki (zrobiona sprawa nie pamięta listy; inną listę daje „Przenieś na listę”); kopia z Ctrl nic nie pomija |
+| T1563 | Rozsuwanie (D367) dla grupy spraw liczone po kolei na dniu z nowymi blokami (`planningOfGroup`), zapis raz (`planCases`) |
+| T1564 | `changeOne` i `readPlanDays` w `store/cases.ts` – jedyna droga kroku i odczytu dni dla jednej sprawy i grupy |
+| T1565 | „Cofnij” grupy zostawia sprawy z dnia o zmienionym pliku i następne zadanie serii, gdy jego właściciel został |
+| T1566 | „Zaplanuj…” grupy pomija tylko zrobione; zaplanowane (także na dzień miniony) planuje od nowa, jak „Zaplanuj” jednej |
+| T1567 | Błąd kroku jednej sprawy (np. zadanie bez tytułu) to pominięcie „nie da się”; całość odrzuca tylko błędna wspólna wartość (szacunek spoza zakresu) |
+| T1580 | Zaznaczenie dni w Kalendarzu przeżywa zmianę miesiąca; Ctrl+A bierze dni pokazanego miesiąca |
+| T1581 | `MonthGrid` ma dwa tryby zaznaczania (Kalendarz – `useSelection`, Kreator i kopia dnia – dawny `selected`/`onSelect`); zwykły klik w Kalendarzu dalej otwiera dzień |
+| T1582 | „Cofnij” typu dni przez `editStands` i `inverseEdit` całego wpisu dnia – dzień z polem zmienionym od tego czasu zostaje cały; tak samo pobudka (dzień z pobudką albo przesuniętym blokiem zmienionym od tego czasu zostaje cały) |
+| T1583 | Powody pominięcia dni w linii: „miniony”, „dzisiejszy” (typ dzisiejszego dnia zmienia się w „Dziś”) |
+| T1584 | Pobudka z menu – `parseField` z zakresem `RANGES.wakeMin`, jak pole pobudki |
+| T1585 | Przykład Kalendarza zaczyna się od Ctrl+klik (zwykły klik otwiera dzień, D527) |
+| T1586 | Liczba zaznaczonych dni tylko w pasku działań Kalendarza (bez drugiego napisu nad siatką); przy linii grupowej bez osobnego komunikatu o pominiętych dniach |
+| T1587 | `readDayFiles` czyta porcjami po 62 dni (limit `dayFiles` w procesie głównym) – także w `dayFilesNow`, `undoDayEdits`, `undoFreeDays`, `undoWeekPush` |
+| T1588 | `takeBackDays` (`store/dayUndo.ts`) – jedna reguła cofania dni dla linii „Tygodnia”, dni wolnych i Kalendarza |
+| T1589 | Kolejność dni dla Shift+klik w Kalendarzu – dni po dacie od siatki, rozszerzone o zaznaczone spoza niej; pozycje menu wyłączone „Zapisuję…” w trakcie zapisu |
+| T1568 | Jeden hook `useCasesGroup` dla ekranu Spraw i panelu „Sprawy” przy osi |
+| T1569 | `order` zaznaczenia Spraw to lista kotwicy; zaznaczone z innych list stoją po niej; Shift+klik w innej liście działa jak klik |
+| T1570 | „Zaplanuj…” grupy stawia sprawy w kolejności widocznej na ekranie (Skrzynka przed „Dziś”), nie w kolejności zaznaczania |
+| T1571 | Del dla zaznaczenia ≥ 2 spraw przez zwykły `DeleteTarget` („Usunąć 3 sprawy?”), bez zmian w `deleteKey.ts` |
+| T1572 | W menu Spraw „Zrobione” / „Przywróć” tylko wtedy, gdy ma sens (obie przy mieszanym zaznaczeniu); lista, na której są wszystkie – ✓ i wyłączona |
+| T1573 | Czasowniki linii Spraw: Przeniesiono, Zrobiono, Przywrócono, Zaplanowano, Skopiowano, Usunięto; panel przy osi ma to samo menu i okno „Zaplanuj…” |
+| T1574 | `carriedBy` – jedyna reguła grupy niesionej przeciąganiem (≥ 2 i zawiera chwyconą); panel zgłasza zaznaczenie przez `onSelected` |
+| T1575 | Chip panelu ma znacznik Del tylko przy zaznaczeniu ≥ 2 – jedna sprawa nie przejmuje Del od zaznaczonego bloku osi |
+| T1576 | „Zaplanuj…” po kliknięciu czeka na dane wpisanego dnia; wpisana godzina zostaje przy zmianie dnia; pola – `DateField`/`TimeField` |
+| T1577 | Energia w linii planowania grupy – `lowestEnergyChange` (najniższa energia przed i po, jak „Ułóż pod energię”) |
+| T1610 | `Timeline.onSelect` niesie `{ctrl, shift}`; obwódkę każdego zaznaczonego daje `marked` |
+| T1611 | Zaznaczenie jednego bloku z kliku idzie za otwartym panelem (D462): zamknięcie panelu, szkic albo zniknięcie bloku je zdejmuje (`release`), Esc wraca wtedy do okna; grupa ≥ 2 zostaje po zamknięciu panelu. W „Tygodniu” (bez panelu) Ctrl+klik jednego bloku zostaje z obwódką do Esc |
+| T1612 | W „Tygodniu” i „3 dniach” id zaznaczenia to `blockKey(date, id)` |
+| T1613 | Ctrl+A, Shift+strzałki i Esc osi działają z fokusem na osi albo bez fokusu (`data-axis`), nie z panelu Spraw |
+| T1614 | Kontrakt `GroupAction` (category, variant, cost, routine, shift ze znakiem, moveTo, cancel, park, remove) i wykonawca `groupRunner` w `plan/groupMenu.ts` |
+| T1615 | Okna „Koszt…” (start od kosztu pierwszego zaznaczonego) i „Przenieś na dzień…” należą do menu grupy (`plan/BlockGroupMenu.tsx`) |
+| T1616 | Jedna linia zmian grupowych `view="week"` dla „Tygodnia” i „3 dni” (pod linią rozsuwania), `view="template"` nad osią szablonu |
+| T1617 | Del grupowy (≥ 2) ma pierwszeństwo przed Del jednego bloku; w „Tygodniu” działa przy fokusie poza polem |
+| T1618 | W „Szablonach” zaznaczalne są tylko własne bloki wersji; kafelki dnia próbnego (sesje, wykłady) ignorują Ctrl, Shift i prawy przycisk |
+| T1619 | Menu w „Tygodniu” bierze listy (podkategorie, warianty, rutyny) z ustawień pierwszego zaznaczonego dnia |
+| T1720 | `MenuBlock.state` (open, begun, past, off) zamiast `begun` – wyłączenia „Odwołaj”, „Zaparkuj”, „Przesuń”, „Przenieś” z powodem stanu |
+| T1721 | `menuBind(open)` w `ContextMenu.tsx` – jedyna para prawy przycisk + klawisz menu (oś, „Tydzień”, wiersz Spraw, dzień Kalendarza) |
+| T1722 | Klik oddalony od naciśnięcia o 4 px i więcej to koniec przeciągnięcia także na nieprzeciągalnym kafelku; klik z klawiatury działa zawsze |
+| T1723 | E2E zaznaczania używają dni z przyszłości (jutro, następny tydzień, następny miesiąc) od `logicalToday()` – wynik nie zależy od godziny ani dnia tygodnia testu |
+| T1724 | E2E klikają działania menu bloków dopiero po podpięciu logiki Z4-A do `groupRunner` |
+| T1590 | Logika zmian grupowych bloków w `engine/groupEdit.ts`, zapis w `today/groupActions.ts` i `templates/templateGroup.ts`; `judgeGroup` ocenia każdy blok jak zmianę pojedynczego |
+| T1591 | Pomijanie przy polach: podkategoria, wariant i rutyna pomijają zaczęty (jak przykład D529); sesje, wykłady i zjazdy są zmieniane, bo panel je zmienia; rutyna tylko w podkategorii rodzaju „rutyna”, wariant tylko swojej podkategorii |
+| T1592 | „Przesuń o” liczy dziś od miejsca kafelka na osi (prognoza, jak przeciąganie), inne dni i szablon – od planu; minuta po minucie; poza dobą logiczną – pominięty |
+| T1593 | „Cofnij” pól – PRZED/PO tylko dla zmienionych kluczy; blok wraca w całości albo zostaje (kept), gdy któreś pole ma już inną wartość niż PO |
+| T1594 | Odwołanie i parkowanie grupy przez IPC `groupLog` / `undoGroupLog` (na wzór `closeDay` / `undoClose`), tylko dziś; blok zaczęty od tego czasu zostaje przy „Cofnij” |
+| T1595 | Koszt zaczętego bloku z grupy – `block.cost` od teraz (jak kafelek); „Cofnij” przywraca koszt sprzed, póki blok trwa i ma koszt grupy |
+| T1596 | Przeniesienie grupy na dzień – kolejne `moveBetweenDays` jedną edycją (dzień docelowy najpierw); „Cofnij” jak dla jednego bloku – oba dni albo żaden |
+| T1597 | Usunięcie grupy: zaczęte przez `removeBegun` (D336), potem jedna edycja z załącznikami; „Cofnij” – plik, potem przywrócenie zaczętych |
+| T1598 | `blockNow` i `patchedBlock` w `shared/data/dayEdits.ts` (`dayActions` reeksportuje) |
+| T1599 | Energia linii z `groupEnergy`: brak, gdy dzień nie ma prognozy albo energia się nie zmienia; przy przeniesieniu – dla dziś, jeśli dotknięte, inaczej dla dnia źródłowego |
+| T1600 | „Cofnij” odwołania i parkowania grupy cofa też zdarzenia D216 zapisane razem z nimi (ten sam komputer i chwila, reguła workEnd), koniec zapauzowanej pracy zawsze; cudze zdarzenia odrzucane |
+| T1601 | Przesunięcie części grupy równoległej tworzy nową grupę z zaznaczonych; niezaznaczone zostają razem (nowy pierwszy jak `leaveGroup`) |
+| T1602 | „Cofnij” bloku migawki (szablon, seria) dopisanego do pliku dnia zdejmuje jego wpis, póki stoi tak, jak go zapisała zmiana |
+| T1603 | Zmiana grupowa w szablonie liczy dzień wersji w turze zapisu (`templates/templateDay.ts`, ta sama reguła co strona) |
+| T1604 | Zmiana grupowa, która niczego nie zapisuje, daje „bez zmian” bez „Cofnij”; dzień bez pliku nie dostaje pliku |
+| T1605 | Szkic odwołania/parkowania dokłada zdarzenia wcześniejszych bloków do faktów dnia przyrostowo (bez pełnego `computeDay`) |
+| T1606 | `pushApart` z opcją `placed` – inne bloki postawione tą samą zmianą trzymają starty; blok pchnięty, który stanąłby tuż przed takim i go opóźnił, idzie za nim; bez `placed` wynik jak dotąd |
+| T1607 | Odwołanie i parkowanie grupy – każdy blok raz, zdarzenia wcześniejszych widoczne dla późniejszych ocen (D216) |
+| T1608 | Zwolniony czas grupy (`groupFreed`) – zakotwiczony liczy się w czasie kotwicy tylko, gdy kotwica coś zwalnia |
+| T1609 | Powody pominięcia z odmowy timera: „skończony”, „odmowa” |
+| T1710 | `placed` podnosi tylko bloki pchnięte przez zmianę (podniesione, zapisane albo pokazane później niż przed); nietknięty zostaje |
+| T1711 | Odwołanie i parkowanie grupy w kolejności godzin z prognozy, remis – kolejność planu; wynik nie zależy od kolejności zaznaczenia ani zapisu |
+| T1712 | Łańcuch zakotwiczonych w zwolnionym czasie grupy tylko przez bloki niezaczęte (jak `freedByEdit`) |
+| T1713 | „Przesuń o” bloku pokazanego za końcem doby liczy od jego minuty; „później” – „poza dniem” |
+| T1714 | „Cofnij” odwołania/parkowania grupy liczy jako przywrócone tylko bloki, które wracają do planu; zdjęte innym zdarzeniem – kept |
+| T1715 | Powtórzone id odrzuca silnik (jedna granica), IPC tylko filtruje typy |
+| T1730 | Wykonawca zmian grupowych bloków w `plan/groupRun.ts` (`runBlockGroup`), `where` – dzień „Dziś” albo szablon z datą wersji; ekrany importują go wprost (T1741, bez rejestru) |
+| T1731 | `changeDaysGroup` – zmiana bloków wielu dni jedną edycją z jednym „Cofnij”; „Dziś” to przypadek jednego dnia |
+| T1732 | Linia bloków – czasownik według działania (Zmieniono, Przeniesiono, Usunięto, Odwołano, Zaparkowano), dopisek „przesunięto N bloków”, gdy zmiana rozsunęła inne |
+| T1733 | Wyłączenia w menu bloków z oceny silnika na modelu widoku; w kolumnach „Tygodnia” – stany bloków i „tylko dziś” dla odwołania i parkowania |
+| T1734 | Odmówione „Cofnij” zostawia linię do ponowienia (`UndoNotDone`, bez drugiego komunikatu) |
+| T1735 | Każdy dzień zmiany grupowej rozliczany po swoim wpisie; dni z pytaniem i odrzucone – dopisek „1 dzień czeka na odpowiedź” / „1 dzień niezapisany” |
+| T1736 | Niepełne „Cofnij” pamięta cofnięte dni i ponawia tylko resztę |
+| T1737 | Zakończone dziś bloki przy usuwaniu grupy otwierają się z powrotem tylko przy odmowie wpisu dzisiejszego; gdy się nie otworzą – komunikat jak dla jednego bloku |
+| T1738 | Dzień docelowy przeniesienia, którego nie da się policzyć, dostaje bloki bez rozsuwania (jak „Przenieś na…” jednego); bloki celu oceniane na nim |
+| T1739 | Energia linii z dnia zapisanego i zmienionego (dziś, inaczej jedyny) |
+| T1740 | `ruleVerdicts` – jedna ocena menu na otwarcie; przeliczenie przy zmianie dnia, widoku albo danych |
+| T1741 | Bez rejestru `groupRunner` – bezpośredni import `runBlockGroup` |
+| T1742 | Zmiana bez „Cofnij” mówi swój tekst w rogu okna |
+| T1743 | „został w swoim dniu” bez myślnika, jak w linii „Tygodnia” |
+| T1744 | Do linii i „Cofnij” wchodzą tylko części faktycznie zapisane |
+| T1745 | Przy przeniesieniu decyduje zapis dnia docelowego, liczą się zapisane źródła; cel zapisany bez żadnego źródła – linia z „Cofnij” celu i „N dni niezapisanych” |
+| T1746 | Koszt zaczętego bloku zapisuje się zdarzeniem niezależnie od pliku dnia; zdarzenie niezapisane – sam komunikat „Nie zapisano” |
+| T1747 | Dzień z pytaniem przy „Cofnij” – cofnięty, czeka na odpowiedź, bez ponowienia |
+| T1748 | `outcomeFate` (`store/data.ts`) – jedno odczytanie wyniku edycji dla zmian grupowych, `saveAnswer` i `weekMove` |
+| T1749 | `stayedPlace` – jawna flaga miejsca w tekście „został …”; pisownia „niezapisany” łącznie |
+| T1750 | `pushApart` z `placed`: nietknięty blok o tym samym starcie co postawiony blok grupy idzie za nim (remis = zajęte miejsce); zostaje tylko blok zaczynający się wcześniej |
+| T1751 | Logika przeciągania grupy w `engine/groupDrag.ts` (`judgeDrag`, `draggedDays`, `dragPreview`), zapis w `plan/groupDrag.ts` |
+| T1752 | Różnica przeciągnięcia = start upuszczenia chwyconego − start jego kafelka; pozostałe bloki liczone od swojego miejsca na osi |
+| T1753 | Słowa „został – …”: już trwa, już zrobiony, zaparkowany, odwołany, sesja, wykład, zjazd, zakotwiczony, w swoim dniu, bez godziny, minął, dzień minął, poza dniem, poza widokiem, nie ma w planie |
+| T1754 | Przeciągnięcie przez dni – jedna edycja, dni przyjmujące bloki (właściciele) najpierw, reszta czeka na wszystkich właścicieli |
+| T1755 | „Cofnij” przeciągnięcia przez dni przywraca dni połączone przeniesieniem razem albo wcale; dzień nieczytelny – nic, linia zostaje |
+| T1756 | Kopia grupy nie bierze zakotwiczonych (liczone „zakotwiczony”); oryginały stoją przy rozsuwaniu jak bloki stałe |
+| T1757 | Przeciągana grupa nie staje „równolegle” obok innego bloku (bez strefy D492) |
+| T1758 | Przeciągnięcie, w którym nic nie pojechało – bez zapisu i linii, komunikat w rogu |
+| T1759 | Esc odwołuje przeciąganie grupy w fazie przechwytywania (nie czyści zaznaczenia); przeciąganie jednego bloku na osi bez zmian |
+| T1760 | „Tydzień”: w trakcie przeciągania grupy pasma miejsc (`week-group-drop`), przenoszone kafelki przyciemnione |
+| T1761 | Czasownik „Skopiowano” dla kopii grupy |
+| T1762 | `templateShift` liczy podgląd na żądanie; `templateGroupCopy` dla kopii grupy w szablonie |
+| T1763 | „Cofnij” przeciągnięcia w obrębie dnia działa jak „Przesuń o” z menu – po polach |
+| T1764 | Esc przy wciśniętym bloku grupy odwołuje gest także przed progiem 4 px; klik po nim wyciszony |
+| T1765 | Pasma i przyciemnienie w „Tygodniu” z tej samej oceny co zapis (`judgeDrag`) – zakotwiczony ma pasmo za kotwicą |
+| T1766 | Kopie zaznaczonej grupy równoległej zostają grupą (dzień i szablon) |
+| T1767 | Chwycony blok, który zostaje, po upuszczeniu wraca od razu |
+| T1768 | Podgląd w „Szablonach” rysuje zakotwiczone jako jadące z grupą |
+| T1769 | Wspólne pomocniki (`withPushedStarts`, `followsMoving`, `patchedPlan`, `stands`), jedno kodowanie id kopii (`copyKeyOf`) |
+| T1770 | Kopia części grupy równoległej bez korzenia – pierwszy z części jest korzeniem kopii |
+| T1771 | Esc grupy przed progiem w „Tygodniu” jak na osi (bez czyszczenia zaznaczenia, klik wyciszony) |
+| T1772 | „Cofnij” przeciągnięcia w obrębie dnia pamięta cofnięte dni i ponawia tylko resztę |
+| T1773 | Przeniesienie grupy liczy „dziś” i dni w turze zapisu |
+| T1774 | Dni grupy w „Tygodniu” liczone przy pierwszym ruchu ponad próg, równolegle |
+| T1775 | Podgląd grupy w „Tygodniu” liczony tylko przy zmianie kolumny, startu, Ctrl albo policzenia dni |
+| T1776 | Trzymanie po upuszczeniu z podglądu miejsca upuszczenia (liczonego od razu), nie z ostatniego renderu |
+| T1777 | Wyciszenie kliku po Esc nigdy nie dotyczy kliku z klawiatury; gaśnie po puszczeniu, utracie przechwycenia albo naciśnięciu |
+| T1778 | Podgląd przeciągania grupy liczony z planu, bez budowania plików |
+| T1779 | `DragJudged.delta` niesie różnicę przeciągnięcia |
+| T1780 | „Cofnij” przeniesienia grupy na inne dni pamięta cofnięte dni: zapisany nie wraca do wysyłki, z pytaniem – czeka na odpowiedź bez ponowienia, odrzucony albo nieczytelny – kolejne „Cofnij” robi tylko resztę |

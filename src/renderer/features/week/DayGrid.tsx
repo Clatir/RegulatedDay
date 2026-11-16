@@ -5,19 +5,26 @@
  * heading of a day or on a block opens its plan, as in the calendar (D295); a click on an empty place of a column (or a drag over it) opens
  * the small window of a new block there (D366). A block that may be moved (`HorizonBlock.movable`) is dragged to another hour
  * or another day (D305, D417, D422): the place it would take is shown while it is held, the drop is `moveWeekBlock`; with Ctrl
- * held when it is let go (D513) – a copy there (`copyDayBlock`), the block stays: the cursor has „+” while Ctrl is held.
+ * held when it is let go (D513) – a copy there (`copyDayBlock`), the block stays: the cursor has „+” while Ctrl is held. A block of a selection
+ * of two and more drags the whole group (D531): every selected block by the same difference of days and minutes, each shown at its new place
+ * while it is held (`week-group-drop`), Esc ends it, the drop is `dragDayGroup` (with Ctrl – the group's copy).
  */
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import type { Costs } from '@shared/model/categories'
 import { logicalClock } from '@shared/format'
+import type { DragKey } from '@shared/engine/groupDrag'
+import type { GroupDay } from '@shared/engine/groupEdit'
+import { daysBetween } from '@shared/time/zone'
 import { attachmentsOfBlock, type BlockPlace } from '@shared/model/attachment'
 import { settingsOn, DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
 import { stepsCounter } from '@shared/model/steps'
 import { SERIES_MARK } from '@shared/seriesText'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { weekday } from '@shared/time/zone'
+import { menuBind } from '../../components/ContextMenu'
 import { cx } from '../../components/ui'
+import { useDeleteSelected } from '../../lib/deleteKey'
 import { useData, type SaveAnswer } from '../../store/data'
 import { useMachine } from '../../store/machine'
 import { openDay, openPick, setBlockDraft, toast } from '../../store/ui'
@@ -39,6 +46,9 @@ import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, da
 import { DENIED_TEXT, dropOn, dropStart, dropStays, sameDrop, weekOnto, type BlockDrop } from './weekViews'
 import { inParallelZone, tileAt } from '../plan/parallelDrag'
 import { undoEditToast } from '../today/dayActions'
+import { useWeekGroup, type WeekGroup } from './weekSelect'
+import { blockKey, parseBlockKey } from '../plan/groupMenu'
+import { countDragDays, dragDayGroup, dragGoing } from '../plan/groupDrag'
 
 const AXIS_PX = 48
 const TONE_CLASS: Record<Tone, string> = { ok: 'text-sea', bad: 'text-rose', muted: 'text-muted', plain: 'text-fg' }
@@ -85,6 +95,43 @@ interface Lift {
   last: BlockDrop | null
   /** The last place at its hour, never beside another block (D513: a copy goes there, D492's drop onto a block is a move's only). */
   plain: BlockDrop | null
+  /** A block of a selection of two and more (D531): every selected block goes with it (its key, its day, its block); null – it alone. */
+  members: GroupMember[] | null
+  /** The days of the group counted for its places (`countDragDays`, read once it is dragged); null – not yet. */
+  counted: ReadonlyMap<string, GroupDay> | null
+  /** What the places of the group were last judged for (the column, the start, Ctrl; the days counted) – judged again only when it changes. */
+  placedFor: string | null
+}
+
+/** A selected block of a group being dragged (D531). */
+interface GroupMember {
+  key: string
+  date: string
+  block: HorizonBlock
+}
+
+/** Where a selected block of the group would land while the grabbed one is held (D531): its column, its start, its length. */
+export interface GroupBand {
+  key: string
+  index: number
+  startMin: number
+  durationMin: number
+}
+
+/**
+ * The places of the other selected blocks of a group dragged with the grabbed one (D531, T1765): those the drop takes – `places`, the judgement of
+ * the drop (`dragGoing`: a block taken at its new start, one anchored to it in its new day at where the column shows it plus the minutes `dm`), in
+ * the columns of the view; the others stay (no band).
+ */
+export function groupBands(days: readonly HorizonDay[], members: readonly GroupMember[], grabbed: string, places: ReadonlyArray<DragKey & { to: string; startMin: number | null }>, dm: number): GroupBand[] {
+  const byKey = new Map(members.map((m) => [m.key, m]))
+  return places.flatMap((p) => {
+    const key = blockKey(p.date, p.id)
+    const m = byKey.get(key)
+    const index = days.findIndex((d) => d.date === p.to)
+    if (key === grabbed || !m || index < 0) return []
+    return [{ key, index, startMin: p.startMin ?? m.block.startMin + dm, durationMin: m.block.endMin - m.block.startMin }]
+  })
 }
 
 /** What a block needs to be dragged (`BlockBox`): the press, whether a drag has just ended on it (its click is not a click), whether it is the one held. */
@@ -125,6 +172,9 @@ export function DayGrid({
   const namesOf = useMemo(() => (date: string): Names => ({ rd, settings: settingsOn(rd.settings, date), routines, requests }), [rd, routines, requests])
   const cols = { gridTemplateColumns: `${AXIS_PX}px repeat(${days.length}, minmax(0, 1fr))` }
   const dates = useMemo(() => days.map((d) => d.date), [days])
+  // D527, D528: the selection of many blocks over the days (Ctrl+click, Shift+click, Shift+arrows, Ctrl+A, Esc, the menu of the right button); Del asks once for all.
+  const group = useWeekGroup({ days, scope: `${mode}|${dates[0]}`, today, energy: rd.general.modules.energy, namesOf })
+  useDeleteSelected(group.removeTarget)
   /** The rectangle a column has on the screen; null when it is not there. */
   const columnRect = (i: number): DOMRect | null => bodyRef.current?.querySelector(`[data-testid="week-col-${days[i]?.date}"]`)?.getBoundingClientRect() ?? null
   // The columns do not move while a drag goes on: their rectangles are read once, when the pointer first asks – with the
@@ -170,6 +220,14 @@ export function DayGrid({
   const [drop, setDrop] = useState<{ blockId: string; at: BlockDrop; durationMin: number } | null>(null)
   // D513: Ctrl held while a block is held – its drop is a copy (the cursor with „+”, the band at its hour).
   const [copying, setCopying] = useState(false)
+  const copyingRef = useRef(false)
+  // D531: the places of the other blocks of a group being dragged, and the group's keys (their tiles dimmed while it is held).
+  const [bands, setBands] = useState<GroupBand[]>([])
+  const [flightKeys, setFlightKeys] = useState<ReadonlySet<string>>(() => new Set())
+  const clearDrops = () => {
+    setDrop(null)
+    setBands([])
+  }
   const unmute = useRef<(() => void) | null>(null)
   useEffect(
     () => () => {
@@ -183,6 +241,7 @@ export function DayGrid({
     unlisten.current = null
     lift.current = null
     setFlight(null)
+    setFlightKeys(new Set())
     setCopying(false)
   }
   /**
@@ -226,9 +285,30 @@ export function DayGrid({
       toast(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
     } finally {
       busy.current = false
-      setDrop(null)
+      clearDrops()
     }
   }
+  /** D531: the group put down with its grabbed block on `at` – every selected block by the same difference (`copy` – Ctrl: copied); the line says it. */
+  const landGroup = async (h: Lift, members: readonly GroupMember[], at: BlockDrop, copy: boolean) => {
+    busy.current = true
+    try {
+      const to = latest.current.days[at.index]!.date
+      const shown = new Set(latest.current.days.map((d) => d.date))
+      await dragDayGroup({ view: 'week', keys: members.map((m) => ({ date: m.date, id: m.block.id })), delta: { days: daysBetween(h.date, to), minutes: at.startMin - h.startMin }, copy, inView: (d) => shown.has(d) })
+    } catch (e) {
+      toast(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000)
+    } finally {
+      busy.current = false
+      clearDrops()
+    }
+  }
+  /** The selected blocks as the columns show them now (D531: the group a drag of one of them takes). */
+  const membersOf = (): GroupMember[] =>
+    group.sel.selected.flatMap((key) => {
+      const { date, id } = parseBlockKey(key)
+      const block = latest.current.days.find((d) => d.date === date)?.blocks.find((x) => x.id === id)
+      return block ? [{ key, date, block }] : []
+    })
   /** The block of column `day` under the pointer whose right part takes the dragged block `id` (D492), and what the drop does there. */
   const ontoAt = (id: string, day: HorizonDay, x: number, y: number, max: number) => {
     const tile = tileAt(x, y, id, day.date)
@@ -236,7 +316,47 @@ export function DayGrid({
   }
   const grab = (b: HorizonBlock, date: string, col: number) => (e: PointerEvent<HTMLElement>) => {
     if (e.button !== 0 || !b.movable || busy.current || lift.current) return
-    const h: Lift = { id: b.id, date, name: blockName(b.named, namesOf(date)), durationMin: b.endMin - b.startMin, startMin: b.startMin, col, pointer: e.pointerId, x0: e.clientX, y0: e.clientY, grabPx: e.clientY - e.currentTarget.getBoundingClientRect().top, moved: false, last: null, plain: null }
+    // D531: a block of a selection of two and more – the whole group goes with it.
+    const members = group.sel.count >= 2 && group.isMarked(date, b.id) ? membersOf() : null
+    const h: Lift = { id: b.id, date, name: blockName(b.named, namesOf(date)), durationMin: b.endMin - b.startMin, startMin: b.startMin, col, pointer: e.pointerId, x0: e.clientX, y0: e.clientY, grabPx: e.clientY - e.currentTarget.getBoundingClientRect().top, moved: false, last: null, plain: null, members, counted: null, placedFor: null }
+    const key = blockKey(date, b.id)
+    /**
+     * D531 (T1765): where the group goes with the grabbed one at `at` – the judgement of the drop on its days, counted once when it was grabbed (until
+     * then only the grabbed one): the bands of the others and their tiles dimmed; over a day gone by – nothing goes.
+     */
+    const placeGroup = (at: BlockDrop | null, copy: boolean) => {
+      if (!h.members || !h.moved) return
+      // T1775: judged only when what it depends on changes (the pointer moves a good deal more often than a column or 5 minutes).
+      const placedFor = `${at ? `${at.index}|${at.startMin}|${at.denied}` : '-'}|${copy}|${h.counted != null}`
+      if (placedFor === h.placedFor) return
+      h.placedFor = placedFor
+      const L = latest.current
+      const to = at ? L.days[at.index]?.date : undefined
+      if (!at || !to || at.denied || !h.counted) {
+        setBands((was) => (was.length ? [] : was))
+        setFlightKeys((was) => (was.size === 1 && was.has(key) ? was : new Set([key])))
+        return
+      }
+      const shownDays = new Set(L.days.map((d) => d.date))
+      const delta = { days: daysBetween(h.date, to), minutes: at.startMin - h.startMin }
+      const { places } = dragGoing(h.counted, h.members.map((m) => ({ date: m.date, id: m.block.id })), delta, L.today, { inView: (d) => shownDays.has(d), copy })
+      const next = groupBands(L.days, h.members, key, places, delta.minutes)
+      setBands((was) => (was.length === next.length && was.every((x, k) => x.key === next[k]!.key && x.index === next[k]!.index && x.startMin === next[k]!.startMin) ? was : next))
+      const going = new Set([key, ...places.map((p) => blockKey(p.date, p.id))])
+      setFlightKeys((was) => (was.size === going.size && [...going].every((k) => was.has(k)) ? was : going))
+    }
+    /** T1774: the days of the selection counted for the judgement once it is dragged (never for a click) – the drop judges them again in its turn. */
+    const countGroup = () => {
+      if (!h.members) return
+      void countDragDays([...new Set(h.members.map((m) => m.date))]).then(
+        (days) => {
+          if (lift.current !== h) return
+          h.counted = days
+          placeGroup(h.plain, copyingRef.current)
+        },
+        () => undefined
+      )
+    }
     /** The place the band shows: at its hour with Ctrl held (D513 – a copy), else where the drop puts it. */
     const shown = (copy: boolean): BlockDrop | null => (copy ? h.plain : h.last)
     lift.current = h
@@ -245,7 +365,7 @@ export function DayGrid({
       // No button held: the release was never heard (outside the window) – no drag without a button.
       if (ev.buttons === 0) {
         stop()
-        setDrop(null)
+        clearDrops()
         return
       }
       if (!h.moved) {
@@ -253,6 +373,10 @@ export function DayGrid({
         h.moved = true
         rects.current = null
         setFlight(h.id)
+        if (h.members) {
+          setFlightKeys(new Set([key]))
+          countGroup()
+        }
       }
       const L = latest.current
       const boxes = (rects.current ??= readRects())
@@ -261,12 +385,14 @@ export function DayGrid({
       if (!body || !boxes[i] || !L.days[i]) return
       const startMin = dropStart({ pointerY: ev.clientY, colTop: body.top + boxes[i]!.off, grabPx: h.grabPx, ppm: L.ppm, lo: L.lo, hi: L.hi, durationMin: h.durationMin })
       const plain = dropOn(i, startMin, h.date, L.days[i].date, L.today)
-      // D492: over the right part of another block of the column – a drop onto it (beside it, or after its full group).
-      const onto = plain.denied ? null : ontoAt(h.id, L.days[i], ev.clientX, ev.clientY, L.max)
+      // D492: over the right part of another block of the column – a drop onto it (beside it, or after its full group); a group never (D531).
+      const onto = plain.denied || h.members ? null : ontoAt(h.id, L.days[i], ev.clientX, ev.clientY, L.max)
       const next: BlockDrop = onto ? { ...plain, startMin: onto.startMin, onto } : plain
       h.last = next
       h.plain = plain
       setCopying(ev.ctrlKey)
+      copyingRef.current = ev.ctrlKey
+      placeGroup(plain, ev.ctrlKey)
       const band = shown(ev.ctrlKey)!
       setDrop((was) => (was && sameDrop(was.at, band) ? was : { blockId: h.id, at: band, durationMin: h.durationMin }))
     }
@@ -280,33 +406,38 @@ export function DayGrid({
       muteClick()
       // A day gone by, the place it already has, or a block of its own group: nothing is written.
       if (!at || at.denied || at.onto?.same || (!at.onto && dropStays(h.date, latest.current.days[at.index]?.date ?? h.date, h.startMin, at.startMin))) {
-        setDrop(null)
+        clearDrops()
         return
       }
-      void land(h, at, copy)
+      if (h.members) void landGroup(h, h.members, at, copy)
+      else void land(h, at, copy)
     }
     const cancel = (ev: globalThis.PointerEvent) => {
       if (ev.pointerId !== h.pointer) return
       if (h.moved) muteClick()
       stop()
-      setDrop(null)
+      clearDrops()
     }
     // Esc of a drag in progress is the drag's alone (heard first, in the capture phase): it must not close a layer under it too.
     const escape = (ev: KeyboardEvent) => {
       // D513: Ctrl pressed or let go while held – the band and the cursor say what the drop will do.
       if (ev.key === 'Control' && h.moved) {
         setCopying(ev.ctrlKey)
+        copyingRef.current = ev.ctrlKey
+        // A copy takes no anchored block (T1756): the places of the group change with Ctrl.
+        placeGroup(h.plain, ev.ctrlKey)
         const band = shown(ev.ctrlKey)
         if (band) setDrop((was) => (was && sameDrop(was.at, band) ? was : { blockId: h.id, at: band, durationMin: h.durationMin }))
         return
       }
-      // Esc only when pressed: letting it go (keyup, heard for Ctrl) changes nothing.
-      if (ev.type !== 'keydown' || ev.key !== 'Escape' || !h.moved) return
+      // Esc only when pressed: letting it go (keyup, heard for Ctrl) changes nothing. A group's (T1771, as T1764 on the axis): also before the
+      // 4 px – it never clears the selection, the click after it is muted.
+      if (ev.type !== 'keydown' || ev.key !== 'Escape' || (!h.moved && !h.members)) return
       ev.preventDefault()
       ev.stopPropagation()
       muteClick()
       stop()
-      setDrop(null)
+      clearDrops()
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
@@ -330,6 +461,11 @@ export function DayGrid({
       data-dragging={flight != null ? 'true' : undefined}
       data-copying={flight != null && copying ? 'true' : undefined}
     >
+      {group.summary && (
+        <div className="pb-1 text-[12px] text-muted" data-testid="week-selection">
+          {group.summary}
+        </div>
+      )}
       {/* The headings stay in view while the axis scrolls. */}
       {/* The strip of all-day events (D405) stays with them, in the same columns. */}
       <div className="sticky top-0 z-10 border-b border-line bg-bg pb-1">
@@ -373,9 +509,11 @@ export function DayGrid({
             onPick={pickOn}
             held={held && spanHeld.includes(i) ? held.range : null}
             waiting={pick?.dates.includes(d.date) ? pick : null}
-            grab={(b) => ({ down: grab(b, d.date, i), consumed: () => muted.current, dragging: flight === b.id && !copying })}
+            grab={(b) => ({ down: grab(b, d.date, i), consumed: () => muted.current, dragging: (flight === b.id || flightKeys.has(blockKey(d.date, b.id))) && !copying })}
             drop={drop && drop.at.index === i ? { ...drop.at, durationMin: drop.durationMin } : null}
+            bands={bands.filter((x) => x.index === i)}
             tight={mode === 'week'}
+            group={group}
           />
         ))}
         {pick && (
@@ -399,6 +537,7 @@ export function DayGrid({
           />
         )}
       </div>
+      {group.overlay}
     </div>
   )
 }
@@ -466,7 +605,9 @@ function DayColumn({
   waiting,
   grab,
   drop,
-  tight
+  bands,
+  tight,
+  group
 }: {
   day: HorizonDay
   index: number
@@ -484,8 +625,12 @@ function DayColumn({
   waiting: NewPick | null
   grab: (b: HorizonBlock) => BlockGrab
   drop: (BlockDrop & { durationMin: number }) | null
+  /** D531: where the other selected blocks of a group being dragged would land in this day. */
+  bands: readonly GroupBand[]
   /** The cost on a tile without spaces („3·1·1·0” – the week, D501, D524). */
   tight: boolean
+  /** The selection of many blocks (D527): the ring, Ctrl / Shift on a block, the menu. */
+  group: WeekGroup
 }) {
   const lanes = useMemo(() => laneLayout(day.blocks), [day.blocks])
   // D410: the attachments of each block (its own, the template's, the series') – 📎N on its tile.
@@ -524,23 +669,27 @@ function DayColumn({
       <EnergyStrip date={day.date} track={day.energy} lo={lo} ppm={ppm} height={height} />
       <div className="absolute inset-y-0 right-0" style={{ left: stripped ? STRIP_WIDTH + 1 : 0 }} data-testid={`week-blocks-${day.date}`}>
         {lanes.map(({ item, lane, lanes: n }) => (
-          <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} onCosts={(costs, ask) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs, { ask })} />
+          <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} marked={group.isMarked(day.date, item.id)} onPick={(e) => group.mark(day.date, item.id, e)} onContext={(at) => group.context(day.date, item.id, at)} onCosts={(costs, ask) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs, { ask })} />
         ))}
         {/* The place a new or a dragged block would take – where the blocks stand, right of the strip (T1288). */}
         {shown && <RangeBand range={shown} lo={lo} ppm={ppm} testId={held ? 'week-range' : 'week-range-waiting'} />}
         {drop && <DropBand range={{ startMin: drop.startMin, endMin: drop.startMin + drop.durationMin }} lo={lo} ppm={ppm} denied={drop.denied} note={drop.onto?.text} />}
+        {bands.map((x) => (
+          <DropBand key={x.key} range={{ startMin: x.startMin, endMin: x.startMin + x.durationMin }} lo={lo} ppm={ppm} denied={false} testId="week-group-drop" of={x.key} />
+        ))}
       </div>
     </div>
   )
 }
 
 /** The place a block being dragged would take (D417): its hours; over a day gone by – refused, said in words. */
-function DropBand({ range, lo, ppm, denied, note }: { range: GridRange; lo: number; ppm: number; denied: boolean; note?: string }) {
+function DropBand({ range, lo, ppm, denied, note, testId = 'week-drop', of }: { range: GridRange; lo: number; ppm: number; denied: boolean; note?: string; testId?: string; of?: string }) {
   return (
     <div
       className={cx('num pointer-events-none absolute right-0 left-0 z-20 overflow-hidden rounded-[3px] border border-dashed px-1 text-[11px] leading-[14px] text-fg', denied ? 'border-rose bg-rose/10' : 'border-lamp bg-lamp/20')}
       style={{ top: (range.startMin - lo) * ppm, height: Math.max(14, (range.endMin - range.startMin) * ppm) }}
-      data-testid="week-drop"
+      data-testid={testId}
+      data-of={of}
       data-start={range.startMin}
       data-end={range.endMin}
       data-denied={denied ? 'true' : undefined}
@@ -555,7 +704,7 @@ function DropBand({ range, lo, ppm, denied, note }: { range: GridRange; lo: numb
 }
 
 /** A block on the axis: its colour as on the day's axis; not begun on a day gone by – dimmed; taken off – dimmed too. A click opens its day (D366). */
-export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, onCosts }: { block: HorizonBlock; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; onCosts?: (costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer> }) {
+export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, marked = false, onPick, onContext, onCosts }: { block: HorizonBlock; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; marked?: boolean; onPick?: (e: { ctrlKey: boolean; shiftKey: boolean }) => void; onContext?: (at: { x: number; y: number }) => void; onCosts?: (costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer> }) {
   const { top, height } = blockSpan(b, lo, ppm)
   const color = blockColor(b.categoryId, names)
   const dim = b.state === 'missed' || b.state === 'parked' || b.state === 'cancelled'
@@ -593,10 +742,16 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
   return (
     <button
       type="button"
-      onClick={() => {
+      onClick={(e) => {
+        if (grab?.consumed()) return
+        // D527: Ctrl and Shift select the block – the day stays closed (the selection is of the columns).
+        if (onPick && (e.ctrlKey || e.shiftKey)) return onPick(e)
         // D462: the click selects the block – its day opens with it selected (as in „Agenda”); Del there removes it. A block outside the plan only opens the day.
-        if (!grab?.consumed()) b.outsidePlan ? openDay(date) : openPick({ page: 'today', day: date }, { kind: 'block', id: b.id, date })
+        if (b.outsidePlan) openDay(date)
+        else openPick({ page: 'today', day: date }, { kind: 'block', id: b.id, date })
       }}
+      // D528: the right button and the menu key – the menu of the selection (this block is put into it first).
+      {...(onContext ? menuBind(onContext) : {})}
       onPointerDown={grab?.down}
       {...NO_GRID}
       title={title}
@@ -605,8 +760,9 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
       data-tile-date={date}
       data-state={b.state}
       data-outside={b.outsidePlan ? 'true' : undefined}
+      data-marked={marked ? 'true' : undefined}
       data-movable={grab ? 'true' : undefined}
-      className={cx('group absolute overflow-hidden rounded-[3px] border-l-[3px] px-1 text-left text-[11px] leading-tight', grab ? 'cursor-grab' : 'cursor-pointer', grab?.dragging && 'opacity-40', blockRinged(b.state) && 'ring-1 ring-lamp', blockDashed(b.state) && 'border-dashed', b.state === 'cancelled' && 'line-through')}
+      className={cx('group absolute overflow-hidden rounded-[3px] border-l-[3px] px-1 text-left text-[11px] leading-tight', grab ? 'cursor-grab' : 'cursor-pointer', grab?.dragging && 'opacity-40', blockRinged(b.state) && 'ring-1 ring-lamp', marked && 'ring-2 ring-lamp', blockDashed(b.state) && 'border-dashed', b.state === 'cancelled' && 'line-through')}
       // Dimmed by its fill and edge, never its text (as on the day's axis, A8-05).
       style={{
         top,
