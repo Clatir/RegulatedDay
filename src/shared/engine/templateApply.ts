@@ -85,7 +85,7 @@ export interface ApplyJudged {
    * The template's blocks not in the day's plan, at the hours the timing gave: each with the day's blocks it overlaps (empty – it fits);
    * `done` – gone by, it goes in as done; `moved` – „od teraz” gave it another hour.
    */
-  missing: Array<{ block: PlanBlock; clash: PlanBlock[]; done: boolean; moved: boolean; span: { start: number; end: number } | null; bg: boolean }>
+  missing: Array<{ block: PlanBlock; clash: PlanBlock[]; done: boolean; moved: boolean; span: { start: number; end: number } | null; bg: boolean; doomed?: boolean }>
   /** How many blocks the template's version has for the day (0 – nothing to apply). */
   total: number
   /** The template's blocks left out before the plan is asked, by why (D547–D549). */
@@ -338,11 +338,14 @@ export function judgeApply(t: Template, day: ApplyDay, timing: ApplyTiming | nul
     })
     return { ...x, clash }
   })
-  return { date: day.date, ofTemplate: day.plan.some((b) => isOfTemplate(b, day.date, t.id)), missing, total: cands.length, left }
+  // A block gone by that „Nadpisz plan” would take and that still stays out – on another one gone by (`takeIn`) – asks nothing: either
+  // answer leaves it out (T1957).
+  const doomed = takeIn(missing, day, 'overwrite').ran
+  return { date: day.date, ofTemplate: day.plan.some((b) => isOfTemplate(b, day.date, t.id)), missing: missing.map((x) => ({ ...x, doomed: doomed.has(x.block.id) })), total: cands.length, left }
 }
 
 /** The day asks „Uzupełnij luki czy nadpisz plan?” (D541): it has no blocks of the template and one of them collides. */
-export const asksMode = (j: ApplyJudged): boolean => !j.ofTemplate && j.missing.some((m) => m.clash.length > 0)
+export const asksMode = (j: ApplyJudged): boolean => !j.ofTemplate && j.missing.some((m) => m.clash.length > 0 && !m.doomed)
 
 export interface Applied {
   raw: Raw
@@ -359,6 +362,31 @@ export interface Applied {
 }
 
 /**
+ * Which of the missing blocks go in in `mode` – one rule for the file (`applyTemplate`) and for the question (`judgeApply`): those that fit,
+ * in „Nadpisz” also those whose every colliding block may leave (neither it nor what is anchored to it has begun or is of the day's own
+ * layers – `leaving`); a block anchored to one that will not be in the plan is left out too; of the blocks gone by that go in, one on another
+ * taken before it (`takeGoneBy`, D547) stays out with what is anchored to it (`ran`).
+ */
+function takeIn(missing: ApplyJudged['missing'], day: ApplyDay, mode: ApplyMode): { take: Set<string>; ran: Set<string>; leaving: Map<string, PlanBlock[]> } {
+  const leaving = new Map<string, PlanBlock[]>()
+  const mayCancel = (c: PlanBlock): boolean => {
+    if (!leaving.has(c.id)) leaving.set(c.id, [c, ...anchoredTo(day.plan, c.id)])
+    return leaving.get(c.id)!.every((b) => !day.begun.has(b.id) && !layerKept(b))
+  }
+  const take = new Set<string>()
+  for (const x of missing) if (!x.clash.length || (mode === 'overwrite' && x.clash.every(mayCancel))) take.add(x.block.id)
+  const byId = new Set(missing.map((x) => x.block.id))
+  const inPlan = new Set(day.plan.map((b) => b.id))
+  const blocks = missing.map((x) => x.block)
+  const gone = [...missing.filter((x) => !take.has(x.block.id)).map((x) => x.block.id), ...blocks.flatMap((b) => (b.anchor && !byId.has(b.anchor) && !inPlan.has(b.anchor) ? [b.anchor] : []))]
+  for (const id of anchoredClosure(blocks, gone)) take.delete(id)
+  const goneBy = missing.flatMap((x): GoneByBlock[] => (x.done && x.span && take.has(x.block.id) ? [{ id: x.block.id, ...x.span, bg: x.bg, anchor: x.block.anchor }] : []))
+  const ran = new Set<string>()
+  for (const id of anchoredClosure(blocks, takeGoneBy(goneBy, day.runs ?? []).ran)) if (take.delete(id)) ran.add(id)
+  return { take, ran, leaving }
+}
+
+/**
  * The day's file after „Zastosuj” in `mode` (a day that does not ask – `asksMode` false – is always `fill`). A block of the snapshot the
  * file cancelled or answered „nie” to comes back by taking that back – as the day had it; it is written into the file only when „od teraz”
  * gave it another hour. A block the snapshot does not have (a copy) is written into the file.
@@ -366,29 +394,9 @@ export interface Applied {
 export function applyTemplate(t: Template, day: ApplyDay, mode: ApplyMode, judged = judgeApply(t, day)): Applied {
   const asSnap = new Set(day.snapshot.blocks.map((b) => b.id))
   const m = asksMode(judged) ? mode : 'fill'
-  // A day's block „Nadpisz” may cancel: neither it nor anything anchored to it has begun or is of the day's own layers.
-  const leaving = new Map<string, PlanBlock[]>()
-  const mayCancel = (c: PlanBlock): boolean => {
-    if (!leaving.has(c.id)) leaving.set(c.id, [c, ...anchoredTo(day.plan, c.id)])
-    return leaving.get(c.id)!.every((b) => !day.begun.has(b.id) && !layerKept(b))
-  }
-  const take = new Set<string>()
-  for (const x of judged.missing) if (!x.clash.length || (m === 'overwrite' && x.clash.every(mayCancel))) take.add(x.block.id)
-  // A block anchored to a block that will not be in the plan – a template block left out, or one begun and then removed (D336) – is
-  // left out too (it has no place without it).
+  const { take, ran, leaving } = takeIn(judged.missing, day, m)
   const byId = new Map(judged.missing.map((x) => [x.block.id, x]))
-  const inPlan = new Set(day.plan.map((b) => b.id))
-  const blocks = judged.missing.map((x) => x.block)
-  const gone = [...judged.missing.filter((x) => !take.has(x.block.id)).map((x) => x.block.id), ...blocks.flatMap((b) => (b.anchor && !byId.has(b.anchor) && !inPlan.has(b.anchor) ? [b.anchor] : []))]
-  for (const id of anchoredClosure(blocks, gone)) take.delete(id)
-  // Two blocks gone by on each other (D547): judged among those that go in only – `takeGoneBy`, the rule the main process judges the
-  // facts by on the same blocks. One left out takes what is anchored to it along.
-  const goneBy = judged.missing.flatMap((x): GoneByBlock[] => (x.done && x.span && take.has(x.block.id) ? [{ id: x.block.id, ...x.span, bg: x.bg, anchor: x.block.anchor }] : []))
-  const left = { ...judged.left }
-  for (const id of anchoredClosure(blocks, takeGoneBy(goneBy, day.runs ?? []).ran)) {
-    if (!take.delete(id)) continue
-    left.ran++
-  }
+  const left = { ...judged.left, ran: judged.left.ran + ran.size }
   // Cancelled only for what is taken in the end.
   const cancel = new Set<string>()
   const off = new Set<string>()
@@ -406,7 +414,7 @@ export function applyTemplate(t: Template, day: ApplyDay, mode: ApplyMode, judge
     if (!asSnap.has(b.id) || moved) raw = putBlock(raw, b)
   }
   const done = judged.missing.filter((x) => x.done && take.has(x.block.id)).map((x) => x.block.id)
-  return { raw, added: take.size, cancelled: off.size, skipped: judged.missing.length - take.size - (left.ran - judged.left.ran), left, done }
+  return { raw, added: take.size, cancelled: off.size, skipped: judged.missing.length - take.size - ran.size, left, done }
 }
 
 /** Why a block asked to be done was not (D547): over a run, begun or taken off, not gone by now, not in the plan. */
@@ -508,29 +516,6 @@ export function templateDoneUndo(
     out.undone.push(block)
   }
   return { drafts, ...out }
-}
-
-/** The block a field of a day's edit writes (`blocks.#<id>…`, `cancelled.<id>`), else null. */
-export function blockOfField(path: readonly string[]): string | null {
-  if (path[0] === 'blocks' && path[1]?.startsWith('#')) return path[1].slice(1)
-  if (path[0] === 'cancelled' && path.length === 2) return path[1]!
-  return null
-}
-
-/**
- * A day's edit without what it writes of `ids` (their blocks and their cancels) – field by field, and out of a whole list of blocks or
- * map / list of cancels it writes at once (a new file, a file without them before); its other fields as they are.
- */
-export function withoutBlocks<E extends { edits: ReadonlyArray<{ path: readonly string[]; value?: unknown }> }>(e: E, ids: ReadonlySet<string>): E {
-  const edits = e.edits.flatMap((f) => {
-    if (ids.has(blockOfField(f.path) ?? '')) return []
-    if (f.path.length !== 1) return [f]
-    if (f.path[0] === 'blocks' && Array.isArray(f.value)) return [{ ...f, value: f.value.filter((x) => !(isRaw(x) && ids.has(String(x.id)))) }]
-    if (f.path[0] === 'cancelled' && Array.isArray(f.value)) return [{ ...f, value: f.value.filter((x) => !ids.has(String(x))) }]
-    if (f.path[0] === 'cancelled' && isRaw(f.value)) return [{ ...f, value: Object.fromEntries(Object.entries(f.value).filter(([k]) => !ids.has(k))) }]
-    return [f]
-  })
-  return { ...e, edits: edits as unknown as E['edits'] }
 }
 
 export interface Revoked {

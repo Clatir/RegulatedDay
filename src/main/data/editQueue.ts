@@ -50,8 +50,10 @@ export const BEHIND_QUESTION = 'czeka na odpowiedź na wcześniejsze pytanie'
 export const AFTER_OWNER = 'czeka na zapis zmiany, z którą idzie'
 
 export type Outcome =
-  | { id: string; status: 'applied' }
-  | { id: string; status: 'conflict'; fields: Array<FieldEdit & { now: unknown }> }
+  /** `wrote` – the fields it changed in the file, `created` / `removed` – it made / removed the record (what a step that takes it back puts back, T1956). */
+  | { id: string; status: 'applied'; wrote?: FieldEdit[]; created?: true; removed?: true }
+  /** `wrote` – the fields of the entry that did not meet a change and went in all the same. */
+  | { id: string; status: 'conflict'; fields: Array<FieldEdit & { now: unknown }>; wrote?: FieldEdit[] }
   | { id: string; status: 'removedElsewhere' }
   /** You removed the record here, and it changed elsewhere since you saw it (A3-09): a question. */
   | { id: string; status: 'changedElsewhere' }
@@ -219,18 +221,20 @@ export class EditQueue {
   }
 
   /**
-   * Whether `e` laid now on `cur` (the folder's record as `apply` reads it) would not go in whole (T1950): an earlier entry of its file is
-   * still in the queue (it would wait behind it), its record is gone (not made new), a removal meets a change, or a field meets a value
-   * changed elsewhere – the rules of `applyOneNow`.
+   * Entries of a step taken out of the queue again (T1956: a step that writes a day whole or not at all – `applyTemplateDays`): a question
+   * or an entry that waits is gone, as if never made; in turn with the runs of the queue.
    */
-  wouldAsk(e: Pick<QueuedEdit, 'rel' | 'edits' | 'create' | 'remove' | 'base'>, cur: { status: 'ok'; value: Record<string, unknown> } | { status: 'missing' }): boolean {
-    if (this.entries.some((x) => x.rel === e.rel)) return true
-    if (cur.status === 'missing') return !e.create && !e.remove
-    if (e.remove) return e.base !== undefined && !sameContentAs(cur.value, e.base)
-    return e.edits.some((f) => {
-      const now = valueAt(cur.value, f.path)
-      return !deepEqual(now, f.value) && !deepEqual(now, f.base)
+  withdraw(ids: readonly string[]): Promise<void> {
+    const run = this.running.then(() => {
+      const drop = new Set(ids)
+      if (!this.entries.some((e) => drop.has(e.id))) return
+      this.entries = this.entries.filter((e) => !drop.has(e.id))
+      for (const id of drop) this.outcomes.delete(id)
+      this.bound = null
+      this.persist()
     })
+    this.running = run.catch(() => undefined)
+    return run
   }
 
   /**
@@ -390,7 +394,7 @@ export class EditQueue {
       let value: unknown = {}
       for (const f of edit.edits) value = setAt(value, f.path, f.value)
       await records.write(edit.rel, { ...(value as Record<string, unknown>), updatedAt: edit.at, updatedBy: this.o.computer }, 'edit')
-      return { id: edit.id, status: 'applied' }
+      return { id: edit.id, status: 'applied', created: true }
     }
     // The file's stamp of its last change never goes back (an older edit laid on later keeps the newer time – „Przyjmij
     // nowsze” compares it).
@@ -399,7 +403,7 @@ export class EditQueue {
       // „Usunięcie na jednym komputerze przy edycji na drugim zawsze kończy się pytaniem” (spec, A3-09).
       if (edit.base !== undefined && !sameContentAs(cur.value, edit.base)) return { id: edit.id, status: 'changedElsewhere' }
       await records.remove(edit.rel)
-      return { id: edit.id, status: 'applied' }
+      return { id: edit.id, status: 'applied', removed: true }
     }
     let value: unknown = cur.value
     const conflicts: Array<FieldEdit & { now: unknown }> = []
@@ -429,8 +433,8 @@ export class EditQueue {
     if (conflicts.length) {
       // What did not meet a change elsewhere is written; the rest stays queued as a question.
       edit.edits = conflicts.map(({ now: _now, ...f }) => f)
-      return { id: edit.id, status: 'conflict', fields: conflicts }
+      return { id: edit.id, status: 'conflict', fields: conflicts, ...(applied.length ? { wrote: applied } : {}) }
     }
-    return { id: edit.id, status: 'applied' }
+    return { id: edit.id, status: 'applied', ...(applied.length ? { wrote: applied } : {}) }
   }
 }

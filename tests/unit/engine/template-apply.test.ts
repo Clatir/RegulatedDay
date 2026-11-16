@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { createDay, dayPlan, sessionBlockId, templateBlockId } from '@shared/engine/createDay'
-import { anchoredClosure, applyTemplate, asksMode, backInFile, foregroundRuns, judgeApply, revokeTemplate, takeGoneBy, templateDoneUndo, versionForDay, withoutBlocks, type ApplyDay, type ApplyTiming, type DayRun } from '@shared/engine/templateApply'
+import { anchoredClosure, applyTemplate, asksMode, backInFile, foregroundRuns, judgeApply, revokeTemplate, takeGoneBy, templateDoneUndo, versionForDay, type ApplyDay, type ApplyTiming, type DayRun } from '@shared/engine/templateApply'
 import type { AnyEvent } from '@shared/model/events'
 import { ALL_DAYS_YES, dayFileFrom, planBlock, type PlanBlock, type Template } from '@shared/model/plan'
 import type { SettingsChange } from '@shared/model/settings'
@@ -503,9 +503,14 @@ describe('runda 2 przeglądu (T1950–T1955)', () => {
     expect(r).toMatchObject({ added: 1, skipped: 1, left: { ran: 0 } })
   })
 
-  it('withoutBlocks: pole bloku, odwołanie i cała lista bloków / odwołań naraz (nowy plik) – bez tych bloków', () => {
-    const e = { rel: 'days/2026/x.json', edits: [{ path: ['blocks', '#a'], base: undefined, value: { id: 'a' } }, { path: ['cancelled', 'a'], base: true, value: undefined }, { path: ['blocks'], base: undefined, value: [{ id: 'a' }, { id: 'b' }] }, { path: ['cancelled'], base: undefined, value: ['a', 'c'] }, { path: ['wakeMin'], base: undefined, value: 360 }] }
-    expect(withoutBlocks(e, new Set(['a'])).edits).toEqual([{ path: ['blocks'], base: undefined, value: [{ id: 'b' }] }, { path: ['cancelled'], base: undefined, value: ['c'] }, { path: ['wakeMin'], base: undefined, value: 360 }])
+  it('blok miniony, który „Nadpisz plan” i tak zostawiłby poza planem (na innym minionym), nie wywołuje pytania kolizji', () => {
+    const t: Template = { ...training, versions: [{ ...training.versions[0]!, blocks: [planBlock({ id: 'x', categoryId: 'inne', startMin: at(6), durationMin: 60, origin: 'template' }), planBlock({ id: 'y', categoryId: 'inne', startMin: at(6, 30), durationMin: 60, origin: 'template' })] }] }
+    // „moj” 07:00–07:30 (not begun) collides with „y” only; „y” lies on „x”, which goes in either way.
+    const raw = { schema: 1, date: THU, blocks: [{ id: 'moj', categoryId: 'inne', startMin: at(7), durationMin: 30, fixed: false }] }
+    const day: ApplyDay = { ...dayOf(THU, raw, [], [empty, t]), runs: [] }
+    const j = judgeApply(t, day, { hours: 'plan', past: 'done', today: THU, nowMin: at(10) })
+    expect(asksMode(j)).toBe(false)
+    expect(applyTemplate(t, day, 'overwrite', j)).toMatchObject({ done: [tid('x')], cancelled: 0 })
   })
 
   it('backInFile: odwołanie z listy (starszy zapis) i „nie” sesji wracają tylko, gdy plik je ma', () => {

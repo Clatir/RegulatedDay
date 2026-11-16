@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DataView, DayData, EditEntry, RawRecord, RdApi, TemplateApplyResult, TemplateUndoJudged } from '@shared/api'
 import { setAt } from '@shared/data/merge'
 import { templateBlockId } from '@shared/engine/createDay'
-import { withoutBlocks, type DayRun } from '@shared/engine/templateApply'
+import type { DayRun } from '@shared/engine/templateApply'
 import { dayFileFrom, planBlock, type Template } from '@shared/model/plan'
 import { placeLogical } from '@shared/time/day'
 import { applyToDays, keepBlocks } from '@renderer/features/templates/applyDays'
@@ -55,7 +55,7 @@ afterEach(() => {
 })
 
 type Facts = TemplateApplyResult['facts'][number]
-function stub(o: { facts?: Partial<Facts>; apply?: Error; judged?: TemplateUndoJudged; asked?: boolean; stranded?: boolean; undoAsked?: boolean; runs?: DayRun[] } = {}) {
+function stub(o: { facts?: Partial<Facts>; apply?: Error; judged?: TemplateUndoJudged; withdrawn?: boolean; stranded?: boolean; undoAsked?: boolean; stayed?: string[]; runs?: DayRun[] } = {}) {
   const files: Record<string, RawRecord | null> = {}
   const lay = (entries: EditEntry[]) =>
     entries.map((e) => {
@@ -70,17 +70,14 @@ function stub(o: { facts?: Partial<Facts>; apply?: Error; judged?: TemplateUndoJ
     applyTemplateDays: vi.fn(async (entries: EditEntry[]) => {
       if (o.apply) throw o.apply
       if (o.stranded) return { outcomes: null, why: 'kolejka nie przyjęła zmiany', facts: [{ day: THU, written: WRITTEN, taken: [], skipped: [], closed: false, regradeFailed: null }] }
-      if (o.asked) {
-        const stripped = [id('rano'), id('po')]
-        return { outcomes: lay(entries.map((e) => withoutBlocks(e, new Set(stripped)))), facts: [{ day: THU, written: [], taken: [], skipped: [], closed: false, regradeFailed: null, asked: true, stripped }] }
-      }
+      if (o.withdrawn) return { outcomes: entries.map(() => ({ status: 'withdrawn' as const })), facts: [{ day: THU, written: [], taken: [], skipped: [], closed: false, regradeFailed: null, notSaved: true }] }
       return { outcomes: lay(entries), facts: [{ day: THU, written: WRITTEN, taken: [id('rano'), id('po')], skipped: [], closed: false, regradeFailed: null, ...o.facts }] }
     }),
     judgeTemplateUndo: vi.fn(async () => o.judged ?? { ok: true as const, kept: [{ day: THU, blocks: [] }] }),
     undoTemplateDays: vi.fn(async (entries: EditEntry[]) =>
       o.undoAsked
-        ? { ok: true as const, outcomes: entries.map(() => ({ status: 'applied' as const })), undone: [], asked: [THU], waiting: [], closed: [], regradeFailed: [] }
-        : { ok: true as const, outcomes: lay(entries), undone: [{ day: THU, blocks: [] }], asked: [], waiting: [], closed: [], regradeFailed: [] }
+        ? { ok: true as const, outcomes: entries.map(() => ({ status: 'withdrawn' as const })), undone: [], notUndone: [THU], closed: [], regradeLater: [] }
+        : { ok: true as const, outcomes: lay(entries), undone: [{ day: THU, blocks: [], stayed: o.stayed ?? [] }], notUndone: [], closed: [], regradeLater: [] }
     ),
     dayRuns: vi.fn(async () => o.runs ?? []),
     dataView: async () => ({ today: THU }) as DataView
@@ -149,15 +146,18 @@ describe('„Zastosuj” dziś – plik i fakty jednym krokiem (D547)', () => {
 })
 
 describe('runda 2 (T1950–T1955)', () => {
-  it('dzień zmieniony na innym komputerze: minione poza planem, w linii „zastosuj jeszcze raz”; „Cofnij” nie rusza minionych', async () => {
-    const s = stub({ asked: true })
-    expect(await applyToDays(training, [THU], 'fill', { hours: 'plan', past: 'done' }, AT)).toBe(true)
-    expect(inPlan(s.files)).toEqual([id('wieczor')])
-    expect(line().text).toBe('„Trening” – 1 dzień: dodano 1 blok · 19.11.2026: zmieniony na innym komputerze – minione bez zaliczenia, zastosuj jeszcze raz')
-    // No facts stand: „Cofnij” is the plain one, of what went in.
-    await line().undo()
-    expect(s.rd.judgeTemplateUndo).not.toHaveBeenCalled()
+  it('dzień, którego zmiany proces główny nie zapisał (wycofał w całości): nic w planie, okno zostaje, „zastosuj jeszcze raz”', async () => {
+    const s = stub({ withdrawn: true })
+    expect(await applyToDays(training, [THU], 'fill', { hours: 'plan', past: 'done' }, AT)).toBe(false)
     expect(inPlan(s.files)).toEqual([])
+    expect(useGroupLine.getState().lines.template).toBeUndefined()
+    expect(useUi.getState().toasts.map((t) => t.text)).toContain('Nic nie zapisano · 19.11.2026: nie zapisano (plik zajęty albo zmieniony na innym komputerze) – zastosuj jeszcze raz')
+  })
+
+  it('„Cofnij”: blok, który po odwrotności został w planie (zmiana z innego komputera), liczony jako „został”', async () => {
+    stub({ stayed: [id('rano')] })
+    await applyToDays(training, [THU], 'fill', { hours: 'plan', past: 'done' }, AT)
+    expect(await line().undo()).toBe('1 blok zmieniony od tego czasu – został')
   })
 
   it('krok odmówił, ale zaliczeń nie dało się cofnąć: linia mówi, że zostały, „Cofnij” zdejmuje same fakty', async () => {
@@ -172,7 +172,7 @@ describe('runda 2 (T1950–T1955)', () => {
     const s = stub({ undoAsked: true })
     await applyToDays(training, [THU], 'fill', { hours: 'plan', past: 'done' }, AT)
     await expect(line().undo()).rejects.toBeInstanceOf(UndoNotDone)
-    expect(useUi.getState().toasts.map((t) => t.text).join(' ')).toContain('zmieniony na innym komputerze – nie cofnięto')
+    expect(useUi.getState().toasts.map((t) => t.text).join(' ')).toContain('nie cofnięto (plik zajęty albo zmieniony na innym komputerze)')
     await expect(line().undo()).rejects.toBeInstanceOf(UndoNotDone)
     expect(s.rd.undoTemplateDays).toHaveBeenCalledTimes(2)
   })

@@ -478,7 +478,8 @@ export interface EditEntry {
  * What became of one entry of an edit; `routineCostKept` – a routine's record written with another cost whose `routine.cost` the journal
  * did not take (T1446): today's begun blocks of it count the cost they had (the window says so).
  */
-export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting'; why?: string; routineCostKept?: true }
+/** `withdrawn` – an entry of a step that writes a day whole or not at all (`applyTemplateDays`) taken out of the queue again: nothing of it stays. */
+export type EditOutcome = { status: 'applied' | 'conflict' | 'removedElsewhere' | 'changedElsewhere' | 'broken' | 'waiting' | 'withdrawn'; why?: string; routineCostKept?: true }
 
 /**
  * A record chosen from a backup: what the queue did with it, `behindQuestion` – it waits for your answer to an earlier
@@ -581,9 +582,8 @@ export interface TemplateDayDone {
   skipped: Array<{ id: string; why: DoneSkipWhy }>
   closed: boolean
   regradeFailed?: string | null
-  /** Its entry would not go in whole now (a change on another computer, a question): its blocks gone by (`stripped`) kept out, no facts. */
-  asked?: boolean
-  stripped?: string[]
+  /** Its entry did not go into the folder (a question, a file held, refused): taken out of the queue, nothing of it stays, no facts (T1956). */
+  notSaved?: boolean
 }
 
 /** „Zastosuj szablon” in one step (D547): what became of each entry (as `edit`), and the facts of each day asked. */
@@ -604,9 +604,12 @@ export interface TemplateUndoAsk {
 /** Whether „Cofnij” may take the facts back: the blocks of each day that stay as they are (another event since, D313), or a refusal. */
 export type TemplateUndoJudged = { ok: true; kept: Array<{ day: string; blocks: string[] }> } | { ok: false; why: string }
 
-/** „Cofnij” of „Zastosuj szablon” in one step: what became of each entry, the blocks taken back by day, the closed days counted again. */
+/**
+ * „Cofnij” of „Zastosuj szablon” in one step: what became of each entry, by day the blocks taken back and those still in the plan (`stayed`
+ * – their facts stay), the days not taken back (`notUndone` – their inverse did not go in), the closed days counted again, those later.
+ */
 export type TemplateUndoResult =
-  | { ok: true; outcomes: EditOutcome[]; undone: Array<{ day: string; blocks: string[] }>; asked: string[]; waiting: string[]; closed: string[]; regradeFailed: string[] }
+  | { ok: true; outcomes: EditOutcome[]; undone: Array<{ day: string; blocks: string[]; stayed: string[] }>; notUndone: string[]; closed: string[]; regradeLater: string[] }
   | { ok: false; why: string }
 
 export interface FolderProbe {

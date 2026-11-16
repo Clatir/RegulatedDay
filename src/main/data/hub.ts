@@ -199,7 +199,7 @@ function cleanEntries(entries: readonly EditEntry[]): EditIn[] {
 }
 
 /** What became of an edit, as a window reads it. */
-const outcomeOut = (o: Outcome & { routineCostKept?: true }): EditOutcome => ({ status: o.status, ...(o.status === 'waiting' ? { why: o.why } : {}), ...(o.routineCostKept ? { routineCostKept: true as const } : {}) })
+const outcomeOut = (o: (Outcome & { routineCostKept?: true }) | { id: string; status: 'withdrawn' }): EditOutcome => ({ status: o.status, ...(o.status === 'waiting' ? { why: o.why } : {}), ...('routineCostKept' in o && o.routineCostKept ? { routineCostKept: true as const } : {}) })
 
 export class DataHub {
   status: DataView['status'] = 'none'
