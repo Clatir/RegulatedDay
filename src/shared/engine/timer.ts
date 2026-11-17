@@ -14,10 +14,12 @@ import { placeOf } from '../model/categories'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '../model/plan'
 import { ROUTINE_VERSIONS, type RoutineVersion } from '../model/routines'
 import { isBoundaryWork, ownHourBlock, plannedSpan, setsWorkEndBlock, startPlanned, zjazdRemoteClass, type BlockInfo } from './blocks'
-import type { DayContext, DayState } from './day'
+import { settingsAtMinute, type DayContext, type DayState } from './day'
 import { workedUntilOf } from './explain'
 import { OPEN, compareOrder, endShiftOf, type EventOrder, isRunning, type AutoAction, isRunningRequest, lastRunEnd, ranMinutes, resumedWith, runShift, workSince, type BlockFact } from './facts'
+import { activityOf, firstUseAfter, type Activity } from './activity'
 import { atOf, idxOf } from './grid'
+import { derivedId } from '../model/ids'
 import { groupOf } from './parallel'
 
 /** „Przedłuż” of a fixed block works up to this long after its planned end (spec „Timer”, D227). */
@@ -353,6 +355,109 @@ export function untouched(state: DayState, block: string): boolean {
   return f.endedAt == null ? f.runs.at(-1)!.to === OPEN : state.facts.autos.some((x) => x.id === f.endId)
 }
 
+/** The automatic ends of a block away from the computer that a return, a limit, the bedtime or the plan gave (T1970). */
+export const AWAY_AUTO_ENDS: ReadonlySet<string> = new Set(['firstUse', 'limit', 'bedtime', 'awayPlan', 'awayChain'])
+
+/** The id of an automatic end of a block (`auto()` in `auto.ts` derives it the same way). */
+export const autoEndId = (date: string, rule: string, block: string, at: number): string => derivedId(date, 'auto', rule, 'block.end', block, at)
+
+/**
+ * The ids one automatic end of a block may have (T1971): its own, then the ones it gets when written again after a leader's
+ * check took it back (an undone id never comes back) – at most four times.
+ */
+export const autoEndIds = (date: string, rule: string, block: string, at: number): string[] => [autoEndId(date, rule, block, at), ...[2, 3, 4, 5].map((n) => derivedId(date, 'auto', rule, 'block.end', block, at, `n${n}`))]
+
+/** You took this automatic end back by „Cofnij” (any of its ids, `autoEndIds`). */
+export function endTakenByYou(state: DayState, events: DayContext['events'], rule: string, block: string, at: number): boolean {
+  const taken = userUndone(events, state.facts.undone)
+  return autoEndIds(state.grid.date, rule, block, at).some((id) => taken.has(id))
+}
+
+/** The ids each `undo` you clicked took back (not a leader's check), without undos undone themselves – once per log (T1971). */
+const userUndoneCache = new WeakMap<readonly unknown[], { undone: ReadonlySet<string>; ids: Set<string> }>()
+export function userUndone(events: DayContext['events'], undone: ReadonlySet<string>): ReadonlySet<string> {
+  const known = userUndoneCache.get(events)
+  if (known && known.undone === undone) return known.ids
+  const ids = new Set<string>()
+  for (const e of events) {
+    const x = e as { id: string; k: string; reason?: unknown; target?: unknown }
+    // An undo undone by a later one points at nothing (as `foldFacts`, T1970).
+    if (x.k === 'undo' && x.reason === 'user' && typeof x.target === 'string' && !undone.has(x.id)) ids.add(x.target)
+  }
+  userUndoneCache.set(events, { undone, ids })
+  return ids
+}
+
+/**
+ * Where the return of a block away from the computer is counted from (ms): a commute and a block of a group that took the front
+ * later – its last run (T1146, T1257), else its start (`awayEnd`).
+ */
+export function awayReturnFrom(state: DayState, info: BlockInfo, f: BlockFact): number {
+  const last = f.runs.at(-1)?.from ?? f.startedAt ?? 0
+  return atOf(state.grid, info.rules.kind === 'commute' || f.group != null ? last : (f.startedAt ?? 0))
+}
+
+/**
+ * The first return after `from` (ms) whose end of the block you did not take back by „Cofnij” (T1969, T1971 – an end a leader's
+ * check took back stays a return), nor `skip`, or null. One rule for `awayEnd` and `awayEndUndo`.
+ */
+export function liveReturn(state: DayState, activity: Activity, events: DayContext['events'], block: string, from: number, skip: string | null = null): number | null {
+  const taken = userUndone(events, state.facts.undone)
+  for (let after = from, i = 0; i < 100; i++) {
+    const b = firstUseAfter(activity, after)
+    if (!b) return null
+    const ids = autoEndIds(state.grid.date, 'firstUse', block, b.use)
+    if (!ids.some((id) => id === skip || taken.has(id))) return b.use
+    after = Math.max(b.use, after + 1)
+  }
+  return null
+}
+
+/**
+ * What goes back with an automatic end `a` of a block away from the computer begun with „jednym ciągiem” on (`AWAY_AUTO_ENDS`;
+ * D555, D557, T1964, T1970, T1971) – every block the app began by itself from that end up to your next return (`awayStart`,
+ * with the rest of its group and its automatic end, the next ones of a chain too): the block goes on to that return, so they
+ * would run beside it. Null – one of them changed since its start, or something else ran in front then (a fixed block, a click,
+ * a request, „Odcinam się” – not a block of its own group, T1971): the end stays. `chain` – the setting at the block's start
+ * (`chainOn`); without it nothing goes with the end, as before 1.30. `activity` – the one the caller judges with.
+ */
+export function awayEndUndo(ctx: Pick<DayContext, 'events'>, state: DayState, activity: Activity, a: AutoAction, chain: (idx: number) => boolean): AutoAction[] | null {
+  const f = a.block ? state.facts.blocks.get(a.block) : undefined
+  const info = a.block ? state.blocks.find((b) => b.id === a.block) : undefined
+  if (a.k !== 'block.end' || !AWAY_AUTO_ENDS.has(a.rule) || !f || !info || f.startedAt == null || f.endId !== a.id || placeOf(info.rules, info.variantId) !== 'away' || !chain(f.startedAt)) return []
+  // The return the block's usual end counts – not this end's, nor one you took back (`liveReturn`, the same `from` as `awayEnd`).
+  const back = liveReturn(state, activity, ctx.events, a.block!, awayReturnFrom(state, info, f), a.id)
+  // In minutes: a block clicked in the minute of the return ran after it (T1969).
+  const backIdx = back != null ? idxOf(state.grid, back) : null
+  const before = (idx: number) => idx >= a.at && (backIdx == null || idx < backIdx)
+  const out: AutoAction[] = []
+  const going = new Set<string>()
+  for (const x of state.facts.autos) {
+    if (x.k !== 'block.start' || x.rule !== 'awayStart' || !x.block || x.block === a.block || !before(x.at) || state.facts.undone.has(x.id)) continue
+    if (!untouched(state, x.block)) return null
+    const end = state.facts.blocks.get(x.block)?.endId
+    const mates = groupStartsWith(state, x)
+    out.push(x, ...state.facts.autos.filter((y) => y.id === end), ...mates)
+    going.add(x.block)
+    for (const m of mates) if (m.block) going.add(m.block)
+  }
+  // Any other run in front from that end to the return stays – so does the end (the block would run beside it); a request and
+  // „Odcinam się” hold the front too (T1969). A block of its own group brought to the front (`groupFront`) is not another (T1971).
+  for (const [id, g] of state.facts.blocks) {
+    if (id === a.block || going.has(id) || (f.group != null && g.group === f.group)) continue
+    if (g.runs.some((r) => !r.bg && before(r.from))) return null
+  }
+  if (state.facts.requests.some((r) => before(r.from)) || state.facts.disconnect.some((d) => before(d.from))) return null
+  return out
+}
+
+/** „Cofnij” that judges your return (`awayEndUndo`): the caller passes its activity to `timerAction` (T1970). */
+export function undoNeedsActivity(state: DayState, act: TimerAction): boolean {
+  if (act.a !== 'undo') return false
+  const a = state.facts.autos.find((x) => x.id === act.target)
+  return !!a && a.k === 'block.end' && AWAY_AUTO_ENDS.has(a.rule)
+}
+
 export function awayStartUndoable(state: DayState, a: AutoAction): boolean {
   if (a.rule !== 'awayStart' || a.k !== 'block.start' || !a.block) return true
   return untouched(state, a.block)
@@ -659,7 +764,7 @@ export function startCost(state: DayState, info: BlockInfo, at: number): ActionC
 }
 
 /** One click of the timer at `at` (ms): the events to write, or why it does nothing, or the cost of a second click. */
-export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, at: number): ActionResult {
+export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, at: number, activity?: Activity): ActionResult {
   const t = timerNow(state)
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
   const no = (why: string, confirm: ActionCost | null = null, code?: ResultCode): ActionResult => ({ ok: false, why, confirm, ...(code ? { code } : {}) })
@@ -866,6 +971,14 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       if (a.rule === 'awayStart' && a.k === 'block.start') {
         if (!awayStartUndoable(state, a)) return no('tego już nie cofniesz – blok zmienił się po starcie')
         pair = [...state.facts.autos.filter((x) => x.k === 'block.end' && x.block === a.block && state.facts.blocks.get(a.block!)?.endId === x.id), ...groupStartsWith(state, a)]
+      }
+      // An automatic end of a block away from the computer goes back with the blocks the app began after it before your return
+      // (D555, T1970) – the block reopened never runs beside them.
+      if (a.k === 'block.end' && AWAY_AUTO_ENDS.has(a.rule)) {
+        // The caller's activity (this computer's own observation too); without it – from the day's log alone.
+        const chained = awayEndUndo(ctx, state, activity ?? activityOf(ctx.events, state.grid.start, at), a, (idx) => settingsAtMinute(ctx.snapshot, state.facts, idx).settings.awayChain)
+        if (chained == null) return no('tego już nie cofniesz – po tym końcu kolejny blok zmienił się albo biegło coś innego')
+        pair = [...pair, ...chained]
       }
       // A fixed start's pause and that start go back together, either way, while the fixed block runs and the flexible one
       // stands in that pause (the flexible block goes on as before, the fixed one stays unstarted – it can be started by

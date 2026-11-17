@@ -14,11 +14,11 @@ import { derivedId, questionId } from '../model/ids'
 import type { PlanBlock } from '../model/plan'
 import { lastInputAt, firstUseAfter, firstUseFrom, lastOutsideBefore, type Activity, type Interval } from './activity'
 import { isBoundaryWork, plannedSpan, startPlanned, type BlockInfo } from './blocks'
-import type { DayContext, DayState } from './day'
+import { settingsAtMinute, type DayContext, type DayState } from './day'
 import { blockAt, endShiftOf, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
 import { requestAction, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
-import { awayStartOf, awayStartUndoable, fixedWorkLeft, groupMate, groupRootIn, groupStarts, groupStartsWith, inGroupOf, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
+import { awayEndUndo, endTakenByYou, autoEndIds, userUndone, liveReturn, awayStartOf, awayStartUndoable, fixedWorkLeft, groupMate, groupRootIn, groupStarts, groupStartsWith, inGroupOf, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
 
 const MIN = 60_000
 /** The rules of a request's end without „Koniec” (`requestEndOf`). */
@@ -182,16 +182,34 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
     if (!begunByItself) return null
     // Its planned end with its pauses (`plannedEndOf`), the return counted from its last run (a resume after a pause).
     const plannedEnd = atOf(state.grid, plannedEndOf(state, info, f))
-    const back = firstUseAfter(activity, runFromOf(state.grid, f), AWAY_GAP_MIN)
+    // A return you took back by „Cofnij” – the next one (T1970).
+    const back = liveFirstUse(c, info.id, runFromOf(state.grid, f))
     // Its end by the plan taken back by „Cofnij” (a traffic jam): it ends at the return, or at the bedtime (T1151).
     const byPlan = awayEndEvent(c.date, info.id, { at: plannedEnd, rule: AWAY_PLAN_RULE })
     if (state.facts.undone.has(byPlan.id)) {
-      if (back) return { at: back.use, rule: 'firstUse' }
+      if (back != null) return { at: back, rule: 'firstUse' }
       const bedtime = atOf(state.grid, state.bedtime.effective)
       return c.inp.now >= bedtime ? { at: Math.max(plannedEnd, bedtime), rule: 'bedtime' } : null
     }
-    if (back && back.use < plannedEnd) return { at: back.use, rule: 'firstUse' }
+    if (back != null && back < plannedEnd) return { at: back, rule: 'firstUse' }
     return c.inp.now >= plannedEnd ? { at: plannedEnd, rule: AWAY_PLAN_RULE } : null
+  }
+  // „Jednym ciągiem” (D553, T1962): every other block away from the computer – begun by itself or by a click – ends at the
+  // return, at the latest at its planned end (with its pauses, `plannedEndOf`; not after the bedtime) – done, without a
+  // question; the next one begins by itself then (`awayStarts`). The setting as it was when the block began (T1968): one
+  // switched „od dziś” later never judges it again. Its end by the plan taken back by your „Cofnij”: the rules below.
+  // A block of a parallel group that took the front later (`groupFront`): the return is counted from then (T1257). A first use
+  // taken back by „Cofnij” (you were not back) – the next return (T1969).
+  const use = liveFirstUse(c, info.id, f.group != null ? runFromOf(state.grid, f) : start)
+  if (chainOn(c.inp.ctx, state, f.startedAt) && !chainTakenBack(c, info.id, start)) {
+    const byPlanEnd = atOf(state.grid, plannedEndOf(state, info, f))
+    const bedtime = atOf(state.grid, state.bedtime.effective)
+    // A block begun after the bedtime (by a click) keeps its planned end – never one before its start; a regeneration keeps
+    // its planned end too (T349: a fixed block may wait behind it – judged the same way at every check, T1969).
+    const plannedEnd = bedtime > start && !info.isRegen ? Math.min(byPlanEnd, bedtime) : byPlanEnd
+    if (use != null && use < plannedEnd) return { at: use, rule: 'firstUse' }
+    // Also when a check (a later log) took it back and you took back the first use that replaced it: written again (`freshEnd`).
+    return c.inp.now >= plannedEnd ? { at: plannedEnd, rule: AWAY_CHAIN_RULE } : null
   }
   // A regeneration the app began by itself (D475) has the same limit (T1139): a long absence is no hours of rest.
   // So does a block of home requests (T1152).
@@ -199,11 +217,10 @@ function awayEnd(c: Ctx, info: BlockInfo, f: BlockFact): { at: number; rule: str
   const limited = info.rules.kind === 'meal' || info.rules.kind === 'routine' || info.categoryId === 'sprawy' || autoRegen
   const listening = info.isWork || info.isProject
   const limit = limited ? start + (length + AWAY_LIMIT_EXTRA_MIN) * MIN : listening ? start + length * MIN : null
-  // A block of a parallel group that took the front later (`groupFront`): the return is counted from then (T1257).
-  const use = firstUseAfter(activity, f.group != null ? runFromOf(state.grid, f) : start, AWAY_GAP_MIN)
-  if (use) {
-    if (limit != null && use.use > limit) return { at: limit, rule: 'limit' }
-    return { at: use.use, rule: 'firstUse' }
+  if (use != null) {
+    // A limit you took back by „Cofnij” (it lasted longer): the return ends it (T1971).
+    if (limit != null && use > limit && !endTakenByYou(state, c.inp.ctx.events, 'limit', info.id, limit)) return { at: limit, rule: 'limit' }
+    return { at: use, rule: 'firstUse' }
   }
   // Nobody used a computer up to the bedtime: it ends after its planned length (D261) – a regeneration too, unless a fixed
   // block waits behind it (T349).
@@ -223,6 +240,73 @@ export const GROUP_PLAN_RULE = 'groupPlan'
 export const AWAY_PLAN_RULE = 'awayPlan'
 
 /**
+ * The end of a block away from the computer at its planned end with „jednym ciągiem” on (D553, T1962): done, on its own
+ * row with „Cofnij”, without the question after the return (D555) nor a row in the ritual (T1965).
+ */
+export const AWAY_CHAIN_RULE = 'awayChain'
+
+/** „Jednym ciągiem” as it was at minute `idx` of the day (`settingsAtMinute`, „od dziś” changes before it, T1968). */
+export const chainOn = (ctx: Pick<DayContext, 'snapshot'>, state: DayState, idx: number | null): boolean => idx != null && settingsAtMinute(ctx.snapshot, state.facts, idx).settings.awayChain
+
+/**
+ * You took back an end by the chain of this start of the block (`undo` you clicked, not a leader's check; one at or after
+ * `start`, ms – a start taken back with it and begun again later is judged anew): its usual rules judge it from then, for
+ * any of its ends by the chain (the id holds the end, which moves with the bedtime, T1968, T1969).
+ */
+function chainTakenBack(c: Ctx, block: string, start: number): boolean {
+  const taken = userUndone(c.inp.ctx.events, c.inp.state.facts.undone)
+  return c.inp.ctx.events.some((e) => {
+    const x = e as { id: string; autoRule?: unknown; block?: unknown; at?: unknown }
+    return x.autoRule === AWAY_CHAIN_RULE && x.block === block && typeof x.at === 'number' && x.at >= start && taken.has(x.id)
+  })
+}
+
+/** `liveReturn` for the block judged (T1969, T1971). */
+const liveFirstUse = (c: Ctx, block: string, from: number): number | null => liveReturn(c.inp.state, c.inp.activity, c.inp.ctx.events, block, from)
+
+/**
+ * Since when the foreground is free at `until` (ms; every stop up to then): the last run in front that stopped, request or
+ * „Odcinam się”; `chain` – a block's end by the chain freed it (T1963: only then the next block goes on at once, and only
+ * while you have not come back since – `awayKnownAt`).
+ */
+export function freeSince(state: DayState, until = Number.POSITIVE_INFINITY): { at: number; chain: boolean } {
+  const at = (idx: number) => atOf(state.grid, idx)
+  let free = state.grid.start
+  for (const [, f] of state.facts.blocks) for (const r of f.runs) if (!r.bg && r.to !== OPEN && at(r.to) <= until) free = Math.max(free, at(r.to))
+  for (const r of state.facts.requests) if (r.to !== OPEN && at(r.to) <= until) free = Math.max(free, at(r.to))
+  for (const d of state.facts.disconnect) if (d.to !== OPEN && at(d.to) <= until) free = Math.max(free, at(d.to))
+  const chain = state.facts.autos.some((a) => a.k === 'block.end' && a.rule === AWAY_CHAIN_RULE && a.block != null && at(a.at) === free && state.facts.blocks.get(a.block)?.endId === a.id)
+  return { at: free, chain }
+}
+
+/**
+ * The end by the chain the next block goes on from (ms), or null: the foreground freed by one (`freeSince`) and no use of a
+ * computer from then to `lo` – a touch of the mouse is no return (T1970).
+ */
+export function chainEndOf(freed: { at: number; chain: boolean }, activity: Activity, lo: number): number | null {
+  return freed.chain && activity.unused.some((u) => u.from <= freed.at && u.to >= lo) ? freed.at : null
+}
+
+/**
+ * When a stretch without input `x` tells you are away within a block's time from `lo` (ms), or null: once `AWAY_START_MIN` of
+ * it has passed from `lo` (T1138).
+ */
+export function awayKnownAt(x: { from: number; to: number }, lo: number): number | null {
+  const from = Math.max(x.from, lo)
+  return x.to - from >= AWAY_START_MIN * MIN ? from + AWAY_START_MIN * MIN : null
+}
+
+/**
+ * „Jednym ciągiem” (D554, T1963, T1971): after a block's end by the chain at `chainEnd` (ms, `chainEndOf`), the next block
+ * begun at `lo` is known once `AWAY_GAP_MIN` of it passed without a use of any computer since that end (a return within those
+ * 2 min is no first use of a block begun then; a touch of the mouse is no use), or null.
+ */
+export function chainKnownAt(activity: Activity, chainEnd: number, lo: number): number | null {
+  const known = lo + AWAY_GAP_MIN * MIN
+  return activity.unused.some((u) => u.from <= chainEnd && u.to >= known) ? known : null
+}
+
+/**
  * The rest of a parallel group begun with a block that began by itself (D499, T1197): each start or resume on its own row
  * (`groupStart`, „Cofnij”); a resumed one sent behind (`block.fg`) – an id of its own, no row (T1204).
  */
@@ -234,8 +318,20 @@ function groupAutoStarts(inp: AutoInput, lead: string, at: number): AutoEvent[] 
 
 /** The automatic end of a block away from the computer by `awayEnd` (one id for the rule and the check that waits for it). */
 const awayEndEvent = (date: string, block: string, away: { at: number; rule: string }): AutoEvent =>
-  // A commute ended „według planu” is done explicitly (D483, D484 – `fin`, T1121); the first use, the limit, the bedtime – not.
-  auto(date, away.rule, { k: 'block.end', block, at: away.at, done: null, rule: away.rule, ...(away.rule === AWAY_PLAN_RULE ? { fin: true } : {}) })
+  // A commute ended „według planu” is done explicitly (D483, D484 – `fin`, T1121), so is a block of a chain (D553); the first
+  // use, the limit, the bedtime – not.
+  auto(date, away.rule, { k: 'block.end', block, at: away.at, done: null, rule: away.rule, ...(away.rule === AWAY_PLAN_RULE || away.rule === AWAY_CHAIN_RULE ? { fin: true } : {}) })
+
+/**
+ * The automatic end `away` of a block as it is written now (T1971): with its first id a leader's check has not taken back
+ * (`autoEndIds`) – an end that holds again after such a check is written again; one you took back stays back (the rule judging it
+ * never gives it again – `liveFirstUse`, `endTakenByYou`, `chainTakenBack`).
+ */
+function freshEnd(state: DayState, date: string, block: string, away: { at: number; rule: string }): AutoEvent {
+  const base = awayEndEvent(date, block, away)
+  const id = autoEndIds(date, away.rule, block, away.at).find((x) => !state.facts.undone.has(x))
+  return id && id !== base.id ? { ...base, id } : base
+}
 
 /** The context the rules of running blocks judge in (outside `autoActions`, which builds its own). */
 function ctxOf(inp: AutoInput, t: TimerNow): Ctx {
@@ -269,10 +365,8 @@ function awayStarts(inp: AutoInput, t: TimerNow, fixedFgAt: number): AutoEvent[]
   const date = state.grid.date
   const at = (idx: number) => atOf(state.grid, idx)
   // Since when the foreground is free (ms): the last run of the foreground that stopped, request or „Odcinam się”.
-  let free = state.grid.start
-  for (const [, f] of state.facts.blocks) for (const r of f.runs) if (!r.bg && r.to !== OPEN) free = Math.max(free, at(r.to))
-  for (const r of state.facts.requests) if (r.to !== OPEN) free = Math.max(free, at(r.to))
-  for (const d of state.facts.disconnect) if (d.to !== OPEN) free = Math.max(free, at(d.to))
+  const freed = freeSince(state)
+  const free = freed.at
   const bedtime = at(state.bedtime.effective)
   const candidates = state.blocks.filter(awayOwnHour).sort((a, b) => a.start! - b.start! || (a.id < b.id ? -1 : 1))
   for (const b of candidates) {
@@ -281,12 +375,18 @@ function awayStarts(inp: AutoInput, t: TimerNow, fixedFgAt: number): AutoEvent[]
     // A commute too before the day's first use (D490 replaces T1147): it never approves the boundary (`day.ts`, T1149).
     const lo = Math.max(at(b.start!), free)
     const hi = Math.min(at(b.start! + b.durationMin), bedtime)
+    // „Jednym ciągiem” (T1963): at once only after a block's end by the chain, with the setting on at this block's start – the
+    // first block of a chain (and one before the day's first use) waits its 10 min; a commute keeps its rules (D553).
+    const chain = b.rules.kind !== 'commute' && chainOn(inp.ctx, state, idxOf(state.grid, lo)) ? chainEndOf(freed, activity, lo) : null
     // The first stretch without input from `lo` long enough to tell you left (an open one up to now).
-    const away = activity.idle.find((x) => x.to - Math.max(x.from, lo) >= AWAY_START_MIN * MIN && Math.max(x.from, lo) < hi)
+    // After a block's end by the chain, with no use since: at its hour once 2 min of it passed without use (T1963, T1971 – a touch
+    // of the mouse is no return); else the first stretch without input from `lo` long enough to tell you left (T1138).
+    const chained = chain != null && lo < hi ? chainKnownAt(activity, chain, lo) : null
+    const away = chained != null ? { from: lo, to: chained } : activity.idle.find((x) => Math.max(x.from, lo) < hi && awayKnownAt(x, lo) != null)
     if (!away) continue
     const from = Math.max(away.from, lo)
     // Due once the gap is known (its threshold passed) – and a fixed block taking the foreground then or before comes first.
-    const known = from + AWAY_START_MIN * MIN
+    const known = chained ?? awayKnownAt(away, lo)!
     if (known > inp.now || known > inp.gate || from >= fixedFgAt) continue
     const id = derivedId(date, 'auto', 'awayStart', 'block.start', b.id, at(b.start!))
     if (state.facts.undone.has(id)) continue
@@ -564,7 +664,7 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     const away = awayEnd(c, b, f)
     if (away) {
       if (!due(away.at)) continue
-      if (take([awayEndEvent(date, b.id, away)])) continue
+      if (take([freshEnd(state, date, b.id, away)])) continue
     }
     // An absence from the threshold of its question during a work or project block (one overruled by „Cofnij” or an
     // answer is passed over – a later one is judged).
@@ -626,7 +726,7 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
   // Automatic ends that a later log shows wrong (input within the threshold, an earlier first use): undone, and the rule
   // judges the block again (spec „log, który przyjdzie później i pokaże wejście w tym progu, go unieważnia”).
   for (const a of state.facts.autos) {
-    if (a.k !== 'block.end' || !a.block || !['idle', 'firstUse', 'limit', 'absence', 'lastInput', AWAY_PLAN_RULE].includes(a.rule)) continue
+    if (a.k !== 'block.end' || !a.block || !['idle', 'firstUse', 'limit', 'absence', 'lastInput', AWAY_PLAN_RULE, AWAY_CHAIN_RULE].includes(a.rule)) continue
     const f = state.facts.blocks.get(a.block)
     const info = byId.get(a.block)
     if (!f || !info || f.endId !== a.id) continue
@@ -643,16 +743,25 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
         continue
       }
       still = idleEnd(c, info, open)?.at ?? null
-    } else if (a.rule === 'firstUse' || a.rule === 'limit' || a.rule === AWAY_PLAN_RULE) {
+    } else if (a.rule === 'firstUse' || a.rule === 'limit' || a.rule === AWAY_PLAN_RULE || a.rule === AWAY_CHAIN_RULE) {
       const r = awayEnd(c, info, open)
       still = r && r.rule === a.rule ? r.at : null
+      // An end by the plan („jednym ciągiem” or a commute, T1966) that a later log shows earlier (an earlier first use): the new
+      // end in the same pass – a block begun by itself from the end that goes back never runs beside a block open again until
+      // the next pass. Never a later one so (it would run under that block).
+      if ((a.rule === AWAY_CHAIN_RULE || a.rule === AWAY_PLAN_RULE) && r && r.rule !== a.rule && r.at <= at(a.at) && due(r.at) && take([revalidate('later log'), freshEnd(state, date, a.block, r)])) continue
     } else if (a.rule === 'absence') {
       still = absencesOf(state, activity, info, open).some((x) => idxOf(state.grid, Math.max(x.away, at(f.startedAt ?? 0))) === f.endedAt) ? at(f.endedAt!) : null
     } else {
       // The session's end at the last input: input within the 30 min that justified it (a later log) undoes it (T311, T330).
       still = sessionLastInputEnd(activity, at(open.runs.at(-1)?.from ?? open.startedAt ?? 0), inp.now)?.at ?? null
     }
-    if (still == null || idxOf(state.grid, still) !== f.endedAt) take([revalidate('later log')])
+    if (still == null || idxOf(state.grid, still) !== f.endedAt) {
+      // The block open again: the blocks the app began after its end before your return go back with it (T1970) – else they
+      // would run beside it; one you changed since (or something else in front) – the end only, as before.
+      const after = awayEndUndo(inp.ctx, state, activity, a, (idx) => chainOn(inp.ctx, state, idx)) ?? []
+      take([revalidate('later log'), ...after.map((x) => ({ id: derivedId(date, 'auto', 'revalidate', x.id), k: 'undo' as const, at: inp.now, target: x.id, reason: 'later log', autoRule: 'revalidate' }))])
+    }
   }
   // A block away from the computer begun by itself (D475) that a later log shows you were not away for (input within the
   // stretch that began it, on another computer): its start and its automatic end undone (T1140) – while only the app
@@ -661,6 +770,13 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     if (a.k !== 'block.start' || a.rule !== 'awayStart' || !a.block || state.facts.undone.has(a.id) || !awayStartUndoable(state, a)) continue
     const from = at(a.at)
     if (activity.idle.some((x) => x.from <= from + MIN && x.to - from >= AWAY_START_MIN * MIN)) continue
+    // A stretch through its start still open (a later log split the one it began by): judged once it closes or is long enough
+    // (T1968) – an undone start never begins again that day.
+    if (activity.idle.some((x) => x.from <= from + MIN && x.to >= inp.now)) continue
+    // „Jednym ciągiem” (T1963): a start after a block's end by the chain – the stretch you left in holds it.
+    const sb = byId.get(a.block)
+    const chainEnd = sb && sb.rules.kind !== 'commute' && chainOn(inp.ctx, state, a.at) ? chainEndOf(freeSince(state, from), activity, from) : null
+    if (chainEnd != null && chainKnownAt(activity, chainEnd, from) != null) continue
     const f = state.facts.blocks.get(a.block)
     const end = f?.endId ? state.facts.autos.find((x) => x.id === f.endId) : undefined
     // The rest of its group begun with it goes back too (T1204).
@@ -924,6 +1040,13 @@ export function nextDeadline(state: DayState): number | null {
   const next = out.filter((x) => x > now).sort((a, b) => a - b)[0]
   return next ?? null
 }
+
+/**
+ * When the leader checks again (T1968): at once after a pass that wrote something – a rule may follow from it (the next block of
+ * a chain begins after an end by the chain, one step a pass), so a day caught up after sleep is whole within seconds – else at
+ * the day's next deadline.
+ */
+export const nextCheckAt = (written: number, now: number, deadline: number | null): number | null => (written > 0 ? now : deadline)
 
 /** Is the block (by its fact) running now. */
 export const runningNow = (f: BlockFact | undefined, m: number): boolean => !!f && isRunning(blockAt(f, m + 1))

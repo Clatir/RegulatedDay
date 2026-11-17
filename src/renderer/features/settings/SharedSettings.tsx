@@ -7,7 +7,7 @@
  * (the same function as the hard end) is a warning – saving is still possible.
  */
 import { useMemo } from 'react'
-import { DAY_TYPE_FIELDS, FIELD_GROUP_NAMES, NUMBER_FIELDS, type FieldGroup } from '@shared/model/fields'
+import { DAY_TYPE_FIELDS, FIELD_GROUP_NAMES, NUMBER_FIELDS, TOGGLE_FIELDS, type FieldGroup } from '@shared/model/fields'
 import { plDate } from '@shared/format'
 import { newId } from '@shared/model/ids'
 import { MODULES, MODULE_NAMES } from '@shared/model/rd'
@@ -164,6 +164,14 @@ export function FieldsSection({ group }: { group: FieldGroup }) {
               onCommit={(v) => (f.scope === 'dated' ? save(f.path.reduceRight<unknown>((inner, k) => ({ [k]: inner }), v) as Record<string, unknown>) : void saveGeneral({ [f.path[0]!]: v }))}
               data-testid={`setting-${f.key}`}
             />
+          </Field>
+        )
+      })}
+      {TOGGLE_FIELDS.filter((f) => f.group === group).map((f) => {
+        const on = f.path.reduce<unknown>((v, k) => (v as Record<string, unknown>)[k], s) === true
+        return (
+          <Field key={f.key} label={f.label} hint={f.hint} labelWidth={260}>
+            <Toggle checked={on} onChange={(v) => void save(f.path.reduceRight<unknown>((inner, k) => ({ [k]: inner }), v) as Record<string, unknown>)} label={on ? 'włączone' : 'wyłączone'} data-testid={`setting-${f.key}`} />
           </Field>
         )
       })}

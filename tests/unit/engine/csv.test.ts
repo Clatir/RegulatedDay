@@ -59,3 +59,14 @@ describe('eksport CSV', () => {
     expect(files['checkiny.csv'].trim().split('\r\n')[1]).toBe('28.10.2026;07:30;85;100;45;trochę/nie, nie/nie, tak/trochę, nie/trochę;85')
   })
 })
+
+describe('eksport CSV – koniec jednym ciągiem (D553, T1968)', () => {
+  it('blok zakończony według planu jednym ciągiem ma uwagę „koniec według planu (jednym ciągiem)”', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'b', cat: 'posilek', at: '13:00', min: 30 })] })
+    s.start('b', '13:00')
+    s.write([{ k: 'block.end', block: 'b', at: s.at('13:30'), done: null, rule: 'awayChain', autoRule: 'awayChain', fin: true }], s.at('13:30'))
+    const rows = csvOf([{ ctx: s.contextAt(s.at('20:00')), names: names(s) }])['bloki.csv']
+    expect(rows).toContain('koniec według planu (jednym ciągiem)')
+  })
+})
+

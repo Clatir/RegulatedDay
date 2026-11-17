@@ -359,7 +359,8 @@ test('przeciąganie grupy (D531): „Tydzień” – dwa bloki wtorku na czwarte
       await expect(page.getByTestId('group-line-week')).toContainText('Przeniesiono 2 bloki')
       await page.getByTestId('group-line-week-undo').click()
       await expect.poll(() => startsOn(tue), { timeout: 15_000 }).toEqual({ w1: 19 * 60, w2: 20 * 60 + 30 })
-      expect(startsOn(thu)).toEqual({ t1: 19 * 60 + 30 })
+      // The two files of one „Cofnij” are written one after the other: Thursday waited for too (T1972).
+      await expect.poll(() => startsOn(thu), { timeout: 15_000 }).toEqual({ t1: 19 * 60 + 30 })
     })
     expect(errors).toEqual([])
   } finally {

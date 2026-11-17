@@ -2,7 +2,7 @@
 
 Wydzielone z `docs/decyzje-techniczne.md` (T1210, uzupełnia T935); T1–T399 – `docs/decyzje-techniczne-T1-T399.md` (T535),
 T400–T499 – `docs/decyzje-techniczne-T400-T499.md` (T840), T500–T599 – `docs/decyzje-techniczne-T500-T599.md` (T857),
-T600–T699 – `docs/decyzje-techniczne-T600-T699.md` (T935), T1000 i nowsze – `docs/decyzje-techniczne.md`; Twoje decyzje D –
+T600–T699 – `docs/decyzje-techniczne-T600-T699.md` (T935), T1000–T1099 – `docs/decyzje-techniczne-T1000-T1099.md` (T1967), T1100 i nowsze – `docs/decyzje-techniczne.md`; Twoje decyzje D –
 `docs/decyzje.md` (D308). Szukaj Grepem po numerze w `docs/decyzje-techniczne*.md`.
 
 | Nr | Decyzja |

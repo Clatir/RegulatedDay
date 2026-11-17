@@ -60,9 +60,12 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * the logs; a relative assessment or a descent of the body (`pool: 'body'`) is a broken line to it – skipped and listed, the line stays in
  * its writer's log. A cost it changes is written with three pools: an own cost of a block (`block.cost`, the day's file) takes the body back
  * from the cost before it (T1534; a file – the starting body, T1520), a routine's cost loses its body to the starting routines' (T1520); a
- * day or a change of the day's settings it writes – the body of your dated settings (T1532).
+ * day or a change of the day's settings it writes – the body of your dated settings (T1532). 17 – blocks away from the computer in one
+ * chain (D553–D556, T1962–T1969): with the setting on, an end by the plan (`awayChain`) and the next block's start at once – an older
+ * version knows neither (it would end such a block at its limit, undo a start 2 min after a chain end, read the setting as off): it
+ * gives way to this one as the leader.
  */
-export const RULES_VERSION = 16
+export const RULES_VERSION = 17
 
 /** The rules since which a block's start writes the cost of its routine (D512, `planned.routineCosts`): an earlier start had none. */
 export const ROUTINE_COSTS_FROM = 14

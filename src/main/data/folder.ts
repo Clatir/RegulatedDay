@@ -19,7 +19,7 @@ import { inverseEdit, sameContentAs, setAt, type MergeConflict } from '@shared/d
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
 import { readLogText } from '@shared/data/logText'
 import { activityOf, type Activity } from '@shared/engine/activity'
-import { answerEvents, autoActions, closedSince, fixedStartPausesClosed, nextDeadline, questionsOf, runFromOf, shutdownActions, type AutoEvent, type Question } from '@shared/engine/auto'
+import { answerEvents, autoActions, closedSince, fixedStartPausesClosed, nextCheckAt, nextDeadline, questionsOf, runFromOf, shutdownActions, type AutoEvent, type Question } from '@shared/engine/auto'
 import { simEvents } from '@shared/engine/sim'
 import { groupLogDrafts, groupLogUndo, type GroupSkip } from '@shared/engine/groupEdit'
 import { foregroundRuns, templateDoneDrafts, templateDoneUndo, type DayRun, type DoneSkipWhy } from '@shared/engine/templateApply'
@@ -28,7 +28,7 @@ import { dayContextOf } from '@shared/engine/context'
 import { computeDay, newSegments, type DayContext, type DayState } from '@shared/engine/day'
 import { NO_POWER, powerNeedOf, type PowerNeed } from '@shared/engine/power'
 import { requestAction, type RequestAction } from '@shared/engine/requests'
-import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerDraft } from '@shared/engine/timer'
+import { timerAction, timerNow, type ActionResult, type TimerAction, type TimerDraft, undoNeedsActivity } from '@shared/engine/timer'
 import { dayStart, weekStart } from '@shared/time/day'
 import { goalsDates, goalsProgress, type GoalsView } from '@shared/engine/goals'
 import { daysViewOf, unknownDay, weekDates, weekViewOf, whenOf, type DaysView, type HorizonDay, type WeekView } from '@shared/engine/week'
@@ -2155,7 +2155,7 @@ export class DataFolder {
       this.append({ ...e, day, dom: 'timer' })
       written++
     }
-    return { written, nextAt: nextDeadline(state) }
+    return { written, nextAt: nextCheckAt(written, now, nextDeadline(state)) }
   }
 
   /**
@@ -2350,7 +2350,10 @@ export class DataFolder {
       const { day: _d, probe, ...act } = click
       void _d
       // Requests („zrobione teraz”, urgent, after the fact, „Koniec”) and the rest of the timer.
-      const r = act.a === 'requestNow' || act.a === 'requestEnd' || act.a === 'requestAfter' ? requestAction(state, act as RequestAction, now) : timerAction(ctx, state, act as TimerAction, now)
+      // „Cofnij” of an automatic end away from the computer judges your return (T1968, T1970): the leader's activity, this
+      // computer's observation too.
+      const activity = undoNeedsActivity(state, act as TimerAction) ? await this.activityFor(day, read, now) : undefined
+      const r = act.a === 'requestNow' || act.a === 'requestEnd' || act.a === 'requestAfter' ? requestAction(state, act as RequestAction, now) : timerAction(ctx, state, act as TimerAction, now, activity)
       if (r.ok && r.events.length && !probe) await this.writeOn(day, laid, r.events, chosen.before)
       return r
     }

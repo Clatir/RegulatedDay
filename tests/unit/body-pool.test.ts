@@ -171,7 +171,7 @@ describe('ciało – zdarzenia starszej wersji i reguły (T1524, T1527, T1528)',
   })
 
   it('RULES_VERSION 16: starsza wersja ustępuje prowadzenia (zejścia ciała, nagroda za rezerwę)', () => {
-    expect(RULES_VERSION).toBe(16)
+    expect(RULES_VERSION).toBeGreaterThanOrEqual(16)
   })
 })
 

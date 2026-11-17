@@ -359,6 +359,12 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await shot(page, 'e3-09-settings')
       const rd = JSON.parse(readFileSync(join(dataDir, 'rd.json'), 'utf8')) as { settings: Array<{ patch: { dayTypes?: { zwykly?: { budgetMin?: number } } } }> }
       expect(rd.settings.at(-1)!.patch.dayTypes?.zwykly?.budgetMin).toBe(420)
+      // D556: „Bloki poza komputerem jednym ciągiem” in „Pytania w ciągu dnia” – off, a click saves it from tomorrow.
+      const chain = page.getByTestId('settings-timer').getByTestId('setting-awayChain')
+      await expect(chain).toHaveAttribute('aria-checked', 'false')
+      await chain.click()
+      await expect(chain).toHaveAttribute('aria-checked', 'true')
+      await expect.poll(() => (JSON.parse(readFileSync(join(dataDir, 'rd.json'), 'utf8')) as { settings: Array<{ patch: { awayChain?: boolean } }> }).settings.at(-1)!.patch.awayChain).toBe(true)
       // D511: no section „Sesje” – the sessions are entries of the templates (their panel in „Szablony”).
       await expect(page.getByTestId('settings-daytypes')).toBeVisible()
       await expect(page.getByTestId('settings-sessions')).toHaveCount(0)

@@ -20,6 +20,7 @@ const limits = [
   { file: 'docs/decyzje-techniczne-T500-T599.md', lines: 1000, kb: 200 },
   { file: 'docs/decyzje-techniczne-T600-T699.md', lines: 1000, kb: 200 },
   { file: 'docs/decyzje-techniczne-T700-T999.md', lines: 1000, kb: 200 },
+  { file: 'docs/decyzje-techniczne-T1000-T1099.md', lines: 1000, kb: 200 },
 ]
 const rules = new URL('.claude/rules/', root)
 if (existsSync(rules)) {

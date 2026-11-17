@@ -268,6 +268,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] SZ7 Dni minione – „Nie dodawaj minionych” / „Dodaj jako zrealizowane” (1.29.0)
    - [ ] SZ8 Dzień zamknięty – punkty przeliczone; „Cofnij” z blokiem zmienionym od tego czasu (1.29.0)
    - [ ] SZ9 Folder niedostępny – zaliczenia dopisują się po zapisie; „Cofnij” czekającej zmiany (1.29.0)
+   - [ ] JC1 „Bloki poza komputerem jednym ciągiem”: posiłek i spacer według planu, bez pytania po powrocie (1.30.0)
+   - [ ] JC2 Jednym ciągiem: powrót w trakcie bloku – koniec przy powrocie z krótkim pytaniem (1.30.0)
+   - [ ] JC3 Jednym ciągiem: „Cofnij” końca według planu cofa też kolejny blok (1.30.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -2936,6 +2939,29 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Oczekiwany efekt:** linia „… · 1 dzień czeka na folder – zaliczenia dopiszą się po zapisie”; po powrocie folderu bloki są w dniu z ✓, a dzień zamknięty ma przeliczone punkty. „Cofnij” przed powrotem – po powrocie dzień bez bloków i bez ✓.
 - **Nie przechodzi, gdy:** po powrocie folderu bloki są bez ✓ albo ✓ bez bloków; po „Cofnij” coś z szablonu zostaje w dniu.
 
+
+### JC – bloki poza komputerem jednym ciągiem (1.30.0, D553–D556)
+
+#### JC1 Ciąg według planu, bez pytania (D553, D555)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/away-chain.test.ts`. Ty: na prawdziwym dniu.
+- **Jak sprawdzić:** Ustawienia → „Pytania w ciągu dnia” → włącz „Bloki poza komputerem jednym ciągiem” (od dziś). Zaplanuj np. posiłek 30 min i zaraz po nim spacer (regeneracja) albo sprawy domowe. Odejdź od komputera co najmniej 10 min przed posiłkiem i wróć po planowanym końcu ostatniego bloku.
+- **Oczekiwany efekt:** na osi posiłek i spacer stoją dokładnie w planowanych godzinach, oba skończone; po powrocie pasek nie pyta „trwał do teraz”; w „zrobione automatycznie” – „… zaczęty o … (bez komputera, według planu)” i „… skończony o … (według planu, jednym ciągiem)”, każdy z „Cofnij”. Bez ustawienia (wyłączone) – jak dotąd: posiłek trwa do limitu (planowany koniec + 30 min), spacer od niego do powrotu, z pytaniem.
+- **Nie przechodzi, gdy:** spacer się nie zaczyna albo zaczyna później niż koniec posiłku; po powrocie jest pytanie o ostatni blok; blok liczy się jako niezrobiony; przełącznik nie zapisuje się albo na drugim komputerze ma inną wartość.
+
+#### JC2 Powrót w trakcie bloku (D554)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/away-chain.test.ts` („powrót w trakcie bloku”).
+- **Jak sprawdzić:** jak JC1, ale wróć w połowie spaceru.
+- **Oczekiwany efekt:** posiłek skończony według planu, spacer kończy się w chwili powrotu, pasek cicho pyta „trwał do teraz · skończył się o…”.
+- **Nie przechodzi, gdy:** spacer trwa dalej mimo powrotu; posiłek kończy się przy powrocie.
+
+#### JC3 „Cofnij” końca według planu (D555)
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/away-chain.test.ts` („Cofnij” końca według planu).
+- **Jak sprawdzić:** po JC1 w „zrobione automatycznie” kliknij „Cofnij” przy „Posiłek skończony o … (według planu, jednym ciągiem)”.
+- **Oczekiwany efekt:** spacer znika z faktów (niezaczęty, nie zaczyna się już sam), posiłek kończy się według zwykłych reguł (przy powrocie albo planowany koniec + 30 min).
+- **Nie przechodzi, gdy:** posiłek i spacer biegną naraz; posiłek zostaje otwarty bez końca; „Cofnij” jest przy końcu, po którym zaczął się blok stały.
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
 #### CI1 Nazwy pul przy polach kosztu (D525)
