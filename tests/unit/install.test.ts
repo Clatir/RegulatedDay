@@ -22,6 +22,19 @@ vi.mock('../../src/main/update/files', async (importOriginal) => {
   return { ...m, writeSyncAtomic: (path: string, text: string) => (atomic.push(path), m.writeSyncAtomic(path, text)) }
 })
 
+// Every background staging (a controller stages on each „ready”: its init, each failed start) – the folder goes only
+// after them, or a copy still renaming into update\<X> makes its removal fail („ENOTEMPTY”).
+const staging = vi.hoisted(() => [] as Promise<unknown>[])
+vi.mock('../../src/main/update/install', async (importOriginal) => {
+  const m = await importOriginal<typeof import('../../src/main/update/install')>()
+  const stageInstallAsync: typeof m.stageInstallAsync = (i) => {
+    const p = m.stageInstallAsync(i)
+    staging.push(p.catch(() => undefined))
+    return p
+  }
+  return { ...m, stageInstallAsync }
+})
+
 const { guardModeAsync, stageInstall, stageInstallAsync, startInstall } = await import('../../src/main/update/install')
 const { UpdateController } = await import('../../src/main/update/controller')
 
@@ -31,7 +44,10 @@ beforeEach(() => {
   spawned.length = 0
 })
 // A controller's check started by `init` (its fetch rejected) may still write its state while the folder goes: retried.
-afterEach(() => rmSync(root, { recursive: true, force: true, maxRetries: 5 }))
+afterEach(async () => {
+  await Promise.all(staging.splice(0))
+  rmSync(root, { recursive: true, force: true, maxRetries: 5 })
+})
 
 /** A ready download of 0.1.1 whose „installer” is no program (it cannot start). */
 function download(): { userData: string; updateDir: string; dl: string; helperDir: string } {
@@ -119,6 +135,8 @@ describe('instalacja, która nie wystartowała', () => {
     expect(calls).toEqual({ before: 1, failed: 1, quit: 0 })
     expect(c.install('now', 'visible')).toBe(false)
     expect(calls).toEqual({ before: 2, failed: 2, quit: 0 })
+    // Each „ready” staged in the background (waited for before the folder goes).
+    expect(staging.length).toBe(3)
     c.updater?.stopAuto()
   })
 
