@@ -52,7 +52,7 @@ import { AppTray } from './tray'
 import { displays, primaryDisplay } from './displays'
 import { createMainWindow, revealMainWindow } from './windows/mainWindow'
 import { DesktopBar } from './windows/desktopBar'
-import { IconPanel } from './windows/iconPanel'
+import { IconPanel, panelCloseOf } from './windows/iconPanel'
 import { QUICK_RETRY_MS, QuickWindow, shortcutOf, touchesShortcut } from './windows/quickWindow'
 import { HelperClient, type HelperMessage } from './helper/client'
 import { helperProgram } from './helper/program'
@@ -870,7 +870,12 @@ function registerIpc(): void {
     return barScreens()
   })
   ipcMain.on(CH.panelTouch, (_e, unfolded?: boolean) => panel?.touch(typeof unfolded === 'boolean' ? unfolded : undefined))
-  ipcMain.on(CH.panelClose, () => panel?.close('Esc'))
+  ipcMain.on(CH.panelClose, (e, how?: unknown) => {
+    // „×” hides the panel, the app goes on in the tray; with Shift it ends the app as the menu's „Zakończ” does.
+    const c = panelCloseOf(how, viewOf(e.sender))
+    panel?.close(c.why)
+    if (c.quit) quitApp()
+  })
   ipcMain.on(CH.showMain, (_e, page?: string) => {
     panel?.close('otwarcie okna głównego')
     showMainWindow(typeof page === 'string' ? page : undefined)

@@ -2,7 +2,7 @@
  * The icon's panel (spec „Widget”): opened by a click of the icon or of a notification, by the icon (or the cursor),
  * always inside the work area. It closes when the window in the foreground changes – also a click elsewhere – except to
  * the shell's windows (the taskbar, the hidden icons' arrow, the notifications) and except the first 500 ms after it
- * opened; when the icon is clicked while it is open; on Esc; after 60 s untouched, counted only while the cursor is
+ * opened; when the icon is clicked while it is open; on Esc and on its „×” (with Shift the app ends); after 60 s untouched, counted only while the cursor is
  * outside it and nothing is unfolded. Losing the focus alone closes it only while the helper does not run. It never
  * opens by itself, and a click of the icon right after such a closing does not open it again. Never destroyed.
  */
@@ -23,6 +23,15 @@ export const REOPEN_BLOCK_MS = 500
  * kept on top (D291): then it stays until you close it (A4-08).
  */
 export const closesOnBlur = (o: { helperRunning: boolean; stayOnTop: boolean; sinceOpenMs: number }): boolean => !o.helperRunning && !o.stayOnTop && o.sinceOpenMs > PANEL_GRACE_MS
+
+/**
+ * How the panel's closing asked by a window goes (D558, T1974): Esc (no argument), „×” (`x`) hide the panel; „×” with Shift
+ * (`quit`) ends the app – only from the panel's own window, another one only hides the panel (and the log says so).
+ */
+export function panelCloseOf(how: unknown, from: string): { why: string; quit: boolean } {
+  if (how === 'quit') return from === 'panel' ? { why: '× z Shift – wyjście', quit: true } : { why: `× z Shift – odmowa wyjścia (okno ${from})`, quit: false }
+  return { why: how === 'x' ? '×' : 'Esc', quit: false }
+}
 
 export interface PanelDeps {
   /**

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.31.0
+- Panel ikony w zasobniku ma w prawym górnym rogu „×”: zamyka panel, a aplikacja działa dalej w tle. „×” kliknięty z wciśniętym Shift zamyka całą aplikację (jak „Zakończ” w menu ikony).
+- Kliknięcie w wolne miejsce panelu ikony (poza przyciskami i polami) otwiera okno główne. Gdy w panelu coś jest rozwinięte (np. „+”, „Skończył się o…”) albo czeka koszt do potwierdzenia, kliknięcie obok nic nie otwiera; przycisk wciśnięty i puszczony obok też nie.
+
 ## 1.30.0
 - Nowe ustawienie „Bloki poza komputerem jednym ciągiem” (Ustawienia → „Pytania w ciągu dnia”, domyślnie wyłączone). Włączone sprawia, że kilka bloków poza komputerem po kolei (np. posiłek, spacer, sprawy domowe) idzie jednym ciągiem: gdy nikogo nie ma przy komputerze, każdy blok kończy się o swoim planowanym końcu i od razu zaczyna się następny – bez pytania o start i bez pytania po powrocie. Bloki liczą się jako zrobione, a każdy start i koniec jest na liście „zrobione automatycznie” z „Cofnij”. Gdy wrócisz w trakcie bloku, kończy się on w chwili powrotu, jak dotąd, z krótkim pytaniem „trwał do teraz · skończył się o…”. „Cofnij” końca bloku cofa też bloki, które zaczęły się po nim same przed Twoim powrotem.
 
