@@ -56,7 +56,13 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 12. **1.31.0 – „×” i wolne pole w panelu ikony (D558, T1974):** prośba użytkownika 19.11; „×” zamyka panel (aplikacja w zasobniku),
     z Shift kończy aplikację, kliknięcie w wolne pole otwiera okno główne. Gałąź `claude/1.31-panel-x`, jeden PR (bez paczki – jedno
     zadanie na wyraźną prośbę o wydanie). Testy: typecheck, `npm test` (302 pliki, 4483), build, lint, E2E; nowy `tests/web/panel-close.test.ts`.
-    Przegląd xhigh (okna, D351). Odbiór PX1–PX3 w `docs/odbior.md`. Stan PR i CI – poniżej.
+    Przegląd xhigh (okna, D351): runda 1 – zsunięcie z przycisku, ±5 min bez `onUnfold` (`data-busy`), strażnik nadawcy `quit`,
+    kolor najechania; runda 2 – puszczenie na przycisku (cel `pointerup`), `panelCloseOf` z testem, testy `data-busy` kosztu i
+    rozwiniętego „+”, wpis „odmowa wyjścia” w logu. PR #103; lokalny instalator `release\Regulated-Day-Setup.exe` (19.11 14:19, kod po
+    rundzie 1) dla użytkownika. Odbiór PX1–PX3 w `docs/odbior.md`.
+    **Uwagi na później:** rozwinięte w panelu („Skończył się o…”, „+”) zostaje po schowaniu panelu i wraca przy kolejnym otwarciu
+    (stan sprzed 1.31, teraz blokuje też wolne pole) – zwijać przy `open`?; `data-busy` to drugi kanał obok `onUnfold` – jeden
+    `busy` z paska; trzy listy „kontrolka z własnym kliknięciem” (`ownControl`, `isEditable`, `OWN_CLICK`) – jedna w `renderer/lib`.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;

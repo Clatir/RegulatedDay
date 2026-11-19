@@ -24,6 +24,15 @@ export const REOPEN_BLOCK_MS = 500
  */
 export const closesOnBlur = (o: { helperRunning: boolean; stayOnTop: boolean; sinceOpenMs: number }): boolean => !o.helperRunning && !o.stayOnTop && o.sinceOpenMs > PANEL_GRACE_MS
 
+/**
+ * How the panel's closing asked by a window goes (D558, T1974): Esc (no argument), „×” (`x`) hide the panel; „×” with Shift
+ * (`quit`) ends the app – only from the panel's own window, another one only hides the panel (and the log says so).
+ */
+export function panelCloseOf(how: unknown, from: string): { why: string; quit: boolean } {
+  if (how === 'quit') return from === 'panel' ? { why: '× z Shift – wyjście', quit: true } : { why: `× z Shift – odmowa wyjścia (okno ${from})`, quit: false }
+  return { why: how === 'x' ? '×' : 'Esc', quit: false }
+}
+
 export interface PanelDeps {
   /**
    * The rectangle to open at for a content height (CSS px); `cursor` – where it was when the panel opened; `atCursor` –

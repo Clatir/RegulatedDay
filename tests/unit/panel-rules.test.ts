@@ -7,7 +7,7 @@ import { DRAG_HOLD_MS, dragHolds } from '@shared/placement'
 
 vi.mock('electron', () => ({ BrowserWindow: class {}, screen: {} }))
 
-const { closesOnBlur, PANEL_GRACE_MS } = await import('../../src/main/windows/iconPanel')
+const { closesOnBlur, panelCloseOf, PANEL_GRACE_MS } = await import('../../src/main/windows/iconPanel')
 
 describe('panel ikony przy utracie fokusu', () => {
   it('bez pomocnika zamyka się po 500 ms; „na wierzchu” z panelem – nigdy (A4-08)', () => {
@@ -24,5 +24,15 @@ describe('przeciąganie paska bez końca', () => {
     expect(dragHolds(0, 60_000)).toBe(true)
     expect(dragHolds(0, DRAG_HOLD_MS - 1)).toBe(true)
     expect(dragHolds(0, DRAG_HOLD_MS)).toBe(false)
+  })
+})
+
+describe('zamknięcie panelu ikony (D558, T1974)', () => {
+  it('Esc i „×” chowają panel; „×” z Shift kończy aplikację tylko z okna panelu', () => {
+    expect(panelCloseOf(undefined, 'panel')).toEqual({ why: 'Esc', quit: false })
+    expect(panelCloseOf('x', 'panel')).toEqual({ why: '×', quit: false })
+    expect(panelCloseOf('quit', 'panel')).toEqual({ why: '× z Shift – wyjście', quit: true })
+    for (const from of ['main', 'bar', 'quick']) expect(panelCloseOf('quit', from)).toEqual({ why: `× z Shift – odmowa wyjścia (okno ${from})`, quit: false })
+    expect(panelCloseOf('coś', 'panel').quit).toBe(false)
   })
 })

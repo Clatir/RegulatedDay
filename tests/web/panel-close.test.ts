@@ -23,7 +23,7 @@ let rd: { panelClose: ReturnType<typeof vi.fn<RdApi['panelClose']>>; showMain: R
 
 beforeEach(() => {
   rd = { panelClose: vi.fn<RdApi['panelClose']>(), showMain: vi.fn<RdApi['showMain']>() }
-  const api: Partial<RdApi> = { ...rd, widgetAction: () => Promise.resolve(null as never), onPanelTarget: () => () => undefined, panelTouch: () => undefined, barLayout: () => undefined }
+  const api: Partial<RdApi> = { ...rd, widgetAction: () => Promise.resolve(null as never), quickToday: () => Promise.resolve('2026-11-12'), onPanelTarget: () => () => undefined, panelTouch: () => undefined, barLayout: () => undefined }
   ;(window as unknown as { rd: Partial<RdApi> }).rd = api
   if (!hadObserver)
     (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
@@ -49,11 +49,15 @@ async function mount(): Promise<HTMLElement> {
   return host.querySelector('[data-testid="panel"]')!
 }
 
-const click = (el: Element, init: MouseEventInit = {}) =>
+const fire = (el: Element, type: string, init: MouseEventInit = {}) => el.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0, ...init }))
+/** A press and a release on `down` / `up`; the click goes to `at` – Chromium's common parent of the two. */
+const press = (down: Element, up: Element = down, at: Element = down, init: MouseEventInit = {}) =>
   act(() => {
-    el.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
-    el.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, ...init }))
+    fire(down, 'pointerdown')
+    fire(up, 'pointerup')
+    fire(at, 'click', init)
   })
+const click = (el: Element, init: MouseEventInit = {}) => press(el, el, el, init)
 
 /** A day with one line „Skończył się o…” (its ±5 min unfold in the line itself). */
 const lineView = (): WidgetView => ({
@@ -62,6 +66,9 @@ const lineView = (): WidgetView => ({
   block: null,
   lines: [{ id: 'ended:2026-11-12:b1', text: 'Blok skończył się?', dot: false, at: Date.UTC(2026, 10, 12, 9, 0), actions: [{ id: 'endedAt', label: 'Skończył się o…' }] }]
 })
+
+/** A cost waiting for „Potwierdź” (10 s left), not in place of a button on view – the row under the buttons. */
+const PENDING = { button: 'line:x', text: 'Start kosztuje 5', left: 10_000 }
 
 describe('panel ikony: „×” i kliknięcie w wolne pole (D558)', () => {
   it('„×” zamyka sam panel, nie otwiera okna', async () => {
@@ -88,13 +95,33 @@ describe('panel ikony: „×” i kliknięcie w wolne pole (D558)', () => {
 
   it('wciśnięty przycisk, zsunięty i puszczony obok – okno się nie otwiera', async () => {
     const panel = await mount()
-    act(() => {
-      panel.querySelector('[data-testid="panel-close"]')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
-      // Chromium gives the click to the common parent of the press and the release.
-      panel.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }))
-    })
+    const x = panel.querySelector('[data-testid="panel-close"]')!
+    press(x, panel, panel)
     expect(rd.showMain).not.toHaveBeenCalled()
     expect(rd.panelClose).not.toHaveBeenCalled()
+  })
+
+  it('wciśnięte obok przycisku, puszczone na nim – okno się nie otwiera', async () => {
+    const panel = await mount()
+    press(panel, panel.querySelector('[data-testid="panel-close"]')!, panel)
+    expect(rd.showMain).not.toHaveBeenCalled()
+  })
+
+  it('rozwinięte „+” – kliknięcie w wolne pole nie otwiera okna', async () => {
+    act(() => useWidget.setState({ view: lineView() }))
+    const panel = await mount()
+    await act(async () => panel.querySelector<HTMLButtonElement>('[data-testid="bar-quick"]')!.click())
+    expect(panel.querySelector('[data-testid="bar-quick-title"]')).not.toBeNull()
+    click(panel)
+    expect(rd.showMain).not.toHaveBeenCalled()
+  })
+
+  it('koszt czeka na „Potwierdź” – pasek ma data-busy, kliknięcie obok nie otwiera okna', async () => {
+    act(() => useWidget.setState({ view: { ...lineView(), pending: PENDING } }))
+    const panel = await mount()
+    expect(panel.querySelector('[data-testid="bar-panel"]')!.getAttribute('data-busy')).toBe('on')
+    click(panel)
+    expect(rd.showMain).not.toHaveBeenCalled()
   })
 
   it('„Skończył się o…” z rozwiniętym ±5 min – kliknięcie obok nie otwiera okna', async () => {

@@ -4,7 +4,7 @@
  * „×” in the upper right corner closes it (the app goes on in the tray), „×” with Shift ends the app; a click on a free
  * spot opens the main window (D558): pressed and released on a free spot, nothing unfolded or waiting (`data-busy`).
  */
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react'
 import { setWindowEscape } from '../lib/escape'
 import { useWidget } from '../store/widget'
 import { Bar, useReportLayout } from './Bar'
@@ -16,9 +16,10 @@ const OWN_CLICK = 'button, a, input, textarea, select, label, [role="button"], [
 const free = (el: EventTarget | null): boolean => el instanceof Element && !el.closest(OWN_CLICK)
 
 /**
- * A click on a free spot opens the main window (D558): pressed there too (a press on a button slid off and released beside
- * it is no click of the panel – Chromium gives such a click to the common parent), nothing unfolded, nothing waiting in the
- * bar (`data-busy`: „Skończył się o…” with its ±5 min, a cost to confirm).
+ * A click on a free spot opens the main window (D558): pressed and released on a free spot (a press slid onto a button or
+ * off it is no click of the panel – Chromium gives such a click to the common parent, so `down` and `up` are the targets of
+ * the press and of the release), nothing unfolded, nothing waiting in the bar (`data-busy`: „Skończył się o…” with its
+ * ±5 min, a cost to confirm).
  */
 export const opensMain = (down: EventTarget | null, up: EventTarget | null, unfolded: boolean, root: Element): boolean =>
   !unfolded && free(down) && free(up) && !root.querySelector('[data-busy]')
@@ -47,14 +48,21 @@ export function PanelApp() {
       window.removeEventListener('keydown', touch)
     }
   }, [])
-  const pressed = useRef<EventTarget | null>(null)
+  // The targets of the press and of the release: a click's own target is only their common parent.
+  const pressed = useRef<{ down: EventTarget | null; up: EventTarget | null }>({ down: null, up: null })
+  const onPress = (e: PointerEvent<HTMLDivElement>) => {
+    pressed.current = { down: e.target, up: null }
+  }
+  const onRelease = (e: PointerEvent<HTMLDivElement>) => {
+    pressed.current.up = e.target
+  }
   const freeClick = (e: MouseEvent<HTMLDivElement>) => {
-    const down = pressed.current
-    pressed.current = null
-    if (opensMain(down, e.target, unfolded, e.currentTarget)) window.rd.showMain()
+    const { down, up } = pressed.current
+    pressed.current = { down: null, up: null }
+    if (opensMain(down, up, unfolded, e.currentTarget)) window.rd.showMain()
   }
   return (
-    <div ref={ref} className="relative flex flex-col gap-2 border border-line-strong bg-panel p-2 pr-7" data-testid="panel" onPointerDown={(e) => (pressed.current = e.target)} onClick={freeClick}>
+    <div ref={ref} className="relative flex flex-col gap-2 border border-line-strong bg-panel p-2 pr-7" data-testid="panel" onPointerDown={onPress} onPointerUp={onRelease} onClick={freeClick}>
       <button
         type="button"
         className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded text-[14px] leading-none text-muted hover:bg-hover hover:text-fg"
