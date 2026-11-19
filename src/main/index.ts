@@ -870,7 +870,13 @@ function registerIpc(): void {
     return barScreens()
   })
   ipcMain.on(CH.panelTouch, (_e, unfolded?: boolean) => panel?.touch(typeof unfolded === 'boolean' ? unfolded : undefined))
-  ipcMain.on(CH.panelClose, () => panel?.close('Esc'))
+  ipcMain.on(CH.panelClose, (e, how?: unknown) => {
+    // „×” hides the panel, the app goes on in the tray; with Shift it ends the app as the menu's „Zakończ” does – only the
+    // panel's own „×” (another window asking it only hides the panel).
+    const quit = how === 'quit' && viewOf(e.sender) === 'panel'
+    panel?.close(quit ? '× z Shift – wyjście' : how === 'x' || how === 'quit' ? '×' : 'Esc')
+    if (quit) quitApp()
+  })
   ipcMain.on(CH.showMain, (_e, page?: string) => {
     panel?.close('otwarcie okna głównego')
     showMainWindow(typeof page === 'string' ? page : undefined)

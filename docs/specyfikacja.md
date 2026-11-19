@@ -1349,10 +1349,12 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   prostokąt poza paskiem zadań, przy kursorze, zawsze w obszarze roboczym ekranu), który znika przy zmianie okna na
   pierwszym planie, także po kliknięciu gdzie indziej (poza oknami powłoki: paskiem zadań, strzałką ukrytych ikon i
   oknem powiadomień, i poza pierwszymi 500 ms po otwarciu; sama utrata fokusu panelu zamyka go tylko wtedy, gdy pomocnik
-  nie działa, i też nie w pierwszych 500 ms), po kliknięciu ikony przy otwartym panelu, po Esc albo po 60 s bez
+  nie działa, i też nie w pierwszych 500 ms), po kliknięciu ikony przy otwartym panelu, po Esc, po „×” w jego prawym
+  górnym rogu (aplikacja działa dalej w zasobniku; „×” z Shift kończy aplikację jak „Zakończ” w menu, D558) albo po 60 s bez
   dotknięcia, liczonych tylko wtedy, gdy kursor jest poza panelem, a warianty ani długości „Przedłuż” nie są rozwinięte
   i nigdy nie otwiera się sam (kliknięcie ikony tuż po takim zamknięciu go nie otwiera ponownie); prawy przycisk
-  pokazuje menu zasobnika. Pasek pulpitu to okno narzędziowe bez aktywacji, bez miejsca na pasku zadań i w Alt+Tab, z
+  pokazuje menu zasobnika. Kliknięcie w wolne pole panelu (poza przyciskiem, polem, linkiem i etykietą; nie przy rozwiniętym
+  elemencie ani koszcie do potwierdzenia) otwiera okno główne (D558). Pasek pulpitu to okno narzędziowe bez aktywacji, bez miejsca na pasku zadań i w Alt+Tab, z
   nieprzezroczystym tłem, które leży pod innymi oknami: widać je tylko tam, gdzie nic go nie zasłania, samo nigdy nie
   zmienia kolejności okien, pokazywane jest zawsze bez aktywacji, a jego przyciski działają na puszczenie przycisku
   myszy, więc kliknięcie go nie aktywuje (domyślnie włączone, do wyłączenia na każdym komputerze; zachowanie przy „Pokaż

@@ -53,6 +53,10 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 9. **1.28.0 – zaznaczanie wielu i zmiany grupowe (ciąg Z, D527–D531, T1541–T1780):** wydane 16.11 (PR #97, `main` 94edb77, run 43801472212); wpis, „Przyjęte” (zaakceptowane przez użytkownika 16.11) i uwagi na później – `docs/archiwum/postep-ciag-Z.md`; odbiór ZG1–ZG10 w `docs/odbior.md`. Równolegle sesja d1 robi 1.29.0 (D540–D549, T1900–T1949).
 10. **1.29.0 – szablon w wybrane dni (D540–D552, T1900–T1961, sesje d1 i 8e):** wydane 16.11 (PR #99, #100, `main` ec848de); wpis, „Przyjęte bez pytania” i uwagi na później – `docs/archiwum/postep-1.29-1.30.md`; odbiór SZ1–SZ9 w `docs/odbior.md`.
 11. **1.30.0 – bloki poza komputerem jednym ciągiem (D553–D557, T1962–T1972):** wydane 17.11 (PR #101, `main` d7dd758, run 43992941638 – ponowiony po niestabilnym `install.test.ts`, poprawka T1973); wpis, cztery rundy przeglądu, „Przyjęte bez pytania” i uwagi na później – `docs/archiwum/postep-1.29-1.30.md`; odbiór JC1–JC3 w `docs/odbior.md`.
+12. **1.31.0 – „×” i wolne pole w panelu ikony (D558, T1974):** prośba użytkownika 19.11; „×” zamyka panel (aplikacja w zasobniku),
+    z Shift kończy aplikację, kliknięcie w wolne pole otwiera okno główne. Gałąź `claude/1.31-panel-x`, jeden PR (bez paczki – jedno
+    zadanie na wyraźną prośbę o wydanie). Testy: typecheck, `npm test` (302 pliki, 4483), build, lint, E2E; nowy `tests/web/panel-close.test.ts`.
+    Przegląd xhigh (okna, D351). Odbiór PX1–PX3 w `docs/odbior.md`. Stan PR i CI – poniżej.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;

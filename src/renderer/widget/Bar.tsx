@@ -494,7 +494,8 @@ function Line({ line, mode, onSteps }: { line: BarLine; mode: BarMode; onSteps?:
   const [pick, setPick] = useState<number | null>(null)
   const send = (actionId: string, value?: number) => act('line', `${line.id}|${actionId}${value != null ? `|${value}` : ''}`)
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid={`bar-line-${line.id}`}>
+    // `data-busy`: its ±5 min stand open – a click beside them in the panel never opens the main window (D558).
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid={`bar-line-${line.id}`} data-busy={pick != null ? 'on' : undefined}>
       {line.dot && <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-fg" aria-label="czeka na kliknięcie" />}
       <span className="min-w-0 text-[12px] leading-snug text-fg">{line.text}</span>
       {pick != null ? (
@@ -927,6 +928,8 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
       data-tone={view.tone}
       data-warn={view.warn}
       data-quiet={quiet ? 'on' : 'off'}
+      // A cost waiting for „Potwierdź”: a click beside it in the panel never opens the main window (D558).
+      data-busy={pending ? 'on' : undefined}
       onPointerMove={mode === 'panel' ? () => window.rd.panelTouch() : undefined}
       // A button's own click is its action – only a click beside the buttons is a click of the bar (A7-01).
       onPointerUp={mode === 'desktop' ? (e) => !(e.target as Element).closest('button') && act('barClick') : undefined}

@@ -2,7 +2,7 @@
  * The icon's panel (spec „Widget”): opened by a click of the icon or of a notification, by the icon (or the cursor),
  * always inside the work area. It closes when the window in the foreground changes – also a click elsewhere – except to
  * the shell's windows (the taskbar, the hidden icons' arrow, the notifications) and except the first 500 ms after it
- * opened; when the icon is clicked while it is open; on Esc; after 60 s untouched, counted only while the cursor is
+ * opened; when the icon is clicked while it is open; on Esc and on its „×” (with Shift the app ends); after 60 s untouched, counted only while the cursor is
  * outside it and nothing is unfolded. Losing the focus alone closes it only while the helper does not run. It never
  * opens by itself, and a click of the icon right after such a closing does not open it again. Never destroyed.
  */

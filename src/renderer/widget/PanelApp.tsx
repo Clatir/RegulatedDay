@@ -1,11 +1,27 @@
 /**
  * The icon's panel: the bar and, while the widget is hidden, only its state line and the question waiting (spec
  * „Widget”). Esc closes it (after whatever Esc closes first); a line a notification's click opened it for is marked.
+ * „×” in the upper right corner closes it (the app goes on in the tray), „×” with Shift ends the app; a click on a free
+ * spot opens the main window (D558): pressed and released on a free spot, nothing unfolded or waiting (`data-busy`).
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { setWindowEscape } from '../lib/escape'
 import { useWidget } from '../store/widget'
 import { Bar, useReportLayout } from './Bar'
+
+/** What a click acts on by itself – never a click of the free panel. */
+const OWN_CLICK = 'button, a, input, textarea, select, label, [role="button"], [contenteditable]:not([contenteditable="false"])'
+
+/** A spot of the panel that is free: not a control, nor inside one. */
+const free = (el: EventTarget | null): boolean => el instanceof Element && !el.closest(OWN_CLICK)
+
+/**
+ * A click on a free spot opens the main window (D558): pressed there too (a press on a button slid off and released beside
+ * it is no click of the panel – Chromium gives such a click to the common parent), nothing unfolded, nothing waiting in the
+ * bar (`data-busy`: „Skończył się o…” with its ±5 min, a cost to confirm).
+ */
+export const opensMain = (down: EventTarget | null, up: EventTarget | null, unfolded: boolean, root: Element): boolean =>
+  !unfolded && free(down) && free(up) && !root.querySelector('[data-busy]')
 
 export function PanelApp() {
   const view = useWidget((s) => s.view)
@@ -31,8 +47,23 @@ export function PanelApp() {
       window.removeEventListener('keydown', touch)
     }
   }, [])
+  const pressed = useRef<EventTarget | null>(null)
+  const freeClick = (e: MouseEvent<HTMLDivElement>) => {
+    const down = pressed.current
+    pressed.current = null
+    if (opensMain(down, e.target, unfolded, e.currentTarget)) window.rd.showMain()
+  }
   return (
-    <div ref={ref} className="flex flex-col gap-2 border border-line-strong bg-panel p-2" data-testid="panel">
+    <div ref={ref} className="relative flex flex-col gap-2 border border-line-strong bg-panel p-2 pr-7" data-testid="panel" onPointerDown={(e) => (pressed.current = e.target)} onClick={freeClick}>
+      <button
+        type="button"
+        className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded text-[14px] leading-none text-muted hover:bg-hover hover:text-fg"
+        aria-label="Zamknij panel (z Shift – zakończ aplikację)"
+        onClick={(e) => window.rd.panelClose(e.shiftKey ? 'quit' : 'x')}
+        data-testid="panel-close"
+      >
+        ×
+      </button>
       {view && (
         // One structure whether the widget is hidden („Odcinam się”: the state line with „Wracam”) or not – the bar stays
         // the same one (what is typed in its field stays, T771).

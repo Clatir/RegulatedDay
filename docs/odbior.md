@@ -271,6 +271,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] JC1 „Bloki poza komputerem jednym ciągiem”: posiłek i spacer według planu, bez pytania po powrocie (1.30.0)
    - [ ] JC2 Jednym ciągiem: powrót w trakcie bloku – koniec przy powrocie z krótkim pytaniem (1.30.0)
    - [ ] JC3 Jednym ciągiem: „Cofnij” końca według planu cofa też kolejny blok (1.30.0)
+   - [ ] PX1 Panel ikony: „×” zamyka panel, aplikacja zostaje w zasobniku (1.31.0)
+   - [ ] PX2 Panel ikony: „×” z Shift zamyka aplikację (1.31.0)
+   - [ ] PX3 Panel ikony: kliknięcie w wolne pole otwiera okno główne (1.31.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -2962,6 +2965,29 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** po JC1 w „zrobione automatycznie” kliknij „Cofnij” przy „Posiłek skończony o … (według planu, jednym ciągiem)”.
 - **Oczekiwany efekt:** spacer znika z faktów (niezaczęty, nie zaczyna się już sam), posiłek kończy się według zwykłych reguł (przy powrocie albo planowany koniec + 30 min).
 - **Nie przechodzi, gdy:** posiłek i spacer biegną naraz; posiłek zostaje otwarty bez końca; „Cofnij” jest przy końcu, po którym zaczął się blok stały.
+### PX – „×” i wolne pole w panelu ikony (1.31.0, D558)
+
+#### PX1 „×” zamyka panel, aplikacja zostaje w zasobniku
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/panel-close.test.ts` („×” wysyła zamknięcie panelu, bez okna głównego). Ty: rzut oka.
+- **Jak sprawdzić:** kliknij ikonę w zasobniku, w panelu kliknij „×” w prawym górnym rogu. Kliknij ikonę jeszcze raz.
+- **Oczekiwany efekt:** panel znika, ikona zostaje w zasobniku, pasek pulpitu działa dalej; drugie kliknięcie ikony otwiera panel jak zwykle.
+- **Nie przechodzi, gdy:** „×” nie widać albo zasłania przycisk paska (odliczanie, 💧, „+”); po „×” znika ikona albo pasek pulpitu; po „×” otwiera się okno główne.
+
+#### PX2 „×” z Shift zamyka aplikację
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/panel-close.test.ts` („×” z Shift – wyjście). Ty: na prawdziwej aplikacji.
+- **Jak sprawdzić:** otwórz panel, przytrzymaj Shift i kliknij „×”. Uruchom aplikację ponownie.
+- **Oczekiwany efekt:** aplikacja kończy się cała (ikona, pasek pulpitu i okno główne znikają), w `main.log` „panel zamknięty: × z Shift – wyjście” i „zamykanie: wyjście z aplikacji”; ponowne uruchomienie startuje normalnie, bez pytania o awarię.
+- **Nie przechodzi, gdy:** zostaje ikona albo proces w Menedżerze zadań; po ponownym starcie aplikacja mówi o awarii albo nie ma dzisiejszych zmian.
+
+#### PX3 Kliknięcie w wolne pole otwiera okno główne
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/panel-close.test.ts` (wolne pole i tekst – okno; przycisk, przycisk zsunięty, rozwinięte „Skończył się o…” – nie). Ty: rzut oka.
+- **Jak sprawdzić:** otwórz panel i kliknij w puste miejsce (np. obok nazwy bloku albo w odstęp pod paskiem). Potem otwórz panel, rozwiń „+” i kliknij obok pola.
+- **Oczekiwany efekt:** pierwsze kliknięcie: panel znika, okno główne wychodzi na wierzch; kliknięcie obok rozwiniętego pola nic nie otwiera, a przyciski panelu robią swoje bez otwierania okna.
+- **Nie przechodzi, gdy:** wolne pole nic nie robi; przycisk paska (Start, Pauza, „Prośba ▸”) otwiera dodatkowo okno; wciśnięcie przycisku, zsunięcie i puszczenie obok otwiera okno; kliknięcie przy rozwiniętym polu albo „Skończył się o…” otwiera okno.
+
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
 #### CI1 Nazwy pul przy polach kosztu (D525)
