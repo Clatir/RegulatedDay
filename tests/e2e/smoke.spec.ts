@@ -133,6 +133,37 @@ for (const title of ['Regulated Day – panel', 'Regulated Day – dźwięk', 'R
   })
 }
 
+// Minimized, then closed into the tray from the taskbar: the hidden window keeps its minimized state – a WM_CLOSE from
+// outside still ends the app (D560 review; only a real minimize and WM_CLOSE – Windows).
+test('okno zminimalizowane i schowane do zasobnika: zamknięcie z zewnątrz kończy aplikację do końca', async () => {
+  test.skip(process.platform !== 'win32', 'minimize needs a window manager; a real WM_CLOSE – Windows only')
+  const { app, page, userData } = await launch()
+  let ended = false
+  try {
+    await expect(page.getByTestId('bar-main')).toBeVisible()
+    const win = await app.browserWindow(page)
+    const title = await win.evaluate((w) => w.getTitle())
+    await win.evaluate((w) => w.minimize())
+    await expect.poll(() => win.evaluate((w) => w.isMinimized())).toBe(true)
+    await win.evaluate((w) => w.close())
+    await expect.poll(() => readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => '')).toContain('okno ukryte w zasobniku')
+    const closed = app.waitForEvent('close', { timeout: 30_000 })
+    const seen = postClose(await app.evaluate(() => process.pid), title)
+    expect(seen, seen).toContain('<- WM_CLOSE')
+    await closed
+    ended = true
+  } finally {
+    // The regression (the hidden window only hides again): no Electron left behind, and the log's tail in the failure.
+    if (!ended) {
+      console.log((await readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => '')).split('\n').slice(-20).join('\n'))
+      await app.close().catch(() => undefined)
+    }
+  }
+  const log = await readFile(join(userData, 'logs', 'main.log'), 'utf8')
+  expect(log).toContain('zamknięcie z zewnątrz (instalator albo taskkill)')
+  expect(log).toContain('aplikacja zamknięta')
+})
+
 test('druga kopia na tej samej tożsamości: przekazuje start działającej (okno wraca) i kończy się bez „koniec pracy” i „aplikacja zamknięta” (F2)', async () => {
   const { app, page, userData } = await launch()
   try {
@@ -383,6 +414,57 @@ test('„×” paska pulpitu (D559): 504 px, chowa pasek tylko z jego okna; wł�
         await window.rd.setPrefs({ desktopBar: true })
       })
       await expect.poll(async () => (await barWin())!.visible, { timeout: 30_000 }).toBe(true)
+    })
+  } finally {
+    await app.close()
+  }
+})
+
+test('pasek schowany „×” wraca z oknem głównym, przełącznik w ustawieniach; dwuklik paska otwiera okno (D560)', async () => {
+  const { app, page, userData } = await launch()
+  try {
+    await withMainLog(userData, async () => {
+      const barShown = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – pasek' && w.isVisible()))
+      const win = await app.browserWindow(page)
+      const mainDo = (what: 'minimize' | 'hide') => win.evaluate((w, what) => (what === 'minimize' ? w.minimize() : w.close()), what)
+      const mainShown = () => win.evaluate((w) => w.isVisible() && !w.isMinimized())
+      await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
+      const bar = await viewPage(app, 'bar')
+      const log = () => readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => '')
+      const doubleClick = () =>
+        bar.evaluate(() => {
+          // The double click of a free spot on the bar, from its releases only (T1500).
+          const free = document.querySelector('[data-testid="bar-desktop"] > div')!
+          for (let i = 0; i < 2; i++) free.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, screenX: 10, screenY: 10 }))
+        })
+      // Minimizing needs a window manager – Xvfb has none; Windows only.
+      if (process.platform === 'win32') {
+        // On by default: hidden by „×”, back after the main window's minimize.
+        await bar.getByTestId('bar-close').click()
+        await expect.poll(barShown).toBe(false)
+        await mainDo('minimize')
+        await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
+        // Closed while minimized (the taskbar's „Zamknij okno”): into the tray, the app goes on.
+        await mainDo('hide')
+        await expect.poll(log).toContain('okno ukryte w zasobniku')
+        expect(await log()).not.toContain('kończę pracę')
+        await doubleClick()
+        await expect.poll(mainShown, { timeout: 30_000 }).toBe(true)
+      }
+      // Back after the main window's close into the tray.
+      await bar.getByTestId('bar-close').click()
+      await expect.poll(barShown).toBe(false)
+      await mainDo('hide')
+      await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
+      await doubleClick()
+      await expect.poll(mainShown, { timeout: 30_000 }).toBe(true)
+      // Off: hidden by „×”, it stays hidden after the close.
+      await page.evaluate(() => window.rd.setPrefs({ barBackWithMain: false }))
+      await bar.getByTestId('bar-close').click()
+      await expect.poll(barShown).toBe(false)
+      await mainDo('hide')
+      await expect.poll(log).toContain('pasek pulpitu zostaje schowany po zamknięciu okna głównego')
+      expect(await barShown()).toBe(false)
     })
   } finally {
     await app.close()

@@ -5,7 +5,8 @@
  * the other questions and lines at the end, and what does not fit gathers in „⋯” with a count. Everything is chosen by a
  * click inside the bar – groups, the lengths of „Przedłuż”, the steps of „Skończył się o …” unfold within the bar itself,
  * never as a separate window (D229). A first click with a cost shows it in place of its button; the second within 10 s
- * does it. On the desktop bar the buttons act on the mouse button's release and there are no tooltips.
+ * does it. On the desktop bar the buttons act on the mouse button's release and there are no tooltips; a double click on
+ * a free spot of it opens the main window (D560).
  */
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { WidgetAction } from '@shared/api'
@@ -22,6 +23,7 @@ import { termHolds } from '../lib/viewTerms'
 import { useEscapeLayer } from '../lib/escape'
 import { useQuickToday } from './quickToday'
 import { pressFromMove, releasedUnheard, type GripState } from './barGrip'
+import { freeSpot, secondRelease, type BarRelease } from './barDouble'
 
 export type BarMode = 'main' | 'panel' | 'desktop'
 type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | 'quick' | 'parallel' | null
@@ -657,6 +659,27 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
   // The row of the actions as the plan said them, unfolded into the list of them (D350).
   const [groupOpen, setGroupOpen] = useState<string | null>(null)
   const root = useRef<HTMLDivElement>(null)
+  // The desktop bar's double click on a free spot opens the main window (D560): the first release waits for the second.
+  const firstRelease = useRef<BarRelease | null>(null)
+  // A press heard on a control (and slid off it): its release is the control's cancel, never a half of the double click.
+  const pressOnControl = useRef(false)
+  const freePress = (e: React.PointerEvent) => void (pressOnControl.current = !freeSpot(e.target))
+  // A move without a button: no press is held, whatever was heard of it (its release came where the page could not hear it).
+  const freeMove = (e: React.PointerEvent) => void (e.buttons === 0 && (pressOnControl.current = false))
+  // A cancelled press (touch, pen) never comes back as a release: nothing of it waits.
+  const freeCancel = () => {
+    pressOnControl.current = false
+    firstRelease.current = null
+  }
+  const freeRelease = (e: React.PointerEvent) => {
+    const onControl = pressOnControl.current
+    pressOnControl.current = false
+    if (e.button !== 0 || onControl || !freeSpot(e.target)) return void (firstRelease.current = null)
+    const now = { at: e.timeStamp, x: e.screenX, y: e.screenY }
+    if (!secondRelease(firstRelease.current, now)) return void (firstRelease.current = now)
+    firstRelease.current = null
+    window.rd.showMain()
+  }
   const quiet = view.quiet
   const beat = usePulse(pulseClass(view.warn, pulse, mode, quiet), `${view.block?.name ?? ''}|${view.block?.endsAt ?? ''}`)
   // The panel of variants belongs to the main process (D313): one for every window, open while the view has it.
@@ -903,6 +926,10 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
         data-warn={view.warn}
         data-quiet="off"
         data-day="none"
+        onPointerDown={mode === 'desktop' ? freePress : undefined}
+        onPointerMove={mode === 'desktop' ? freeMove : undefined}
+        onPointerUp={mode === 'desktop' ? freeRelease : undefined}
+        onPointerCancel={mode === 'desktop' ? freeCancel : undefined}
       >
         <div className={cx('relative flex flex-col gap-1.5 py-1.5 pl-3', mode === 'desktop' ? 'pr-8' : 'pr-2')}>
           {mode === 'desktop' && <DragHandle />}
@@ -950,9 +977,18 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
       data-quiet={quiet ? 'on' : 'off'}
       // A cost waiting for „Potwierdź”: a click beside it in the panel never opens the main window (D558).
       data-busy={pending ? 'on' : undefined}
-      onPointerMove={mode === 'panel' ? () => window.rd.panelTouch() : undefined}
+      onPointerMove={mode === 'panel' ? () => window.rd.panelTouch() : mode === 'desktop' ? freeMove : undefined}
       // A button's own click is its action – only a click beside the buttons is a click of the bar (A7-01).
-      onPointerUp={mode === 'desktop' ? (e) => !(e.target as Element).closest('button') && act('barClick') : undefined}
+      onPointerDown={mode === 'desktop' ? freePress : undefined}
+      onPointerCancel={mode === 'desktop' ? freeCancel : undefined}
+      onPointerUp={
+        mode === 'desktop'
+          ? (e) => {
+              if (!(e.target as Element).closest('button')) act('barClick')
+              freeRelease(e)
+            }
+          : undefined
+      }
     >
       {grows === 'up' && unfolded}
       <div className={cx('relative flex flex-col gap-1.5 py-1.5 pl-3', mode === 'desktop' ? 'pr-8' : 'pr-2', quiet && 'gap-1 py-1')}>

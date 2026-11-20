@@ -120,6 +120,23 @@ export function SettingsPage() {
         <Field label="Pasek pulpitu" hint={barNote ?? (prefs.onTop !== 'off' ? 'Leży nad oknami (Zawsze na wierzchu), bez zabierania fokusu; chowa się nad pełnym ekranem i przy oknie głównym na pierwszym planie.' : 'Leży pod oknami innych aplikacji – widać go tam, gdzie nic go nie zasłania.')}>
           <Toggle checked={prefs.desktopBar} onChange={(v) => void setMachinePrefs({ desktopBar: v })} label={prefs.desktopBar ? 'włączony' : 'wyłączony'} data-testid="pref-desktop-bar" />
         </Field>
+        {prefs.desktopBar && (
+          <Field
+            label="Pasek wraca z oknem głównym"
+            hint={
+              prefs.barBackWithMain
+                ? 'Pasek schowany „×” pojawia się znowu, gdy minimalizujesz albo zamykasz okno główne.'
+                : 'Pasek schowany „×” wraca tylko z „Pokaż pasek pulpitu” w menu ikony, z ustawień albo po ponownym uruchomieniu.'
+            }
+          >
+            <Toggle
+              checked={prefs.barBackWithMain}
+              onChange={(v) => void setMachinePrefs({ barBackWithMain: v })}
+              label={prefs.barBackWithMain ? 'włączone' : 'wyłączone'}
+              data-testid="pref-bar-back-with-main"
+            />
+          </Field>
+        )}
         <Field label="Miejsce paska" hint="Monitory tak, jak ustawia je Windows. Pasek zostaje w wybranym miejscu na tym komputerze.">
           <BarPlaceMap />
         </Field>

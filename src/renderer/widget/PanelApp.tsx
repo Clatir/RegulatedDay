@@ -9,9 +9,10 @@ import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 
 import { setWindowEscape } from '../lib/escape'
 import { useWidget } from '../store/widget'
 import { Bar, useReportLayout } from './Bar'
+import { OWN } from './barDouble'
 
-/** What a click acts on by itself – never a click of the free panel. */
-const OWN_CLICK = 'button, a, input, textarea, select, label, [role="button"], [contenteditable]:not([contenteditable="false"])'
+/** What a click acts on by itself – never a click of the free panel (the same list as the desktop bar's free spot). */
+const OWN_CLICK = OWN
 
 /** A spot of the panel that is free: not a control, nor inside one. */
 const free = (el: EventTarget | null): boolean => el instanceof Element && !el.closest(OWN_CLICK)
