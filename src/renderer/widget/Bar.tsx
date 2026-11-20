@@ -93,6 +93,25 @@ function endGrip(g: Grip, why: 'up' | 'cancel' | 'lost' | null): void {
 }
 
 /**
+ * The desktop bar's „×” (D559): in its own 24 px on the right (the bar is wider by them – the content stays as before), above
+ * the content; hides the bar until „Pokaż pasek pulpitu” in the icon's menu, with Shift ends the app. Like every button of
+ * the desktop bar it acts on the release (the window without activation often never hears the press – no `click`, T1500).
+ */
+function CloseBar() {
+  return (
+    <button
+      type="button"
+      className="absolute top-1 right-1 z-10 flex h-5 w-5 items-center justify-center rounded text-[14px] leading-none text-muted hover:bg-hover hover:text-fg"
+      aria-label="Schowaj pasek (z Shift – zakończ aplikację)"
+      onPointerUp={(e) => e.button === 0 && window.rd.barClose(e.shiftKey ? 'quit' : 'x')}
+      data-testid="bar-close"
+    >
+      ×
+    </button>
+  )
+}
+
+/**
  * The handle the desktop bar is dragged by (D303), seen on hover, over the left padding of the bar's main part: the
  * main process moves the bar after the cursor and remembers where it is let go. The drag begins at the press – or, when
  * Windows never handed the page the press (T1500), at the first move over the handle with the button held; while it is
@@ -885,8 +904,9 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
         data-quiet="off"
         data-day="none"
       >
-        <div className="relative flex flex-col gap-1.5 py-1.5 pr-2 pl-3">
+        <div className={cx('relative flex flex-col gap-1.5 py-1.5 pl-3', mode === 'desktop' ? 'pr-8' : 'pr-2')}>
           {mode === 'desktop' && <DragHandle />}
+          {mode === 'desktop' && <CloseBar />}
           {view.lines.map((l) => (
             <div key={l.id} className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid={`bar-line-${l.id}`}>
               <span className="min-w-0 text-[12.5px] leading-snug text-fg">{l.text}</span>
@@ -935,8 +955,9 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
       onPointerUp={mode === 'desktop' ? (e) => !(e.target as Element).closest('button') && act('barClick') : undefined}
     >
       {grows === 'up' && unfolded}
-      <div className={cx('relative flex flex-col gap-1.5 py-1.5 pr-2 pl-3', quiet && 'gap-1 py-1')}>
+      <div className={cx('relative flex flex-col gap-1.5 py-1.5 pl-3', mode === 'desktop' ? 'pr-8' : 'pr-2', quiet && 'gap-1 py-1')}>
         {mode === 'desktop' && <DragHandle />}
+        {mode === 'desktop' && <CloseBar />}
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           {view.question && (
             <div className="flex shrink-0 items-center gap-1.5" data-testid="bar-question">

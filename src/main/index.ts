@@ -51,7 +51,7 @@ import { Autostart, HIDDEN_ARG } from './autostart'
 import { AppTray } from './tray'
 import { displays, primaryDisplay } from './displays'
 import { createMainWindow, revealMainWindow } from './windows/mainWindow'
-import { DesktopBar } from './windows/desktopBar'
+import { DesktopBar, barCloseOf } from './windows/desktopBar'
 import { IconPanel, panelCloseOf } from './windows/iconPanel'
 import { QUICK_RETRY_MS, QuickWindow, shortcutOf, touchesShortcut } from './windows/quickWindow'
 import { HelperClient, type HelperMessage } from './helper/client'
@@ -159,6 +159,8 @@ let barLayoutNow: BarLayout = { height: 64, unfolded: false }
 let barFoldedHeight = 64
 /** Why the desktop bar is hidden although it is on (the settings and the panel say it). */
 let barProblem: 'helper' | 'failed' | null = null
+/** The bar hidden by its „×” (D559): until „Pokaż pasek pulpitu” in the icon's menu, the bar switched on again in the settings or the next start. */
+let barClosed = false
 
 const prefs = (): MachinePrefs => config.get().prefs
 
@@ -226,7 +228,7 @@ function quickAdd(title: unknown): Promise<QuickAddResult> {
 
 function widgetView(): WidgetView {
   const view = widget.current()
-  const barNote = !prefs().desktopBar || view.hidden ? null : barProblem === 'failed' ? BAR_NOTE_FAILED : barProblem === 'helper' ? BAR_NOTE_HELPER : null
+  const barNote = !prefs().desktopBar || barClosed || view.hidden ? null : barProblem === 'failed' ? BAR_NOTE_FAILED : barProblem === 'helper' ? BAR_NOTE_HELPER : null
   return { ...view, barNote }
 }
 
@@ -394,7 +396,7 @@ const mainInFront = (): boolean => !!mainWindow && !mainWindow.isDestroyed() && 
  * The settings and the widget want the desktop bar shown now; „na wierzchu” it hides over a full screen and while the
  * main window is in front (D291, D302).
  */
-const barWanted = (): boolean => prefs().desktopBar && !widgetView().hidden && !(prefs().onTop !== 'off' && (fullscreenNow || mainInFront()))
+const barWanted = (): boolean => prefs().desktopBar && !barClosed && !widgetView().hidden && !(prefs().onTop !== 'off' && (fullscreenNow || mainInFront()))
 
 /**
  * The desktop bar as the settings, the widget and the helper allow: laid under the windows before it shows – or, with
@@ -689,6 +691,12 @@ function quitFromOutside(): void {
   afterOutsideClose(quitApp)
 }
 
+/** A double click on the icon (D559): the main window, always – the panel its first click opened closes. */
+function openMainFromIcon(): void {
+  panel?.close('dwuklik ikony')
+  showMainWindow()
+}
+
 function showMainWindow(page?: string): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
   if (mainWindow.isMinimized()) mainWindow.restore()
@@ -732,10 +740,19 @@ function trayMenu(): MenuItemConstructorOptions[] {
   const ready = updates?.updater?.readyRelease
   return [
     { label: 'Otwórz Regulated Day', click: () => showMainWindow() },
+    ...(barClosed && prefs().desktopBar ? [{ label: 'Pokaż pasek pulpitu', click: () => showClosedBar() }] : []),
     ...(ready ? [{ label: `Zainstaluj teraz (${ready.version})`, click: () => void updates?.action('installNow') }] : []),
     { type: 'separator' },
     { label: 'Zakończ', click: () => quitApp() }
   ]
+}
+
+/** The bar hidden by its „×” shown again (D559): the icon's menu, or the bar switched on again in the settings. */
+function showClosedBar(): void {
+  if (!barClosed) return
+  barClosed = false
+  log('info', 'pasek pulpitu pokazany ponownie po „×”')
+  layoutBar()
 }
 
 // ------------------------------------------------------------------ the bar's actions
@@ -768,6 +785,8 @@ async function setPrefs(patch: unknown): Promise<MachinePrefs> {
   // D402, T759: the shortcut of the quick capture changed, switched off or on, or typed again – registered again at once
   // (the same keys again: one Windows refused is tried once more).
   if (touchesShortcut(patch)) quick?.setShortcut(shortcutOf(next))
+  // The bar switched on again in the settings: one hidden by its „×” shows too (D559).
+  if (next.desktopBar && !before.desktopBar) barClosed = false
   broadcast(CH.onPrefs, next)
   layoutBar()
   await saved.catch(() => undefined)
@@ -874,6 +893,16 @@ function registerIpc(): void {
     // „×” hides the panel, the app goes on in the tray; with Shift it ends the app as the menu's „Zakończ” does.
     const c = panelCloseOf(how, viewOf(e.sender))
     panel?.close(c.why)
+    if (c.quit) quitApp()
+  })
+  ipcMain.on(CH.barClose, (e, how?: unknown) => {
+    // „×” hides the desktop bar until the icon's menu shows it again, with Shift it ends the app (D559).
+    const c = barCloseOf(how, viewOf(e.sender))
+    log('info', c.why)
+    if (c.hide) {
+      barClosed = true
+      layoutBar()
+    }
     if (c.quit) quitApp()
   })
   ipcMain.on(CH.showMain, (_e, page?: string) => {
@@ -1398,7 +1427,7 @@ async function main(): Promise<void> {
   }
 
   registerIpc()
-  tray = new AppTray({ title: APP_TITLE, iconDir: join(userData, 'icons'), click: () => panel?.toggle(), menu: trayMenu, log })
+  tray = new AppTray({ title: APP_TITLE, iconDir: join(userData, 'icons'), click: () => panel?.toggle(), doubleClick: () => openMainFromIcon(), menu: trayMenu, log })
   tray.ensure()
 
   const startHidden = process.argv.includes(HIDDEN_ARG)

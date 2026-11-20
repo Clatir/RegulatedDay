@@ -2,7 +2,8 @@
  * The icon's panel: the bar and, while the widget is hidden, only its state line and the question waiting (spec
  * „Widget”). Esc closes it (after whatever Esc closes first); a line a notification's click opened it for is marked.
  * „×” in the upper right corner closes it (the app goes on in the tray), „×” with Shift ends the app; a click on a free
- * spot opens the main window (D558): pressed and released on a free spot, nothing unfolded or waiting (`data-busy`).
+ * spot opens the main window (D558): pressed and released on a free spot, nothing unfolded or waiting (`data-busy`); a double
+ * click opens it always (D559) – anywhere but on a control, also with something unfolded or waiting.
  */
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react'
 import { setWindowEscape } from '../lib/escape'
@@ -23,6 +24,15 @@ const free = (el: EventTarget | null): boolean => el instanceof Element && !el.c
  */
 export const opensMain = (down: EventTarget | null, up: EventTarget | null, unfolded: boolean, root: Element): boolean =>
   !unfolded && free(down) && free(up) && !root.querySelector('[data-busy]')
+
+/** What a double click never opens the main window from (D559): a control acts by itself – a label passes its click to its own. */
+const OWN_DOUBLE = 'button, a, input, textarea, select, [role="button"], [contenteditable]:not([contenteditable="false"])'
+
+/**
+ * A double click in the panel opens the main window always (D559): both its presses anywhere but on a control – a double
+ * click of a button that went away after its first click (an answer, „Potwierdź”) lands its second on free text.
+ */
+export const doubleOpensMain = (first: EventTarget | null, second: EventTarget | null): boolean => [first, second].every((el) => el instanceof Element && !el.closest(OWN_DOUBLE))
 
 export function PanelApp() {
   const view = useWidget((s) => s.view)
@@ -56,13 +66,18 @@ export function PanelApp() {
   const onRelease = (e: PointerEvent<HTMLDivElement>) => {
     pressed.current.up = e.target
   }
+  // The first press of a pair of clicks: a double click counts only when it, too, was on no control.
+  const firstPress = useRef<EventTarget | null>(null)
+  const onMouseDown = (e: MouseEvent<HTMLDivElement>) => {
+    if (e.detail <= 1) firstPress.current = e.target
+  }
   const freeClick = (e: MouseEvent<HTMLDivElement>) => {
     const { down, up } = pressed.current
     pressed.current = { down: null, up: null }
     if (opensMain(down, up, unfolded, e.currentTarget)) window.rd.showMain()
   }
   return (
-    <div ref={ref} className="relative flex flex-col gap-2 border border-line-strong bg-panel p-2 pr-7" data-testid="panel" onPointerDown={onPress} onPointerUp={onRelease} onClick={freeClick}>
+    <div ref={ref} className="relative flex flex-col gap-2 border border-line-strong bg-panel p-2 pr-7" data-testid="panel" onPointerDown={onPress} onPointerUp={onRelease} onClick={freeClick} onMouseDown={onMouseDown} onDoubleClick={(e) => doubleOpensMain(firstPress.current, e.target) && window.rd.showMain()}>
       <button
         type="button"
         className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded text-[14px] leading-none text-muted hover:bg-hover hover:text-fg"

@@ -3,7 +3,7 @@
  * The icon by the clock (spec „Widget”, D289): its colour is the bar's, a dot when something stands without your
  * click, a drop when the water icon waits, and the tooltip with the block, the time to its end and the next fixed block.
  * The main process draws it as an .ico with the sizes 16–32 px for each state (a tray icon from a PNG uses only its base
- * size). Left click: the icon's panel; right click: the menu. Set again after Explorer restarts and after the screens
+ * size). Left click: the icon's panel; double click: the main window, always (D559); right click: the menu. Set again after Explorer restarts and after the screens
  * change.
  */
 import { mkdirSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs'
@@ -16,6 +16,8 @@ export interface TrayDeps {
   title: string
   iconDir: string
   click: () => void
+  /** A double click (its first click already went to `click`). */
+  doubleClick: () => void
   menu: () => MenuItemConstructorOptions[]
   log: (level: 'info' | 'warn', msg: string, e?: unknown) => void
 }
@@ -56,6 +58,7 @@ export class AppTray {
       this.tray = new Tray(this.iconFile(this.state))
       this.tray.setToolTip(this.tooltip || this.d.title)
       this.tray.on('click', () => this.d.click())
+      this.tray.on('double-click', () => this.d.doubleClick())
       this.tray.on('right-click', () => this.popMenu())
       return true
     } catch (e) {

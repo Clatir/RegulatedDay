@@ -45,6 +45,7 @@ export const CH = {
   placeBar: 'rd:placeBar',
   panelTouch: 'rd:panelTouch',
   panelClose: 'rd:panelClose',
+  barClose: 'rd:barClose',
   barAction: 'rd:barAction',
   update: 'rd:update',
   onUpdate: 'rd:onUpdate',
@@ -234,6 +235,9 @@ export type ViewKind = 'main' | 'bar' | 'panel' | 'sound' | 'quick'
 
 /** How the icon's panel is closed: Esc (none), its „×” – the app stays in the tray, „×” with Shift – the app ends. */
 export type PanelCloseHow = 'x' | 'quit'
+
+/** How the desktop bar is closed (D559): its „×” hides it until „Pokaż pasek pulpitu” in the icon's menu or the next start, with Shift – the app ends. */
+export type BarCloseHow = 'x' | 'quit'
 
 export interface HelperStatus {
   /** running – answering; starting – (re)starting after a crash; unavailable – 3 crashes in 10 min; missing – no program. */
@@ -841,6 +845,8 @@ export interface RdApi {
   panelTouch(): void
   /** The panel closes: Esc (none), its „×” (`x`), or „×” with Shift – the whole app ends (`quit`). */
   panelClose(how?: PanelCloseHow): void
+  /** The desktop bar's „×” (D559): hidden (`x`), or with Shift the whole app ends (`quit`). */
+  barClose(how: BarCloseHow): void
   barAction(action: BarActionId, arg?: string): Promise<void>
   update(): Promise<UpdateView>
   onUpdate(cb: (view: UpdateView) => void): () => void
