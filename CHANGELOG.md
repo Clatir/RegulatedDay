@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.33.0
+- Dwuklik w wolne miejsce paska pulpitu (poza przyciskami, polami i uchwytem) otwiera okno główne.
+- Zamknięcie zminimalizowanego okna głównego z paska zadań chowa je do zasobnika – wcześniej kończyło całą aplikację.
+- Pasek pulpitu schowany „×” pojawia się znowu, gdy minimalizujesz albo zamykasz okno główne. Przełącznik „Pasek wraca z oknem głównym” w Ustawieniach (domyślnie włączony) – po wyłączeniu pasek wraca tylko z „Pokaż pasek pulpitu” w menu ikony, z ustawień albo po ponownym uruchomieniu.
+
 ## 1.32.0
 - Pasek pulpitu ma w prawym górnym rogu „×” – pasek jest szerszy o 24 px, więc kropla 💧 i reszta paska stoją jak dotąd. „×” chowa pasek, a aplikacja działa dalej w zasobniku; pasek wraca pozycją „Pokaż pasek pulpitu” w menu ikony (prawy przycisk), po włączeniu paska w ustawieniach albo przy kolejnym uruchomieniu. „×” kliknięty z wciśniętym Shift zamyka całą aplikację.
 - Dwuklik w ikonę przy zegarze zawsze otwiera okno główne.

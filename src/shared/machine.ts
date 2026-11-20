@@ -31,6 +31,11 @@ export interface MachinePrefs {
   barPulse: boolean
   /** The desktop bar under the windows (on by default, off on any computer). */
   desktopBar: boolean
+  /**
+   * The desktop bar hidden by its „×” (D559) shows again when the main window is minimized or closed (D560, on by default);
+   * off – only „Pokaż pasek pulpitu” in the icon's menu, the settings or the next start show it.
+   */
+  barBackWithMain: boolean
   /** The icon's panel and the desktop bar stay out of recordings and screen sharing. */
   hideFromCapture: boolean
   /** null = the default: the left bottom corner of the primary work area. */
@@ -102,6 +107,7 @@ export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   animations: true,
   barPulse: false,
   desktopBar: true,
+  barBackWithMain: true,
   hideFromCapture: true,
   barPlacement: null,
   filters: {},
@@ -152,6 +158,7 @@ export function machinePrefsFrom(raw: unknown): MachinePrefs {
     animations: bool(r.animations, DEFAULT_MACHINE_PREFS.animations),
     barPulse: bool(r.barPulse, DEFAULT_MACHINE_PREFS.barPulse),
     desktopBar: bool(r.desktopBar, DEFAULT_MACHINE_PREFS.desktopBar),
+    barBackWithMain: bool(r.barBackWithMain, DEFAULT_MACHINE_PREFS.barBackWithMain),
     hideFromCapture: bool(r.hideFromCapture, DEFAULT_MACHINE_PREFS.hideFromCapture),
     barPlacement: placementFrom(r.barPlacement),
     filters: filtersFrom(r.filters),

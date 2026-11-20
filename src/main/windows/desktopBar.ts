@@ -38,6 +38,12 @@ export function barCloseOf(how: unknown, from: string): { hide: boolean; quit: b
   return { hide: false, quit: false, why: '× paska – nieznane polecenie' }
 }
 
+/**
+ * The main window minimized or closed into the tray (D560): the bar hidden by its „×” comes back when „Pasek wraca z oknem
+ * głównym” is on and the bar itself is on (switched on again, it shows by itself) – never while the app quits.
+ */
+export const barBackWithMain = (closed: boolean, on: boolean, barOn: boolean, quitting: boolean): boolean => closed && on && barOn && !quitting
+
 export class DesktopBar {
   private readonly win: BrowserWindow
   private visible = false

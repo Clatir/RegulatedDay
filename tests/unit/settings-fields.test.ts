@@ -101,6 +101,14 @@ describe('ustawienia bez liczb', () => {
     })
   })
 
+  it('pasek schowany „×” wraca z oknem głównym (D560): domyślnie włączone, wyłączone zostaje, inna wartość – domyślna', () => {
+    expect(DEFAULT_MACHINE_PREFS.barBackWithMain).toBe(true)
+    expect(machinePrefsFrom({}).barBackWithMain).toBe(true)
+    expect(machinePrefsFrom({ barBackWithMain: false }).barBackWithMain).toBe(false)
+    expect(machinePrefsFrom({ barBackWithMain: 'nie' }).barBackWithMain).toBe(true)
+    expect(patchMachinePrefs(DEFAULT_MACHINE_PREFS, { barBackWithMain: false }).barBackWithMain).toBe(false)
+  })
+
   it('miejsce paska: wybrane miejsce albo własne; zapis sprzed 0.10.0 i nieznane miejsce – własne', () => {
     const display = { label: 'LG', bounds: { x: 1920, y: 0, width: 1280, height: 720 } }
     expect(machinePrefsFrom({ barPlacement: { display, spot: 'top-center', offset: { x: 400, y: 8 } } }).barPlacement?.spot).toBe('top-center')

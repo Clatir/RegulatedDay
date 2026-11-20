@@ -277,6 +277,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] PX4 Pasek pulpitu: „×” chowa pasek, „Pokaż pasek pulpitu” w menu ikony go przywraca (1.32.0)
    - [ ] PX5 Pasek pulpitu: „×” z Shift zamyka aplikację (1.32.0)
    - [ ] PX6 Dwuklik ikony i panelu otwiera okno główne (1.32.0)
+   - [ ] PX7 Dwuklik paska pulpitu otwiera okno główne (1.33.0)
+   - [ ] PX8 Pasek schowany „×” wraca po minimalizacji i zamknięciu okna głównego, przełącznik w Ustawieniach (1.33.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3013,6 +3015,22 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** okno główne schowane – kliknij dwa razy szybko ikonę przy zegarze. Potem otwórz panel, rozwiń „+” i kliknij dwa razy w nazwę bloku.
 - **Oczekiwany efekt:** za każdym razem okno główne wychodzi na wierzch, a panel znika; pojedyncze kliknięcie ikony dalej otwiera panel.
 - **Nie przechodzi, gdy:** po dwukliku ikony zostaje otwarty panel albo okno się nie pokazuje; dwuklik w przycisk panelu otwiera okno (przycisk może zadziałać dwa razy – jak dotąd); pojedynczy klik ikony otwiera okno zamiast panelu.
+
+### PX – dwuklik paska i powrót paska z oknem głównym (1.33.0, D560)
+
+#### PX7 Dwuklik paska pulpitu otwiera okno główne
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/bar-double.test.ts` (dwa puszczenia ≤ 500 ms i ≤ 4 px; nie na przycisku, nie za wolno, nie w panelu), E2E (D560) w `smoke.spec.ts`. **Tylko Ty:** prawdziwy dwuklik na pulpicie.
+- **Jak sprawdzić:** okno główne zminimalizowane albo schowane – kliknij dwa razy szybko w nazwę bloku albo w puste miejsce paska pulpitu. Potem kliknij dwa razy w przycisk paska (np. 💧).
+- **Oczekiwany efekt:** po dwukliku w wolne miejsce okno główne wychodzi na wierzch; dwuklik w przycisk robi tylko to, co przycisk (bez okna); pojedyncze kliknięcie paska nic nie otwiera; przeciąganie za uchwyt działa jak dotąd.
+- **Nie przechodzi, gdy:** dwuklik w wolne miejsce nie otwiera okna (także po kilku próbach); okno otwiera się po pojedynczym kliknięciu albo po dwukliku w przycisk; po przeciągnięciu paska okno się otwiera.
+
+#### PX8 Pasek schowany „×” wraca z oknem głównym
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/bar-close.test.ts`, `tests/unit/settings-fields.test.ts`, E2E (D560) w `smoke.spec.ts` (minimalizacja, zamknięcie, przełącznik wyłączony). **Tylko Ty:** na pulpicie.
+- **Jak sprawdzić:** kliknij „×” na pasku pulpitu, otwórz okno główne (dwuklik ikony), zminimalizuj je. Powtórz z zamknięciem okna „×”. Potem w Ustawieniach wyłącz „Pasek wraca z oknem głównym” i powtórz.
+- **Oczekiwany efekt:** przy włączonym przełączniku pasek wraca w tym samym miejscu po minimalizacji i po zamknięciu okna; przy wyłączonym zostaje schowany do „Pokaż pasek pulpitu” w menu ikony; przełącznik pamięta się po ponownym uruchomieniu.
+- **Nie przechodzi, gdy:** pasek nie wraca przy włączonym przełączniku; wraca przy wyłączonym; wraca w innym miejscu; przełącznika nie ma w Ustawieniach przy włączonym pasku.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 

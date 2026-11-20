@@ -75,6 +75,21 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
     użytkownika – czy ma go pokazać); dwuklik w przycisk panelu wykonuje akcję dwa razy (`onClick` w trybie panelu, stan sprzed 1.32); „×” paska działa na samo puszczenie, także wciśnięcia zaczętego poza nim – jak każdy
     przycisk paska pulpitu (T1500), do rozważenia wspólnie dla wszystkich.
 
+14. **1.33.0 – dwuklik paska pulpitu i pasek wracający z oknem głównym (D560, T1976):** uwagi użytkownika 20.11 po 1.32 – dwuklik
+    w „popup” (log: panel nieotwierany, czyli pasek pulpitu) nie otwierał okna; przełącznik, by pasek schowany „×” wracał po
+    minimalizacji okna głównego (odpowiedzi: domyślnie włączony, także przy zamknięciu okna). Dwuklik z dwóch puszczeń (`barDouble.ts`),
+    pref `barBackWithMain`, `mainGone` na `minimize`/`hide`. Przy okazji (przegląd): zamknięcie zminimalizowanego okna z paska zadań
+    kończyło aplikację – teraz zasobnik (flaga `shown`). Gałąź `claude/1.33-pasek-wraca`, jeden PR. Testy: typecheck, `npm test`
+    (305 plików, 4506), build, lint, E2E pełne przed poprawkami (130, 11 pominiętych), smoke po rundzie 3 (26). Przegląd xhigh, 3 rundy:
+    1 – minimalizacja w E2E tylko na Windows (Xvfb bez menedżera okien), zamknięcie zminimalizowanego okna, wciśnięcie na przycisku,
+    `OWN` wspólne z panelem; 2 – okno schowane po minimalizacji ignorowało zamknięcie z zewnątrz (instalator) – flaga `shown` + E2E
+    z prawdziwym WM_CLOSE, `pointercancel`, `desktopBar` w `barBackWithMain`; 3 – ruch bez przycisku zeruje wciśnięcie, `restore` →
+    `shown`, E2E z `finally`. Lokalny instalator `Downloads\Regulated-Day-Setup-1.33.0.exe` (20.11 14:33). Odbiór PX7–PX8 w `docs/odbior.md`.
+    **Uwagi na później:** okno zmaksymalizowane, zminimalizowane i zamknięte zapisuje się jako niezmaksymalizowane (`isMaximized` false
+    przy minimalizacji – stan sprzed 1.33); przy zamknięciu z zewnątrz pasek schowany „×” może mignąć (`quitting` jeszcze false w
+    `afterOutsideClose`); klik uchwytu między dwoma puszczeniami nie przerywa pary (3 kliknięcia w 500 ms); `OWN_DOUBLE` w panelu to
+    osobna lista bez `label`; czas dwukliku stały 500 ms (bez `GetDoubleClickTime`).
+
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
   niżej „Wszystkie punkty” – pełny opis każdego nieodebranego według etapu i numeru, z wersją przy nagłówku. Odebrany

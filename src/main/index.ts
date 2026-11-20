@@ -51,7 +51,7 @@ import { Autostart, HIDDEN_ARG } from './autostart'
 import { AppTray } from './tray'
 import { displays, primaryDisplay } from './displays'
 import { createMainWindow, revealMainWindow } from './windows/mainWindow'
-import { DesktopBar, barCloseOf } from './windows/desktopBar'
+import { DesktopBar, barBackWithMain, barCloseOf } from './windows/desktopBar'
 import { IconPanel, panelCloseOf } from './windows/iconPanel'
 import { QUICK_RETRY_MS, QuickWindow, shortcutOf, touchesShortcut } from './windows/quickWindow'
 import { HelperClient, type HelperMessage } from './helper/client'
@@ -752,6 +752,15 @@ function showClosedBar(): void {
   if (!barClosed) return
   log('info', 'pasek pulpitu pokazany ponownie po „×”')
   setBarClosed(false)
+}
+
+/** The main window minimized or closed into the tray: the bar hidden by its „×” comes back, when you chose so (D560). */
+function mainGone(how: 'minimize' | 'hide'): void {
+  const after = how === 'minimize' ? 'minimalizacji' : 'zamknięciu'
+  if (barBackWithMain(barClosed, prefs().barBackWithMain, prefs().desktopBar, quitting)) {
+    log('info', `pasek pulpitu wraca po ${after} okna głównego`)
+    setBarClosed(false)
+  } else if (barClosed && prefs().desktopBar && !quitting) log('info', `pasek pulpitu zostaje schowany po ${after} okna głównego (przełącznik wyłączony)`)
 }
 
 /** The bar hidden by its „×” or not (D559): laid again, and the windows hear the view – its note („Pokaż pasek”) follows. */
@@ -1465,6 +1474,8 @@ async function main(): Promise<void> {
   mainWindow.on('blur', mainMoved)
   mainWindow.on('hide', mainMoved)
   mainWindow.on('minimize', mainMoved)
+  mainWindow.on('hide', () => mainGone('hide'))
+  mainWindow.on('minimize', () => mainGone('minimize'))
   mainWindow.on('query-session-end', () => onSystemEnd(false))
   mainWindow.on('session-end', () => onSystemEnd(true))
 

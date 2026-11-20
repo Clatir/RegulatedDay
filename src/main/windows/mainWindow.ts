@@ -71,13 +71,21 @@ export function createMainWindow(d: MainWindowDeps): BrowserWindow {
     // Never shown since a start in the tray: still maximized for its first showing.
     d.savePlace({ ...b, maximized: win.isMaximized() || maximizeAtShow.has(win) })
   }
+  // Shown to you – minimized too – or hidden in the tray (a hidden window keeps its minimized state).
+  let shown = false
+  win.on('show', () => void (shown = true))
+  // A restore shows a hidden, minimized window without 'show'.
+  win.on('restore', () => void (shown = true))
+  win.on('hide', () => void (shown = false))
   win.on('close', (e) => {
     if (d.quitting()) {
       place()
       return
     }
     e.preventDefault()
-    if (!win.isVisible()) {
+    // Minimized, it is no hidden window (Electron's `isVisible` is false for it on Windows): its close from the taskbar is
+    // yours. Hidden after a minimize it stays minimized – only `shown` tells the two apart.
+    if (!win.isVisible() && !(shown && win.isMinimized())) {
       // Nobody can click the close of a hidden window: an installer or taskkill asks the app to end.
       d.log('okno ukryte dostało polecenie zamknięcia z zewnątrz – kończę pracę')
       d.externalClose()

@@ -108,6 +108,7 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 - Pasek pulpitu „×” (D559, T1975): `CloseBar` (`bar-close`) w pasie 24 px (`BAR_BASE_WIDTH` 504, treść `pr-8`) → `barClose('x'|'quit')`,
   `barCloseOf` tylko od nadawcy `bar`; `barClosed` w `barWanted` do „Pokaż pasek pulpitu” w menu ikony, `desktopBar` false → true albo restartu.
   Dwuklik ikony → `openMainFromIcon`; dwuklik w panelu – `doubleOpensMain` (bez warunku `data-busy` i rozwinięcia).
+- Dwuklik paska pulpitu (D560, T1976): `barDouble.ts` – dwa puszczenia (nie `dblclick`: wciśnięcie często nie dochodzi, T1500) ≤ 500 ms i ≤ 4 px na `freeSpot` → `showMain`. Powrót paska: `barBackWithMain` przy `minimize`/`hide` okna głównego, pref `barBackWithMain` (domyślnie true).
 - Wydarzenia całodniowe (D405, T740–T743): `WidgetView.allDay` (`barAllDay`, dziś = doba logiczna) – kropka i tytuł (≤ 20 znaków, „+N”) z lewej strony pierwszego wiersza
   paska pulpitu (`AllDayLabel`, tylko `desktop`), tylko odczyt, pełne tytuły po najechaniu w miejscu; miejsce zabiera tylko elastyczna nazwa bloku.
 
