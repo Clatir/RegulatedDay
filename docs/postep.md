@@ -67,7 +67,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 13. **1.32.0 – „×” paska pulpitu i dwuklik (D559, T1975):** uwaga użytkownika 20.11 – w 1.31 „×” był tylko w panelu ikony, a na pasku
     pulpitu w rogu stoi 💧 (log: panel nieotwierany od 14.11). Makieta dwóch wariantów, wybrany A: pasek 504 px, „×” w pasie po prawej,
     chowa pasek do „Pokaż pasek pulpitu” (menu ikony) / ustawień / restartu, z Shift kończy; dwuklik ikony i panelu – okno główne.
-    Gałąź `claude/1.32-pasek-x`, jeden PR. Testy: typecheck, `npm test` (304 pliki, 4497), build, lint, E2E (129, 11 pominiętych – tylko CI);
+    Wydane 20.11 (PR #104, `main` c13eca9, run 44717204598, wydanie v1.32.0). Testy: typecheck, `npm test` (304 pliki, 4497), build, lint, E2E (129, 11 pominiętych – tylko CI);
     nowe `tests/unit/bar-close.test.ts`, `tests/web/bar-close.test.ts`, E2E „„×” paska pulpitu (D559)”. Przegląd xhigh: runda 1 – „×” na
     puszczenie (okno bez aktywacji nie słyszy wciśnięcia, T1500), dwuklik w panelu liczy oba wciśnięcia, `barNote` przy schowanym pasku,
     E2E bez stałego opóźnienia; runda 2 – widok paska rozsyłany po zmianie `barClosed`, odmowa w E2E po wpisie w logu. Odbiór PX4–PX6 w `docs/odbior.md`.
