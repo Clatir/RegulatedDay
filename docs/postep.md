@@ -85,6 +85,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
     `OWN` wspólne z panelem; 2 – okno schowane po minimalizacji ignorowało zamknięcie z zewnątrz (instalator) – flaga `shown` + E2E
     z prawdziwym WM_CLOSE, `pointercancel`, `desktopBar` w `barBackWithMain`; 3 – ruch bez przycisku zeruje wciśnięcie, `restore` →
     `shown`, E2E z `finally`. Lokalny instalator `Downloads\Regulated-Day-Setup-1.33.0.exe` (20.11 14:33). Odbiór PX7–PX8 w `docs/odbior.md`.
+    **Wydane:** PR #106 scalony 20.11, CI na `main` zielone (run 44763227083), wydanie v1.33.0 opublikowane 20.11 17:18 UTC.
+    Otwarte pytanie z 1.32: czy wybór miejsca paska w ustawieniach ma pokazywać pasek schowany „×”.
     **Uwagi na później:** okno zmaksymalizowane, zminimalizowane i zamknięte zapisuje się jako niezmaksymalizowane (`isMaximized` false
     przy minimalizacji – stan sprzed 1.33); przy zamknięciu z zewnątrz pasek schowany „×” może mignąć (`quitting` jeszcze false w
     `afterOutsideClose`); klik uchwytu między dwoma puszczeniami nie przerywa pary (3 kliknięcia w 500 ms); `OWN_DOUBLE` w panelu to
