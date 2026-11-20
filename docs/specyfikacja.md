@@ -1353,8 +1353,8 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   górnym rogu (aplikacja działa dalej w zasobniku; „×” z Shift kończy aplikację jak „Zakończ” w menu, D558) albo po 60 s bez
   dotknięcia, liczonych tylko wtedy, gdy kursor jest poza panelem, a warianty ani długości „Przedłuż” nie są rozwinięte
   i nigdy nie otwiera się sam (kliknięcie ikony tuż po takim zamknięciu go nie otwiera ponownie); prawy przycisk
-  pokazuje menu zasobnika. Kliknięcie w wolne pole panelu (poza przyciskiem, polem, linkiem i etykietą; nie przy rozwiniętym
-  elemencie ani koszcie do potwierdzenia) otwiera okno główne (D558). Pasek pulpitu to okno narzędziowe bez aktywacji, bez miejsca na pasku zadań i w Alt+Tab, z
+  pokazuje menu zasobnika (z pozycją „Pokaż pasek pulpitu”, gdy pasek schowano jego „×”), a dwuklik ikony zawsze otwiera okno główne (D559). Kliknięcie w wolne pole panelu (poza przyciskiem, polem, linkiem i etykietą; nie przy rozwiniętym
+  elemencie ani koszcie do potwierdzenia) otwiera okno główne (D558). Dwuklik w panelu gdziekolwiek poza przyciskiem i polem otwiera okno główne zawsze, także przy rozwiniętym elemencie (D559). Pasek pulpitu ma 504 px przy 100% (480 px treści i 24 px po prawej na „×”): „×” chowa pasek (aplikacja działa w zasobniku) do „Pokaż pasek pulpitu” w menu ikony, włączenia paska w ustawieniach albo kolejnego uruchomienia; „×” z Shift kończy aplikację jak „Zakończ” (D559). Pasek pulpitu to okno narzędziowe bez aktywacji, bez miejsca na pasku zadań i w Alt+Tab, z
   nieprzezroczystym tłem, które leży pod innymi oknami: widać je tylko tam, gdzie nic go nie zasłania, samo nigdy nie
   zmienia kolejności okien, pokazywane jest zawsze bez aktywacji, a jego przyciski działają na puszczenie przycisku
   myszy, więc kliknięcie go nie aktywuje (domyślnie włączone, do wyłączenia na każdym komputerze; zachowanie przy „Pokaż

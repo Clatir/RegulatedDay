@@ -64,6 +64,17 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
     (stan sprzed 1.31, teraz blokuje też wolne pole) – zwijać przy `open`?; `data-busy` to drugi kanał obok `onUnfold` – jeden
     `busy` z paska; trzy listy „kontrolka z własnym kliknięciem” (`ownControl`, `isEditable`, `OWN_CLICK`) – jedna w `renderer/lib`.
 
+13. **1.32.0 – „×” paska pulpitu i dwuklik (D559, T1975):** uwaga użytkownika 20.11 – w 1.31 „×” był tylko w panelu ikony, a na pasku
+    pulpitu w rogu stoi 💧 (log: panel nieotwierany od 14.11). Makieta dwóch wariantów, wybrany A: pasek 504 px, „×” w pasie po prawej,
+    chowa pasek do „Pokaż pasek pulpitu” (menu ikony) / ustawień / restartu, z Shift kończy; dwuklik ikony i panelu – okno główne.
+    Gałąź `claude/1.32-pasek-x`, jeden PR. Testy: typecheck, `npm test` (304 pliki, 4497), build, lint, E2E (129, 11 pominiętych – tylko CI);
+    nowe `tests/unit/bar-close.test.ts`, `tests/web/bar-close.test.ts`, E2E „„×” paska pulpitu (D559)”. Przegląd xhigh: runda 1 – „×” na
+    puszczenie (okno bez aktywacji nie słyszy wciśnięcia, T1500), dwuklik w panelu liczy oba wciśnięcia, `barNote` przy schowanym pasku,
+    E2E bez stałego opóźnienia; runda 2 – widok paska rozsyłany po zmianie `barClosed`, odmowa w E2E po wpisie w logu. Odbiór PX4–PX6 w `docs/odbior.md`.
+    **Uwagi na później:** wybór miejsca paska w ustawieniach przy pasku schowanym „×” zapisuje miejsce, ale paska nie pokazuje (pytanie do
+    użytkownika – czy ma go pokazać); dwuklik w przycisk panelu wykonuje akcję dwa razy (`onClick` w trybie panelu, stan sprzed 1.32); „×” paska działa na samo puszczenie, także wciśnięcia zaczętego poza nim – jak każdy
+    przycisk paska pulpitu (T1500), do rozważenia wspólnie dla wszystkich.
+
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
   niżej „Wszystkie punkty” – pełny opis każdego nieodebranego według etapu i numeru, z wersją przy nagłówku. Odebrany

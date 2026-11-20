@@ -135,3 +135,46 @@ describe('panel ikony: „×” i kliknięcie w wolne pole (D558)', () => {
     expect(rd.showMain).not.toHaveBeenCalled()
   })
 })
+
+describe('panel ikony: dwuklik zawsze otwiera okno główne (D559)', () => {
+  /** Two presses (the first on `first`) and the double click on `el` – Chromium's `detail` counts the presses. */
+  const dbl = (el: Element, first: Element = el) =>
+    act(() => {
+      fire(first, 'mousedown', { detail: 1 })
+      fire(el, 'mousedown', { detail: 2 })
+      fire(el, 'dblclick', { detail: 2 })
+    })
+
+  it('dwuklik w wolne pole, w tekst paska i w tekst linii otwiera okno', async () => {
+    act(() => useWidget.setState({ view: lineView() }))
+    const panel = await mount()
+    dbl(panel)
+    dbl(panel.querySelector('[data-testid="bar-block"]')!)
+    dbl(panel.querySelector('[data-testid="bar-line-ended:2026-11-12:b1"] span')!)
+    expect(rd.showMain).toHaveBeenCalledTimes(3)
+  })
+
+  it('dwuklik otwiera okno także z rozwiniętym „+” i z kosztem czekającym na „Potwierdź”', async () => {
+    act(() => useWidget.setState({ view: { ...lineView(), pending: PENDING } }))
+    const panel = await mount()
+    await act(async () => panel.querySelector<HTMLButtonElement>('[data-testid="bar-quick"]')!.click())
+    dbl(panel)
+    expect(rd.showMain).toHaveBeenCalledTimes(1)
+  })
+
+  it('pierwsze kliknięcie na przycisku, drugie na tekście (przycisk zniknął) – okno się nie otwiera', async () => {
+    act(() => useWidget.setState({ view: lineView() }))
+    const panel = await mount()
+    dbl(panel.querySelector('[data-testid="bar-block"]')!, panel.querySelector('[data-testid="bar-act-ended-endedAt"]')!)
+    expect(rd.showMain).not.toHaveBeenCalled()
+  })
+
+  it('dwuklik w przycisk i w pole nie otwiera okna', async () => {
+    act(() => useWidget.setState({ view: lineView() }))
+    const panel = await mount()
+    dbl(panel.querySelector('[data-testid="panel-close"]')!)
+    await act(async () => panel.querySelector<HTMLButtonElement>('[data-testid="bar-quick"]')!.click())
+    dbl(panel.querySelector('[data-testid="bar-quick-title"]')!)
+    expect(rd.showMain).not.toHaveBeenCalled()
+  })
+})

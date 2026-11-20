@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.32.0
+- Pasek pulpitu ma w prawym górnym rogu „×” – pasek jest szerszy o 24 px, więc kropla 💧 i reszta paska stoją jak dotąd. „×” chowa pasek, a aplikacja działa dalej w zasobniku; pasek wraca pozycją „Pokaż pasek pulpitu” w menu ikony (prawy przycisk), po włączeniu paska w ustawieniach albo przy kolejnym uruchomieniu. „×” kliknięty z wciśniętym Shift zamyka całą aplikację.
+- Dwuklik w ikonę przy zegarze zawsze otwiera okno główne.
+- Dwuklik w panelu ikony – gdziekolwiek poza przyciskami i polami, także gdy coś jest rozwinięte – otwiera okno główne.
+
 ## 1.31.0
 - Panel ikony w zasobniku ma w prawym górnym rogu „×”: zamyka panel, a aplikacja działa dalej w tle. „×” kliknięty z wciśniętym Shift zamyka całą aplikację (jak „Zakończ” w menu ikony).
 - Kliknięcie w wolne miejsce panelu ikony (poza przyciskami i polami) otwiera okno główne. Gdy w panelu coś jest rozwinięte (np. „+”, „Skończył się o…”) albo czeka koszt do potwierdzenia, kliknięcie obok nic nie otwiera; przycisk wciśnięty i puszczony obok też nie.

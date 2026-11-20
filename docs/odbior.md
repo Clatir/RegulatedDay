@@ -274,6 +274,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] PX1 Panel ikony: „×” zamyka panel, aplikacja zostaje w zasobniku (1.31.0)
    - [ ] PX2 Panel ikony: „×” z Shift zamyka aplikację (1.31.0)
    - [ ] PX3 Panel ikony: kliknięcie w wolne pole otwiera okno główne (1.31.0)
+   - [ ] PX4 Pasek pulpitu: „×” chowa pasek, „Pokaż pasek pulpitu” w menu ikony go przywraca (1.32.0)
+   - [ ] PX5 Pasek pulpitu: „×” z Shift zamyka aplikację (1.32.0)
+   - [ ] PX6 Dwuklik ikony i panelu otwiera okno główne (1.32.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -2987,6 +2990,29 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** otwórz panel i kliknij w puste miejsce (np. obok nazwy bloku albo w odstęp pod paskiem). Potem otwórz panel, rozwiń „+” i kliknij obok pola.
 - **Oczekiwany efekt:** pierwsze kliknięcie: panel znika, okno główne wychodzi na wierzch; kliknięcie obok rozwiniętego pola nic nie otwiera, a przyciski panelu robią swoje bez otwierania okna.
 - **Nie przechodzi, gdy:** wolne pole nic nie robi; przycisk paska (Start, Pauza, „Prośba ▸”) otwiera dodatkowo okno; wciśnięcie przycisku, zsunięcie i puszczenie obok otwiera okno; kliknięcie przy rozwiniętym polu albo „Skończył się o…” otwiera okno.
+
+### PX – „×” paska pulpitu i dwuklik (1.32.0, D559)
+
+#### PX4 „×” chowa pasek pulpitu, „Pokaż pasek pulpitu” go przywraca
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/bar-close.test.ts`, `tests/unit/bar-close.test.ts`, E2E „„×” paska pulpitu (D559)” w `smoke.spec.ts` (504 px, schowanie, powrót po włączeniu w ustawieniach). **Tylko Ty:** menu ikony i wygląd na pulpicie.
+- **Jak sprawdzić:** spójrz na prawy górny róg paska pulpitu, kliknij „×”. Prawy przycisk na ikonie przy zegarze → „Pokaż pasek pulpitu”.
+- **Oczekiwany efekt:** 💧 stoi jak dotąd, „×” obok niej w osobnym pasie (pasek nieco szerszy); po „×” pasek znika, ikona zostaje; pozycja menu przywraca pasek w tym samym miejscu; bez schowanego paska tej pozycji w menu nie ma.
+- **Nie przechodzi, gdy:** „×” zasłania 💧 albo inny przycisk; „×” nie reaguje na zwykłe kliknięcie; po „×” znika ikona albo aplikacja się kończy; „Pokaż pasek pulpitu” nie przywraca paska; pasek wychodzi poza ekran (pasek przy prawej krawędzi ekranu po aktualizacji stoi o 24 px dalej w lewo – to miejsce na „×”, nie błąd).
+
+#### PX5 „×” paska z Shift zamyka aplikację
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/bar-close.test.ts` (Shift – `quit`). **Tylko Ty:** na prawdziwej aplikacji.
+- **Jak sprawdzić:** przytrzymaj Shift i kliknij „×” na pasku pulpitu. Uruchom aplikację ponownie.
+- **Oczekiwany efekt:** aplikacja kończy się cała, w `main.log` „× paska z Shift – wyjście”; ponowny start normalny, z paskiem na pulpicie.
+- **Nie przechodzi, gdy:** zostaje ikona albo proces; po ponownym starcie pytanie o awarię albo brak paska.
+
+#### PX6 Dwuklik ikony i panelu otwiera okno główne
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/tray.test.ts` (dwuklik idzie do okna), `tests/web/panel-close.test.ts` (dwuklik w panelu – też przy rozwiniętym „+” i koszcie; nie na przycisku i polu). **Tylko Ty:** prawdziwy dwuklik ikony w zasobniku.
+- **Jak sprawdzić:** okno główne schowane – kliknij dwa razy szybko ikonę przy zegarze. Potem otwórz panel, rozwiń „+” i kliknij dwa razy w nazwę bloku.
+- **Oczekiwany efekt:** za każdym razem okno główne wychodzi na wierzch, a panel znika; pojedyncze kliknięcie ikony dalej otwiera panel.
+- **Nie przechodzi, gdy:** po dwukliku ikony zostaje otwarty panel albo okno się nie pokazuje; dwuklik w przycisk panelu otwiera okno (przycisk może zadziałać dwa razy – jak dotąd); pojedynczy klik ikony otwiera okno zamiast panelu.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 

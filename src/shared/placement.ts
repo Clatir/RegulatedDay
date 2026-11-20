@@ -1,14 +1,15 @@
 /**
  * Where the icon's panel and the desktop bar stand (spec „Widget”), pure. Both always stay in the work area of their
- * screen; the bar's width is the smaller of 480 DIP × the interface's scale and the work area's width less 16 DIP.
+ * screen; the bar's width is the smaller of 504 DIP (480 of content and 24 for its „×”, D559) × the interface's scale and the work area's width less 16 DIP.
  */
 import { clampInto, findDisplay, type DisplayInfo, type Rect } from './bounds'
 import type { BarPlacement, BarSpot } from './machine'
 
-export const BAR_BASE_WIDTH = 480
+/** The desktop bar: 480 DIP of content and 24 DIP for its „×” on the right (D559). */
+export const BAR_BASE_WIDTH = 504
 const MARGIN = 8
 
-/** The width of the bar (and the panel) on a work area at a scale. */
+/** The width of the desktop bar on a work area at a scale (the panel is 480 DIP – `place` in the main process). */
 export const barWidth = (workArea: Rect, zoom: number): number => Math.floor(Math.min(BAR_BASE_WIDTH * zoom, workArea.width - 16))
 
 type Edge = 'bottom' | 'top' | 'left' | 'right'

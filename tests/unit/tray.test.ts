@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const images: string[] = []
 const tips: string[] = []
+const handlers = new Map<string, () => void>()
 
 vi.mock('electron', () => ({
   Tray: class {
@@ -19,7 +20,7 @@ vi.mock('electron', () => ({
     isDestroyed = () => false
     setImage = (image: string) => void images.push(image)
     setToolTip = (tip: string) => void tips.push(tip)
-    on = () => undefined
+    on = (event: string, fn: () => void) => void handlers.set(event, fn)
     destroy = () => undefined
   },
   Menu: { buildFromTemplate: () => ({}) }
@@ -39,7 +40,7 @@ function brokenTray() {
   root = mkdtempSync(join(tmpdir(), 'rd-tray-'))
   const iconDir = join(root, 'icons')
   const logs: string[] = []
-  const tray = new AppTray({ title: 'Regulated Day', iconDir, click: () => undefined, menu: () => [], log: (_l, msg) => void logs.push(msg) })
+  const tray = new AppTray({ title: 'Regulated Day', iconDir, click: () => undefined, doubleClick: () => undefined, menu: () => [], log: (_l, msg) => void logs.push(msg) })
   expect(tray.ensure()).toBe(true)
   rmSync(iconDir, { recursive: true, force: true })
   writeFileSync(iconDir, 'not a folder')
@@ -66,5 +67,17 @@ describe('ikona zasobnika przy pliku ikony, którego nie da się zapisać', () =
     tray.set({ color: '#4A7AC2', dot: false, drop: true }, 'Woda')
     expect(() => tray.refresh()).not.toThrow()
     expect(logs.some((m) => m.includes('ikona zasobnika nie odświeżona'))).toBe(true)
+  })
+})
+
+describe('dwuklik ikony (D559)', () => {
+  it('pojedynczy klik idzie do panelu, dwuklik – do okna głównego', () => {
+    root = mkdtempSync(join(tmpdir(), 'rd-tray-'))
+    const calls: string[] = []
+    const tray = new AppTray({ title: 'Regulated Day', iconDir: join(root, 'icons'), click: () => void calls.push('click'), doubleClick: () => void calls.push('double'), menu: () => [], log: () => undefined })
+    expect(tray.ensure()).toBe(true)
+    handlers.get('click')!()
+    handlers.get('double-click')!()
+    expect(calls).toEqual(['click', 'double'])
   })
 })

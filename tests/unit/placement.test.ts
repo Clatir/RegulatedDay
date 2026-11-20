@@ -34,21 +34,21 @@ describe('panel ikony (Widget)', () => {
 })
 
 describe('pasek pulpitu (Widget)', () => {
-  it('szerokość: mniejsza z 480 DIP × skala i obszaru roboczego minus 16 DIP', () => {
-    expect(barWidth(primary.workArea, 1)).toBe(480)
-    expect(barWidth(primary.workArea, 1.5)).toBe(720)
+  it('szerokość: mniejsza z 504 DIP (480 treści + 24 na „×”, D559) × skala i obszaru roboczego minus 16 DIP', () => {
+    expect(barWidth(primary.workArea, 1)).toBe(504)
+    expect(barWidth(primary.workArea, 1.5)).toBe(756)
     expect(barWidth({ x: 0, y: 0, width: 700, height: 500 }, 1.5)).toBe(684)
   })
 
   it('domyślnie lewy dolny róg obszaru roboczego ekranu głównego, rozwija się w górę', () => {
     const r = barRect(null, [primary, second], primary, 1, 64, 200)
-    expect(r.bounds).toEqual({ x: 8, y: 1032 - 8 - 200, width: 480, height: 200 })
+    expect(r.bounds).toEqual({ x: 8, y: 1032 - 8 - 200, width: 504, height: 200 })
     expect(r.growsUp).toBe(true)
   })
 
   it('zapamiętany monitor po nazwie i granicach; odłączony – lewy dolny róg ekranu głównego (D303)', () => {
     const placement = { display: { label: 'LG', bounds: second.bounds }, spot: null, offset: { x: 20, y: 30 } }
-    expect(barRect(placement, [primary, second], primary, 1, 64)).toMatchObject({ bounds: { x: 1940, y: 30, width: 480, height: 64 }, spot: null })
+    expect(barRect(placement, [primary, second], primary, 1, 64)).toMatchObject({ bounds: { x: 1940, y: 30, width: 504, height: 64 }, spot: null })
     // Its monitor gone: the corner, not the same offset there.
     expect(barRect(placement, [primary], primary, 1, 64)).toMatchObject({ display: { id: 1 }, bounds: { x: 8, y: 1032 - 8 - 64 }, spot: 'bottom-left' })
     // Stands at the top: unfolds downwards.
@@ -74,9 +74,9 @@ describe('miejsce paska: makieta i przeciąganie (D303, D304)', () => {
     expect(p.spot).toBe('bottom-right')
     for (const s of BAR_SPOTS) expect(barRect(spotPlacement(primary, s, folded), [primary], primary, 1, 64).spot).toBe(s)
     // The bar grew with a question (92 px): still 8 DIP above the taskbar, not pressed to it.
-    expect(barRect(p, [primary, second], primary, 1, 92).bounds).toEqual({ x: 3200 - 488, y: 672 - 8 - 92, width: 480, height: 92 })
-    // At 150 %: 720 wide, still 8 DIP from the right.
-    expect(barRect(p, [primary, second], primary, 1.5, 96).bounds).toMatchObject({ x: 3200 - 8 - 720, width: 720 })
+    expect(barRect(p, [primary, second], primary, 1, 92).bounds).toEqual({ x: 3200 - 512, y: 672 - 8 - 92, width: 504, height: 92 })
+    // At 150 %: 756 wide, still 8 DIP from the right.
+    expect(barRect(p, [primary, second], primary, 1.5, 96).bounds).toMatchObject({ x: 3200 - 8 - 756, width: 756 })
   })
 
   it('przeciąganie: prostokąt idzie za kursorem także między monitorami (bez skoku), w obrębie obszarów roboczych', () => {
@@ -95,7 +95,7 @@ describe('miejsce paska: makieta i przeciąganie (D303, D304)', () => {
   it('upuszczony pasek: własne miejsce na monitorze pod środkiem, w jego obszarze roboczym; po ponownym starcie stoi tam samo', () => {
     const p = placementAfterDrag({ x: 2100, y: 200, width: 480, height: 64 }, [primary, second], 64, false)
     expect(p).toEqual({ display: { label: 'LG', bounds: second.bounds }, spot: null, offset: { x: 180, y: 200 } })
-    expect(barRect(p, [primary, second], primary, 1, 64).bounds).toEqual({ x: 2100, y: 200, width: 480, height: 64 })
+    expect(barRect(p, [primary, second], primary, 1, 64).bounds).toEqual({ x: 2100, y: 200, width: 504, height: 64 })
     // Let go half on each monitor (middle on the first): put into the first.
     expect(placementAfterDrag({ x: 1600, y: 200, width: 480, height: 64 }, [primary, second], 64, false)).toMatchObject({ display: { label: 'Dell U2720Q' }, offset: { x: 1920 - 480, y: 200 } })
   })
@@ -104,7 +104,7 @@ describe('miejsce paska: makieta i przeciąganie (D303, D304)', () => {
     const p = placementAfterDrag({ x: 600, y: 500, width: 480, height: 300 }, [primary], 64, true)
     expect(p.offset).toEqual({ x: 600, y: 500 + 300 - 64 })
     const r = barRect(p, [primary], primary, 1, 64, 300)
-    expect(r.bounds).toEqual({ x: 600, y: 500, width: 480, height: 300 })
+    expect(r.bounds).toEqual({ x: 600, y: 500, width: 504, height: 300 })
   })
 
   it('monitor nad głównym (ujemne y, inna skala): przeciąganie, przejście przez krawędź i powrót na to samo miejsce (A4-13)', () => {
@@ -116,7 +116,7 @@ describe('miejsce paska: makieta i przeciąganie (D303, D304)', () => {
     // Let go on the upper one: its own place there, back on the same rectangle after a start.
     const p = placementAfterDrag({ x: 408, y: -620, width: 480, height: 64 }, all, 64, false)
     expect(p.display.label).toBe('VG27B')
-    expect(barRect(p, all, primary, 1, 64).bounds).toEqual({ x: 408, y: -620, width: 480, height: 64 })
+    expect(barRect(p, all, primary, 1, 64).bounds).toEqual({ x: 408, y: -620, width: 504, height: 64 })
   })
 
   it('ekran pod punktem po x i y – monitor nad głównym ma te same x (A4-11)', () => {

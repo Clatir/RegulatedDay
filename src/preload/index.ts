@@ -35,6 +35,7 @@ const api: RdApi = {
   placeBar: (display, spot) => ipcRenderer.invoke(CH.placeBar, display, spot),
   panelTouch: () => ipcRenderer.send(CH.panelTouch),
   panelClose: (how) => ipcRenderer.send(CH.panelClose, how),
+  barClose: (how) => ipcRenderer.send(CH.barClose, how),
   barAction: (action, arg) => ipcRenderer.invoke(CH.barAction, action, arg),
   update: () => ipcRenderer.invoke(CH.update),
   onUpdate: (cb) => on(CH.onUpdate, cb),

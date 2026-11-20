@@ -105,6 +105,9 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 - Panel ikony (D558, T1974): „×” (`panel-close`) – `panelClose('x')`, z Shift `panelClose('quit')` → `quitApp`; Esc – `panelClose()`;
   kliknięcie w wolne pole – `opensMain` w `PanelApp.tsx` → `showMain` (wciśnięcie i kliknięcie poza przyciskiem/polem/linkiem/etykietą, nic rozwiniętego, brak `[data-busy]`).
   Nowy stan lokalny paska, który coś rozwija bez `onUnfold`, oznacz `data-busy` – inaczej klik obok otworzy okno.
+- Pasek pulpitu „×” (D559, T1975): `CloseBar` (`bar-close`) w pasie 24 px (`BAR_BASE_WIDTH` 504, treść `pr-8`) → `barClose('x'|'quit')`,
+  `barCloseOf` tylko od nadawcy `bar`; `barClosed` w `barWanted` do „Pokaż pasek pulpitu” w menu ikony, `desktopBar` false → true albo restartu.
+  Dwuklik ikony → `openMainFromIcon`; dwuklik w panelu – `doubleOpensMain` (bez warunku `data-busy` i rozwinięcia).
 - Wydarzenia całodniowe (D405, T740–T743): `WidgetView.allDay` (`barAllDay`, dziś = doba logiczna) – kropka i tytuł (≤ 20 znaków, „+N”) z lewej strony pierwszego wiersza
   paska pulpitu (`AllDayLabel`, tylko `desktop`), tylko odczyt, pełne tytuły po najechaniu w miejscu; miejsce zabiera tylko elastyczna nazwa bloku.
 

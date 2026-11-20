@@ -363,6 +363,32 @@ test('pasek pulpitu wyłączony tuż po włączeniu: spóźnione potwierdzenie p
   }
 })
 
+test('„×” paska pulpitu (D559): 504 px, chowa pasek tylko z jego okna; włączony znowu w ustawieniach wraca', async () => {
+  const { app, page, userData } = await launch()
+  try {
+    await withMainLog(userData, async () => {
+      const barWin = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.getTitle() === 'Regulated Day – pasek').map((w) => ({ visible: w.isVisible(), width: w.getBounds().width }))[0])
+      await expect.poll(async () => (await barWin())?.visible, { timeout: 30_000 }).toBe(true)
+      expect((await barWin())!.width).toBe(504)
+      // Another window asking it changes nothing.
+      await page.evaluate(() => window.rd.barClose('x'))
+      await expect.poll(() => readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => '')).toContain('× paska – odmowa (okno main)')
+      expect((await barWin())!.visible).toBe(true)
+      const bar = await viewPage(app, 'bar')
+      await bar.getByTestId('bar-close').click()
+      await expect.poll(async () => (await barWin())!.visible).toBe(false)
+      // Off and on again in the settings: the bar hidden by its „×” shows.
+      await page.evaluate(async () => {
+        await window.rd.setPrefs({ desktopBar: false })
+        await window.rd.setPrefs({ desktopBar: true })
+      })
+      await expect.poll(async () => (await barWin())!.visible, { timeout: 30_000 }).toBe(true)
+    })
+  } finally {
+    await app.close()
+  }
+})
+
 test('pasek pulpitu bez potwierdzenia pomocnika zostaje ukryty z komunikatem', async () => {
   test.skip(process.env.RD_E2E_REAL_HELPER === '1', 'the stand-in of the helper refuses the bar; the real one confirms it')
   const { app, page, userData } = await launch({ env: { RD_FAKE_HELPER_BAR: 'fail' } })

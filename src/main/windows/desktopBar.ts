@@ -26,6 +26,18 @@ export interface BarApply {
   onTop?: boolean
 }
 
+/**
+ * How the bar's closing asked by a window goes (D559, T1975): „×” (`x`) hides the bar until „Pokaż pasek pulpitu” in the
+ * icon's menu or the next start, „×” with Shift (`quit`) ends the app – both only from the bar's own window; another one
+ * changes nothing (and the log says so).
+ */
+export function barCloseOf(how: unknown, from: string): { hide: boolean; quit: boolean; why: string } {
+  if (from !== 'bar') return { hide: false, quit: false, why: `× paska – odmowa (okno ${from})` }
+  if (how === 'quit') return { hide: false, quit: true, why: '× paska z Shift – wyjście' }
+  if (how === 'x') return { hide: true, quit: false, why: '× paska – schowany do „Pokaż pasek pulpitu”' }
+  return { hide: false, quit: false, why: '× paska – nieznane polecenie' }
+}
+
 export class DesktopBar {
   private readonly win: BrowserWindow
   private visible = false
