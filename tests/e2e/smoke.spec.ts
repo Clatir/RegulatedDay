@@ -371,12 +371,8 @@ test('„×” paska pulpitu (D559): 504 px, chowa pasek tylko z jego okna; wł�
       await expect.poll(async () => (await barWin())?.visible, { timeout: 30_000 }).toBe(true)
       expect((await barWin())!.width).toBe(504)
       // Another window asking it changes nothing.
-      // A send and then an invoke from the same window reach the main process in order: once the invoke answers, the
-      // refusal is done.
-      await page.evaluate(async () => {
-        window.rd.barClose('x')
-        await window.rd.barScreens()
-      })
+      await page.evaluate(() => window.rd.barClose('x'))
+      await expect.poll(() => readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => '')).toContain('× paska – odmowa (okno main)')
       expect((await barWin())!.visible).toBe(true)
       const bar = await viewPage(app, 'bar')
       await bar.getByTestId('bar-close').click()

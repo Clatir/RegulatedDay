@@ -750,8 +750,15 @@ function trayMenu(): MenuItemConstructorOptions[] {
 /** The bar hidden by its „×” shown again (D559): the icon's menu, or the bar switched on again in the settings. */
 function showClosedBar(): void {
   if (!barClosed) return
-  barClosed = false
   log('info', 'pasek pulpitu pokazany ponownie po „×”')
+  setBarClosed(false)
+}
+
+/** The bar hidden by its „×” or not (D559): laid again, and the windows hear the view – its note („Pokaż pasek”) follows. */
+function setBarClosed(closed: boolean): void {
+  if (barClosed === closed) return
+  barClosed = closed
+  broadcast(CH.onWidget, widgetView())
   layoutBar()
 }
 
@@ -786,7 +793,10 @@ async function setPrefs(patch: unknown): Promise<MachinePrefs> {
   // (the same keys again: one Windows refused is tried once more).
   if (touchesShortcut(patch)) quick?.setShortcut(shortcutOf(next))
   // The bar switched on again in the settings: one hidden by its „×” shows too (D559).
-  if (next.desktopBar && !before.desktopBar) barClosed = false
+  if (next.desktopBar && !before.desktopBar && barClosed) {
+    barClosed = false
+    broadcast(CH.onWidget, widgetView())
+  }
   broadcast(CH.onPrefs, next)
   layoutBar()
   await saved.catch(() => undefined)
@@ -899,10 +909,7 @@ function registerIpc(): void {
     // „×” hides the desktop bar until the icon's menu shows it again, with Shift it ends the app (D559).
     const c = barCloseOf(how, viewOf(e.sender))
     log('info', c.why)
-    if (c.hide) {
-      barClosed = true
-      layoutBar()
-    }
+    if (c.hide) setBarClosed(true)
     if (c.quit) quitApp()
   })
   ipcMain.on(CH.showMain, (_e, page?: string) => {

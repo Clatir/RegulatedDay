@@ -70,9 +70,10 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
     Gałąź `claude/1.32-pasek-x`, jeden PR. Testy: typecheck, `npm test` (304 pliki, 4497), build, lint, E2E (129, 11 pominiętych – tylko CI);
     nowe `tests/unit/bar-close.test.ts`, `tests/web/bar-close.test.ts`, E2E „„×” paska pulpitu (D559)”. Przegląd xhigh: runda 1 – „×” na
     puszczenie (okno bez aktywacji nie słyszy wciśnięcia, T1500), dwuklik w panelu liczy oba wciśnięcia, `barNote` przy schowanym pasku,
-    E2E bez stałego opóźnienia. Odbiór PX4–PX6 w `docs/odbior.md`.
+    E2E bez stałego opóźnienia; runda 2 – widok paska rozsyłany po zmianie `barClosed`, odmowa w E2E po wpisie w logu. Odbiór PX4–PX6 w `docs/odbior.md`.
     **Uwagi na później:** wybór miejsca paska w ustawieniach przy pasku schowanym „×” zapisuje miejsce, ale paska nie pokazuje (pytanie do
-    użytkownika – czy ma go pokazać); dwuklik w przycisk panelu wykonuje akcję dwa razy (`onClick` w trybie panelu, stan sprzed 1.32).
+    użytkownika – czy ma go pokazać); dwuklik w przycisk panelu wykonuje akcję dwa razy (`onClick` w trybie panelu, stan sprzed 1.32); „×” paska działa na samo puszczenie, także wciśnięcia zaczętego poza nim – jak każdy
+    przycisk paska pulpitu (T1500), do rozważenia wspólnie dla wszystkich.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
