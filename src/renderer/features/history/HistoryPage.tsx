@@ -55,9 +55,16 @@ export function HistoryPage() {
   }, [pick, records])
   if (!records) return <div className="p-6 text-muted">Czytam historię…</div>
   if (!records.length) return <EmptyState why="Historia jest pusta: wersje zapisują się, gdy zmieniasz albo usuwasz plan, szablon, sprawę, rutynę czy ustawienia." />
-  const kinds = [...new Set(records.map((r) => r.kind))].filter((k) => KIND_NAMES[k])
-  const words = fold(query.trim()).text
-  const found = words ? records.filter((r) => fold(`${nameOf(r)} ${KIND_NAMES[r.kind] ?? ''}`).text.includes(words)) : records
+  // Only the records the list has a name for (the counter, the filters and the list say the same); a day is found by its ISO date too.
+  const known = records.filter((r) => KIND_NAMES[r.kind])
+  const kinds = [...new Set(known.map((r) => r.kind))]
+  const words = fold(query.trim()).text.split(/\s+/).filter(Boolean)
+  const found = words.length
+    ? known.filter((r) => {
+        const text = fold(r.kind === 'day' ? `${nameOf(r)} ${r.id}` : nameOf(r)).text
+        return words.every((w) => text.includes(w))
+      })
+    : known
   const options: FilterOption[] = kinds.map((k) => ({ id: k, label: KIND_NAMES[k]!, count: found.filter((r) => r.kind === k).length }))
   const active = chosenKinds.filter((k) => kinds.includes(k))
   const shown = active.length ? found.filter((r) => active.includes(r.kind)) : found
@@ -65,7 +72,7 @@ export function HistoryPage() {
     <div className="flex min-h-0 flex-1" data-testid="history">
       <div className="flex w-[300px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-line p-3">
         <input type="search" className="input" value={query} placeholder="Szukaj w historii" aria-label="Szukaj w historii" onChange={(e) => setQuery(e.currentTarget.value)} data-testid="history-search" />
-        <FilterBar listKey="history" options={options} shown={shown.length} total={records.length} />
+        <FilterBar listKey="history" options={options} shown={shown.length} total={known.length} />
         {!shown.length && (
           <p className="text-[12.5px] text-muted" data-testid="history-none">
             Nic nie pasuje – zmień szukane słowa albo wyczyść filtry.

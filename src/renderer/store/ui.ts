@@ -234,28 +234,49 @@ export function closeToast(id: number): void {
   useUi.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }))
 }
 
+/** The most messages standing at once. */
+const TOASTS_MAX = 4
+/** An error without an action stays until „×” closes it (UX18); `ms` 0. */
+const pinned = (t: Pick<Toast, 'kind' | 'ms' | 'action'>): boolean => t.kind === 'error' && t.ms === 0 && !t.action
+
 /**
  * A message. An identical one standing (the same text and kind, F7) is not shown twice: it stays and its time starts again. One with
- * an action („Cofnij”) is never merged – two operations with the same words each keep their own `run`. An error (UX18, D565 P26) has
- * no time: it stays until „×” closes it, whatever `ms` says (the argument only keeps the callers as they are).
+ * an action („Cofnij”) is never merged – two operations with the same words each keep their own `run`. An error without an action
+ * (UX18, D565 P26) has no time: it stays until „×” closes it, whatever `ms` says (the argument only keeps the callers as they are); an
+ * error with an action keeps its time (the window of the „Cofnij”), and so does the refusal of a field (`refusalToast` – its words
+ * stand under the field too). Past `TOASTS_MAX` the oldest message goes – an ordinary one first, an error that stays only when
+ * nothing else is standing.
  */
-export function toast(text: string, kind: Toast['kind'] = 'info', ms = 5000, action?: Toast['action']): number {
+export function toast(text: string, kind: Toast['kind'] = 'info', ms = 5000, action?: Toast['action'], timed = false): number {
   const same = action ? undefined : useUi.getState().toasts.find((t) => t.text === text && t.kind === kind && !t.action)
+  const stays = kind === 'error' && !action && !timed
+  // An error that stays is never made to go by the same words as a refusal.
+  const keeps = stays || (same != null && pinned(same))
   const id = same?.id ?? nextToast++
-  const stays = kind === 'error'
-  const time = stays ? 0 : ms
-  if (same) {
-    clearTimeout(timers.get(id))
-    timers.delete(id)
-    useUi.setState((s) => ({ toasts: s.toasts.map((t) => (t.id === id ? { ...t, ms: time } : t)) }))
-  } else useUi.setState((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, kind, ms: time, action }] }))
-  if (!stays)
+  const time = keeps ? 0 : ms
+  clearTimeout(timers.get(id))
+  timers.delete(id)
+  if (same) useUi.setState((s) => ({ toasts: s.toasts.map((t) => (t.id === id ? { ...t, ms: time } : t)) }))
+  else {
+    const all = [...useUi.getState().toasts]
+    while (all.length >= TOASTS_MAX) {
+      const out = all.findIndex((t) => !pinned(t))
+      const [gone] = all.splice(out < 0 ? 0 : out, 1)
+      clearTimeout(timers.get(gone!.id))
+      timers.delete(gone!.id)
+    }
+    useUi.setState({ toasts: [...all, { id, text, kind, ms: time, action }] })
+  }
+  if (!keeps)
     timers.set(
       id,
       setTimeout(() => closeToast(id), ms)
     )
   return id
 }
+
+/** The refusal of a field (D347): an error that goes by itself – the same words stand under the field until it is put right. */
+export const refusalToast = (text: string, ms: number): number => toast(text, 'error', ms, undefined, true)
 
 /** How long a deletion can be undone (spec „Usuwanie”). */
 export const UNDO_MS = 10_000

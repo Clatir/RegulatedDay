@@ -75,7 +75,8 @@ export function BlockEditor({
   forecastEnd,
   forecastStart,
   onEscape,
-  day
+  day,
+  historyOf
 }: {
   block: PlanBlock
   plan: readonly PlanBlock[]
@@ -120,6 +121,8 @@ export function BlockEditor({
    * category. Left out – the day of `place`, else none (a template, a series: used from today on).
    */
   day?: string
+  /** The file of the record „Historia” opens when the place does not say it (a series: the part edited – `series/<id>.json`, UX18); a day's block has its day's plan. */
+  historyOf?: string
 }) {
   useEscapeLayer(true, onEscape ?? onClose)
   const owner = place ? ownerToAdd(block, place) : null
@@ -141,7 +144,7 @@ export function BlockEditor({
   const [making, setMaking] = useState<'routine' | 'variant' | 'category' | null>(null)
   const today = useData((s) => s.view?.today ?? '')
   const blockDay = day ?? (place?.scope === 'day' ? place.date : null)
-  const historyRel = newBlock ? null : blockHistoryRel(place, day)
+  const historyRel = newBlock ? null : (historyOf ?? blockHistoryRel(place, day))
   // A variant and a category are made „od dziś”: a day gone by would not have them (T1067).
   const newDated = blockDay == null || (today !== '' && blockDay >= today)
   const newOption = (dated: boolean) => (readOnly || (dated && !newDated) ? [] : [NEW_OPTION])

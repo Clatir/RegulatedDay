@@ -5,6 +5,7 @@
  * occurrences changed on their own day, stay. A series that has ended is only shown.
  */
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
+import { paths } from '@shared/data/paths'
 import type { Series } from '@shared/model/series'
 import { settingsOn } from '@shared/model/settings'
 import { plDate } from '@shared/format'
@@ -112,6 +113,8 @@ export function SeriesEditor({ series, today, onClosed, onRemoved, guard }: { se
         computers={view.computers}
         inSeries
         place={{ scope: 'series', root: series.root }}
+        // A series split in two has a file for each part: the history of the part edited here, not of the root's.
+        historyOf={paths.record('series', series.id)}
         readOnly={ended}
         onChange={(p) => {
           const b = seriesBlockPatch(p)

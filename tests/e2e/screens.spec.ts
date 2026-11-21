@@ -368,8 +368,8 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await shot(page, 'e3-07-templates')
 
       // UX18 (E7): „Historia” in the template's editor – the history with this template chosen and its versions shown.
-      // (the first one: the open block's panel has its own, further on)
-      await page.getByTestId('template-editor').getByTestId('history-open').first().click()
+      // (the open block's panel in a template has none: the editor's is the only one)
+      await page.getByTestId('template-editor').getByTestId('history-open').click()
       await expect(page.getByTestId('history-versions')).toBeVisible({ timeout: 15_000 })
       // The list: the filter of kinds with the counts, the counter „x z y”, the search narrowing it down.
       await expect(page.getByTestId('filters-history')).toBeVisible()

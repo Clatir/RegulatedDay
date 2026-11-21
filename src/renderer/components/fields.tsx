@@ -9,7 +9,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 import { clock, durationLabel, logicalClock, parseDate, parseDuration, parseInteger, parseLogicalTime, plDate, type Parsed } from '@shared/format'
 import { parseField } from '@shared/model/fields'
 import { nextDayNote, parseEnd } from '@shared/blockEnd'
-import { toast } from '../store/ui'
+import { refusalToast } from '../store/ui'
 import { useEscapeLayer } from '../lib/escape'
 import { cx } from './ui'
 
@@ -115,7 +115,7 @@ export function CommitField<T>({ value, onCommit, parse, format, placeholder, cl
     setDraft(null)
     if ('refused' in r) {
       // Refused: the saved value comes back, the message says why.
-      toast(r.refused, 'error', 6000)
+      refusalToast(r.refused, 6000)
       setError(r.refused)
       onReject?.(r.refused)
       return
@@ -289,7 +289,7 @@ export function TextField({ value, onCommit, max = 80, multiline, placeholder, c
     const v = draft.trim().slice(0, max)
     setDraft(null)
     if (required && !v) {
-      toast('To pole nie może być puste.', 'error', 5000)
+      refusalToast('To pole nie może być puste.', 5000)
       setError('To pole nie może być puste.')
       return
     }

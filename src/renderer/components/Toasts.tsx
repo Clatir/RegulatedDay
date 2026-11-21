@@ -5,7 +5,7 @@ import { cx } from './ui'
 export function Toasts() {
   const toasts = useUi((s) => s.toasts)
   return (
-    <div className="pointer-events-none fixed right-3 bottom-3 z-[60] flex flex-col items-end gap-1.5">
+    <div className="pointer-events-none fixed right-3 bottom-3 z-[60] flex flex-col items-end gap-1.5" data-toast="">
       {toasts.map((t) => (
         <div
           key={t.id}

@@ -28,6 +28,7 @@ import { Choice, DateField, DurationField, EndField, TextField, TimeField } from
 import { HistoryButton } from '../../components/HistoryButton'
 import { EmptyState, Section, cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
+import { openHistoryChecked } from '../../lib/historyOpen'
 import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
 import { DEL_RING, deleteMark, removeTarget, useDeleteResolver, useDeleteSelected, type DeleteTarget } from '../../lib/deleteKey'
@@ -36,7 +37,7 @@ import { addPerson, saveRd, useData } from '../../store/data'
 import { useDay } from '../../store/day'
 import { changeTaskSteps } from '../../store/steps'
 import { tickCaseStep } from '../steps/stepsFinish'
-import { openHistoryOf, takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
+import { takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
 import { groupedCategoryOptions } from '../plan/blockView'
 import { caseTitle, DATE_PRESETS, afterRequestAdded, doDateNote, filterOf, PRIORITY_CHOICES, presetDate, sectionsOf, statusParts, type PriorityChoice } from './casesLogic'
 import { CasesMatrix } from './CasesMatrix'
@@ -350,7 +351,7 @@ function CaseRow({ x, today, marked, group, expanded, onExpand }: { x: CaseItem;
     dates: () => setDating(true),
     steps: () => setStepsOpen(true),
     repeat: () => setRepeating(true),
-    history: () => openHistoryOf(paths.record('request', r.id)),
+    history: () => void openHistoryChecked(paths.record('request', r.id)),
     remove: () => void remove()
   })
   return (
