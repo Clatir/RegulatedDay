@@ -484,6 +484,26 @@ export function freeWeekday(templates: readonly Template[], dayType: DayTypeId):
   return null
 }
 
+/**
+ * `id` for a new template that is never smaller than the id of any of `ids` (`templateFor` lets the smaller id win, quietly): `id` itself
+ * when it is greater than all of them, else an id of the same length just above the greatest of them: its first character below „z”
+ * one step up, the characters before it kept and `id`'s own after it (base-36 order is the order of the strings). An id never grows
+ * (it names the record's file – a path in the data folder); only when the greatest is all „z” does it get `id`'s first four characters
+ * after it. A new template never takes the days of an older one (D563 P3) – the rule of choosing stays as it is.
+ */
+export function idAfter(ids: Iterable<string>, id: string): string {
+  let max = ''
+  for (const x of ids) if (x > max) max = x
+  if (id > max) return id
+  for (let i = 0; i < Math.min(max.length, id.length); i++) {
+    const k = ID_CHARS.indexOf(max[i]!)
+    if (k >= 0 && k < ID_CHARS.length - 1) return `${max.slice(0, i)}${ID_CHARS[k + 1]}${id.slice(i + 1)}`
+  }
+  return `${max}${id.slice(0, 4)}`
+}
+
+const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz'
+
 export function lectureFrom(v: unknown): LectureSeries | null {
   if (!isPlain(v) || typeof v.id !== 'string' || typeof v.categoryId !== 'string' || !isIsoDate(v.from) || !isIsoDate(v.to)) return null
   const weekday = intIn(v.weekday, 1, 7)

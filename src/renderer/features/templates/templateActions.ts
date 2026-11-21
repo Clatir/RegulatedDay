@@ -17,7 +17,7 @@ import { dayFileFrom, templateFor, templateFrom, withTemplateVersion, type PlanB
 import { settingsOn, type SettingsChange } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
-import { editOf, isSaved, rawRecord, trySaveWith, useData, withOwner } from '../../store/data'
+import { editOf, isSaved, rawRecord, tryUpdateRecord, trySaveWith, useData, withOwner } from '../../store/data'
 import { toast, undoToast } from '../../store/ui'
 
 /** The first day a template still makes (today is made from it already). */
@@ -168,4 +168,21 @@ function done(made: Made, out: Awaited<ReturnType<typeof trySaveWith>>, rel: str
  */
 export function freshAfter(fresh: string | null, selected: string | null, shown: string | null): string | null {
   return fresh != null && selected === fresh && shown !== fresh ? fresh : null
+}
+
+/**
+ * „Cofnij” of „Dodano blok” (D563 P2): the block just made on the axis out of the version from `from`, by its id, from the template as it is
+ * now – the inverse of the add only, so what was changed since (its name typed in the panel, another field) stays and never meets a question
+ * of its own. A block that is gone already says there is nothing to take back; a write that did not go through says so.
+ */
+export async function undoAddedBlock(templateId: string, from: string, blockId: string): Promise<void> {
+  let found = false
+  const out = await tryUpdateRecord(paths.record('template', templateId), (raw) => {
+    const t = templateFrom(raw)
+    if (!t?.versions.some((v) => v.from === from && v.blocks.some((b) => b.id === blockId))) return raw
+    found = true
+    return templateJson(withTemplateVersion(t, from, (v) => ({ blocks: v.blocks.filter((b) => b.id !== blockId) })), raw)
+  })
+  if (!found) toast('Tego bloku już nie ma w szablonie – nie ma czego cofać.', 'info', 6000)
+  else if (!isSaved(out)) toast('Nie cofnięto – zapis się nie udał.', 'error', 8000)
 }

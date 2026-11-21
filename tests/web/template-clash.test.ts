@@ -7,7 +7,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { DataView, RawRecord } from '@shared/api'
-import { planBlock, templateFrom, type Template } from '@shared/model/plan'
+import { planBlock, templateFor, templateFrom, type Template } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { installEscape } from '@renderer/lib/escape'
 import { TemplatesPage } from '@renderer/features/templates/TemplatesPage'
@@ -95,6 +95,17 @@ describe('A7: „+ Szablon” przy istniejącym domyślnym', () => {
     await open([t('d', 'Domyślny', []), t('a', 'Cały tydzień', [1, 2, 3, 4, 5, 6, 7])])
     await click(q('template-new'))
     expect(created().weekdays).toEqual([])
+  })
+
+  it('wszystkie dni zajęte: nowy szablon (drugi domyślny) ma id większe od istniejących, więc nigdy nie wygrywa z domyślnym', async () => {
+    const OLD = 'zzzzzzzzzzzzzzzz'
+    await open([t(OLD, 'Domyślny', []), t('zzzzzzzzzzzzzzzy', 'Cały tydzień', [1, 2, 3, 4, 5, 6, 7])])
+    await click(q('template-new'))
+    const now = created()
+    expect(now.weekdays).toEqual([])
+    expect(now.id > OLD).toBe(true)
+    const winner = templateFor([t(OLD, 'Domyślny', []), now], 'zwykly', 3, '2026-12-16')
+    expect(winner?.template.id).toBe(OLD)
   })
 
   it('bez domyślnego – nowy jest domyślnym (jak dotąd)', async () => {

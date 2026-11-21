@@ -282,3 +282,40 @@ test('szablon: klik w pustą oś zapisuje blok od razu i mówi „Dodano blok ·
     await app.close()
   }
 })
+
+test('szablon: „Cofnij” dodanego bloku po wpisaniu nazwy usuwa blok i nie pyta o konflikt z własną zmianą (D563 P2)', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-template-axis-undo2-'))
+  seedAwake(dataDir, [])
+  const empty: Template = { id: 'pusty', name: 'Pusty', dayType: 'zwykly', weekdays: [7], archived: false, versions: [{ from: '2026-01-01', budgetMin: null, maxMin: null, blocks: [] }] }
+  write(dataDir, paths.record('template', empty.id), templateJson(empty))
+  const blocks = () => {
+    const t = templateFrom(readJson(join(dataDir, paths.record('template', empty.id))))
+    return t ? t.versions.flatMap((v) => v.blocks) : []
+  }
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-templates').click()
+      await page.getByTestId('template-item').filter({ hasText: 'Pusty' }).click()
+      const hours = page.getByTestId('template-timeline').getByTestId('timeline-hours')
+      await hours.scrollIntoViewIfNeeded()
+      const box = (await hours.boundingBox())!
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+      await expect(page.getByTestId('block-editor')).toBeVisible({ timeout: 15_000 })
+      const toast = page.getByRole('status').filter({ hasText: 'Dodano blok' })
+      await expect(toast).toBeVisible()
+      // The name typed before „Cofnij” is a change of the template after the add – „Cofnij” takes the block out all the same.
+      await page.keyboard.type('Plan tygodnia')
+      await page.keyboard.press('Enter')
+      await expect.poll(() => blocks().map((b) => b.name)).toEqual(['Plan tygodnia'])
+      await toast.getByTestId('toast-action').click()
+      await expect.poll(() => blocks().length).toBe(0)
+      await expect(page.getByTestId('template-timeline').locator('[data-block-title="Plan tygodnia"]')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
