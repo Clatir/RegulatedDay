@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ BrowserWindow: class {}, shell: {} }))
 
-const { barBackWithMain, barCloseOf, barFromPanel, barWant, switchesBarOn } = await import('../../src/main/windows/desktopBar')
+const { barBackWithMain, barCloseOf, barFromPanel, barWant, switchesBarOn, unclosesBar } = await import('../../src/main/windows/desktopBar')
 
 describe('„×” paska pulpitu', () => {
   it('„×” chowa pasek, z Shift kończy aplikację', () => {
@@ -68,6 +68,12 @@ describe('„Pasek pulpitu” w menu ikony (D564 P16) – ta sama reguła co sto
     expect(barWant('hideBar', { closed: false, desktopBar: false }, 'z menu ikony')).toMatchObject({ closed: false, switchOn: false })
   })
 
+  it('bez zmiany – log mówi „już”, nie „pokazany” / „schowany” (pozycja menu kliknięta po zmianie stanu gdzie indziej)', () => {
+    expect(barWant('showBar', { closed: false, desktopBar: true }, 'z menu ikony')).toEqual({ closed: false, switchOn: false, why: 'pasek pulpitu już pokazany (z menu ikony)' })
+    expect(barWant('hideBar', { closed: true, desktopBar: true }, 'z menu ikony')).toEqual({ closed: true, switchOn: false, why: 'pasek pulpitu już schowany (z menu ikony)' })
+    expect(barFromPanel('showBar', 'panel', { closed: false, desktopBar: true }).why).toBe('pasek pulpitu już pokazany (z panelu ikony)')
+  })
+
   it('panel mówi w logu „z panelu ikony” jak przed P16', () => {
     expect(barFromPanel('showBar', 'panel', { closed: false, desktopBar: false }).why).toBe('pasek pulpitu włączony i pokazany z panelu ikony')
     expect(barFromPanel('hideBar', 'panel', { closed: false, desktopBar: true }).why).toBe('pasek pulpitu schowany z panelu ikony')
@@ -83,5 +89,31 @@ describe('włączenie paska w ustawieniach pokazuje pasek schowany „×” (D56
   it('wyłączenie i każda inna zmiana ustawień – pasek zostaje schowany', () => {
     for (const patch of [{ desktopBar: false }, { zoom: 1.1 }, { barBackWithMain: true }, { barPlacement: null }, { desktopBar: 'true' }, null, undefined, 'desktopBar', [true]])
       expect(switchesBarOn(patch), JSON.stringify(patch)).toBe(false)
+  })
+})
+
+describe('które zapisy ustawień zdejmują „×” (D564 P16; przegląd UX11)', () => {
+  const s = (closed: boolean, before: boolean, after: boolean) => ({ closed, before, after })
+
+  it('przełącznik i „Pokaż pasek” w Ustawieniach – także przy pasku już włączonym', () => {
+    expect(unclosesBar(s(true, true, true), { desktopBar: true }, 'settings')).toBe(true)
+  })
+
+  it('kreator (ten sam `desktopBar: true`, pasek już włączony) – „×” zostaje', () => {
+    expect(unclosesBar(s(true, true, true), { desktopBar: true, stationaryClasses: false }, 'app')).toBe(false)
+  })
+
+  it('wyłączony → włączony – zawsze, niezależnie od kształtu zmiany i od tego, kto ją pisze (stary „×” jest wtedy niewidoczny)', () => {
+    for (const by of ['settings', 'app'] as const) {
+      expect(unclosesBar(s(true, false, true), { desktopBar: true }, by), by).toBe(true)
+      expect(unclosesBar(s(true, false, true), { zoom: 1.1 }, by), by).toBe(true)
+    }
+  })
+
+  it('bez „×”, wyłączenie i inne zmiany – nic', () => {
+    expect(unclosesBar(s(false, true, true), { desktopBar: true }, 'settings')).toBe(false)
+    expect(unclosesBar(s(true, true, false), { desktopBar: false }, 'settings')).toBe(false)
+    expect(unclosesBar(s(true, true, true), { zoom: 1.1 }, 'settings')).toBe(false)
+    expect(unclosesBar(s(true, false, false), { zoom: 1.1 }, 'settings')).toBe(false)
   })
 })

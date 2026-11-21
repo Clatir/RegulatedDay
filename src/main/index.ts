@@ -51,7 +51,7 @@ import { Autostart, HIDDEN_ARG } from './autostart'
 import { AppTray, trayMenuItems } from './tray'
 import { displays, primaryDisplay } from './displays'
 import { createMainWindow, revealMainWindow } from './windows/mainWindow'
-import { DesktopBar, barBackWithMain, barCloseOf, barFromPanel, barWant, switchesBarOn } from './windows/desktopBar'
+import { DesktopBar, barBackWithMain, barCloseOf, barFromPanel, barWant, unclosesBar } from './windows/desktopBar'
 import { IconPanel, panelCloseOf } from './windows/iconPanel'
 import { QUICK_RETRY_MS, QuickWindow, shortcutOf, touchesShortcut } from './windows/quickWindow'
 import { HelperClient, type HelperMessage } from './helper/client'
@@ -814,7 +814,8 @@ async function barAction(action: BarActionId, arg: string | undefined, from: str
 
 // ------------------------------------------------------------------ settings
 
-async function setPrefs(patch: unknown): Promise<MachinePrefs> {
+/** `by`: `settings` – the window's own change (`CH.setPrefs`: the settings' switch, „Pokaż pasek”); `app` – the wizard, the drag, the panel. */
+async function setPrefs(patch: unknown, by: 'settings' | 'app' = 'app'): Promise<MachinePrefs> {
   const before = prefs()
   const next = patchMachinePrefs(before, patch)
   const saved = config.update({ prefs: next })
@@ -823,8 +824,9 @@ async function setPrefs(patch: unknown): Promise<MachinePrefs> {
   // D402, T759: the shortcut of the quick capture changed, switched off or on, or typed again – registered again at once
   // (the same keys again: one Windows refused is tried once more).
   if (touchesShortcut(patch)) quick?.setShortcut(shortcutOf(next))
-  // The bar switched on in the settings – also one on already (D564 P16, C3): one hidden by its „×” shows too (D559).
-  const shown = barClosed && next.desktopBar && switchesBarOn(patch)
+  // The bar switched on – from off by anyone, on already only by the settings (D564 P16, C3; never the wizard's prefs): one hidden by
+  // its „×” shows too (D559).
+  const shown = unclosesBar({ closed: barClosed, before: before.desktopBar, after: next.desktopBar }, patch, by)
   if (shown) {
     barClosed = false
     // Off → on says its own line (the panel, the menu); on already – only the settings' switch and „Pokaż pasek” do this.
@@ -870,7 +872,7 @@ function registerIpc(): void {
     return appInfo()
   })
   handle(CH.prefs, () => prefs())
-  handle(CH.setPrefs, (_e, patch: unknown) => setPrefs(patch))
+  handle(CH.setPrefs, (_e, patch: unknown) => setPrefs(patch, 'settings'))
   handle(CH.autostart, () => autostart!.read())
   handle(CH.setAutostart, async (_e, on: unknown) => {
     const value = on === true

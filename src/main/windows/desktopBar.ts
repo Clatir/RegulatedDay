@@ -44,11 +44,16 @@ export type BarWant = 'showBar' | 'hideBar'
 /**
  * „Schowaj” hides the bar as its „×” does (`closed` – until „pokaż”, the settings, the main window going or the next start);
  * „pokaż” shows it again – one switched off in the settings is switched on on this computer (`switchOn`). Off, there is
- * nothing to hide: the state stays. One rule for the panel's footer and the icon's menu (`by` – where, for the log).
+ * nothing to hide: the state stays. One rule for the panel's footer and the icon's menu (`by` – where, for the log); a word that
+ * changes nothing (a menu popped up before the state changed elsewhere) says „już” in the log.
  */
 export function barWant(want: BarWant, s: { closed: boolean; desktopBar: boolean }, by: string): { closed: boolean; switchOn: boolean; why: string } {
-  if (want === 'hideBar') return s.desktopBar ? { closed: true, switchOn: false, why: `pasek pulpitu schowany ${by}` } : { closed: s.closed, switchOn: false, why: 'pasek pulpitu wyłączony w ustawieniach – nie ma czego chować' }
-  return { closed: false, switchOn: !s.desktopBar, why: s.desktopBar ? `pasek pulpitu pokazany ${by}` : `pasek pulpitu włączony i pokazany ${by}` }
+  if (want === 'hideBar') {
+    if (!s.desktopBar) return { closed: s.closed, switchOn: false, why: 'pasek pulpitu wyłączony w ustawieniach – nie ma czego chować' }
+    return { closed: true, switchOn: false, why: s.closed ? `pasek pulpitu już schowany (${by})` : `pasek pulpitu schowany ${by}` }
+  }
+  if (!s.desktopBar) return { closed: false, switchOn: true, why: `pasek pulpitu włączony i pokazany ${by}` }
+  return { closed: false, switchOn: false, why: s.closed ? `pasek pulpitu pokazany ${by}` : `pasek pulpitu już pokazany (${by})` }
 }
 
 /**
@@ -65,6 +70,15 @@ export function barFromPanel(want: BarWant, from: string, s: { closed: boolean; 
  * its „×” shows with one click (the switch says „schowany”); any other change leaves it hidden.
  */
 export const switchesBarOn = (patch: unknown): boolean => typeof patch === 'object' && patch !== null && (patch as { desktopBar?: unknown }).desktopBar === true
+
+/**
+ * A change of this computer's settings takes the „×” off (D564 P16): the bar switched on from off – always, whoever writes it (the
+ * old „×” is not seen while off, `widgetView` masks it); on already – only by the settings' own word (`settings`: the switch and
+ * „Pokaż pasek” through `CH.setPrefs`), never by the wizard's prefs, which say `desktopBar: true` of a bar simply left on.
+ */
+export function unclosesBar(s: { closed: boolean; before: boolean; after: boolean }, patch: unknown, by: 'settings' | 'app'): boolean {
+  return s.closed && s.after && (!s.before || (by === 'settings' && switchesBarOn(patch)))
+}
 
 /**
  * The main window minimized or closed into the tray (D560): the bar hidden by its „×” comes back when „Pasek wraca z oknem

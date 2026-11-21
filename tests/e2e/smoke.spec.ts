@@ -483,10 +483,16 @@ test('pasek schowany „×” (UX11, D564 P16): Ustawienia i panel to mówią i 
       await expect(page.getByTestId('bar-main').getByTestId('bar-closed')).toHaveCount(0)
       await panel.keyboard.press('Escape')
 
-      // Switched off: nothing is „schowany” any more – no line; the switch turns it on and it shows.
+      // Switched off with the old „×” still kept: nothing is „schowany” any more – no line in the settings nor in the panel
+      // (the main process masks it), the footer says „pokaż”; the switch turns it on and it shows.
       await page.evaluate(() => window.rd.setPrefs({ desktopBar: false }))
       await expect(sw.locator('xpath=..')).toHaveText('wyłączony')
       await expect(line).toHaveCount(0)
+      expect(await page.evaluate(async () => (await window.rd.widget()).barClosed)).toBe(false)
+      await page.evaluate(() => window.rd.barAction('openPanel'))
+      await expect(panel.getByTestId('panel-bar-toggle')).toHaveText('▣ Pasek pulpitu: pokaż')
+      await expect(panel.getByTestId('bar-closed')).toHaveCount(0)
+      await panel.keyboard.press('Escape')
       await sw.click()
       await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
     })

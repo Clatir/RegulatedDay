@@ -1369,7 +1369,7 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   Gdy reguła mówi, że widget jest ukryty, pasek pulpitu znika, a ikona jest szara, bez kroków koloru i bez kropki; lewe
   kliknięcie otwiera wtedy panel tylko z linią stanu („Zajęcia do 15:00”, „Odcinam się od 15:10 · Wracam”, „Prośba ▸”,
   „Zrobione teraz”, „Koniec prośby”, gdy prośba trwa) i z pytaniem, które czeka (np. „Zajęcia skończyły się wcześniej?”
-  na komputerze, na którym użyto komputera, bez kropki, D240). Pasek pulpitu przy każdym pokazaniu pomocnik kładzie tuż
+  na komputerze, na którym użyto komputera, bez kropki, D240), a przy pasku schowanym „×” także z linią „Pasek pulpitu schowany · Pokaż pasek” (D564 P16). Pasek pulpitu przy każdym pokazaniu pomocnik kładzie tuż
   nad pulpitem, pod wszystkimi oknami, zanim się pokaże (SetWindowPos wywołane synchronicznie, bez SWP\_ASYNCWINDOWPOS,
   w osobnym wątku z limitem 2 s, wprost nad najwyższym oknem pulpitu – Progman, WorkerW z ikonami pulpitu
   (SHELLDLL\_DefView) albo widoczne, nieukryte przez system WorkerW z powierzchnią, które nachodzi na pasek; ukryte okna

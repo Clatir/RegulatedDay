@@ -73,6 +73,19 @@ describe('Ustawienia – pasek schowany „×” (D564 P16)', () => {
     expect(setPrefs.mock.calls).toEqual([[{ desktopBar: true }]])
   })
 
+  it('dwuklik w przełącznik „schowany” – pasek pokazany raz; drugie kliknięcie nie wyłącza go po rozesłanym widoku (C8)', async () => {
+    await render({ desktopBar: true, closed: true })
+    await click(q('pref-desktop-bar')!)
+    // The main process shows the bar and sends the view: the switch is ticked before the second click of the pair lands.
+    act(() => useWidget.setState({ view: { ...noFolderView(), barClosed: false } }))
+    expect(q('pref-desktop-bar')!.getAttribute('aria-checked')).toBe('true')
+    await act(async () => void q('pref-desktop-bar')!.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 })))
+    expect(setPrefs.mock.calls).toEqual([[{ desktopBar: true }]])
+    // A key (Space, Enter – detail 0) and a click of its own still switch it.
+    await act(async () => void q('pref-desktop-bar')!.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 })))
+    expect(setPrefs.mock.calls).toEqual([[{ desktopBar: true }], [{ desktopBar: false }]])
+  })
+
   it('„Pokaż pasek” w linii – to samo jednym kliknięciem; dwuklik – raz', async () => {
     await render({ desktopBar: true, closed: true })
     await click(q('settings-bar-show')!)

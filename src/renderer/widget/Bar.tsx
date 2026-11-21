@@ -115,13 +115,14 @@ function BarButton({ mode, onAct, children, testId, pressed, accent, label, repe
 /**
  * Why the desktop bar is not on the screen – in the window and the panel, never on the bar itself: hidden although on
  * (`barNote`, D270 – „Pokaż pasek” lays it again) or, in the panel only, hidden by its „×” (D564 P16 – „Pasek pulpitu schowany
- * · Pokaż pasek” takes the „×” off). The two never stand together: the main process gives no note to a bar hidden by „×”.
+ * · Pokaż pasek” takes the „×” off; also with the widget hidden, „Odcinam się”). The two never stand together: the main process
+ * gives no note to a bar hidden by „×”. `className` – its place in the row of the hidden widget.
  */
-function BarNote({ view, mode }: { view: WidgetView; mode: BarMode }) {
+function BarNote({ view, mode, className }: { view: WidgetView; mode: BarMode; className?: string }) {
   if (mode === 'desktop') return null
   if (view.barNote)
     return (
-      <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted" data-testid="bar-note">
+      <div className={cx('flex flex-wrap items-center gap-1.5 text-[12px] text-muted', className)} data-testid="bar-note">
         {view.barNote}
         <BarButton mode={mode} onAct={() => void window.rd.barAction('placeBar')}>
           {SHOW_BAR_TEXT}
@@ -130,7 +131,7 @@ function BarNote({ view, mode }: { view: WidgetView; mode: BarMode }) {
     )
   if (mode !== 'panel' || !view.barClosed) return null
   return (
-    <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted" data-testid="bar-closed">
+    <div className={cx('flex flex-wrap items-center gap-1.5 text-[12px] text-muted', className)} data-testid="bar-closed">
       {BAR_CLOSED_TEXT}
       <BarButton mode={mode} testId="bar-closed-show" onAct={() => void window.rd.barAction('showBar')}>
         {SHOW_BAR_TEXT}
@@ -999,6 +1000,7 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
             {quickField}
           </div>
         )}
+        <BarNote view={view} mode={mode} className="w-full" />
       </div>
     )
 

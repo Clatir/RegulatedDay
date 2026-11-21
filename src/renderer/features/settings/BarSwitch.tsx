@@ -20,7 +20,8 @@ export function BarSwitch() {
   const sw = barSwitchOf(desktopBar, closed)
   return (
     <div className="flex flex-col items-start gap-1.5">
-      <Toggle checked={sw.checked} onChange={(v) => void setMachinePrefs({ desktopBar: v })} label={sw.label} data-testid="pref-desktop-bar" />
+      {/* Once per double click: shown by the first click, the bar's view ticks the switch – the second would switch it off. */}
+      <Toggle checked={sw.checked} onChange={(v) => void setMachinePrefs({ desktopBar: v })} label={sw.label} once data-testid="pref-desktop-bar" />
       {desktopBar && closed && (
         <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted" data-testid="settings-bar-closed">
           {BAR_CLOSED_TEXT}

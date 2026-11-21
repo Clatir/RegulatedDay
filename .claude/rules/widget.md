@@ -125,13 +125,14 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 - Pasek pulpitu „↗” i „×” (D564 P12, D559, T1975): `BarCorner` (`bar-corner`) w pasie 24 px – u góry `bar-open-main` (`showMain` na puszczenie),
   pod nim „×” (`bar-close`); `BAR_BASE_WIDTH` 504, treść `pr-8` → `barClose('x'|'quit')`,
   `barCloseOf` tylko od nadawcy `bar`; `barClosed` w `barWanted` do pokazania albo restartu.
-- Pasek schowany „×” (D564 P16, UX11): `WidgetView.barClosed` = schowany i włączony (`widgetView`; wyłączony – false). Pokazują go: „Pasek pulpitu” w menu
-  ikony (`trayMenuItems`: zawsze, `type: 'checkbox'`, ptaszek = `barChosen`, klik → `barWant(…, 'z menu ikony')`), stopka panelu, linia `bar-closed`
-  „Pasek pulpitu schowany · Pokaż pasek” (`BarNote` w `Bar`, tylko `mode === 'panel'`, bez ukrytego widgetu; `showBar`), Ustawienia (`settings/BarSwitch.tsx`:
-  przełącznik `barSwitchOf` – „schowany” niezaznaczony, linia `settings-bar-closed`; oba `setPrefs({ desktopBar: true })` – `switchesBarOn` w `setPrefs`
-  zdejmuje „×” także przy pasku już włączonym), wybór miejsca w makiecie (`CH.placeBar` po zapisie miejsca, tylko włączony) i `barBackWithMain`.
-  `barNote` (pomocnik, nieudane położenie) i linia „schowany” nigdy razem – notka tylko bez „×”.
   Dwuklik ikony → `openMainFromIcon`; dwuklik w panelu – `doubleOpensMain` (bez warunku `data-busy` i rozwinięcia).
+- Pasek schowany „×” (D564 P16, UX11): `WidgetView.barClosed` = schowany i włączony (`widgetView`; wyłączony – false). Pokazują go: „Pasek pulpitu” w menu
+  ikony (`trayMenuItems`: zawsze, `type: 'checkbox'`, ptaszek = `barChosen`, klik → `barWant(…, 'z menu ikony')`; bez zmiany log „już …”), stopka panelu, linia `bar-closed`
+  „Pasek pulpitu schowany · Pokaż pasek” (`BarNote` w `Bar`, tylko `mode === 'panel'`, także przy ukrytym widgecie; `showBar`), Ustawienia (`settings/BarSwitch.tsx`:
+  przełącznik `barSwitchOf` – „schowany” niezaznaczony, `Toggle once` – dwuklik działa raz; linia `settings-bar-closed`; oba `setPrefs({ desktopBar: true })` przez
+  `CH.setPrefs` = `by: 'settings'`), wybór miejsca w makiecie (`CH.placeBar` po zapisie miejsca, tylko włączony) i `barBackWithMain`. Które zapisy zdejmują
+  „×” – `unclosesBar`: wyłączony → włączony zawsze, już włączony tylko `settings` (kreator `setPrefs(w.prefs)` nie).
+  `barNote` (pomocnik, nieudane położenie) i linia „schowany” nigdy razem – notka tylko bez „×”.
 - Dwuklik paska pulpitu (D560, T1976): `barDouble.ts` – dwa puszczenia (nie `dblclick`: wciśnięcie często nie dochodzi, T1500) ≤ 500 ms i ≤ 4 px na `freeSpot` → `showMain`. Powrót paska: `barBackWithMain` przy `minimize`/`hide` okna głównego, pref `barBackWithMain` (domyślnie true).
 - Wydarzenia całodniowe (D405, T740–T743): `WidgetView.allDay` (`barAllDay`, dziś = doba logiczna) – kropka i tytuł (≤ 20 znaków, „+N”) z lewej strony pierwszego wiersza
   paska pulpitu (`AllDayLabel`, tylko `desktop`), tylko odczyt, pełne tytuły po najechaniu w miejscu; miejsce zabiera tylko elastyczna nazwa bloku.
