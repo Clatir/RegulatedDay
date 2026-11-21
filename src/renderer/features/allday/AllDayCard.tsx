@@ -80,6 +80,11 @@ export function AllDayCard({
   // Heard before what the press starts where it lands (`useOutsidePointer`: the left button only; a dialog over the card with its overlay –
   // Del's question, D462 – and a toast are no „outside”); a press the card does not let go (`holdGesture`) reaches nothing below.
   const awayRef = useRef<(e: PointerEvent) => void>(() => undefined)
+  // The click held while a save runs – one per save (it starts again with the next).
+  const heldOnce = useRef(false)
+  useEffect(() => {
+    heldOnce.current = false
+  }, [busy])
   useOutsidePointer(true, ref, (e) => e.button > 0 || awayRef.current(e))
   const problems = cardProblems(shown)
 
@@ -105,10 +110,14 @@ export function AllDayCard({
       else onClose()
     })
   awayRef.current = (press) => {
-    // The question „Wolne” is up: the click elsewhere is its „Nie”. A save runs: its click waits (the card is still needed for the question).
+    // A save runs (`yes` too): its first click waits – the card is still needed for the question – and the next closes (D72: a save that
+    // hangs never freezes the window). Then the question „Wolne”: the click elsewhere is its „Nie”.
+    if (busy) {
+      if (heldOnce.current) return onClose()
+      heldOnce.current = true
+      return holdGesture(press)
+    }
     if (ask) return onClose()
-    if (busy) return holdGesture(press)
-    commitActiveField()
     const e = { ...form.current, title: form.current.title.trim() }
     if (!e.title || (base && (Object.keys(e) as Array<keyof AllDayEvent>).every((k) => base[k] === e[k]))) return onClose()
     // Days the wrong way round: the card stays with the message, and the click goes nowhere – another card opened by it would end this one.
