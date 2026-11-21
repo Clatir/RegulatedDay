@@ -315,6 +315,10 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX8.2 PgUp / PgDn / Home na każdym widoku okresów (1.34.0)
    - [ ] UX8.3 Ctrl+N w „Tygodniu”, „3 dniach” i Kalendarzu (1.34.0)
    - [ ] UX8.4 Przycisk „dziś” i pusty dzień Agendy (1.34.0)
+   - [ ] UX17.1 Wiersz sprawy w jednym wierszu, „▸” i „…” (1.34.0)
+   - [ ] UX17.2 Macierz z klawiatury i myszy (1.34.0)
+   - [ ] UX17.3 „Pokaż wszystkie” w filtrze kalendarzy (1.34.0)
+   - [ ] UX17.4 Del przy jednym bloku zaznaczonym w „Tygodniu” (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3325,6 +3329,35 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** przycisk „dziś” na każdym ekranie okresów w bieżącym i innym okresie; „+ Blok” przy pustym dniu Agendy.
 - **Oczekiwany efekt:** przycisk „dziś” zawsze widoczny, wyłączony w bieżącym okresie; „+ Blok” otwiera ten dzień z nowym blokiem.
 - **Nie przechodzi, gdy:** przycisk znika albo jest aktywny w bieżącym okresie; „+ Blok” otwiera inny dzień.
+
+
+#### UX17.1 Wiersz sprawy w jednym wierszu, „▸” i „…”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/cases-ux17.test.ts`, E2E `cases`. Ty: wygląd.
+- **Jak sprawdzić:** Sprawy → Listy, zadanie z terminem i priorytetem; „▸” i „…”; potem otwórz „Powtarzaj”, zmień regułę bez zapisu i przenieś sprawę na inną listę (z „…” i prawym przyciskiem).
+- **Oczekiwany efekt:** jeden wiersz (tytuł, szacunek, termin, „P1”, „Zaplanuj…”, „…”); „▸” pokazuje resztę i zostaje rozwinięte po przeniesieniu; przy niezapisanej regule pada pytanie „Zapisać zmianę powtarzania?”.
+- **Nie przechodzi, gdy:** wiersz w dwóch liniach; „…” nie zamyka się Esc; reguła ginie po cichu przy przeniesieniu.
+
+#### UX17.2 Macierz z klawiatury i myszy
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/cases-ux17.test.ts`, `tests/unit/engine/cases-priority.test.ts`, E2E `cases`. Ty: wygląd fokusu.
+- **Jak sprawdzić:** Macierz: Tab, strzałki, Enter, prawy przycisk; przeciągnij kartę i wróć nią na miejsce.
+- **Oczekiwany efekt:** strzałki chodzą po kartach i polach w swoją stronę; Enter/klik otwiera wiersz w Listach rozwinięty, z fokusem na tytule; prawy przycisk daje „Priorytet ▸”; przeciągnięcie (także wycofane) nie otwiera wiersza.
+- **Nie przechodzi, gdy:** ← przesuwa w prawo; przeciągnięcie przełącza na Listy; karta bez widocznego fokusu.
+
+#### UX17.3 „Pokaż wszystkie” w filtrze kalendarzy
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/calendars-chips.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** odznacz kalendarz, kliknij „Pokaż wszystkie (1)”, uruchom aplikację ponownie.
+- **Oczekiwany efekt:** wszystkie kalendarze włączone, przycisk znika, bloki wracają, po restarcie nadal wszystkie.
+- **Nie przechodzi, gdy:** po restarcie ukrycie wraca; przycisk widać bez odznaczonego kalendarza.
+
+#### UX17.4 Del przy jednym bloku zaznaczonym w „Tygodniu”
+- [ ] Odebrane
+- **Automatycznie:** E2E `group-select`, `tests/web/week-select.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Tygodniu” Ctrl+klik jednego bloku, Del.
+- **Oczekiwany efekt:** „Usunąć „<nazwa>”?”; Esc zostawia, „Usuń” usuwa tylko ten blok.
+- **Nie przechodzi, gdy:** Del nic nie robi; usuwa inne bloki.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
