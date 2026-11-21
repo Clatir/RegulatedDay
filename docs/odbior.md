@@ -319,6 +319,12 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX17.2 Macierz z klawiatury i myszy (1.34.0)
    - [ ] UX17.3 „Pokaż wszystkie” w filtrze kalendarzy (1.34.0)
    - [ ] UX17.4 Del przy jednym bloku zaznaczonym w „Tygodniu” (1.34.0)
+   - [ ] UX14.1 Ustawienia – spis i grupy (1.34.0)
+   - [ ] UX14.2 „Od razu”, jeden pasek „od jutra” i zaplanowane zmiany (1.34.0)
+   - [ ] UX14.3 Szukanie pól w Ustawieniach i Ctrl K (1.34.0)
+   - [ ] UX14.4 Pola paska przy wyłączonym pasku, bez duplikatów (1.34.0)
+   - [ ] UX14.5 „Wycofaj” zaplanowanej zmiany (1.34.0)
+   - [ ] UX14.6 Wycofanie na dwóch komputerach (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3358,6 +3364,49 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** w „Tygodniu” Ctrl+klik jednego bloku, Del.
 - **Oczekiwany efekt:** „Usunąć „<nazwa>”?”; Esc zostawia, „Usuń” usuwa tylko ten blok.
 - **Nie przechodzi, gdy:** Del nic nie robi; usuwa inne bloki.
+
+
+#### UX14.1 Ustawienia – spis i grupy
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/settings-layout.test.ts`, `tests/web/settings-page.test.ts`, E2E `screens`. Ty: wygląd.
+- **Jak sprawdzić:** otwórz Ustawienia, kliknij kolejno każdą pozycję spisu po lewej; zwęź okno.
+- **Oczekiwany efekt:** każda sekcja jednym kliknięciem, grupy: Dzień i energia · Kategorie i kalendarze · Sprawy i szablony · Pasek i powiadomienia · Dane i kopie · O aplikacji; w wąskim oknie spis nad sekcjami.
+- **Nie przechodzi, gdy:** sekcja nieosiągalna ze spisu; spis zasłania treść.
+
+#### UX14.2 „Od razu”, jeden pasek „od jutra” i zaplanowane zmiany
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/settings-planned.test.ts`, E2E `screens`. Ty: rzut oka.
+- **Jak sprawdzić:** zmień budżet w „Typach dni” (od jutra) i przełącz moduł.
+- **Oczekiwany efekt:** jeden pasek „od jutra” nad sekcjami z datą; „Moduły”, „Pasek pulpitu”, „Ten komputer” ze znacznikiem „od razu”; „Zaplanowane zmiany” pokazują pole, wartość i datę.
+- **Nie przechodzi, gdy:** pasek stoi nad „Dane”; lista bez wartości; moduł bez „od razu”.
+
+#### UX14.3 Szukanie pól w Ustawieniach i Ctrl K
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/settings-index.test.ts`, E2E `search`, `screens`. Ty: rzut oka.
+- **Jak sprawdzić:** wpisz „rezerwa” w polu „Szukaj w ustawieniach”, potem to samo w Ctrl K.
+- **Oczekiwany efekt:** „Rezerwa energii” przewija się na środek i jest obwiedziona przez ok. 2 s.
+- **Nie przechodzi, gdy:** brak wyniku; obwódka nie znika; wynik prowadzi do złej sekcji.
+
+#### UX14.4 Pola paska przy wyłączonym pasku, bez duplikatów
+- [ ] Odebrane
+- **Tylko Ty:** wygląd.
+- **Jak sprawdzić:** wyłącz pasek pulpitu; przejrzyj całe Ustawienia.
+- **Oczekiwany efekt:** pola paska widoczne, szare, z jednym wyjaśnieniem; jedna „Wersja”, jeden „Folder danych” (w „Dane”, razem z kopiami); „Tolerancja trafności” w „Trafność planu”.
+- **Nie przechodzi, gdy:** pole paska znika albo daje się przełączyć; dubel etykiety; kopie w dwóch miejscach.
+
+#### UX14.5 „Wycofaj” zaplanowanej zmiany
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/settings-withdraw.test.ts`, `tests/fs/settings-withdraw.test.ts`, `tests/web/settings-withdraw.test.ts`, E2E `screens`. Ty: rzut oka.
+- **Jak sprawdzić:** zmień „Rezerwę energii” (od jutra) → „Zaplanowane zmiany” → „Wycofaj”, potem „Cofnij”; dodaj podkategorię od jutra i kliknij przy niej „Usuń”.
+- **Oczekiwany efekt:** wiersz znika, pole ma poprzednią wartość, dymek „Wycofano zaplanowaną zmianę od …” z „Cofnij”, które przywraca wiersz; podkategoria z zaplanowanym dodaniem znika całkiem; przy późniejszej zmianie tej samej listy – „wycofaj najpierw ją”.
+- **Nie przechodzi, gdy:** wiersz zostaje; „Cofnij” dodaje drugi wiersz; po „Wycofano” wartość dalej obowiązuje od tej daty.
+
+#### UX14.6 Wycofanie na dwóch komputerach
+- [ ] Odebrane
+- **Tylko Ty:** synchronizacja OneDrive.
+- **Jak sprawdzić:** zmiana od jutra na A; po synchronizacji „Wycofaj” na B.
+- **Oczekiwany efekt:** po synchronizacji wiersza nie ma na A ani na B, bez pytania o konflikt.
+- **Nie przechodzi, gdy:** pytanie o konflikt; wiersz wraca; znika inna zmiana zrobiona w tym czasie na A.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
