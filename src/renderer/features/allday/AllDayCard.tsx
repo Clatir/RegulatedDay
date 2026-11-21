@@ -78,10 +78,18 @@ export function AllDayCard({
   const setTried = (v: boolean) => alive.current && setTriedNow(v)
   const [ask, setAskNow] = useState<string[] | null>(null)
   const setAsk = (v: string[] | null) => alive.current && setAskNow(v)
-  // The save that runs now (`save`; null while „Usuń” or „Tak” runs): what it took, and when it ends – a click outside that ends the card meanwhile
-  // still has what was written after it took its copy to save (it follows the running one).
-  const flight = useRef<{ taken: AllDayEvent | null; done: Promise<AllDayEvent | null | undefined> | null } | null>(null)
-  const [busy, run] = useBusy()
+  const [busy, runBusy] = useBusy()
+  // The click held while a save, „Tak” or „Usuń” runs – one per run: it starts again with the next (the end of the run, not an effect on `busy`:
+  // a run that ends in the tick it began would show no change of `busy` at all).
+  const heldOnce = useRef(false)
+  const run = <T,>(fn: () => Promise<T>) =>
+    runBusy(async () => {
+      try {
+        return await fn()
+      } finally {
+        heldOnce.current = false
+      }
+    })
   const computers = useData((s) => s.view?.computers)
   const calendars = useData((s) => s.rd.calendars)
   useEscapeLayer(true, onClose)
@@ -93,55 +101,36 @@ export function AllDayCard({
   // Heard before what the press starts where it lands (`useOutsidePointer`: the left button only; a dialog over the card with its overlay –
   // Del's question, D462 – and a toast are no „outside”); a press the card does not let go (`holdGesture`) reaches nothing below.
   const awayRef = useRef<(e: PointerEvent) => void>(() => undefined)
-  // The click held while a save runs – one per save (it starts again with the next).
-  const heldOnce = useRef(false)
-  useEffect(() => {
-    if (!busy) heldOnce.current = false
-  }, [busy])
   useOutsidePointer(true, ref, (e) => e.button > 0 || awayRef.current(e))
   const problems = cardProblems(shown)
 
-  const save = () => {
-    const mine: NonNullable<typeof flight.current> = { taken: null, done: null }
-    mine.done = run(async () => {
-      flight.current = mine
+  const save = () =>
+    run(async () => {
       commitActiveField()
       const e = { ...form.current, title: form.current.title.trim() }
       const p = cardProblems(e)
       if (p.title || p.dates) {
         setTried(true)
-        return null
+        return
       }
-      mine.taken = e
       const saved = await saveAllDay(e, base)
       if (!saved) {
         // Removed meanwhile (the toast said so): nothing left to edit – the card ends as after „Usuń”. Any other refusal leaves it.
         if (base && allDayGone(base.id)) onClose()
-        return null
+        return
       }
       // The question once (D405): when this save turned „To wolne” on or changed the days of such an event – the days from today on
       // that are not „Wolne” and not closed. Of the event as it stands after the save (another computer's fields included).
       const days = asksFreeAfter(base, saved) ? await askFreeDays(saved, today) : []
       if (days.length) setAsk(days)
       else onClose()
-      return saved
     })
-    return mine.done
-  }
   awayRef.current = (press) => {
-    // A save, „Tak” or „Usuń” runs: its first click waits – the card is still needed for the question – and the next closes (D72: one that
-    // hangs never freezes the window); what was written after the running save took its copy follows it (a refusal of it leaves that to the
-    // next save – the whole of it, against what the card opened with). Then the question „Wolne”: the click elsewhere is its „Nie”.
+    // A save, „Tak” or „Usuń” runs (the fields are read-only meanwhile – nothing is written after it took its copy): its first click waits – the
+    // card is still needed for the question – and the next closes the card, the run ends in the background (D72: one that hangs never freezes
+    // the window). Then the question „Wolne”: the click elsewhere is its „Nie”.
     if (busy) {
-      if (heldOnce.current) {
-        const f = flight.current
-        const e = { ...form.current, title: form.current.title.trim() }
-        const changed = f?.taken && (Object.keys(e) as Array<keyof AllDayEvent>).some((k) => f.taken![k] !== e[k])
-        onClose()
-        if (f?.done && f.taken && changed && e.title && !cardProblems(e).dates)
-          void f.done.then((saved) => saveAllDay(e, saved ? f.taken : base)).catch(() => undefined)
-        return
-      }
+      if (heldOnce.current) return onClose()
       heldOnce.current = true
       return holdGesture(press)
     }
@@ -160,7 +149,6 @@ export function AllDayCard({
   }
   const remove = () =>
     run(async () => {
-      flight.current = null
       if (!base) return
       const raw = await removeAllDay(base.id)
       if (!raw) {
@@ -176,7 +164,6 @@ export function AllDayCard({
   const yes = () =>
     run(async () => {
       if (!ask) return
-      flight.current = null
       const r = await setFreeDays(ask, today)
       if (r.change || r.duringDay) onFree(r)
       // Nothing written (a refused save, every day unreadable – the toast said so): the question stays for another „Tak”.
@@ -212,6 +199,7 @@ export function AllDayCard({
               className="input"
               value={shown.title}
               maxLength={ALL_DAY_TITLE_MAX}
+              readOnly={busy}
               placeholder="Tytuł"
               aria-label="Tytuł"
               aria-invalid={tried && problems.title != null}
@@ -230,10 +218,10 @@ export function AllDayCard({
             )}
           </div>
           <Field label="Od" labelWidth={34}>
-            <DateField value={shown.startDate} onCommit={(v) => set({ startDate: v })} today={today} past aria-label="Od" errorPlacement="below" data-testid="allday-start" />
+            <DateField value={shown.startDate} onCommit={(v) => set({ startDate: v })} today={today} past aria-label="Od" readOnly={busy} errorPlacement="below" data-testid="allday-start" />
           </Field>
           <Field label="Do" labelWidth={34}>
-            <DateField value={shown.endDate} onCommit={(v) => set({ endDate: v })} today={today} past aria-label="Do" errorPlacement="below" data-testid="allday-end" />
+            <DateField value={shown.endDate} onCommit={(v) => set({ endDate: v })} today={today} past aria-label="Do" readOnly={busy} errorPlacement="below" data-testid="allday-end" />
           </Field>
           {problems.dates && (
             <span className="text-[12px] text-rose" role="alert" data-testid="allday-dates-problem">
@@ -248,6 +236,7 @@ export function AllDayCard({
                 aria-label={ALL_DAY_COLOR_NAMES[c]}
                 title={ALL_DAY_COLOR_NAMES[c]}
                 aria-pressed={shown.color === c}
+                disabled={busy}
                 onClick={() => set({ color: c })}
                 className={cx('h-[20px] w-[20px] rounded-full border', shown.color === c ? 'ring-2 ring-lamp ring-offset-1 ring-offset-raised' : 'border-line-strong')}
                 style={{ background: blockFill(ALL_DAY_COLOR_HEX[c], brightness), borderColor: ALL_DAY_COLOR_HEX[c] }}
@@ -262,13 +251,14 @@ export function AllDayCard({
                 options={calendars.map((c) => ({ value: c.id, label: c.name }))}
                 onChange={(id) => set({ calendarId: id === DEFAULT_CALENDAR_ID ? null : id })}
                 aria-label="Kalendarz"
+                disabled={busy}
                 data-testid="allday-calendar"
               />
             </Field>
           )}
-          <NoteEditor value={shown.note} onCommit={(note) => set({ note })} olderComputers={olderComputers(computers ?? [])} />
+          <NoteEditor value={shown.note} onCommit={(note) => set({ note })} olderComputers={olderComputers(computers ?? [])} readOnly={busy} />
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={shown.free} onChange={(e) => set({ free: e.currentTarget.checked })} data-testid="allday-free" />
+            <input type="checkbox" disabled={busy} checked={shown.free} onChange={(e) => set({ free: e.currentTarget.checked })} data-testid="allday-free" />
             To wolne (urlop, wyjazd)
           </label>
           <div className="flex gap-2 pt-1">
