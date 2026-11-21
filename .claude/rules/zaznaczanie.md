@@ -103,7 +103,7 @@ paths:
   Napis „Zaznaczone: N · czas · energia …” (`blockSummary`: minuty kafelka, koszt/h z `TimelineItem.cost`) nad osią od 2; Del dla ≥ 2 – `removeBlocksTarget` („Usunąć 4 bloki?”)
   ma pierwszeństwo przed celem jednego bloku (`useDeleteResolver('block')` – fokus musi być na zaznaczonym).
 - „Tydzień” / „3 dni”: `week/weekSelect.tsx` `useWeekGroup` w `DayGrid` (klucz bloku `blockKey(date, id)`; order `weekOrder` – dzień, potem start; `BlockBox`: `marked`, `onPick` – Ctrl/Shift
-  zaznacza bez otwierania dnia, zwykły klik otwiera jak dotąd; `DayGrid` ma klucz pierwszego dnia, więc inny tydzień, zakres 3 dni i tryb zaczynają bez zaznaczenia); napis `week-selection`.
+  zaznacza bez otwierania dnia, zwykły klik otwiera jak dotąd; `DayGrid` ma klucz pierwszego dnia, więc inny tydzień, zakres 3 dni i tryb zaczynają bez zaznaczenia); napis `week-selection`. Del na kolumnach: ≥ 2 – `removeBlocksTarget`, jeden blok zaznaczony Ctrl+klikiem – `removeTarget` z nazwą bloku (UX17, F8; `useWeekGroup.removeTarget`, wcześniej jeden blok nie był celem Del).
 - Menu „Zmień N bloków” (`groupMenu.ts` – `blockMenu`, czyste: podkategoria i wariant z ✓/„—”, „Koszt…” → okno `GroupCostDialog`, rutyna tylko dla rodzaju „rutyna”, „Przesuń o…” → później /
   wcześniej o 5, 15, 30, 60 i pole, „Przenieś na dzień…” → `GroupMoveDialog`, „Odwołaj”, „Zaparkuj”, „Usuń”; szablon bez trzech działań dnia; wyłączone z powodem wg `MenuBlock.state` (`open` / `begun` / `past` / `off`): wszystkie zaczęte –
   „Żaden blok nie jest niezaczęty”, wszystkie minione, wszystkie zdjęte z planu (zaparkowane, odwołane), żaden nie ma godziny do przesunięcia, różne podkategorie dla wariantu; okno kosztu zaczyna od kosztu

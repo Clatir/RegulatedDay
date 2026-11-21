@@ -26,7 +26,7 @@ import { ownControl } from './usePointerDrag'
  * `onSelected` hears the selection of the panel whenever it changes (in the order shown): the page of the axis, which holds the drag, asks it at the
  * drop and for the ghost what a drag of a sprawa carries (`carriedBy` – the one rule).
  */
-export function CasesPanel({ drag, grab, onPlan, onSelected }: { drag: CaseDragState | null; grab: (id: string, e: React.PointerEvent) => void; onPlan: (item: CaseItem) => void; onSelected?: (selected: readonly CaseItem[]) => void }) {
+export function CasesPanel({ drag, grab, started, onPlan, onSelected }: { drag: CaseDragState | null; grab: (id: string, e: React.PointerEvent) => void; started?: { current: boolean }; onPlan: (item: CaseItem) => void; onSelected?: (selected: readonly CaseItem[]) => void }) {
   const rd = useData((s) => s.rd)
   const { items, today } = useCases()
   // Requests belong to their module (spec „Moduły”): switched off, the panel holds the tasks' alone, as the page does.
@@ -36,7 +36,12 @@ export function CasesPanel({ drag, grab, onPlan, onSelected }: { drag: CaseDragS
   // D527: the selection of the panel (its two lists; Shift and Ctrl+A go within one) – the keys are the panel's only with the focus in it.
   const panel = useRef<HTMLElement>(null)
   const lists = useMemo(() => sections.map((s) => s.items.map((x) => x.record.id)), [sections])
-  const group = useCasesGroup({ view: 'today', items, lists, enabled: true, when: () => panel.current?.contains(document.activeElement) === true, today })
+  const group = useCasesGroup({ view: 'today', items, lists, enabled: true, when: () => panel.current?.contains(document.activeElement) === true, dragStarted: () => {
+      // The click that follows a gesture that started answers once (as on the card of the matrix).
+      const was = started?.current === true
+      if (started) started.current = false
+      return was
+    }, today })
   // D530: a selected sprawa dragged carries the whole selection (the page of the axis hears which – `onSelected`).
   const heard = useRef(onSelected)
   heard.current = onSelected

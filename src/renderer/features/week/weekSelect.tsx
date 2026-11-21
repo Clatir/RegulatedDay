@@ -10,9 +10,9 @@ import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import { removeBlocksTarget, blockKey, blockSummary, menuCtxOf, parseBlockKey, weekOrder, type MenuBlock, type MenuState } from '../plan/groupMenu'
 import { runBlockGroup } from '../plan/groupRun'
 import { BlockGroupMenu } from '../plan/BlockGroupMenu'
-import type { DeleteTarget } from '../../lib/deleteKey'
+import { removeTarget, type DeleteTarget } from '../../lib/deleteKey'
 import { useSelection, type SelectionApi } from '../../lib/useSelection'
-import type { Names } from '../plan/blockView'
+import { blockName, type Names } from '../plan/blockView'
 
 /** Where a block of the columns is in its day for the menu: begun, past without a start, taken off the plan, or still to come. */
 export function stateOfWeek(state: HorizonBlock['state']): MenuState {
@@ -43,7 +43,12 @@ export function useWeekGroup(o: { days: readonly HorizonDay[]; scope: string; to
   const chosen = useMemo(() => sel.selected.flatMap((k) => (byKey.has(k) ? [byKey.get(k)!] : [])), [sel.selected, byKey])
   const summary = useMemo(() => blockSummary(chosen, o.energy), [chosen, o.energy])
   const [menu, setMenu] = useState<{ ids: readonly string[]; at: { x: number; y: number } } | null>(null)
-  const removeTarget = sel.count >= 2 ? removeBlocksTarget(sel.count, () => runBlockGroup('week', [...sel.selected], { kind: 'remove' })) : null
+  // Del: two or more – one question for all; one block selected (Ctrl+click – no panel holds it) – asked by its name (UX17, F8), the same removal.
+  const only = sel.count === 1 ? sel.selected[0] : undefined
+  const onlyBlock = only !== undefined ? byKey.get(only) : undefined
+  const removeKeys = () => runBlockGroup('week', [...sel.selected], { kind: 'remove' })
+  const removeTargetOf: DeleteTarget | null =
+    sel.count >= 2 ? removeBlocksTarget(sel.count, removeKeys) : only !== undefined && onlyBlock ? removeTarget(blockName(onlyBlock.named, o.namesOf(parseBlockKey(only).date)), removeKeys) : null
   // The subcategories, variants and routines to choose from are those of the first selected day (the settings of a date).
   const first = (menu?.ids[0] ? parseBlockKey(menu.ids[0]).date : o.today) || o.today
   const ctx = useMemo(() => menuCtxOf(o.namesOf(first)), [first, o.namesOf])
@@ -64,7 +69,7 @@ export function useWeekGroup(o: { days: readonly HorizonDay[]; scope: string; to
     isMarked: (date, id) => sel.isSelected(blockKey(date, id)),
     mark: (date, id, e) => void sel.onItemClick(blockKey(date, id), { ctrlKey: e.ctrlKey, shiftKey: e.shiftKey }),
     context: (date, id, at) => setMenu({ ids: [...sel.onItemContext(blockKey(date, id))], at }),
-    removeTarget,
+    removeTarget: removeTargetOf,
     overlay: <BlockGroupMenu view="week" menu={menu} onClose={() => setMenu(null)} blocksOf={blocksOf} ctx={ctx} today={o.today} />
   }
 }

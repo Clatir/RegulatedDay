@@ -16,6 +16,6 @@ function minuteAt(x: number, y: number): number | null {
   return p ? dropMinute(p, x, y) : null
 }
 
-export function useCaseDrag(onDrop: (id: string, minute: number, copy: boolean) => void): { drag: CaseDragState | null; grab: (id: string, e: GrabEvent) => void } {
+export function useCaseDrag(onDrop: (id: string, minute: number, copy: boolean) => void): { drag: CaseDragState | null; grab: (id: string, e: GrabEvent) => void; started: { current: boolean } } {
   return usePointerDrag(minuteAt, onDrop)
 }

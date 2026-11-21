@@ -28,7 +28,7 @@ paths:
   nieczytelny rekord osobno (T995).
 - Widoki: `useVisibleBlocks(bloki)` i `useVisibleAllDay(wydarzenia)` (`features/calendars/calendarFilter.ts`) → `{ shown, hiddenCount }`
   (`useVisibleAllDay` także `revealedId`; czyste `filterBlocks`, `filterAllDay`, `calendarSieve` – jedyna droga). Przy jednym kalendarzu (D425) ukrycie nie działa, nieistniejące id nic nie
-  ukrywa; pamięć ukrytych jest zapominana przy jednym kalendarzu, tylko gdy `view.rd` wczytany (T972, T990). `<CalendarChips hiddenCount={…} />` nad widokiem: nic przy jednym kalendarzu, „ukryte: N” gdy N > 0. Pamięć ukrytych:
+  ukrywa; pamięć ukrytych jest zapominana przy jednym kalendarzu, tylko gdy `view.rd` wczytany (T972, T990). `<CalendarChips hiddenCount={…} />` nad widokiem: nic przy jednym kalendarzu, „ukryte: N” gdy N > 0, „Pokaż wszystkie (K)” (`calendar-show-all`, `useCalendarFilter.showAll`; K – odznaczone kalendarze, które istnieją; UX17, F8). Pamięć ukrytych:
   `localStorage` `rd.hiddenCalendars` na tym komputerze, nigdy folder danych. Wpięte (część B, T997–T1012): „Dziś” (`TodayPage`:
   `useVisibleBlocks(items)` – `TimelineItem.categoryId` z `dayAxis`; krzywa, znaczniki i rozsuwanie z dnia, nie z pozycji; `axisWithRevealed` zwraca
   tylko blok z otwartym panelem z podpisem `hiddenIn` – trwający blok ukrytego kalendarza chowa się jak inne, D428; `Timeline` `extent` = godziny wszystkich bloków – D427),

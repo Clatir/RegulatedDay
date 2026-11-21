@@ -44,7 +44,7 @@ async function show(hiddenCount = 0) {
   root = createRoot(host)
   await act(async () => root!.render(createElement(CalendarChips, { hiddenCount })))
   const chips = () => [...host!.querySelectorAll<HTMLElement>('[data-testid="calendar-chip"]')]
-  return { chips, count: () => host!.querySelector('[data-testid="calendar-hidden-count"]')?.textContent ?? null, group: () => host!.querySelector('[data-testid="calendar-chips"]') }
+  return { chips, all: () => host!.querySelector<HTMLElement>('[data-testid="calendar-show-all"]'), count: () => host!.querySelector('[data-testid="calendar-hidden-count"]')?.textContent ?? null, group: () => host!.querySelector('[data-testid="calendar-chips"]') }
 }
 
 describe('żetony kalendarzy', () => {
@@ -75,6 +75,33 @@ describe('żetony kalendarzy', () => {
     host?.remove()
     const some = await show(3)
     expect(some.count()).toBe('ukryte: 3')
+  })
+
+  it('„Pokaż wszystkie” (UX17, F8): jest tylko przy ukrytym kalendarzu, z liczbą ukrytych kalendarzy; jeden klik wraca wszystkie i zapamiętuje to', async () => {
+    const { chips, all } = await show()
+    expect(all()).toBeNull()
+    await act(async () => chips()[1]!.click())
+    await act(async () => chips()[2]!.click())
+    expect(all()!.textContent).toBe('Pokaż wszystkie (2)')
+    expect(all()!.getAttribute('title')).toBe('Ukryte kalendarze: 2')
+    await act(async () => all()!.click())
+    expect(useCalendarFilter.getState().hidden).toEqual([])
+    expect(JSON.parse(localStorage.getItem('rd.hiddenCalendars')!)).toEqual([])
+    expect(chips().map((c) => c.getAttribute('aria-pressed'))).toEqual(['true', 'true', 'true'])
+    expect(all()).toBeNull()
+  })
+
+  it('„Pokaż wszystkie” liczy tylko istniejące kalendarze (zapamiętane id po usuniętym kalendarzu nie liczy się), a klik czyści i je', async () => {
+    useCalendarFilter.setState({ hidden: ['dawny', 'praca'] })
+    const { all } = await show()
+    expect(all()!.textContent).toBe('Pokaż wszystkie (1)')
+    await act(async () => all()!.click())
+    expect(useCalendarFilter.getState().hidden).toEqual([])
+    useCalendarFilter.setState({ hidden: ['dawny'] })
+    act(() => root?.unmount())
+    host?.remove()
+    const stale = await show()
+    expect(stale.all()).toBeNull()
   })
 
   it('jeden kalendarz („Moje”): żetonów nie ma – nie ma czym przełączać', async () => {

@@ -1,7 +1,8 @@
 /**
  * The chips over a view (D419): one per calendar, in its colour; a click checks it or unchecks it (an unchecked calendar's
  * blocks are not in the views of the window), and „ukryte: N” says how many blocks of the view are hidden. With one calendar
- * („Moje” only) there is nothing to switch: no chips.
+ * („Moje” only) there is nothing to switch: no chips. With a calendar unchecked, „Pokaż wszystkie (K)” (K – the unchecked calendars)
+ * checks them all in one click (UX17, F8).
  */
 import { blockFill } from '@shared/theme'
 import { cx } from '../../components/ui'
@@ -13,8 +14,11 @@ export function CalendarChips({ hiddenCount, className }: { hiddenCount: number;
   const calendars = useData((x) => x.rd.calendars)
   const hidden = useCalendarFilter((x) => x.hidden)
   const toggle = useCalendarFilter((x) => x.toggle)
+  const showAll = useCalendarFilter((x) => x.showAll)
   const brightness = useMachine((x) => x.prefs.brightness)
   if (calendars.length < 2) return null
+  // Only the calendars that exist count (a remembered id of a removed one hides nothing); the button still clears them all.
+  const off = calendars.filter((c) => hidden.includes(c.id)).length
   return (
     <div className={cx('flex flex-wrap items-center gap-1.5', className)} role="group" aria-label="Kalendarze" data-testid="calendar-chips">
       {calendars.map((c) => {
@@ -36,6 +40,11 @@ export function CalendarChips({ hiddenCount, className }: { hiddenCount: number;
           </button>
         )
       })}
+      {off > 0 && (
+        <button type="button" className="text-[12px] text-lamp hover:underline" title={`Ukryte kalendarze: ${off}`} onClick={showAll} data-testid="calendar-show-all">
+          Pokaż wszystkie ({off})
+        </button>
+      )}
       {hiddenCount > 0 && (
         <span className="text-[12px] text-muted" data-testid="calendar-hidden-count">
           ukryte: {hiddenCount}

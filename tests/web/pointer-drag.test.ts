@@ -35,12 +35,13 @@ function mountMatrix(over: 'p1' | null) {
   field.dataset.matrixField = 'p1'
   document.body.append(field)
   ;(document as { elementFromPoint: unknown }).elementFromPoint = () => (over ? field : null)
-  const out: { drag: MatrixDragState | null; grab: Grab } = { drag: null, grab: () => undefined }
+  const out: { drag: MatrixDragState | null; grab: Grab; started: { current: boolean } } = { drag: null, grab: () => undefined, started: { current: false } }
   const drops: Array<[string, MatrixField]> = []
   const Probe = () => {
     const h = useMatrixDrag((id, f) => drops.push([id, f]))
     out.drag = h.drag
     out.grab = h.grab
+    out.started = h.started
     return null
   }
   host = document.createElement('div')
@@ -58,6 +59,37 @@ const key = (k: string): KeyboardEvent => {
   act(() => void window.dispatchEvent(e))
   return e
 }
+
+describe('`started` – gest, który się zaczął, nie jest kliknięciem (UX17)', () => {
+  const nextTask = () => new Promise((r) => setTimeout(r, 0))
+
+  it('stoi od przekroczenia progu do następnego taska po końcu gestu – puszczeniu, Esc, blur i ruchu bez przycisku; przed progiem nie stoi', async () => {
+    const { out } = mountMatrix('p1')
+    press(out)
+    ptr('pointermove', 12, 11)
+    expect(out.started.current).toBe(false)
+    ptr('pointerup', 12, 11, 0)
+    await nextTask()
+    expect(out.started.current).toBe(false)
+    const ends: Array<[string, () => void]> = [
+      ['puszczenie', () => ptr('pointerup', 60, 40, 0)],
+      ['Esc', () => void key('Escape')],
+      ['blur', () => act(() => void window.dispatchEvent(new Event('blur')))],
+      ['ruch bez przycisku', () => ptr('pointermove', 70, 50, 0)]
+    ]
+    for (const [name, end] of ends) {
+      press(out)
+      ptr('pointermove', 60, 40)
+      expect(out.started.current, name).toBe(true)
+      end()
+      // The click of the same release is still in this task and sees it …
+      expect(out.started.current, name + ' – tuż po').toBe(true)
+      await nextTask()
+      // … a later click with no press before it (a screen reader's) does not.
+      expect(out.started.current, name + ' – w następnym tasku').toBe(false)
+    }
+  })
+})
 
 describe('przeciąganie sprawy w macierzy – koniec gestu', () => {
   it('puszczenie nad polem zapisuje raz; krótki ruch to klik – bez zapisu', () => {
