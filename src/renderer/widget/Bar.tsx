@@ -15,7 +15,7 @@ import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/r
 import { TITLE_MAX } from '@shared/model/requests'
 import { quickPreview } from '@shared/quickDates'
 import { barBackground, TONE_SETS } from '@shared/theme'
-import { ALL_STEPS_TEXT, barStepText, OPEN_MAIN_TEXT, SEEN_LINE, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from '@shared/widget'
+import { ALL_STEPS_TEXT, BAR_CLOSED_TEXT, barStepText, OPEN_MAIN_TEXT, SEEN_LINE, SHOW_BAR_TEXT, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
 import { useMachine } from '../store/machine'
 import { cx } from '../components/ui'
@@ -109,6 +109,33 @@ function BarButton({ mode, onAct, children, testId, pressed, accent, label, repe
     >
       {children}
     </button>
+  )
+}
+
+/**
+ * Why the desktop bar is not on the screen – in the window and the panel, never on the bar itself: hidden although on
+ * (`barNote`, D270 – „Pokaż pasek” lays it again) or, in the panel only, hidden by its „×” (D564 P16 – „Pasek pulpitu schowany
+ * · Pokaż pasek” takes the „×” off). The two never stand together: the main process gives no note to a bar hidden by „×”.
+ */
+function BarNote({ view, mode }: { view: WidgetView; mode: BarMode }) {
+  if (mode === 'desktop') return null
+  if (view.barNote)
+    return (
+      <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted" data-testid="bar-note">
+        {view.barNote}
+        <BarButton mode={mode} onAct={() => void window.rd.barAction('placeBar')}>
+          {SHOW_BAR_TEXT}
+        </BarButton>
+      </div>
+    )
+  if (mode !== 'panel' || !view.barClosed) return null
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted" data-testid="bar-closed">
+      {BAR_CLOSED_TEXT}
+      <BarButton mode={mode} testId="bar-closed-show" onAct={() => void window.rd.barAction('showBar')}>
+        {SHOW_BAR_TEXT}
+      </BarButton>
+    </div>
   )
 }
 
@@ -1008,14 +1035,7 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
                 ))}
             </div>
           ))}
-          {view.barNote && mode !== 'desktop' && (
-            <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted" data-testid="bar-note">
-              {view.barNote}
-              <BarButton mode={mode} onAct={() => void window.rd.barAction('placeBar')}>
-                Pokaż pasek
-              </BarButton>
-            </div>
-          )}
+          <BarNote view={view} mode={mode} />
           {/* D402: „+” always – also without a day (the main process says why when nothing could be saved). */}
           <div className="flex flex-wrap items-center gap-1.5">
             <QuickButton mode={mode} open={unfold === 'quick'} toggle={() => toggle('quick')} />
@@ -1209,14 +1229,7 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
         {shownLines.map((l) => (
           <Line key={`${l.id}|${opening ?? 0}`} line={l} mode={mode} onSteps={openRoutine} />
         ))}
-        {view.barNote && mode !== 'desktop' && (
-          <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted" data-testid="bar-note">
-            {view.barNote}
-            <BarButton mode={mode} onAct={() => void window.rd.barAction('placeBar')}>
-              Pokaż pasek
-            </BarButton>
-          </div>
-        )}
+        <BarNote view={view} mode={mode} />
       </div>
       {grows === 'down' && unfolded}
     </div>

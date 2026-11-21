@@ -103,9 +103,9 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   `listWhole` (`engine/stepsFlow.ts`, T1120), linia `stepsFinished:<blok>` „Skończono: <nazwa> · Cofnij” przez `ROUTINE_UNDO_MS` (jak
   `routineSaved`, po całym zapisie – T1114), „Cofnij” = `undoAfterSteps` (najpierw koniec; odmowa – nic więcej).
 - Panel ikony – „pilot” (D564 P13, wariant A): nagłówek `panel-head` („Regulated Day” i „×”), pasek, stopka `panel-foot` – `panel-open-main`
-  (`showMain`), `panel-bar-toggle` według zamiaru, nie widoczności: „▣ Pasek pulpitu: schowaj” przy `prefs.desktopBar && !view.barClosed` (także gdy
+  (`showMain`), `panel-bar-toggle` według zamiaru, nie widoczności: „▣ Pasek pulpitu: schowaj” przy `barChosen(prefs.desktopBar, view.barClosed)` (`shared/widget.ts`; także gdy
   pasek chwilowo ukrywa reguła, brak pomocnika albo pełny ekran), inaczej „pokaż” → `barAction('hideBar' | 'showBar')` → `barFromPanel(chcę, nadawca,
-  stan)` w `windows/desktopBar.ts` (tylko od `panel`): `setBarClosed` albo `setPrefs({ desktopBar: true })`. Powód ukrycia (`barProblem`) zmienia tylko
+  stan)` w `windows/desktopBar.ts` (tylko od `panel`; reguła `barWant` wspólna z menu ikony) → `setBarWant`: `setBarClosed` albo `setPrefs({ desktopBar: true })`. Powód ukrycia (`barProblem`) zmienia tylko
   `setBarProblem` – rozsyła widok przy zmianie (notka `barNote`). `panel-quit` (`panelClose('quit')`). Nagłówek i stopka (`data-panel-chrome`) nie są wolnym polem. Jedna nazwa
   okna i wyjścia: `OPEN_MAIN_TEXT` / `QUIT_APP_TEXT` (`shared/widget.ts`) – menu ikony (`trayMenuItems` w `tray.ts`), stopka, „↗”, linia bez folderu.
   Każde otwarcie wysyła `rd:panelTarget` = `PanelOpening { target, reopened }` (`reopened` – panel był schowany): tylko wtedy `PanelApp` liczy
@@ -124,7 +124,13 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   nagłówka i stopki panelu (`PanelButton`) – to samo `detail`.
 - Pasek pulpitu „↗” i „×” (D564 P12, D559, T1975): `BarCorner` (`bar-corner`) w pasie 24 px – u góry `bar-open-main` (`showMain` na puszczenie),
   pod nim „×” (`bar-close`); `BAR_BASE_WIDTH` 504, treść `pr-8` → `barClose('x'|'quit')`,
-  `barCloseOf` tylko od nadawcy `bar`; `barClosed` w `barWanted` do „Pokaż pasek pulpitu” w menu ikony, `desktopBar` false → true albo restartu.
+  `barCloseOf` tylko od nadawcy `bar`; `barClosed` w `barWanted` do pokazania albo restartu.
+- Pasek schowany „×” (D564 P16, UX11): `WidgetView.barClosed` = schowany i włączony (`widgetView`; wyłączony – false). Pokazują go: „Pasek pulpitu” w menu
+  ikony (`trayMenuItems`: zawsze, `type: 'checkbox'`, ptaszek = `barChosen`, klik → `barWant(…, 'z menu ikony')`), stopka panelu, linia `bar-closed`
+  „Pasek pulpitu schowany · Pokaż pasek” (`BarNote` w `Bar`, tylko `mode === 'panel'`, bez ukrytego widgetu; `showBar`), Ustawienia (`settings/BarSwitch.tsx`:
+  przełącznik `barSwitchOf` – „schowany” niezaznaczony, linia `settings-bar-closed`; oba `setPrefs({ desktopBar: true })` – `switchesBarOn` w `setPrefs`
+  zdejmuje „×” także przy pasku już włączonym), wybór miejsca w makiecie (`CH.placeBar` po zapisie miejsca, tylko włączony) i `barBackWithMain`.
+  `barNote` (pomocnik, nieudane położenie) i linia „schowany” nigdy razem – notka tylko bez „×”.
   Dwuklik ikony → `openMainFromIcon`; dwuklik w panelu – `doubleOpensMain` (bez warunku `data-busy` i rozwinięcia).
 - Dwuklik paska pulpitu (D560, T1976): `barDouble.ts` – dwa puszczenia (nie `dblclick`: wciśnięcie często nie dochodzi, T1500) ≤ 500 ms i ≤ 4 px na `freeSpot` → `showMain`. Powrót paska: `barBackWithMain` przy `minimize`/`hide` okna głównego, pref `barBackWithMain` (domyślnie true).
 - Wydarzenia całodniowe (D405, T740–T743): `WidgetView.allDay` (`barAllDay`, dziś = doba logiczna) – kropka i tytuł (≤ 20 znaków, „+N”) z lewej strony pierwszego wiersza

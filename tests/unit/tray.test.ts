@@ -82,29 +82,42 @@ describe('dwuklik ikony (D559)', () => {
   })
 })
 
-describe('menu ikony – jedna nazwa okna głównego i wyjścia (C7, D564 P13, P20)', () => {
+describe('menu ikony – jedna nazwa okna głównego i wyjścia (C7, D564 P13, P20), „Pasek pulpitu” z ptaszkiem zawsze (P16)', () => {
   const acts = () => {
     const calls: string[] = []
-    return { calls, a: { showMain: () => void calls.push('main'), showBar: () => void calls.push('bar'), install: () => void calls.push('install'), quit: () => void calls.push('quit') } }
+    return { calls, a: { showMain: () => void calls.push('main'), bar: (want: 'showBar' | 'hideBar') => void calls.push(want), install: () => void calls.push('install'), quit: () => void calls.push('quit') } }
   }
   const labels = (items: ReturnType<typeof trayMenuItems>) => items.map((i) => (i.type === 'separator' ? '—' : i.label))
+  const barItem = (items: ReturnType<typeof trayMenuItems>) => items.find((i) => i.label === 'Pasek pulpitu')!
 
-  it('„Otwórz okno główne” na górze, „Zakończ aplikację” na dole; każda pozycja robi swoje', () => {
+  it('„Otwórz okno główne” na górze, „Pasek pulpitu” pod nim, „Zakończ aplikację” na dole; każda pozycja robi swoje', () => {
     const { calls, a } = acts()
     const items = trayMenuItems({ barClosed: false, desktopBar: true, ready: null }, a)
-    expect(labels(items)).toEqual(['Otwórz okno główne', '—', 'Zakończ aplikację'])
+    expect(labels(items)).toEqual(['Otwórz okno główne', 'Pasek pulpitu', '—', 'Zakończ aplikację'])
     for (const i of items) (i.click as (() => void) | undefined)?.()
-    expect(calls).toEqual(['main', 'quit'])
+    expect(calls).toEqual(['main', 'hideBar', 'quit'])
   })
 
-  it('pasek schowany „×” – „Pokaż pasek pulpitu”; gotowa aktualizacja – „Zainstaluj teraz (…)”', () => {
+  it('ptaszek według zamiaru, nie widoczności: włączony i bez „×” – zaznaczony, klik chowa; schowany „×” i wyłączony – bez ptaszka, klik pokazuje', () => {
+    const { calls, a } = acts()
+    const on = barItem(trayMenuItems({ barClosed: false, desktopBar: true, ready: null }, a))
+    expect([on.type, on.checked]).toEqual(['checkbox', true])
+    // Closed by its „×”, and switched off in the settings: the item stays (it was gone when off before UX11).
+    for (const s of [{ barClosed: true, desktopBar: true }, { barClosed: false, desktopBar: false }, { barClosed: true, desktopBar: false }]) {
+      const item = barItem(trayMenuItems({ ...s, ready: null }, a))
+      expect([item.type, item.checked], JSON.stringify(s)).toEqual(['checkbox', false])
+      ;(item.click as () => void)()
+    }
+    ;(on.click as () => void)()
+    expect(calls).toEqual(['showBar', 'showBar', 'showBar', 'hideBar'])
+  })
+
+  it('gotowa aktualizacja – „Zainstaluj teraz (…)” pod „Pasek pulpitu”', () => {
     const { calls, a } = acts()
     const items = trayMenuItems({ barClosed: true, desktopBar: true, ready: '1.34.0' }, a)
-    expect(labels(items)).toEqual(['Otwórz okno główne', 'Pokaż pasek pulpitu', 'Zainstaluj teraz (1.34.0)', '—', 'Zakończ aplikację'])
+    expect(labels(items)).toEqual(['Otwórz okno główne', 'Pasek pulpitu', 'Zainstaluj teraz (1.34.0)', '—', 'Zakończ aplikację'])
     for (const i of items) (i.click as (() => void) | undefined)?.()
-    expect(calls).toEqual(['main', 'bar', 'install', 'quit'])
-    // Switched off in the settings: no „Pokaż pasek pulpitu” (as before – UX11 changes it).
-    expect(labels(trayMenuItems({ barClosed: true, desktopBar: false, ready: null }, a))).toEqual(['Otwórz okno główne', '—', 'Zakończ aplikację'])
+    expect(calls).toEqual(['main', 'showBar', 'install', 'quit'])
   })
 })
 

@@ -8,7 +8,7 @@
  * with something unfolded or waiting. Opened again, it shows nothing unfolded from before it hid (C8).
  */
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
-import { OPEN_MAIN_TEXT, QUIT_APP_TEXT } from '@shared/widget'
+import { OPEN_MAIN_TEXT, QUIT_APP_TEXT, barChosen } from '@shared/widget'
 import { setWindowEscape } from '../lib/escape'
 import { useMachine } from '../store/machine'
 import { useWidget } from '../store/widget'
@@ -100,7 +100,7 @@ export function PanelApp() {
   }
   // By your intention, not by what is on the screen now (D564 P13): on in the settings and not hidden by its „×” – „schowaj”
   // (also while a rule, the helper or a full screen keeps it away for a while); else „pokaż” (takes the „×” off, switches it on).
-  const barOn = desktopBar && !view?.barClosed
+  const barOn = barChosen(desktopBar, !!view?.barClosed)
   return (
     <div ref={ref} className="flex flex-col gap-2 border border-line-strong bg-panel p-2" data-testid="panel" onPointerDown={onPress} onPointerUp={onRelease} onClick={freeClick} onMouseDown={onMouseDown} onDoubleClick={(e) => doubleOpensMain(firstPress.current, e.target) && window.rd.showMain()}>
       <div className="flex items-center justify-between gap-2 pl-1" data-testid="panel-head" data-panel-chrome="">

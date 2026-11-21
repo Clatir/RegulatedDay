@@ -10,7 +10,7 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:
 import { join } from 'node:path'
 import { Menu, Tray, type MenuItemConstructorOptions } from 'electron'
 import { TRAY_SIZES, renderTrayIcon, trayIconKey, type TrayIconState } from '@shared/trayIcon'
-import { OPEN_MAIN_TEXT, QUIT_APP_TEXT } from '@shared/widget'
+import { BAR_MENU_TEXT, OPEN_MAIN_TEXT, QUIT_APP_TEXT, barChosen } from '@shared/widget'
 import { encodeIco, encodePng } from './icon/ico'
 
 /** What the icon's menu depends on: the bar hidden by its „×”, switched on in the settings, an update ready to install. */
@@ -23,19 +23,23 @@ export interface TrayMenuState {
 
 export interface TrayMenuActs {
   showMain: () => void
-  showBar: () => void
+  /** „Pasek pulpitu” clicked: shown again (switched on) or hidden as by its „×” – the panel's rule (`barWant`). */
+  bar: (want: 'showBar' | 'hideBar') => void
   install: () => void
   quit: () => void
 }
 
 /**
  * The icon's menu (right click): the main window and the end of the app by their one name each – the same words as the
- * panel's footer (C7, D564 P13, P20); „Pokaż pasek pulpitu” only for the bar hidden by its „×” (D559).
+ * panel's footer (C7, D564 P13, P20); „Pasek pulpitu” always (D564 P16), ticked by your choice as the footer's „schowaj” – on and
+ * not hidden by its „×”, also while the helper or a failed laying keeps it away; unticked (hidden by „×”, off in the settings)
+ * its click shows it.
  */
 export function trayMenuItems(s: TrayMenuState, a: TrayMenuActs): MenuItemConstructorOptions[] {
+  const on = barChosen(s.desktopBar, s.barClosed)
   return [
     { label: OPEN_MAIN_TEXT, click: () => a.showMain() },
-    ...(s.barClosed && s.desktopBar ? [{ label: 'Pokaż pasek pulpitu', click: () => a.showBar() }] : []),
+    { label: BAR_MENU_TEXT, type: 'checkbox', checked: on, click: () => a.bar(on ? 'hideBar' : 'showBar') },
     ...(s.ready ? [{ label: `Zainstaluj teraz (${s.ready})`, click: () => a.install() }] : []),
     { type: 'separator' },
     { label: QUIT_APP_TEXT, click: () => a.quit() }

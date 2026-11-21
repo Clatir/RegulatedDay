@@ -246,7 +246,7 @@ export interface PanelOpening {
   reopened: boolean
 }
 
-/** How the desktop bar is closed (D559): its „×” hides it until „Pokaż pasek pulpitu” in the icon's menu or the next start, with Shift – the app ends. */
+/** How the desktop bar is closed (D559): its „×” hides it until it is shown again (the icon's menu, the panel, the settings – D564 P16) or the next start, with Shift – the app ends. */
 export type BarCloseHow = 'x' | 'quit'
 
 export interface HelperStatus {

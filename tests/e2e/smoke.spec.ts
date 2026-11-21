@@ -420,6 +420,81 @@ test('„×” paska pulpitu (D559): 504 px, chowa pasek tylko z jego okna; wł�
   }
 })
 
+test('pasek schowany „×” (UX11, D564 P16): Ustawienia i panel to mówią i jednym kliknięciem go pokazują – „Pokaż pasek”, przełącznik, miejsce paska', async () => {
+  const { app, page, userData } = await launch({ data: true })
+  try {
+    await withMainLog(userData, async () => {
+      const barShown = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – pasek' && w.isVisible()))
+      const log = () => readFile(join(userData, 'logs', 'main.log'), 'utf8').catch(() => '')
+      await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
+      // The main window stays in front all along (no „Pasek wraca z oknem głównym” here).
+      const bar = await viewPage(app, 'bar')
+      const close = async () => {
+        await bar.getByTestId('bar-close').click()
+        await expect.poll(barShown).toBe(false)
+      }
+      await page.getByTestId('nav-settings').click()
+      const sw = page.getByTestId('pref-desktop-bar')
+      const line = page.getByTestId('settings-bar-closed')
+      await expect(sw).toHaveAttribute('aria-checked', 'true')
+      await expect(sw.locator('xpath=..')).toHaveText('włączony')
+      await expect(line).toHaveCount(0)
+
+      // Hidden by „×”: the settings say „schowany” – no „włączony” – with the line; „Pokaż pasek” brings it back.
+      await close()
+      await expect(sw).toHaveAttribute('aria-checked', 'false')
+      await expect(sw.locator('xpath=..')).toHaveText('schowany')
+      await expect(line).toHaveText('Pasek pulpitu schowanyPokaż pasek')
+      await page.getByTestId('settings-bar-show').click()
+      await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
+      await expect(line).toHaveCount(0)
+      await expect(sw).toHaveAttribute('aria-checked', 'true')
+      await expect.poll(log).toContain('pasek pulpitu pokazany ponownie po „×” – włączony w ustawieniach')
+
+      // One click on the switch shows it (in 1.33 only off → on did).
+      await close()
+      await sw.click()
+      await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
+      expect(await page.evaluate(async () => (await window.rd.prefs()).desktopBar)).toBe(true)
+
+      // A place chosen in the settings shows it – at the new place (the open question of 1.32).
+      await close()
+      await page.getByTestId('bar-place-1-bottom-right').click()
+      await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
+      await expect(page.getByTestId('bar-place-1-bottom-right')).toHaveAttribute('aria-pressed', 'true')
+      await expect.poll(log).toContain('pasek pulpitu pokazany ponownie po „×” – miejsce wybrane w ustawieniach')
+
+      // The icon's panel: the same line above its footer; „Pokaż pasek” there brings it back too.
+      await close()
+      await page.evaluate(() => window.rd.barAction('openPanel'))
+      const panel = await viewPage(app, 'panel')
+      await expect(panel.getByTestId('bar-closed')).toHaveText('Pasek pulpitu schowanyPokaż pasek')
+      await expect(panel.getByTestId('panel-bar-toggle')).toHaveText('▣ Pasek pulpitu: pokaż')
+      await panel.getByTestId('bar-closed-show').click()
+      await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
+      await expect(panel.getByTestId('bar-closed')).toHaveCount(0)
+      await expect(panel.getByTestId('panel-bar-toggle')).toHaveText('▣ Pasek pulpitu: schowaj')
+      await expect.poll(log).toContain('pasek pulpitu pokazany z panelu ikony')
+      // The window's own bar never has the line (P16: the panel and the settings).
+      await close()
+      // Opened again if anything closed it meanwhile (asked while open, it only stays).
+      await page.evaluate(() => window.rd.barAction('openPanel'))
+      await expect(panel.getByTestId('bar-closed')).toBeVisible()
+      await expect(page.getByTestId('bar-main').getByTestId('bar-closed')).toHaveCount(0)
+      await panel.keyboard.press('Escape')
+
+      // Switched off: nothing is „schowany” any more – no line; the switch turns it on and it shows.
+      await page.evaluate(() => window.rd.setPrefs({ desktopBar: false }))
+      await expect(sw.locator('xpath=..')).toHaveText('wyłączony')
+      await expect(line).toHaveCount(0)
+      await sw.click()
+      await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
+    })
+  } finally {
+    await app.close()
+  }
+})
+
 test('pasek schowany „×” wraca z oknem głównym, przełącznik w ustawieniach; dwuklik paska otwiera okno (D560)', async () => {
   const { app, page, userData } = await launch()
   try {

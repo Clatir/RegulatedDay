@@ -33,7 +33,7 @@ export interface MachinePrefs {
   desktopBar: boolean
   /**
    * The desktop bar hidden by its „×” (D559) shows again when the main window is minimized or closed (D560, on by default);
-   * off – only „Pokaż pasek pulpitu” in the icon's menu, the settings or the next start show it.
+   * off – only „Pasek pulpitu” in the icon's menu, the panel, the settings (D564 P16) or the next start show it.
    */
   barBackWithMain: boolean
   /** The icon's panel and the desktop bar stay out of recordings and screen sharing. */

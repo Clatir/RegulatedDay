@@ -16,6 +16,7 @@ import { SHORTCUTS } from '../../lib/shortcuts'
 import { phaseText, updateAction } from '../../store/update'
 import { takeFoundPick, takePick, toast, useUi } from '../../store/ui'
 import { BarPlaceMap } from './BarPlaceMap'
+import { BarSwitch } from './BarSwitch'
 import { QuickKeyField } from './QuickKeyField'
 import { QUICK_KEY_HELP } from './quickKey'
 import { CalendarsSection } from './CalendarsSection'
@@ -119,7 +120,7 @@ export function SettingsPage() {
           />
         </Field>
         <Field label="Pasek pulpitu" hint={barNote ?? (prefs.onTop !== 'off' ? 'Leży nad oknami (Zawsze na wierzchu), bez zabierania fokusu; chowa się nad pełnym ekranem i przy oknie głównym na pierwszym planie.' : 'Leży pod oknami innych aplikacji – widać go tam, gdzie nic go nie zasłania.')}>
-          <Toggle checked={prefs.desktopBar} onChange={(v) => void setMachinePrefs({ desktopBar: v })} label={prefs.desktopBar ? 'włączony' : 'wyłączony'} data-testid="pref-desktop-bar" />
+          <BarSwitch />
         </Field>
         {prefs.desktopBar && (
           <Field
@@ -127,7 +128,7 @@ export function SettingsPage() {
             hint={
               prefs.barBackWithMain
                 ? 'Pasek schowany „×” pojawia się znowu, gdy minimalizujesz albo zamykasz okno główne.'
-                : 'Pasek schowany „×” wraca tylko z „Pokaż pasek pulpitu” w menu ikony, z ustawień albo po ponownym uruchomieniu.'
+                : 'Pasek schowany „×” wraca tylko z „Pasek pulpitu” w menu ikony, z panelu ikony, z ustawień albo po ponownym uruchomieniu.'
             }
           >
             <Toggle
@@ -138,7 +139,7 @@ export function SettingsPage() {
             />
           </Field>
         )}
-        <Field label="Miejsce paska" hint="Monitory tak, jak ustawia je Windows. Pasek zostaje w wybranym miejscu na tym komputerze.">
+        <Field label="Miejsce paska" hint="Monitory tak, jak ustawia je Windows. Pasek zostaje w wybranym miejscu na tym komputerze; schowany „×” pokazuje się w nowym miejscu.">
           <BarPlaceMap />
         </Field>
         <Field

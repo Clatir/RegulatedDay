@@ -343,6 +343,41 @@ describe('panel ikony – nagłówek i stopka (P13 wariant A, C1, C7)', () => {
   })
 })
 
+describe('pasek schowany „×” – linia „Pasek pulpitu schowany · Pokaż pasek” w panelu (D564 P16, C3)', () => {
+  it('w panelu – z dniem i bez folderu; „Pokaż pasek” jednym kliknięciem pokazuje pasek (dwuklik – raz)', async () => {
+    for (const view of [{ ...dayView(), barClosed: true }, { ...noFolderView(), barClosed: true }]) {
+      act(() => useWidget.setState({ view }))
+      await render(createElement(PanelApp))
+      expect(q('bar-closed')!.textContent).toBe('Pasek pulpitu schowanyPokaż pasek')
+      click(q('bar-closed-show')!, 1)
+      click(q('bar-closed-show')!, 2)
+      expect(rd.barAction.mock.calls).toEqual([['showBar']])
+      // A button of the line, not a free spot of the panel.
+      expect(rd.showMain).not.toHaveBeenCalled()
+      act(() => root?.unmount())
+      host?.remove()
+      rd.barAction.mockClear()
+    }
+  })
+
+  it('tylko w panelu: okno główne i pasek pulpitu jej nie mają; bez „×” jej nie ma', () => {
+    const closed = { ...dayView(), barClosed: true }
+    expect(html(closed, 'panel')).toContain('data-testid="bar-closed"')
+    expect(html(closed, 'main')).not.toContain('data-testid="bar-closed"')
+    expect(html(closed, 'desktop')).not.toContain('data-testid="bar-closed"')
+    expect(html(dayView(), 'panel')).not.toContain('data-testid="bar-closed"')
+  })
+
+  it('komunikat „ukryty” (pomocnik, nieudane położenie) zostaje jak był – z „Pokaż pasek”, który kładzie pasek ponownie', async () => {
+    const view = { ...dayView(), barNote: 'Pasek pulpitu ukryty: pomocnik nie działa' }
+    expect(html(view, 'panel')).not.toContain('data-testid="bar-closed"')
+    await bar(view, 'panel')
+    expect(q('bar-note')!.textContent).toBe('Pasek pulpitu ukryty: pomocnik nie działaPokaż pasek')
+    click(q('bar-note')!.querySelector('button')!)
+    expect(rd.barAction.mock.calls).toEqual([['placeBar']])
+  })
+})
+
 describe('panel otwarty ponownie – nic rozwiniętego sprzed schowania (C8)', () => {
   it('„Prośba ▸”, „⋯”, pole „+ Skrzynka” i ±5 min „Skończył się o…” zwijają się przy otwarciu', async () => {
     act(() => useWidget.setState({ view: dayView() }))
