@@ -1,5 +1,5 @@
 /**
- * The morning plan's line about today's all-day events (D405, HKU1 part C): „Dziś: Konferencja (2/3)”, several in the order
+ * The morning plan's line about today's all-day events (D405, HKU1 part C): „Dziś: Konferencja (2 z 3)”, several in the order
  * of `compareAllDay` joined with „ · ”, a one-day event without a day count, none – no line.
  */
 import { describe, expect, it } from 'vitest'
@@ -14,8 +14,8 @@ describe('linia wydarzeń w planie porannym', () => {
     expect(morningAllDayLine([ev('a', 'Wczoraj', '2026-11-18'), ev('b', 'Jutro', '2026-11-20', '2026-11-21')], '2026-11-19')).toBeNull()
   })
 
-  it('wielodniowe: dzień „(2/3)”', () => {
-    expect(morningAllDayLine([ev('a', 'Konferencja', '2026-11-18', '2026-11-20')], '2026-11-19')).toBe('Dziś: Konferencja (2/3)')
+  it('wielodniowe: dzień „(2 z 3)”', () => {
+    expect(morningAllDayLine([ev('a', 'Konferencja', '2026-11-18', '2026-11-20')], '2026-11-19')).toBe('Dziś: Konferencja (2 z 3)')
   })
 
   it('jednodniowe bez dopisku', () => {
@@ -24,7 +24,7 @@ describe('linia wydarzeń w planie porannym', () => {
 
   it('kilka: wszystkie, w kolejności compareAllDay (wcześniejszy start, dłuższe, tytuł)', () => {
     const events = [ev('c', 'Zebranie', '2026-11-19'), ev('b', 'Urlop', '2026-11-19', '2026-11-19'), ev('a', 'Konferencja', '2026-11-18', '2026-11-20')]
-    expect(morningAllDayLine(events, '2026-11-19')).toBe('Dziś: Konferencja (2/3) · Urlop · Zebranie')
+    expect(morningAllDayLine(events, '2026-11-19')).toBe('Dziś: Konferencja (2 z 3) · Urlop · Zebranie')
   })
 
   it('tytuł nie jest skracany (jak w pasie), notatka nie wchodzi do linii', () => {

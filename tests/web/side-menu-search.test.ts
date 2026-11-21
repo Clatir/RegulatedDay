@@ -38,12 +38,12 @@ async function mount() {
 const q = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`)
 
 describe('„Szukaj” w menu bocznym (D469)', () => {
-  it('jest ostatnią pozycją menu, z napisem „Szukaj” i skrótem „Ctrl K” jak skróty ekranów', async () => {
+  it('jest ostatnią pozycją menu, z napisem „Szukaj” i skrótem „Ctrl+K” jak skróty ekranów', async () => {
     await mount()
     const search = q('nav-search')!
     expect(search).not.toBeNull()
-    expect(search.textContent).toBe('SzukajCtrl K')
-    expect(search.getAttribute('title')).toBe('Szukaj (Ctrl K)')
+    expect(search.textContent).toBe('SzukajCtrl+K')
+    expect(search.getAttribute('title')).toBe('Szukaj (Ctrl+K)')
     // Same markup of the keys as the screens' ones.
     const keysOf = (el: HTMLElement) => el.querySelector('span.num')!.className
     expect(keysOf(search)).toBe(keysOf(q('nav-today')!))
@@ -62,7 +62,7 @@ describe('„Szukaj” w menu bocznym (D469)', () => {
 
   it('ekrany zachowują kolejność i cyfry Ctrl+cyfra (D362); „Szukaj” nie zabiera cyfry', () => {
     expect(DIGIT_PAGES).toEqual(['today', 'calendar', 'week', 'stats', 'requests', 'templates', 'routines', 'room', 'history'])
-    expect(DIGIT_PAGES.map((p) => pageKeys(p))).toEqual(['Ctrl 1', 'Ctrl 2', 'Ctrl 3', 'Ctrl 4', 'Ctrl 5', 'Ctrl 6', 'Ctrl 7', 'Ctrl 8', 'Ctrl 9'])
-    expect(pageKeys('settings')).toBe('Ctrl ,')
+    expect(DIGIT_PAGES.map((p) => pageKeys(p))).toEqual(['Ctrl+1', 'Ctrl+2', 'Ctrl+3', 'Ctrl+4', 'Ctrl+5', 'Ctrl+6', 'Ctrl+7', 'Ctrl+8', 'Ctrl+9'])
+    expect(pageKeys('settings')).toBe('Ctrl+,')
   })
 })

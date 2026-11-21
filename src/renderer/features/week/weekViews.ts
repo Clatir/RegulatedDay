@@ -7,7 +7,7 @@ import { mayMoveBetween } from '@shared/engine/calendarViews'
 import { groupEndMin, groupRootOf, PARALLEL_SAME_TEXT, parallelDrop, parallelFullText, parallelJoinText } from '@shared/engine/parallel'
 import type { HorizonBlock } from '@shared/engine/week'
 import type { AgendaBlock } from '@shared/engine/calendarViews'
-import { durationLabel } from '@shared/format'
+import { durationLabel, plDayMonth } from '@shared/format'
 import { categoryName } from '@shared/model/rd'
 import { DRAG_STEP_MIN, type PlanBlock } from '@shared/model/plan'
 import { addDays, weekday } from '@shared/time/zone'
@@ -138,7 +138,7 @@ export const DENIED_TEXT = 'dzień minął'
 
 /** The first line of a day of „Agenda”: „Dziś · środa 18.11”, „Jutro · czwartek 19.11”, else „piątek 20.11”. */
 export function agendaHeading(date: string, today: string): string {
-  const day = `${WEEKDAY_FULL[weekday(date) - 1]} ${Number(date.slice(8, 10))}.${date.slice(5, 7)}`
+  const day = `${WEEKDAY_FULL[weekday(date) - 1]} ${plDayMonth(date)}`
   if (date === today) return `Dziś · ${day}`
   return date === addDays(today, 1) ? `Jutro · ${day}` : day
 }

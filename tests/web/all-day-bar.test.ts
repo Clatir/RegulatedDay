@@ -175,7 +175,7 @@ describe('pytanie „Wolne” – słowa', () => {
     expect(freeAskDays(['2026-11-18', '2026-11-19', '2026-11-20'])).toBe('śr 18.11 – pt 20.11')
     expect(freeAskDays(['2026-11-19'])).toBe('cz 19.11')
     expect(freeAskDays(['2026-11-16', '2026-11-18', '2026-11-19'])).toBe('pn 16.11, śr 18.11 – cz 19.11')
-    expect(freeAskDays(['2026-12-31', '2027-01-01'])).toBe('cz 31.12 – pt 1.01')
+    expect(freeAskDays(['2026-12-31', '2027-01-01'])).toBe('cz 31.12 – pt 01.01')
     expect(freeAskText(['2026-11-18', '2026-11-19', '2026-11-20'])).toBe('Ustawić typ dnia „Wolne” na śr 18.11 – pt 20.11?')
   })
 

@@ -114,17 +114,17 @@ export function dayIndexOf(e: AllDayEvent, date: string): { index: number; count
 /** „(2/3)” – the day of a multi-day event; '' for a one-day event or a day outside it. */
 export function dayOfText(e: AllDayEvent, date: string): string {
   const d = dayIndexOf(e, date)
-  return d && d.count > 1 ? `(${d.index}/${d.count})` : ''
+  return d && d.count > 1 ? `(${d.index} z ${d.count})` : ''
 }
 
-const dayMonth = (date: string) => `${Number(date.slice(8, 10))}.${date.slice(5, 7)}`
+const dayMonth = (date: string) => `${date.slice(8, 10)}.${date.slice(5, 7)}`
 
-/** The dates as the interface shows them: „18.11”, „18–20.11”, „30.11–2.12”, across a year „30.12.2026–2.01.2027”. */
+/** The dates as the interface shows them: „18.11”, „18–20.11”, „30.11–02.12”, across a year „30.12.2026–02.01.2027” (two digits each, as `plDayMonth`). */
 export function rangeText(e: Pick<AllDayEvent, 'startDate' | 'endDate'>): string {
   const { startDate: a, endDate: b } = e
   if (a === b) return dayMonth(a)
   if (a.slice(0, 4) !== b.slice(0, 4)) return `${dayMonth(a)}.${a.slice(0, 4)}–${dayMonth(b)}.${b.slice(0, 4)}`
-  if (a.slice(0, 7) === b.slice(0, 7)) return `${Number(a.slice(8, 10))}–${dayMonth(b)}`
+  if (a.slice(0, 7) === b.slice(0, 7)) return `${a.slice(8, 10)}–${dayMonth(b)}`
   return `${dayMonth(a)}–${dayMonth(b)}`
 }
 

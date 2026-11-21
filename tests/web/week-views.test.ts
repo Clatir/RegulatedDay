@@ -83,7 +83,7 @@ describe('skala „3 dni” i „Tygodnia” (D417)', () => {
   })
   it('tytuł: trzy dni od–do, rok na końcu (na przełomie lat przy obu końcach)', () => {
     expect(threeDaysTitle(['2026-11-17', '2026-11-18', '2026-11-19'])).toBe('wt 17.11 – cz 19.11.2026')
-    expect(threeDaysTitle(['2026-12-31', '2027-01-01', '2027-01-02'])).toBe('cz 31.12.2026 – sb 2.01.2027')
+    expect(threeDaysTitle(['2026-12-31', '2027-01-01', '2027-01-02'])).toBe('cz 31.12.2026 – sb 02.01.2027')
     expect(threeDaysTitle([])).toBe('')
   })
 })

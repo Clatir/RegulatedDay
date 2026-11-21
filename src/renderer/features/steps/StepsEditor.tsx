@@ -1,7 +1,7 @@
 /**
  * The list „Kroki” of a block or a task (SNT5, D440): the field „Dodaj krok” (Enter adds and stays in the field for the next
  * one), the steps with a tick (a day's own – never a change of the block), a title edited in place, a removal, a drag to a new
- * place (the handle „⋮⋮”; Alt+↑ / Alt+↓ on a row – the keyboard's way), the counter „✓ 3/4” by the heading. The list changes
+ * place (the handle „⋮⋮”; Alt+↑ / Alt+↓ on a row – the keyboard's way), the counter „✓ 3 z 4” by the heading (D565 P24; the tile keeps „✓ 3/4”). The list changes
  * nothing by itself: every change is an op (`StepOp`) the screen saves – answering whether it was (the text stays in the
  * field when it was not). A template's list has no ticks (`ticks` off: every day starts with none, D440).
  * D460: each step may have a time (the field beside its title, empty allowed); the sum is said under the heading – „kroki:
@@ -9,7 +9,7 @@
  * (nothing is refused: the block's length never follows the steps).
  */
 import { useEffect, useId, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
-import { addStepOp, STEP_NO_TITLE, STEP_TITLE_MAX, stepsCounter, type Step, type StepOp, type StepsKind } from '@shared/model/steps'
+import { addStepOp, STEP_NO_TITLE, STEP_TITLE_MAX, stepsProgress, type Step, type StepOp, type StepsKind } from '@shared/model/steps'
 import { CommitField, FieldShell, TextField } from '../../components/fields'
 import { cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
@@ -56,7 +56,7 @@ export function StepsEditor({
   // The step to give the focus back to once the list shows its new order (an element that moves may lose it).
   const refocus = useRef<string | null>(null)
   const [drag, setDrag] = useState<{ id: string; over: { id: string; after: boolean } | null } | null>(null)
-  const counter = ticks ? stepsCounter(steps) : null
+  const counter = ticks ? stepsProgress(steps) : null
   const time = stepsTimeLine(steps, lengthMin)
 
   useEffect(() => {

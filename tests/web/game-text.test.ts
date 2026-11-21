@@ -24,7 +24,7 @@ describe('gra w oknie (D322)', () => {
     expect(weekNumber('2026-10-26')).toBe(44)
     expect(weekNumber('2026-12-28')).toBe(53)
     expect(weekNumber('2027-01-04')).toBe(1)
-    expect(weekLabel('2026-10-26')).toBe('tydz. 44 · 26.10–1.11')
+    expect(weekLabel('2026-10-26')).toBe('tydz. 44 · 26.10–01.11')
     const variants = [{ id: 'spacer', name: 'Spacer' }]
     expect(wayName('spacer', variants)).toBe('Spacer')
     expect(wayName('odcinam', variants)).toBe('Odcinam się')

@@ -168,6 +168,15 @@ export function stepsCounter(steps: readonly Pick<Step, 'done'>[] | undefined): 
   return `✓ ${steps.filter((s) => s.done).length}/${steps.length}`
 }
 
+/**
+ * The counter of the steps outside the tile and the bar (D565 P24: „x z y” everywhere else – the panel of a block, the row of a task in „Sprawy”):
+ * „✓ 3 z 4”; null – no steps. The tile of the axis and the bar keep „✓ 3/4” and „krok 1/4” (D440).
+ */
+export function stepsProgress(steps: readonly Pick<Step, 'done'>[] | undefined): string | null {
+  if (!steps?.length) return null
+  return `✓ ${steps.filter((s) => s.done).length} z ${steps.length}`
+}
+
 /** The step the bar shows (D440): the first not ticked off in the list's order with its place (1 = the first); null – all ticked or none. */
 export function firstOpen(steps: readonly Step[] | undefined): { step: Step; n: number; total: number } | null {
   const list = steps ?? []

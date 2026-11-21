@@ -35,7 +35,7 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
   nieczytelna zostaje jak w pliku, zmieniona/usunięta zabiera czytelne pozycje swojego id – T787), `refusalFor` (pełna lista
   zadania – „w zadaniu”),
   `stepOpFrom` (operacja z okna), `applyStepOp` + `addStepOp` / `moveStepOp` (operacje po
-  id – ta sama na liście bloku i zadania, T790), `stepsCounter` („✓ 3/4”), `firstOpen`, `freshSteps`, `textWithSteps` (Ctrl K).
+  id – ta sama na liście bloku i zadania, T790), `stepsCounter` („✓ 3/4” – kafelek osi i „Tygodnia”, D440), `stepsProgress` („✓ 3 z 4” – panel bloku i wiersz zadania w „Sprawach”, D565 P24), `firstOpen`, `freshSteps`, `textWithSteps` (Ctrl K).
   Nowa wersja serii i szablonu pisze się na surowej wersji, z której powstaje (`sourceVersionKey` w `model/plan.ts`).
 - `model/routineSteps.ts` (D473, T1100–T1103) – kroki rutyny bloku bez własnych: `routineStepsOf` (lista, wersja, `kept`), `shownSteps`
   (własna albo rutyny – panel, licznik osi, pasek), `routineList` (wersja rutyny jako lista: id kroków rutyny, „krok N”, czas),

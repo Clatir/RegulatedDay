@@ -1164,6 +1164,8 @@ test('rutyny (D328): karta w „Dziś” z wersją i krokami; „Kroki ▸” w 
       const grid = page.getByTestId('copy-dialog')
       if (!(await grid.getByTestId(`day-${yesterday}`).isVisible())) await grid.getByLabel('Poprzedni miesiąc').click()
       await grid.getByTestId(`day-${yesterday}`).click()
+      // The window of days of the templates (D565 P24, F6): the click shows the day in the field „Od”, as DD.MM.RRRR.
+      await expect(grid.getByTestId('copy-dialog-from')).toHaveValue(`${yesterday.slice(8, 10)}.${yesterday.slice(5, 7)}.${yesterday.slice(0, 4)}`)
       await grid.getByTestId('copy-apply').click()
       await expect(grid.getByTestId('copy-warning')).toContainText('Kopia zastąpi plan dnia, który już trwał')
       await expect(grid.getByTestId('copy-ahead')).toBeDisabled()

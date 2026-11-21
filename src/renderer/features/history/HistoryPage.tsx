@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { HistoryRecord, HistoryVersion } from '@shared/api'
 import { diffRecords } from '@shared/data/merge'
-import { countLabel, plDate } from '@shared/format'
+import { countLabel, plDate, plDateTime } from '@shared/format'
 import { personName } from '@shared/model/rd'
 import { settingsOn } from '@shared/model/settings'
 import { SERIES_MARK } from '@shared/seriesText'
@@ -63,7 +63,7 @@ export function HistoryPage() {
                 >
                   <RecordName r={r} />
                   <span className="text-[11.5px] text-muted">
-                    {countLabel(r.versions, 'wersja', 'wersje', 'wersji')} · {new Date(r.last).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', dateStyle: 'short', timeStyle: 'short' })}
+                    {countLabel(r.versions, 'wersja', 'wersje', 'wersji')} · {plDateTime(r.last)}
                     {r.exists ? '' : ' · usunięty'}
                   </span>
                 </button>
@@ -164,7 +164,7 @@ function Versions({ r }: { r: HistoryRecord }) {
         return (
           <div key={v.file} className="flex flex-col gap-1.5 rounded border border-line bg-panel p-3 text-[12.5px]" data-testid="history-version">
             <div className="flex items-center gap-2">
-              <span className="font-medium">{new Date(v.savedAt).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', dateStyle: 'medium', timeStyle: 'short' })}</span>
+              <span className="font-medium">{plDateTime(v.savedAt)}</span>
               <span className="text-muted">
                 {REASONS[v.reason] ?? 'wersja'} · {computer(v.savedBy)}
               </span>

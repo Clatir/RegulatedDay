@@ -15,6 +15,10 @@ import { TextField } from '../../components/fields'
 import { EmptyState, cx } from '../../components/ui'
 import { RoutineCostField, saveRoutineRecord } from './routineCost'
 import { RoutineSteps } from './RoutineSteps'
+import { routineUses, usesText } from './routineUses'
+import { THING_KINDS_HINT } from '../../lib/thingKinds'
+import { blockName } from '../plan/blockView'
+import { seriesBlockOf } from '../series/seriesForm'
 import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
 import { useBusy } from '../../lib/busy'
 import { useNewShortcut } from '../../lib/escape'
@@ -90,7 +94,7 @@ export function RoutinesPage() {
         )}
       </div>
       <div className="min-w-0 flex-1 overflow-y-auto p-4">
-        {current ? <Editor routine={current} onRemoved={() => setSelected(null)} /> : <EmptyState why={routines.length ? 'Wybierz rutynę z listy.' : 'Nie ma jeszcze rutyn. Rutyna to kroki z czasem każdego – np. poranna: woda, karmienie kota, prysznic.'} action={{ label: '+ Rutyna', run: () => void create() }} />}
+        {current ? <Editor routine={current} onRemoved={() => setSelected(null)} /> : <EmptyState why={routines.length ? 'Wybierz rutynę z listy.' : `Nie ma jeszcze rutyn (np. poranna: woda, karmienie kota, prysznic). ${THING_KINDS_HINT}`} action={{ label: '+ Rutyna', run: () => void create() }} />}
       </div>
     </div>
   )
@@ -100,7 +104,16 @@ function Editor({ routine, onRemoved }: { routine: Routine; onRemoved: () => voi
   const rel = paths.record('routine', routine.id)
   const rd = useData((s) => s.rd)
   const today = useData((s) => s.view?.today ?? '')
+  const templates = useData((s) => s.templates)
+  const series = useData((s) => s.series)
+  const requests = useData((s) => s.requests)
+  const routines = useData((s) => s.routines)
   const categories = useMemo(() => settingsOn(rd.settings, today).categories, [rd.settings, today])
+  // F9: where the routine is used – the templates and series whose blocks point at it.
+  const used = useMemo(() => {
+    const names = { rd, settings: settingsOn(rd.settings, today), routines, requests }
+    return usesText(routineUses(routine.id, templates, series, (s) => blockName(seriesBlockOf(s, today), names), today))
+  }, [routine.id, templates, series, rd, today, routines, requests])
   /** The routine changed by `fn` from what it is when the change's turn comes (A6-01). */
   const change = (fn: (r: Routine) => Partial<Routine>) =>
     void updateRecord(rel, (raw) => {
@@ -130,6 +143,9 @@ function Editor({ routine, onRemoved }: { routine: Routine; onRemoved: () => voi
           <RoutineSteps key={v} version={v} steps={routine[v]} onChange={(fn) => change((r) => ({ [v]: fn(r[v]) }))} />
         ))}
       </div>
+      <p className="text-[12px] text-muted" data-testid="routine-used">
+        {used}
+      </p>
       <p className="text-[12px] text-muted">Kroki odhaczasz po powrocie do komputera – w pasku („✓ Wszystkie · Kroki ▸ · gorsze dni”) albo na karcie w „Dziś”; tam jednym kliknięciem wybierasz też wersję. Wersja na gorsze dni bez kroków znaczy: jak zwykła.</p>
     </div>
   )

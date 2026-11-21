@@ -8,6 +8,7 @@
  * detail of the day (D418, D422: up to three miniature bars, „+N” for all the rest, the dot of the load), which takes their place.
  */
 import { useRef, useState, type ReactNode } from 'react'
+import { WEEKDAY_SHORT } from '@shared/format'
 import type { AllDayEvent } from '@shared/model/allDay'
 import { ALL_DAY_COLOR_HEX, PALETTE } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
@@ -24,7 +25,6 @@ const lamp = (alpha: number): string => {
   const n = Number.parseInt(PALETTE.lamp.slice(1), 16)
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
 }
-const WEEKDAYS = ['pon', 'wt', 'śr', 'czw', 'pt', 'sob', 'nd']
 
 export function monthOf(date: string): string {
   return date.slice(0, 7)
@@ -100,7 +100,7 @@ export function MonthGrid({
   return (
     <div className="flex flex-col gap-1" data-testid={rest['data-testid'] ?? 'month-grid'} onMouseLeave={() => setDrag(null)} onMouseUp={() => setDrag(null)}>
       <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-muted">
-        {WEEKDAYS.map((w) => (
+        {WEEKDAY_SHORT.map((w) => (
           <span key={w}>{w}</span>
         ))}
       </div>

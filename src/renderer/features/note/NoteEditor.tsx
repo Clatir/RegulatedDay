@@ -245,8 +245,8 @@ export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { valu
           <span className="mr-auto text-[12.5px] leading-snug text-muted">Notatka</span>
           {!readOnly && state && (
             <>
-              <Tool label={<b>B</b>} title="Pogrubienie (Ctrl B)" active={state.bold} onClick={act((c) => c.toggleBold())} testId="note-bold" />
-              <Tool label={<i>I</i>} title="Kursywa (Ctrl I)" active={state.italic} onClick={act((c) => c.toggleItalic())} />
+              <Tool label={<b>B</b>} title="Pogrubienie (Ctrl+B)" active={state.bold} onClick={act((c) => c.toggleBold())} testId="note-bold" />
+              <Tool label={<i>I</i>} title="Kursywa (Ctrl+I)" active={state.italic} onClick={act((c) => c.toggleItalic())} />
               <Tool label={<s>S</s>} title="Przekreślenie" active={state.strike} onClick={act((c) => c.toggleStrike())} />
               <Tool label="H1" title="Nagłówek 1" active={state.h1} onClick={act((c) => c.toggleHeading({ level: 1 }))} />
               <Tool label="H2" title="Nagłówek 2" active={state.h2} onClick={act((c) => c.toggleHeading({ level: 2 }))} />

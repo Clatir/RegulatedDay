@@ -4,7 +4,7 @@
  * card's question „Wolne” and the lines.
  * Pure – the screens (`AllDayBar`, `AllDayCard`) only draw what this says.
  */
-import { WEEKDAY_SHORT } from '@shared/format'
+import { plDayMonth, WEEKDAY_SHORT } from '@shared/format'
 import { weekLanes, type AllDayEvent, type AllDayLanes } from '@shared/model/allDay'
 import { weekStart } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
@@ -62,7 +62,7 @@ export function dragDates(dates: readonly string[], from: number, to: number): {
 }
 
 /** A day as the interface words it in the question and the lines: „śr 18.11”. */
-export const dayWord = (date: string): string => `${WEEKDAY_SHORT[weekday(date) - 1]} ${Number(date.slice(8, 10))}.${date.slice(5, 7)}`
+export const dayWord = (date: string): string => `${WEEKDAY_SHORT[weekday(date) - 1]} ${plDayMonth(date)}`
 
 /** The days of the question „Wolne”, in runs: „śr 18.11 – pt 20.11”, a lone day „czw 19.11”, runs apart „pn 16.11, śr 18.11 – pt 20.11”. */
 export function freeAskDays(dates: readonly string[]): string {

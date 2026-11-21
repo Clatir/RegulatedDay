@@ -29,6 +29,7 @@ import { DateField, TextField } from '../../components/fields'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
 import { isSaved, saveRecord, storedAnswer, tryUpdateRecord, updateRecord, useData, type SaveAnswer, type SendState } from '../../store/data'
 import { useBusy } from '../../lib/busy'
+import { THING_KINDS_HINT } from '../../lib/thingKinds'
 import { useNewShortcut } from '../../lib/escape'
 import { removeTarget, useDeleteResolver, useDeleteSelected } from '../../lib/deleteKey'
 import { takeFoundPick, undoToast, useUi } from '../../store/ui'
@@ -179,32 +180,35 @@ export function TemplatesPage() {
             </div>
           )
         })}
-        {listed.length > 0 && (
-          <div className="flex flex-col gap-1" data-testid="series-list">
-            <span className="text-[11.5px] text-muted">Serie</span>
-            {listed.map((s) => {
-              const ended = (seriesPlans.find((p) => p.series.id === s.id)?.last ?? s.until ?? today) < today
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => openSeries(s.id)}
-                  data-del={`series:${s.id}`}
-                  className={cx('flex flex-col rounded border px-2.5 py-1.5 text-left', selectedSeries === s.id ? 'border-lamp bg-lamp-soft' : 'border-line hover:bg-hover', ended && 'border-dashed text-muted')}
-                  data-testid="series-item"
-                >
-                  <span>
-                    {SERIES_MARK} {blockName(seriesBlockOf(s, today), names)}
-                  </span>
-                  <span className="text-[11.5px] text-muted">
-                    {seriesText(s, today)}
-                    {ended ? ' · zakończona' : ''}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        )}
+        <div className="flex flex-col gap-1" data-testid="series-list">
+          <span className="text-[11.5px] text-muted">Serie</span>
+          {listed.length === 0 && (
+            <span className="text-[12px] text-muted" data-testid="series-empty">
+              Nie ma jeszcze serii. Serię zakładasz w panelu bloku, w polu „Powtarzaj”.
+            </span>
+          )}
+          {listed.map((s) => {
+            const ended = (seriesPlans.find((p) => p.series.id === s.id)?.last ?? s.until ?? today) < today
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => openSeries(s.id)}
+                data-del={`series:${s.id}`}
+                className={cx('flex flex-col rounded border px-2.5 py-1.5 text-left', selectedSeries === s.id ? 'border-lamp bg-lamp-soft' : 'border-line hover:bg-hover', ended && 'border-dashed text-muted')}
+                data-testid="series-item"
+              >
+                <span>
+                  {SERIES_MARK} {blockName(seriesBlockOf(s, today), names)}
+                </span>
+                <span className="text-[11.5px] text-muted">
+                  {seriesText(s, today)}
+                  {ended ? ' · zakończona' : ''}
+                </span>
+              </button>
+            )
+          })}
+        </div>
         {templates.some((t) => t.archived) && (
           <button type="button" className="text-left text-[12px] text-muted hover:text-fg" onClick={() => setShowArchived(!showArchived)}>
             {showArchived ? 'Ukryj archiwum' : 'Pokaż archiwum'}
@@ -217,7 +221,7 @@ export function TemplatesPage() {
         ) : current ? (
           <Editor key={current.id} template={current} today={today} openBlock={openBlock} onBlockOpened={() => setOpenBlock(null)} onCopied={setSelected} onRemoved={() => setSelected(null)} />
         ) : (
-          <EmptyState why={templates.length ? 'Wybierz szablon z listy.' : 'Nie ma jeszcze szablonów. Szablon to plan dnia danego typu, z którego powstaje każdy taki dzień.'} action={{ label: '+ Szablon', run: () => void create() }} />
+          <EmptyState why={templates.length ? 'Wybierz szablon z listy.' : `Nie ma jeszcze szablonów. ${THING_KINDS_HINT}`} action={{ label: '+ Szablon', run: () => void create() }} />
         )}
       </div>
       {leaving && <UnsavedRuleDialog title="Zapisać zmianę serii?" busy={leavingBusy} onSave={() => void answerLeaving(true)} onDiscard={() => void answerLeaving(false)} onClose={() => !leavingBusy && setLeaving(null)} />}

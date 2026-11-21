@@ -6,7 +6,7 @@
  * tests share it.
  */
 import { MAX_BLOCK_MIN } from './model/plan'
-import { weekday } from './time/zone'
+import { PL_ZONE, weekday } from './time/zone'
 
 /** No-break space: a number never breaks between its thousands. */
 export const NBSP = ' '
@@ -47,6 +47,16 @@ const pad2 = (n: number) => String(n).padStart(2, '0')
 
 /** 'RRRR-MM-DD' → „21.10.2026”. */
 export const plDate = (date: string): string => `${date.slice(8, 10)}.${date.slice(5, 7)}.${date.slice(0, 4)}`
+
+/** A moment → „21.11.2026 14:30” – a moment as a date and the 24-hour clock of Warsaw (the one format of „Historia” and the lists of versions, D565 P24). */
+export const plDateTime = (ms: number): string => {
+  // A time no date can show (`at: 1e20` of a damaged version): the number as it is – the formatter would throw.
+  if (!Number.isFinite(new Date(ms).getTime())) return String(ms)
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('pl-PL', { timeZone: PL_ZONE, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(ms).map((x) => [x.type, x.value])
+  ) as Record<string, string>
+  return `${p.day}.${p.month}.${p.year} ${p.hour}:${p.minute}`
+}
 
 /** The names of the weekdays, Monday first (the nominative, lower case). */
 export const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela'] as const
@@ -123,28 +133,35 @@ export function parseInteger(text: string, min: number, max: number): Parsed<num
   return ok(n)
 }
 
-/** 'RRRR-MM-DD' of a real day; null = no such day (31.02, 29.02 of a common year). */
+/** 'RRRR-MM-DD' of a real day; null = no such day (31.02, 29.02 of a common year, a year that has not four digits – it would not be an ISO date). */
 export function isoDay(y: number, mo: number, d: number): string | null {
+  if (!Number.isInteger(y) || y < 1000 || y > 9999) return null
   const dt = new Date(Date.UTC(y, mo - 1, d))
   if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null
   return `${y}-${pad2(mo)}-${pad2(d)}`
 }
 
+/** A year outside 1000–9999 is no year of a date (four digits were typed or not): the message says it, not „Nie ma takiego dnia.”. */
+const yearRefusal = (y: number): Parsed<never> | null => (y < 1000 || y > 9999 ? refuse('Rok musi być między 1000 a 9999.') : null)
+
 /**
- * A date typed (spec „Czas i długość”): „21.10.2026”, „2026-10-21”, or without its year – „3.01” is the nearest such
- * date from `today` on (today included: a plan for today is typed as today), 29.02 the nearest leap year's (T392);
+ * A date typed (spec „Czas i długość”, D565 P24 – the same in every field of a date): „21.10.2026”, with dots, dashes, slashes or
+ * spaces (`21-10-2026`, `21/10/2026`), one-digit day or month, eight digits `21102026`, `2026-10-21`, or without its year – „3.01”
+ * is the nearest such date from `today` on (today included: a plan for today is typed as today), 29.02 the nearest leap year's (T392);
  * with `past` the nearest one up to today (a range of past days, e.g. the CSV export).
  */
 export function parseDate(text: string, today: string, o: { past?: boolean } = {}): Parsed<string> {
   const t = text.trim()
   if (!t) return refuse('Wpisz datę, np. 21.10.2026 albo 3.01.')
   let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t)
-  if (m) return isoDay(Number(m[1]), Number(m[2]), Number(m[3])) ? ok(isoDay(Number(m[1]), Number(m[2]), Number(m[3]))!) : refuse('Nie ma takiego dnia.')
-  m = /^(\d{1,2})[./](\d{1,2})(?:[./](\d{4}))?\.?$/.exec(t)
+  if (m) return yearRefusal(Number(m[1])) ?? (isoDay(Number(m[1]), Number(m[2]), Number(m[3])) ? ok(isoDay(Number(m[1]), Number(m[2]), Number(m[3]))!) : refuse('Nie ma takiego dnia.'))
+  m = /^(\d{2})(\d{2})(\d{4})$/.exec(t) ?? /^(\d{1,2})[./ -](\d{1,2})(?:[./ -](\d{4}))?\.?$/.exec(t)
   if (!m) return refuse('Nie rozumiem tej daty – wpisz np. 21.10.2026 albo 3.01.')
   const d = Number(m[1])
   const mo = Number(m[2])
   if (m[3]) {
+    const bad = yearRefusal(Number(m[3]))
+    if (bad) return bad
     const day = isoDay(Number(m[3]), mo, d)
     return day ? ok(day) : refuse('Nie ma takiego dnia.')
   }
