@@ -20,7 +20,7 @@ import { parseBlockKey, type GroupAction } from '@renderer/features/plan/groupMe
 import { WeekPage } from '@renderer/features/week/WeekPage'
 import { useData } from '@renderer/store/data'
 import { useDaysView, useWeekView } from '@renderer/store/horizon'
-import { useUi } from '@renderer/store/ui'
+import { NO_MEMORY, useUi } from '@renderer/store/ui'
 
 // The change of a pick: caught (the screens call `runBlockGroup` of `groupRun.ts`).
 const { runs } = vi.hoisted(() => ({ runs: [] as Array<{ view: string; ids: readonly string[]; action: unknown }> }))
@@ -73,7 +73,7 @@ beforeEach(() => {
   offDel = installDeleteKey()
   runs.length = 0
   useData.setState({ rd: rdFrom({ schema: 1 }), view: { today: TODAY, allDay: [], computers: [] } as unknown as DataView, allDay: [] })
-  useUi.setState({ page: 'week', day: null, pick: null, toasts: [] })
+  useUi.setState({ page: 'week', day: null, pick: null, toasts: [], from: null, memory: NO_MEMORY })
   vi.mocked(useWeekView).mockImplementation((date) => {
     const w = weekStart(date)
     return { view: weekViewOf(w, TODAY, weekDates(w).map((d) => day(d, blocksOf(d)))), failed: false }

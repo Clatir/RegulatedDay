@@ -41,7 +41,15 @@ import { showGroupLine } from '../../store/groupLine'
 import { movedDay, type WeekPushedDay } from '../../store/weekPush'
 import { useMonthView } from '../../store/horizon'
 import { useMachine } from '../../store/machine'
-import { openDay, toast, undoToast } from '../../store/ui'
+import { openDay, setBlockDraft, setMemory, toast, undoToast, useUi } from '../../store/ui'
+import { useNewShortcut } from '../../lib/escape'
+import { usePeriodKeys } from '../../lib/periodKeys'
+import { NewBlockPopover } from '../week/NewBlockPopover'
+import { NEW_BLOCK_WIDTH, popoverPlace } from '../week/weekLayout'
+import { freeHourStart, newBlockDay } from '../week/weekNew'
+import { NO_NEW_DAY_TEXT } from '../week/weekNew'
+import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
+import { logicalMinuteOf } from '@shared/time/day'
 import { setWakeOnDays } from '../today/dayActions'
 import { DAY_TYPE_COLORS, holidayMarks } from './dayTypes'
 import { emptyMonthDay, monthCellView, visibleMonthDay } from './monthCellView'
@@ -67,9 +75,14 @@ export function CalendarPage() {
   const { rd, seriesPlans, stamp, routines, requests, templates } = useData()
   const today = useData((s) => s.view?.today ?? '')
   const brightness = useMachine((s) => s.prefs.brightness)
-  const [month, setMonth] = useState(monthOf(today))
+  // The month is the session's (D2, UX8: `useUi.memory` – coming back from a day of „Dziś” finds it); null – the current one.
+  const thisMonth = monthOf(today)
+  const month = useUi((s) => s.memory.month) ?? thisMonth
+  const setMonth = (m: string) => setMemory({ month: m === thisMonth ? null : m })
   const [files, setFiles] = useState<Record<string, RawRecord | null>>({})
   const importing = useZjazdy((s) => s.preview != null)
+  // PgUp / PgDn / Home (D6, P8): the month before, the next, the current one.
+  usePeriodKeys({ prev: () => setMonth(shiftMonth(month, -1)), next: () => setMonth(shiftMonth(month, 1)), today: () => setMonth(thisMonth) }, !importing)
   const [wake, setWake] = useState<number | null>(null)
   const dates = useMemo(() => gridDates(month), [month])
   // The selection of days (D527): kept across months (a day of another month stays selected), Ctrl+A takes the days of the month shown.
@@ -116,6 +129,23 @@ export function CalendarPage() {
   }, [dates, stamp])
   const fileOf = (d: string) => (files[d] ? dayFileFrom(files[d], d) : null)
   const [busy, run] = useBusy()
+  // Ctrl+N (D6, P9): the small window of a new block today – or on the first day of the grid from today – at the nearest free hour, beside its cell.
+  const root = useRef<HTMLDivElement>(null)
+  const [fresh, setFresh] = useState<{ seq: number; date: string; startMin: number; place: { left: number; top: number } } | null>(null)
+  const freshSeq = useRef(0)
+  useNewShortcut(() => {
+    if (importing || fresh) return
+    const date = newBlockDay(dates, today)
+    if (!date) return void toast(NO_NEW_DAY_TEXT)
+    const own = fileOf(date)
+    const wakeMin = own?.wakeMin ?? settingsOn(rd.settings, date).dayTypes[info(date).type].wakeMin
+    const startMin = freeHourStart(monthDays.get(date)?.blocks ?? [], { isToday: date === today, nowMin: logicalMinuteOf(date, Date.now()), wakeMin }, DEFAULT_NEW_BLOCK_MIN)
+    const box = root.current?.getBoundingClientRect()
+    const at = root.current?.querySelector(`[data-testid="day-${date}"]`)?.getBoundingClientRect()
+    const place = box && at ? popoverPlace({ gridWidth: box.width, colLeft: at.left - box.left, colRight: at.right - box.left, top: at.top - box.top, width: NEW_BLOCK_WIDTH }) : { left: 0, top: 0 }
+    setFresh({ seq: ++freshSeq.current, date, startMin, place })
+  })
+  const namesOf = (d: string) => ({ rd, settings: settingsOn(rd.settings, d), routines, requests })
   /** The menu opens once the files of its days are known: the ✓ and „—” are of the days as they are, whichever month they are in. */
   const openMenu = (ids: readonly string[], at: { x: number; y: number }) => {
     const asked = ++menuAsked.current
@@ -288,7 +318,7 @@ export function CalendarPage() {
 
   const [y, m] = month.split('-')
   return (
-    <div className="flex flex-col gap-3 p-4" data-testid="calendar" data-counted={monthView ? 'true' : undefined}>
+    <div ref={root} className="relative flex flex-col gap-3 p-4" data-testid="calendar" data-counted={monthView ? 'true' : undefined}>
       {importing && <ZjazdyPreviewPanel busy={busy} onSave={(days) => void saveImport(days)} onCancel={closeZjazdy} />}
       {!importing && (
         <>
@@ -302,7 +332,8 @@ export function CalendarPage() {
             <button type="button" className="btn" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Następny miesiąc" data-testid="month-next">
               ›
             </button>
-            <button type="button" className="btn" onClick={() => setMonth(monthOf(today))}>
+            {/* One rule of „dziś” on every screen of periods (D6): always there, off where you already are. */}
+            <button type="button" className="btn" disabled={month === thisMonth} onClick={() => setMonth(thisMonth)} data-testid="month-today">
               Dziś
             </button>
             <button type="button" className="btn" disabled={busy} onClick={() => void readPdf()} data-testid="calendar-zjazdy">
@@ -362,6 +393,26 @@ export function CalendarPage() {
             </span>
           </div>
         </>
+      )}
+      {fresh && !importing && (
+        <NewBlockPopover
+          key={fresh.seq}
+          dates={[fresh.date]}
+          startMin={fresh.startMin}
+          durationMin={DEFAULT_NEW_BLOCK_MIN}
+          dragged={false}
+          today={today}
+          namesOf={namesOf}
+          place={fresh.place}
+          onClose={() => setFresh(null)}
+          onDates={() => undefined}
+          onMore={(block) => {
+            // The full editing of the day, the block not saved yet (the draft of „Dziś”, D461).
+            setBlockDraft(fresh.date, block, true)
+            setFresh(null)
+            openDay(fresh.date)
+          }}
+        />
       )}
       {menu && menuEntries && <ContextMenu title={`Zmień ${groupCount(menu.dates.length, 'day')}`} at={menu.at} items={menuEntries} onClose={() => setMenu(null)} testId="calendar-menu" />}
     </div>

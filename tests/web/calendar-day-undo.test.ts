@@ -14,7 +14,7 @@ import { installEscape } from '@renderer/lib/escape'
 import { clearGroupLine } from '@renderer/store/groupLine'
 import { useData } from '@renderer/store/data'
 import { useMonthView } from '@renderer/store/horizon'
-import { useUi } from '@renderer/store/ui'
+import { NO_MEMORY, useUi } from '@renderer/store/ui'
 
 vi.mock('@renderer/store/horizon', () => ({ useWeekView: vi.fn(), useDaysView: vi.fn(), useGoalsView: vi.fn(() => ({ view: null, failed: false })), useMonthView: vi.fn() }))
 
@@ -50,7 +50,7 @@ beforeEach(() => {
     dataView: async () => undefined
   }
   useData.setState({ rd: rdFrom({ schema: 1 }), view: { today: TODAY, allDay: [], computers: [] } as unknown as DataView, allDay: [] })
-  useUi.setState({ page: 'calendar', day: null, pick: null, toasts: [] })
+  useUi.setState({ page: 'calendar', day: null, pick: null, toasts: [], from: null, memory: NO_MEMORY })
   offEsc = installEscape()
 })
 afterEach(() => {

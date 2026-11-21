@@ -28,9 +28,10 @@ import { commitActiveField } from '../../lib/commit'
 import { useOutsidePointer } from '../../lib/outside'
 import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
+import { usePeriodKeys } from '../../lib/periodKeys'
 import { isSaved, saveAnswer, useData, type SaveAnswer, type SendState } from '../../store/data'
 import { dayUsable, useDay, type DayModel } from '../../store/day'
-import { dropSavedDraft, onLeaveBlockDraft, openDay, patchBlockDraft, setBlockDraft, takePick, toast, useUi } from '../../store/ui'
+import { dropSavedDraft, navigate, onLeaveBlockDraft, openDay, patchBlockDraft, setBlockDraft, takePick, toast, useUi } from '../../store/ui'
 import { useMachine } from '../../store/machine'
 import { attachTransfer } from '../attachments/attachDrop'
 import { dayPlace as placeOfDay, withAttachCounts } from '../attachments/attachView'
@@ -230,6 +231,9 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
   const nextPlace = (lengthMin?: number) => nextFreeStart(model.state, { isToday, nowMin: logicalMinuteOf(date, Date.now()), wakeMin: model.ctx.wakeMin }, lengthMin)
   const newHere = () => create(nextPlace(), undefined, true)
   useNewShortcut(newHere)
+  // PgUp / PgDn / Home (D6, P8): the day before, the day after, today – as the arrows and „Dziś” of the heading.
+  usePeriodKeys({ prev: () => openDay(addDays(date, -1)), next: () => openDay(addDays(date, 1)), today: () => (isToday ? undefined : openDay(null)) })
+  const from = useUi((s) => s.from)
   // D384: a sprawa of the panel beside the axis put on it – dropped at a minute, or in the nearest free place from now. A day
   // gone is history: no panel there (as no pushing, D367).
   const casesOn = date >= today
@@ -257,7 +261,8 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
   // it does, the panel of the block opens (a day gone by too). One that is no longer on the day says so.
   const pick = useUi((s) => s.pick)
   useEffect(() => {
-    if (pick?.kind === 'command' && pick.id === 'newBlock' && isToday) {
+    // The search's command is today's; one with a day (the empty day of „Agenda”) is that day's.
+    if (pick?.kind === 'command' && pick.id === 'newBlock' && (pick.date ? pick.date === date : isToday)) {
       takePick((p) => p.kind === 'command' && p.id === 'newBlock')
       newHere()
     } else if (pick?.kind === 'block' && pick.date === date) {
@@ -601,6 +606,12 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
   return (
     <div className={cx('flex min-h-0 flex-1 flex-col', caseDrag?.copy && '[&_*]:cursor-copy!')} data-testid="today">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2">
+        {/* A day opened from „Tydzień” or the calendar (D2, UX8): back to it, where it was. */}
+        {from && (
+          <button type="button" className="btn h-[26px]" onClick={() => navigate(from)} data-testid="day-back">
+            {from === 'week' ? '← Tydzień' : '← Kalendarz'}
+          </button>
+        )}
         <button type="button" className="btn h-[26px] px-2" onClick={() => openDay(addDays(date, -1))} aria-label="Poprzedni dzień" data-testid="day-prev">
           ‹
         </button>
@@ -611,11 +622,10 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
         <button type="button" className="btn h-[26px] px-2" onClick={() => openDay(addDays(date, 1))} aria-label="Następny dzień" data-testid="day-next">
           ›
         </button>
-        {!isToday && (
-          <button type="button" className="btn h-[26px]" onClick={() => openDay(null)} data-testid="day-today">
-            Dziś
-          </button>
-        )}
+        {/* One rule of „dziś” on every screen of periods (D6): always there, off where you already are. */}
+        <button type="button" className="btn h-[26px]" disabled={isToday} onClick={() => openDay(null)} data-testid="day-today">
+          Dziś
+        </button>
         <button
           type="button"
           className="ml-2 inline-flex h-[26px] items-center rounded border px-2 text-[12.5px]"

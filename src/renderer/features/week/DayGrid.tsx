@@ -27,6 +27,7 @@ import { menuBind } from '../../components/ContextMenu'
 import { cx } from '../../components/ui'
 import { contentTop, followAxis, scrollAxis, scrollParent } from '../../lib/axisScroll'
 import { useDeleteSelected } from '../../lib/deleteKey'
+import { useNewShortcut } from '../../lib/escape'
 import { useData, type SaveAnswer } from '../../store/data'
 import { useMachine } from '../../store/machine'
 import { openDay, openPick, setBlockDraft, toast } from '../../store/ui'
@@ -41,6 +42,7 @@ import { EnergyStrip, STRIP_WIDTH } from './EnergyStrip'
 import { costRoom, TileCost } from '../plan/TileCost'
 import { hasEnergy } from '../plan/energyDraw'
 import { NewBlockPopover } from './NewBlockPopover'
+import { freeHourStart, newBlockDay, NO_NEW_DAY_TEXT } from './weekNew'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
 import { saveTileCosts, type CostAsk } from '../plan/costSave'
 import { copyDayBlock, moveWeekBlock } from './weekMove'
@@ -54,6 +56,9 @@ import { countDragDays, dragDayGroup, dragGoing } from '../plan/groupDrag'
 
 const AXIS_PX = 48
 const TONE_CLASS: Record<Tone, string> = { ok: 'text-sea', bad: 'text-rose', muted: 'text-muted', plain: 'text-fg' }
+
+/** The wake taken for a day that has none counted (not read). */
+const DEFAULT_WAKE_MIN = 8 * 60
 
 /** The drop of a block into a day gone by changes nothing (D417) – said when the save is refused after all (the day turned over). */
 export const PAST_DROP_TEXT = 'Dni minionych nie zmieniasz przeciąganiem.'
@@ -248,6 +253,16 @@ export function DayGrid({
     setPick({ seq: ++asks.current, dates: idx.map((i) => days[i]!.date), startMin: r.startMin, durationMin: r.endMin - r.startMin, dragged, place })
   }
   const spanHeld = held ? dayIndexes(held.from, held.to) : []
+  // Ctrl+N (D6, P9): the window of a new block today – or on the first day shown from today – at the nearest free hour (`weekNew.ts`); one window at a time.
+  useNewShortcut(() => {
+    if (pick) return
+    const date = newBlockDay(dates, today)
+    const i = date ? dates.indexOf(date) : -1
+    const d = days[i]
+    if (!d) return void toast(NO_NEW_DAY_TEXT)
+    const startMin = freeHourStart(d.blocks, { isToday: d.date === today, nowMin: logicalMinuteOf(d.date, Date.now()), wakeMin: d.wakeMin ?? DEFAULT_WAKE_MIN }, DEFAULT_NEW_BLOCK_MIN)
+    pickOn(i, i, { startMin, endMin: startMin + DEFAULT_NEW_BLOCK_MIN }, false)
+  })
 
   // A block dragged (D417): its listeners are the window's (the pointer leaves the block at once), they read what the page has now.
   const latest = useRef({ days, lo, hi, ppm, today, max: rd.general.parallelMax })
