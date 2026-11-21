@@ -93,6 +93,12 @@ K (przegląd kalibracji) wchodzi między paczki, gdy aplikacja go zaproponuje. K
 | P28 | UX19 | Szablon z menu dni, szybkie wybory dni, cele zwijane | tak |
 | P29 | UX19 | Ctrl+Z dla ostatniego „Cofnij” | tak, tylko póki linia lub dymek „Cofnij” jest widoczny |
 
+## Po ciągu UX – 1.35.0: przeskalowanie kosztów (D566)
+
+| # | Zadanie | Rodzaj | Wykonawca · przegląd | Szacunek | Pytania | Gotowe, gdy |
+| --- | --- | --- | --- | --- | --- | --- |
+| SK1 | „Przelicz koszty ×N”: okno (mnożnik, pule, zakres – podkategorie, rutyny, warianty, własne koszty bloków, szablony), podgląd „przed → po”, zaokrąglenie i przycięcie do ±5, jeden zapis (folder danych, zmiany grupowe jak ciąg Z) i „Cofnij”; dostęp z Ustawień (sekcja kosztów) i Ctrl K | Całość | `wykonawca-opus` · xhigh | 3–4 h | – (D566) | ×2 na wszystkich pulach zmienia koszt 2 → 4 i 3 → 5 (przycięte) w podkategorii, rutynie i bloku; podgląd pokazuje każdą zmianę; „Cofnij” przywraca wszystko; minione dni (zamrożone) bez zmian; testy silnika i `tests/fs`, E2E `screens` |
+
 ## Ciąg Z – zakończony z wydaniem 1.28.0 (D527–D531)
 
 Zaznaczanie wielu i zmiany grupowe, 15–16.11.2026; tabela zadań – `docs/archiwum/postep-ciag-Z.md`. Zostaje Twój odbiór ZG1–ZG10.
