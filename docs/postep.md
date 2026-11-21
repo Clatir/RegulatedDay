@@ -95,8 +95,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 15. **Ciąg UX – poprawki użytkowe (D561):** przegląd użytkowy 1.33.0 (20.11; ustalenia z dowodami –
     `docs/przeglad-ux-20.11.md`), 21.11 użytkownik: wdrożyć wszystkie poprawki. Plan – `docs/plan.md`, „Ciąg UX”:
     19 zadań (UX1–UX19) w 8 paczkach, 66–90 h; jedno CI i jedno wydanie 1.34.0 na końcu (D562) – zadania scalane bez CI do
-    `claude/ciag-ux`; pytania P1–P29 z rekomendacjami (klikalne przed paczką).
-    **Następny krok:** po „dalej” – „Przed etapem UX” (paczka 1 = UX1–UX3, bez pytań), gałąź ciągu `claude/ciag-ux`.
+    gałęzi sesji `claude/dazzling-dijkstra-qat23f`; pytania P1–P29 odpowiedziane 21.11 (D563–D565, rekomendacje poza P19).
+    „Dalej” dane 21.11 – ciąg w toku od paczki 1 (UX1–UX3); stan paczek – tabela niżej.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;

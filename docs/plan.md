@@ -18,11 +18,11 @@ według kolumny „Wykonawca” (D349).
 Przegląd 20.11 (ustalenia z dowodami, plik:linia – `docs/przeglad-ux-20.11.md`, litery A–G niżej to jego pozycje);
 21.11 użytkownik: wdrożyć wszystkie poprawki, paczki z jednym CI na końcu (D562, zamiast wydania po paczce – D413). 19 zadań
 w 8 paczkach – paczka to etap pracy i brama pytań, nie wydanie: zadanie – testy lokalne i `/code-review`, scalenie do gałęzi ciągu
-`claude/ciag-ux` bez CI; po paczce wpis w `docs/postep.md` i wypchnięcie gałęzi (bez PR). Na końcu ciągu `version` 1.34.0 raz, jedna
+gałęzi sesji ciągu (21.11: `claude/dazzling-dijkstra-qat23f`, od `main` po PR #108) bez CI; po paczce wpis w `docs/postep.md` i wypchnięcie gałęzi (bez PR). Na końcu ciągu `version` 1.34.0 raz, jedna
 sekcja `CHANGELOG.md`, jeden PR z pełnym CI (Linux i Windows), wydanie. Testy tylko w CI na Windows (kolejność okien, pasek,
 powiadomienia – paczki 4 i 5) dają wynik dopiero wtedy: szacunek ma na to rundę poprawek po CI (2–4 h). Gdy `main` zmieni się w
 trakcie – `git merge origin/main` do gałęzi ciągu. Start ciągu po „dalej”; potem paczki idą po kolei jako ciąg (D317), z bramą pytań przed każdą: zachowanie widoczne dla
-użytkownika tylko po odpowiedzi (pytania P1–P29 niżej, klikalne, rekomendacja pierwsza); ⚙ – przywrócenie zachowania ze
+użytkownika tylko po odpowiedzi (pytania P1–P29 niżej, klikalne, rekomendacja pierwsza; **wszystkie odpowiedziane 21.11 – D563–D565**, rekomendacje poza P19: odliczanie mm:ss zostaje); ⚙ – przywrócenie zachowania ze
 specyfikacji albo poprawka techniczna, rozstrzygam sam (T1977 i dalej). Po każdej paczce punkty `UX<n>.<k>` w `docs/odbior.md` (wersja 1.34.0).
 K (przegląd kalibracji) wchodzi między paczki, gdy aplikacja go zaproponuje. Każda poprawka ma test, który na 1.33.0 pada;
 „do sprawdzenia” w przeglądzie – najpierw test, który potwierdza błąd.
