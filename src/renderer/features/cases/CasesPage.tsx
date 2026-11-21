@@ -66,6 +66,14 @@ export function CasesPage() {
   const [chosen, setChosen] = useState<string | null>(null)
   // The rows opened under „▸” (UX17): kept here, not in the row – a sprawa moved to another list stands in another section and its row is mounted anew.
   const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(new Set())
+  // A sprawa that is gone (removed here or on another computer) takes its mark along: it comes back closed, and the set does not grow.
+  useEffect(() => {
+    setExpandedIds((now) => {
+      const live = new Set(all.map((x) => x.record.id))
+      const kept = [...now].filter((id) => live.has(id))
+      return kept.length === now.size ? now : new Set(kept)
+    })
+  }, [all])
   const setExpandedOf = (id: string, on: boolean) =>
     setExpandedIds((now) => {
       if (now.has(id) === on) return now
@@ -291,6 +299,8 @@ function CaseRow({ x, today, marked, group, expanded, onExpand }: { x: CaseItem;
   const rule = useRef<RuleGuard | null>(null)
   const [asking, setAsking] = useState(false)
   const [askBusy, setAskBusy] = useState(false)
+  // The list the sprawa is going to when the question stands because of that (a move would unmount the form and lose its rule); null – the question is of closing the form.
+  const [moveAfter, setMoveAfter] = useState<CaseList | null>(null)
   // D440: a task's steps open under its row (as the note of a request is read there); the counter stays in the row.
   const [stepsOpen, setStepsOpen] = useState(false)
   const counter = isTask ? stepsProgress(r.steps) : null
@@ -308,11 +318,13 @@ function CaseRow({ x, today, marked, group, expanded, onExpand }: { x: CaseItem;
   const done = x.list === 'done'
   // P25: the row is one line (title / person and note, estimate, the badges of the due date and the priority, „Zaplanuj…”, „…”); the rest – the note and
   // the subcategory of a task, the list, the priority, „Zrobione”, „Terminy”, „Kroki”, „Powtarzaj”, „Usuń” – under „▸” and in the menu „…” (the same states).
-  const toggleRepeat = () => (repeating && rule.current?.unsaved() ? setAsking(true) : setRepeating(!repeating))
+  const toggleRepeat = () => (repeating && rule.current?.unsaved() ? (setMoveAfter(null), setAsking(true)) : setRepeating(!repeating))
+  // D563 P5: a move to another list (or „Zrobione”) takes the row to another section – a rule not saved yet would be lost with its form, so it is asked first.
+  const moveTo = (list: CaseList) => (repeating && rule.current?.unsaved() ? (setMoveAfter(list), setAsking(true)) : void moveCase(r.id, list))
   const menu = caseRowMenu(x, {
-    list: (l) => void moveCase(r.id, l),
+    list: moveTo,
     priority: (v) => set({ priority: priorityFrom(v) }),
-    done: () => void moveCase(r.id, 'done'),
+    done: () => moveTo('done'),
     // The menu only opens the forms (a second pick must not close what is open and being typed in); the buttons under „▸” toggle.
     dates: () => setDating(true),
     steps: () => setStepsOpen(true),
@@ -362,7 +374,7 @@ function CaseRow({ x, today, marked, group, expanded, onExpand }: { x: CaseItem;
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2 text-[12px]">
-            <Choice value={x.list} options={CASE_LISTS.map((l) => ({ value: l, label: CASE_LIST_NAMES[l] }))} onChange={(list: CaseList) => void moveCase(r.id, list)} className="h-[24px] text-[12px]" aria-label="Lista" data-testid="case-list" />
+            <Choice value={x.list} options={CASE_LISTS.map((l) => ({ value: l, label: CASE_LIST_NAMES[l] }))} onChange={(list: CaseList) => moveTo(list)} className="h-[24px] text-[12px]" aria-label="Lista" data-testid="case-list" />
             {isTask && (
               <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={stepsOpen} onClick={() => setStepsOpen(!stepsOpen)} data-testid="case-steps-toggle">
                 Kroki{counter ? ` ${counter}` : ''}
@@ -371,7 +383,7 @@ function CaseRow({ x, today, marked, group, expanded, onExpand }: { x: CaseItem;
             {!done && (
               <>
                 <Choice value={(r.priority ?? 'none') as PriorityChoice} options={PRIORITY_CHOICES} onChange={(v: PriorityChoice) => set({ priority: priorityFrom(v) })} className="h-[24px] text-[12px]" aria-label="Priorytet" data-testid="case-priority-choice" />
-                <button type="button" className="btn h-[24px] px-2 text-[12px]" onClick={() => void moveCase(r.id, 'done')} data-testid="case-done">
+                <button type="button" className="btn h-[24px] px-2 text-[12px]" onClick={() => moveTo('done')} data-testid="case-done">
                   Zrobione
                 </button>
                 <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={dating} onClick={() => setDating(!dating)} data-testid="case-dates-open">
@@ -399,18 +411,29 @@ function CaseRow({ x, today, marked, group, expanded, onExpand }: { x: CaseItem;
             title="Zapisać zmianę powtarzania?"
             busy={askBusy}
             onSave={() => {
+              const target = moveAfter
               setAskBusy(true)
               void (rule.current?.save() ?? Promise.resolve(false))
                 .catch(() => false)
                 .then((ok) => {
-                  // Saved: the form closes; a save that did not go through stays on the form with its rule.
+                  // Saved: the form closes (and the move goes on); a save that did not go through stays on the form with its rule, the sprawa where it was.
                   setAskBusy(false)
                   setAsking(false)
-                  if (ok) setRepeating(false)
+                  setMoveAfter(null)
+                  if (ok) {
+                    setRepeating(false)
+                    if (target) void moveCase(r.id, target)
+                  }
                 })
             }}
-            onDiscard={() => (setAsking(false), setRepeating(false))}
-            onClose={() => !askBusy && setAsking(false)}
+            onDiscard={() => {
+              const target = moveAfter
+              setAsking(false)
+              setMoveAfter(null)
+              setRepeating(false)
+              if (target) void moveCase(r.id, target)
+            }}
+            onClose={() => !askBusy && (setAsking(false), setMoveAfter(null))}
           />
         </div>
       )}

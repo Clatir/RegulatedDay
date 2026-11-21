@@ -32,9 +32,11 @@ export const ownControl = (t: EventTarget): boolean => t instanceof Element && t
 
 /**
  * `started` – a ref that says whether the gesture of the last press went past the threshold (a drag, whatever came of it: dropped, cancelled, brought back to
- * where it began); the click the browser sends after the release asks it (UX17: a drag is never a click on the card).
+ * where it began); the click the browser sends after the release asks it (UX17: a drag is never a click on the card) and puts it down once it has answered.
+ * The click comes in the same task as the release (it may come on no card at all – dropped elsewhere), so the mark also goes down in the next one: a later click
+ * with no press before it (a screen reader's, `element.click()`) is a click.
  */
-export function usePointerDrag<T>(resolve: (x: number, y: number) => T | null, onDrop: (id: string, target: T, copy: boolean) => void): { drag: PointerDragState<T> | null; grab: (id: string, e: GrabEvent) => void; started: { readonly current: boolean } } {
+export function usePointerDrag<T>(resolve: (x: number, y: number) => T | null, onDrop: (id: string, target: T, copy: boolean) => void): { drag: PointerDragState<T> | null; grab: (id: string, e: GrabEvent) => void; started: { current: boolean } } {
   const [drag, setDrag] = useState<PointerDragState<T> | null>(null)
   const started = useRef(false)
   const at = useRef(resolve)
@@ -66,6 +68,7 @@ export function usePointerDrag<T>(resolve: (x: number, y: number) => T | null, o
     }
     const end = (ev: PointerEvent) => {
       stop()
+      if (moved) setTimeout(() => (started.current = false), 0)
       if (!moved || ev.type === 'pointercancel') return
       const target = at.current(ev.clientX, ev.clientY)
       if (target != null) drop.current(id, target, ev.ctrlKey)

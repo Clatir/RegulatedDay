@@ -39,6 +39,8 @@ export interface CasesGroupOptions {
   enabled: boolean
   /** The focus is in this screen: the page and the panel never both take a key. */
   when: (e: KeyboardEvent) => boolean
+  /** The panel's drag (`usePointerDrag.started`): a click that follows a gesture that started is no click on the row. */
+  dragStarted?: () => boolean
   today: string
 }
 
@@ -109,6 +111,10 @@ export function useCasesGroup(o: CasesGroupOptions): CasesGroup {
         // The row's own fields and buttons are theirs, and so is an opened form of the row (`data-row-form`: dates, repeat, steps, „Zaplanuj”);
         // a press that moved is a drag of the panel's row.
         if (ownControl(e.target) || isEditable(e.target) || (e.target instanceof Element && e.target.closest('[data-row-form]'))) return
+        if (o.dragStarted?.()) {
+          down.current = null
+          return
+        }
         const from = down.current
         if (from && Math.hypot(e.clientX - from.x, e.clientY - from.y) > CLICK_SLOP) return
         sel.onItemClick(id, e)

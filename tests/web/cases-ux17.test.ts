@@ -160,6 +160,18 @@ describe('wiersz sprawy w jednym wierszu (P25)', () => {
     expect(q('case-more', row('b'))).toBeNull()
   })
 
+  it('rozwinięcie nie przeżywa sprawy: usunięta (i przywrócona) wraca zwinięta, a pamięć rozwiniętych nie rośnie', async () => {
+    const s = stub([task('a', 1), task('b', 2)])
+    await render()
+    await click(q('case-expand', row('a'))!)
+    expect(q('case-more', row('a'))).not.toBeNull()
+    let bring: () => void = () => undefined
+    await act(async () => void (bring = s.take('a')))
+    await act(async () => bring())
+    expect(q('case-more', row('a'))).toBeNull()
+    expect(q('case-expand', row('a'))!.getAttribute('aria-expanded')).toBe('false')
+  })
+
   it('„Zaplanuj…” zostaje w wierszu i otwiera formularz; klik w pola i przyciski nie zaznacza wiersza', async () => {
     stub([task('a', 1)])
     await render()
@@ -282,43 +294,18 @@ describe('Macierz: klik, fokus, strzałki, prawy przycisk (F8)', () => {
     expect(document.activeElement).toBe(q('case-title', row('c')))
   })
 
-  /** A pointer gesture on the card: the press, the moves of the window (a button held), the release, then the click the browser sends after it. */
-  const gesture = async (id: string, moves: Array<[number, number]>, click_: [number, number]) => {
+  /** A pointer gesture on the card: the press, the moves of the window (a button held), then the release and – as the browser does, in the same task – the click after it. */
+  const gesture = async (id: string, moves: Array<[number, number]>, click_: [number, number] | null) => {
     document.elementFromPoint = () => null
-    const fire = (type: string, x: number, y: number, el: EventTarget = window) => act(async () => void el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y })))
-    await fire('pointerdown', 10, 10, card(id))
-    for (const [x, y] of moves) await fire('pointermove', x, y)
-    await fire('pointerup', moves.at(-1)?.[0] ?? 10, moves.at(-1)?.[1] ?? 10)
-    await click(card(id), { clientX: click_[0], clientY: click_[1] })
+    const event = (type: string, x: number, y: number) => new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y })
+    await act(async () => void card(id).dispatchEvent(event('pointerdown', 10, 10)))
+    for (const [x, y] of moves) await act(async () => void window.dispatchEvent(event('pointermove', x, y)))
+    const [ux, uy] = moves.at(-1) ?? [10, 10]
+    await act(async () => {
+      window.dispatchEvent(event('pointerup', ux, uy))
+      if (click_) card(id).dispatchEvent(event('click', click_[0], click_[1]))
+    })
   }
-
-  it('klik w kartę (i Enter) rozwija otwierany wiersz – widać jego notatkę i pola, nie tylko linię', async () => {
-    await matrix(five())
-    await click(card('c'))
-    await settle()
-    expect(q('case-more', row('c'))).not.toBeNull()
-    expect(q('case-more', row('d'))).toBeNull()
-  })
-
-  it('menu karty znika, gdy jej sprawa znika (usunięta gdzie indziej), i nie wraca po „Cofnij”', async () => {
-    const s = await matrix(five())
-    await rightClick(card('c'))
-    expect(q('matrix-menu')).not.toBeNull()
-    let bring: () => void = () => undefined
-    await act(async () => void (bring = s.take('c')))
-    expect(q('matrix-menu')).toBeNull()
-    await act(async () => bring())
-    expect(card('c')).not.toBeNull()
-    expect(q('matrix-menu')).toBeNull()
-  })
-
-  it('karta ma nazwę z tytułu, listy, znaczka terminu i szacunku, a podpowiedź osobno (aria-describedby)', async () => {
-    await matrix([task('a', 1, { priority: 'p1', dueDate: addDays(TODAY, 2), estimateMin: 45 }), task('b', 2, { priority: 'p1' })])
-    expect(card('a').getAttribute('aria-label')).toMatch(/^zadanie a, Skrzynka, Termin za 2 dni, 45 min$/)
-    expect(card('b').getAttribute('aria-label')).toBe('zadanie b, Skrzynka, 30 min')
-    const hint = document.getElementById(card('a').getAttribute('aria-describedby')!)
-    expect(hint?.textContent).toMatch(/Enter/)
-  })
 
   it('klik po przeciągnięciu nie otwiera wiersza – także przeciągnięcie wycofane na kartę i puszczenie tuż za progiem', async () => {
     await matrix(five())

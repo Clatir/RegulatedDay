@@ -247,7 +247,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
     else planCaseOne(id, minute, copy)
   }
   const planCaseNext = (x: CaseItem) => planCaseOne(x.record.id, nextPlace(x.estimateMin))
-  const { drag: caseDrag, grab: grabCase } = useCaseDrag(planCaseAt)
+  const { drag: caseDrag, grab: grabCase, started: caseDragStarted } = useCaseDrag(planCaseAt)
   const draggedCase = caseDrag?.target != null ? requests.find((x) => x.id === caseDrag.id) : undefined
   const draggedGroup = caseDrag ? carriedBy(panelSelected.current, caseDrag.id) : null
   const ghost: BlockSpan | null = draggedCase && caseDrag?.target != null ? { startMin: caseDrag.target, endMin: caseDrag.target + (draggedGroup ? groupBlockMinutes(draggedGroup.map((x) => x.record)) : estimateOf(draggedCase)) } : null
@@ -863,7 +863,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
             }
           />
         ) : (
-          <SidePanel model={model} names={names} onSelect={setSelected} onMove={(b) => setDialog({ move: b })} cases={casesOn ? <CasesPanel drag={caseDrag} grab={grabCase} onPlan={planCaseNext} onSelected={(s) => void (panelSelected.current = s)} /> : undefined} />
+          <SidePanel model={model} names={names} onSelect={setSelected} onMove={(b) => setDialog({ move: b })} cases={casesOn ? <CasesPanel drag={caseDrag} grab={grabCase} started={caseDragStarted} onPlan={planCaseNext} onSelected={(s) => void (panelSelected.current = s)} /> : undefined} />
         )}
       </div>
       {exchange && (

@@ -81,8 +81,11 @@ export function CasesMatrix({ items, today, onOpen }: { items: readonly CaseItem
           grab(x.record.id, e)
         }}
         onClick={(e) => {
-          // A gesture that started is a drag (what it wrote, it wrote on the drop – even brought back to the card), not a click.
-          if (started.current) return
+          // A gesture that started is a drag (what it wrote, it wrote on the drop – even brought back to the card), not a click; the click that follows it answers once.
+          if (started.current) {
+            started.current = false
+            return
+          }
           onOpen(x.record.id)
         }}
         onContextMenu={menuHandlers(x.record.id).onContextMenu}

@@ -593,6 +593,8 @@ test('konwencje: długość „1h30”, ułamek odrzucony z komunikatem, Esc cof
       await expect(page.getByTestId('case-row')).toHaveCount(3)
       await expect(page.getByTestId('request-note').first()).toHaveValue('spacer z psem')
       // „Zrobione” moves it to the list of done (Sprawy, D383); a task added with Ctrl+N and a filter by kind: one of four, then all again.
+      // The restored row is closed again (its mark went with it).
+      await page.getByTestId('case-row').first().getByTestId('case-expand').click()
       await page.getByTestId('case-row').first().getByTestId('case-done').click()
       await expect(page.getByTestId('cases-done-list').getByTestId('case-row')).toHaveCount(1)
       await page.keyboard.press('Control+KeyN')

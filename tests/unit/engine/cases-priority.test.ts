@@ -266,7 +266,8 @@ describe('strzałki w macierzy (UX17, F8)', () => {
     expect(matrixMove(full, 'a', 'ArrowLeft')).toBeNull()
     expect(matrixMove(full, 'c', 'ArrowRight')).toBeNull()
     expect(matrixMove(full, 'd', 'ArrowLeft')).toBeNull()
-    expect(matrixMove(full, 'f', 'ArrowRight')).toBeNull()  })
+    expect(matrixMove(full, 'f', 'ArrowRight')).toBeNull()
+  })
 
   it('nieznana karta – nigdzie', () => {
     expect(matrixMove(full, 'zzz', 'ArrowDown')).toBeNull()
