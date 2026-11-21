@@ -99,22 +99,26 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
     „Dalej” dane 21.11. **Gałąź ciągu: `claude/ciag-ux`** (bez PR – CI nie rusza; PR i pełne CI raz na końcu, D562).
     PR #108 (plan i D561–D565) scalony 21.11, `main` scalony do `claude/ciag-ux`. Sesja przeniesiona 21.11 z chmury na komputer
     lokalny. Drzewa wykonawców zakłada główna sesja z gałęzi ciągu (T1986 – `isolation: worktree` bierze `origin/main`).
-    - **Paczka 1 (UX1–UX3) – zamknięta 21.11:** T1977–T1985, po przeglądzie T1990 (c11067b, 8ab540e). `/code-review` high
-      `26e6726..a3d9c55`: 1 ważne (start „o godzinie” w Szablonie w tygodniu sesji – poprawione, `templateStartAt`), runda 2 na
-      poprawce: strefa przed pierwszym stałym – jak przeciągnięcie (D372), tylko testy. Testy lokalne (Windows): typecheck, build,
-      lint zielone; `npm test` 4551/4559 – czerwone tylko `tests/unit/installer-close.test.ts` (8, środowisko: działa zainstalowana
-      Regulated Day i `rd-helper`, szukanie po nazwie procesu – jak w ciągu Z; sprawdzi CI); `config.test.ts` zielony; E2E 132
-      zielone, 11 pominiętych (tylko CI). Odbiór: UX1.1–UX3.2 w `docs/odbior.md`.
-      **Uwagi na później:** „Historia” z komunikatu przy nieudanym `historyList` mówi „brak wersji” (`HistoryPage.tsx`); kilka
-      uszkodzonych rekordów jednego rodzaju – przyciski „Historia: Szablon dnia” nie do odróżnienia (`recordTitle`); menu „⋯”
-      20 px na lewo od przycisku (`MENU_WIDTH` 220 przy `min-w-[200px]`); scalony dymek zostaje na starym miejscu listy i
-      `slice(-3)` może go zrzucić; martwa gałąź „Ten dzień już minął.” w `moveShortcuts`; „o godzinie” w Szablonie nie rozsuwa
-      sąsiadów jak przeciągnięcie (`pushApart`).
-    - **Paczka 2 (UX4–UX6) – w toku 21.11:** UX4 scalony (5e6d1f0, T1987–T1989), przegląd: poprawki w toku (drugi Esc po
-      `blur`, Enter w „Od” odcinka, odmowa zamknięcia bez powodu); UX5 scalony (bd19cc7), przegląd: poprawki w toku („Cofnij”
-      „Dodano blok” po zmianie nazwy, „+ Szablon” przy 7 zajętych dniach); UX6 u wykonawcy (drzewo `ux6`).
-    - Paczki 3–8 (UX7–UX19): do zrobienia, odpowiedzi w D563–D565 (P19: mm:ss zostaje). `docs/decyzje-techniczne.md` ma
-      ~186 / 200 KB – przed nowymi T w paczce 3 wydzielić T1100–T1999 do osobnego pliku (jak T1967).
+    - **Paczka 1 (UX1–UX3) – zamknięta 21.11:** T1977–T1985, T1990; szczegóły i uwagi na później – `docs/archiwum/postep-ciag-UX.md`.
+    - **Paczka 2 (UX4–UX6) – zamknięta 21.11:** T1986–T1996, wszystko w `claude/ciag-ux` (ostatni kod caf48e3). Wykonawca
+      `wykonawca-sonnet` w drzewach `ux4`–`ux6` (T1986). Przegląd high: UX4 – 2 rundy (drugi Esc po `blur`, Enter w „Od”
+      odcinka, odmowa zamknięcia bez powodu – poprawione); UX5 – 4 rundy (czwarta dozwolona po ważnych w trzeciej; „Cofnij”
+      „Dodano blok” jako odwrotność dodania – T1992, id nowego szablonu `idAfter` – T1993); UX6 – 4 rundy, po czwartej
+      uproszczenie bez kolejnej rundy: karta całodniowa tylko do odczytu w trakcie zapisu, bez zapisu dosyłanego (T1995).
+      Testy: typecheck, build, lint zielone; `npm test` – czerwone tylko `installer-close.test.ts` (środowisko, jak w paczce 1);
+      unit 4655/4663; pełne E2E 135 zielonych (przed ostatnimi poprawkami UX5/UX6), po nich E2E zmienionych obszarów (allday, series,
+      cases, template-apply, zjazdy, screens) 49 zielonych. Odbiór: UX4.1–UX6.3.
+      **Uwagi na później:** UX4 – odmowa bez powodu w `answer`, `undoRun` i `UnclosedDays` (`if (!r.ok && r.why)`) dalej
+      cicha; Enter z odrzuconym tekstem robi `blur` (drugi Esc trafia do okna); test Entera odcinka nie sprawdza wartości;
+      `installEscape` w teście bez sprzątania. UX5 – ramka zderzeń `role="status"` (klik w nią nie jest „obok”), duplikat
+      `key` przy dwóch rywalach o tej samej nazwie, „nieużywany” pomija wersje, `idAfter` widzi tylko wczytane szablony
+      (plik nieczytelny / niezsynchronizowany z większym id); „Cofnij” nie zdejmuje załącznika dodanego do świeżego bloku.
+      UX6 – klik obok, który zapisuje bez pytania „Wolne”, połyka kliknięcie (trzeba kliknąć drugi raz); Esc w oknie
+      reguły w trakcie zapisu; „+ Szablon” / Ctrl K przy niezapisanej regule – zapis szablonu przed pytaniem; prawy klik
+      zatwierdza pole (`useOutsidePointer`); strażnik `seq` w AllDayBar bez osobnego testu.
+    - **Następna: paczka 3 (UX7–UX9)** – Timeline i TodayPage wspólne, więc po kolei; odpowiedzi P6–P11 w D563.
+      Przed nowymi T wydzielić T1100–T1999 z `docs/decyzje-techniczne.md` (~190 / 200 KB) do osobnego pliku (jak T1967).
+    - Paczki 4–8 (UX10–UX19): do zrobienia, odpowiedzi w D564–D565 (P19: mm:ss zostaje).
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
@@ -123,6 +127,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
   `docs/archiwum/odbior-odebrane.md` pod nagłówek swojego etapu (T536).
 
 ## Pytania na później
+- Po UX6 (D563 P5): pytanie „Zapisać zmianę serii?” pada przy wyborze innej pozycji i zamknięciu panelu, ale nie przy
+  wyjściu z „Szablonów” (menu, Ctrl K) ani przy filtrze / przeniesieniu wiersza sprawy – rozszerzyć?
 - Po G1 (1.0.1): czy zamknięcie dnia ma kończyć też zapauzowaną analizę tygodniową i bloki „po końcu pracy jak projekt”
   (dziś – jak „Koniec pracy”, D195 – zostają zapauzowane z kropką do 04:00)? Wyszło w przeglądzie G1, poza szkicem D.
 - Po G1: czy „Koniec pracy?” ma padać po czasie do wyjaśnienia odpowiedzianym „praca” po bloku, który skończył się sam

@@ -288,6 +288,15 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX2.3 Ten sam dymek nie dubluje się (1.34.0)
    - [ ] UX3.1 Komunikaty prowadzą na miejsce: Historia, Dane, kreator (1.34.0)
    - [ ] UX3.2 Ctrl K: „Plan dnia”, „Kalendarze”, „Nowe zadanie” (1.34.0)
+   - [ ] UX4.1 „Zamknij dzień” w rytuale ma „Cofnij” (1.34.0)
+   - [ ] UX4.2 Enter i Esc w polach godziny rytuału (1.34.0)
+   - [ ] UX4.3 Przyciski rytuału z wielkiej litery, „Zatwierdź” rano i wieczorem (1.34.0)
+   - [ ] UX5.1 Typ jednego dnia w Kalendarzu ma „Cofnij” (1.34.0)
+   - [ ] UX5.2 Klik w pustą oś Szablonu – „Dodano blok · Cofnij” (1.34.0)
+   - [ ] UX5.3 Dwa szablony na ten sam dzień – ostrzeżenie i „nieużywany” (1.34.0)
+   - [ ] UX6.1 Check-in i „Pomiń” zostają po zmianie ekranu (1.34.0)
+   - [ ] UX6.2 Karta wydarzenia całodniowego – klik obok zapisuje (1.34.0)
+   - [ ] UX6.3 Niezapisana reguła serii i powtarzania – pytanie (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3105,6 +3114,69 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** Ctrl K, wpisz „plan dnia”, potem „kalendarze”, potem „nowe zadanie”.
 - **Oczekiwany efekt:** dwie pierwsze przewijają Ustawienia do swojej sekcji, nagłówek sekcji widać w całości pod paskiem „od jutra”; „Nowe zadanie” otwiera nowe zadanie w Sprawach.
 - **Nie przechodzi, gdy:** brak wyniku; nagłówek sekcji schowany pod paskiem; „Nowe zadanie” otwiera prośbę.
+
+#### UX4.1 „Zamknij dzień” w rytuale ma „Cofnij”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ritual-close-undo.test.ts`, E2E `screens.spec.ts` (rytuał zamknięcia). Ty: rzut oka wieczorem.
+- **Jak sprawdzić:** wieczorem w rytuale kliknij „Zamknij dzień”, w dymku kliknij „Cofnij”.
+- **Oczekiwany efekt:** dymek „Zamknięto <dzień>: po rytuale · Cofnij” przez ok. 10 s (jak rano przy niezamkniętych dniach); „Cofnij” wraca do rytuału z dniem niezamkniętym.
+- **Nie przechodzi, gdy:** brak dymku; „Cofnij” nic nie zmienia albo dzień zostaje zamknięty; dymek pojawia się, choć dzień się nie zamknął.
+
+#### UX4.2 Enter i Esc w polach godziny rytuału
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ritual-time-keys.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w rytuale otwórz „Pracowałem do …” (albo „Zaznacz odcinek”), wpisz godzinę i naciśnij Enter. Otwórz znowu, wpisz coś i naciśnij Esc dwa razy. To samo rano w „Niezamkniętych dniach”.
+- **Oczekiwany efekt:** Enter zapisuje jak „Zapisz” (w odcinku – z pola „Od” i „Do”); pierwszy Esc wyrzuca wpisany tekst, drugi zamyka edytor bez zapisu i nie zamyka niczego innego.
+- **Nie przechodzi, gdy:** Enter nic nie robi; Esc zamyka cały rytuał albo panel; po drugim Esc edytor dalej otwarty.
+
+#### UX4.3 Przyciski rytuału z wielkiej litery, „Zatwierdź” rano i wieczorem
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ritual-close-undo.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** przejrzyj przyciski rytuału i planu porannego.
+- **Oczekiwany efekt:** „Zostaw”, „Usuń”, „Rozwiń”, „Anuluj”, „Otwórz jutro”, „Zaznacz odcinek” – z wielkiej litery; przycisk zatwierdzenia granicy to „Zatwierdź” rano i wieczorem.
+- **Nie przechodzi, gdy:** któryś przycisk rytuału z małej litery; rano dalej „Zatwierdź plan”.
+
+#### UX5.1 Typ jednego dnia w Kalendarzu ma „Cofnij”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/calendar-day-undo.test.ts`, E2E `zjazdy.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Kalendarzu zmień typ jednego dnia (np. dzień zjazdu na „Wolne”), w dymku kliknij „Cofnij”.
+- **Oczekiwany efekt:** dymek „Typ dnia <data>: Wolne · Cofnij”; „Cofnij” przywraca poprzedni typ i zajęcia zjazdu.
+- **Nie przechodzi, gdy:** brak dymku przy jednym dniu; po „Cofnij” brakuje zajęć zjazdu albo typ zostaje.
+
+#### UX5.2 Klik w pustą oś Szablonu – „Dodano blok · Cofnij”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/template-undo-added.test.ts`, E2E `template-apply.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Szablonach kliknij w puste miejsce osi, wpisz nazwę bloku, potem w dymku kliknij „Cofnij”.
+- **Oczekiwany efekt:** blok „Inne” 1 h dodany od razu i dymek „Dodano blok · Cofnij”; „Cofnij” usuwa ten blok bez pytania o konflikt, także po wpisaniu nazwy; szablon wraca do stanu sprzed kliknięcia.
+- **Nie przechodzi, gdy:** brak dymku; „Cofnij” pyta o konflikt albo zostawia blok; po „Cofnij” szablon ma nową pustą wersję.
+
+#### UX5.3 Dwa szablony na ten sam dzień – ostrzeżenie i „nieużywany”
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-clash.test.ts`, `tests/web/template-clash.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** ustaw dwóm szablonom tego samego typu ten sam dzień tygodnia; otwórz oba. Potem przy istniejącym szablonie domyślnym kliknij „+ Szablon”.
+- **Oczekiwany efekt:** w edytorze ramka z nazwą szablonu, który wygrywa (u przegrywającego „…wygrywa – tych dni ten szablon nie tworzy”); na liście „· nieużywany” przy przegrywającym na wszystkich dniach; nic nie jest zablokowane; nowy szablon zaczyna od wolnego dnia tygodnia i nie przejmuje dni istniejącego.
+- **Nie przechodzi, gdy:** brak ostrzeżenia; „nieużywany” przy szablonie, który tworzy dni; nowy szablon od razu z poniedziałkiem zajętym przez inny.
+
+#### UX6.1 Check-in i „Pomiń” zostają po zmianie ekranu
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/morning-checkin.test.ts`, `tests/web/unclosed-undo.test.ts`. Ty: rzut oka rano.
+- **Jak sprawdzić:** rano odpowiedz na kilka pytań check-inu, przejdź do „Spraw” i wróć. Osobno: „Pomiń” check-in albo niezamknięte dni, zmień ekran i wróć.
+- **Oczekiwany efekt:** odpowiedzi są tam, gdzie je zostawiłeś; pominięte zostaje pominięte do końca dnia; następnego dnia wszystko od nowa.
+- **Nie przechodzi, gdy:** odpowiedzi giną po zmianie ekranu; pominięty check-in wraca w tym samym dniu.
+
+#### UX6.2 Karta wydarzenia całodniowego – klik obok zapisuje
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/allday-card-away.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** otwórz kartę nowego wydarzenia całodniowego, wpisz tytuł i kliknij obok. Potem otwórz pustą kartę i kliknij obok; potem wpisz tytuł i naciśnij Esc.
+- **Oczekiwany efekt:** z tytułem – wydarzenie zapisane; pusta karta – zamyka się bez wydarzenia; Esc – odrzuca. Przy błędnych datach karta zostaje z komunikatem.
+- **Nie przechodzi, gdy:** wpisany tytuł ginie po kliknięciu obok; pusta karta tworzy wydarzenie; Esc zapisuje.
+
+#### UX6.3 Niezapisana reguła serii i powtarzania – pytanie
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/series-unsaved.test.ts`, `tests/web/cases-repeat.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Szablonach zmień regułę serii (bez „Zapisz zmianę serii”) i wybierz inną serię albo zamknij panel. W Sprawach zmień powtarzanie i zamknij „Powtarzaj”.
+- **Oczekiwany efekt:** okno „Zapisać zmianę serii?” (albo „…powtarzania?”) z „Zapisz” i „Odrzuć”; „Zapisz” zapisuje i przechodzi dalej, „Odrzuć” porzuca zmianę.
+- **Nie przechodzi, gdy:** zmiana ginie po cichu; okno pojawia się bez żadnej zmiany; „Zapisz” nie zapisuje.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
