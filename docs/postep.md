@@ -97,14 +97,24 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
     19 zadań (UX1–UX19) w 8 paczkach, 66–90 h; jedno CI i jedno wydanie 1.34.0 na końcu (D562) – zadania scalane bez CI do
     gałęzi `claude/ciag-ux`; pytania P1–P29 odpowiedziane 21.11 (D563–D565, rekomendacje poza P19).
     „Dalej” dane 21.11. **Gałąź ciągu: `claude/ciag-ux`** (bez PR – CI nie rusza; PR i pełne CI raz na końcu, D562).
-    PR #108 (`claude/dazzling-dijkstra-qat23f`, sam plan i D561–D565) – CI Linux zielone, Windows w toku 21.11 10:10; scalić,
-    gdy zielone (D285), potem `git merge origin/main` do `claude/ciag-ux`. Sesja przeniesiona 21.11 z chmury na komputer lokalny.
-    - **Paczka 1 (UX1–UX3):** kod scalony w `claude/ciag-ux` (commity 7ad1159, c3047f2, aac1fca; T1977–T1985). Testy lokalne
-      w chmurze: typecheck, build, lint zielone; `npm test` 4550 zielonych, 1 czerwony `tests/unit/config.test.ts` (tylko jako root –
-      na Windows powinien przejść); E2E powiązanych plików zielone u wykonawców. **Zostało:** `/code-review` high na zakresie
-      `26e6726..7ad1159`, `26e6726..c3047f2`, `26e6726..aac1fca` (łącznie `git diff 26e6726 a3d9c55`), poprawki, punkty
-      odbioru UX1.1… w `docs/odbior.md` (wersja 1.34.0), wpis paczki tutaj.
-    - Paczki 2–8 (UX4–UX19): do zrobienia, odpowiedzi w D563–D565 (P19: mm:ss zostaje).
+    PR #108 (plan i D561–D565) scalony 21.11, `main` scalony do `claude/ciag-ux`. Sesja przeniesiona 21.11 z chmury na komputer
+    lokalny. Drzewa wykonawców zakłada główna sesja z gałęzi ciągu (T1986 – `isolation: worktree` bierze `origin/main`).
+    - **Paczka 1 (UX1–UX3) – zamknięta 21.11:** T1977–T1985, po przeglądzie T1990 (c11067b, 8ab540e). `/code-review` high
+      `26e6726..a3d9c55`: 1 ważne (start „o godzinie” w Szablonie w tygodniu sesji – poprawione, `templateStartAt`), runda 2 na
+      poprawce: strefa przed pierwszym stałym – jak przeciągnięcie (D372), tylko testy. Testy lokalne (Windows): typecheck, build,
+      lint zielone; `npm test` 4551/4559 – czerwone tylko `tests/unit/installer-close.test.ts` (8, środowisko: działa zainstalowana
+      Regulated Day i `rd-helper`, szukanie po nazwie procesu – jak w ciągu Z; sprawdzi CI); `config.test.ts` zielony; E2E 132
+      zielone, 11 pominiętych (tylko CI). Odbiór: UX1.1–UX3.2 w `docs/odbior.md`.
+      **Uwagi na później:** „Historia” z komunikatu przy nieudanym `historyList` mówi „brak wersji” (`HistoryPage.tsx`); kilka
+      uszkodzonych rekordów jednego rodzaju – przyciski „Historia: Szablon dnia” nie do odróżnienia (`recordTitle`); menu „⋯”
+      20 px na lewo od przycisku (`MENU_WIDTH` 220 przy `min-w-[200px]`); scalony dymek zostaje na starym miejscu listy i
+      `slice(-3)` może go zrzucić; martwa gałąź „Ten dzień już minął.” w `moveShortcuts`; „o godzinie” w Szablonie nie rozsuwa
+      sąsiadów jak przeciągnięcie (`pushApart`).
+    - **Paczka 2 (UX4–UX6) – w toku 21.11:** UX4 scalony (5e6d1f0, T1987–T1989), przegląd: poprawki w toku (drugi Esc po
+      `blur`, Enter w „Od” odcinka, odmowa zamknięcia bez powodu); UX5 scalony (bd19cc7), przegląd: poprawki w toku („Cofnij”
+      „Dodano blok” po zmianie nazwy, „+ Szablon” przy 7 zajętych dniach); UX6 u wykonawcy (drzewo `ux6`).
+    - Paczki 3–8 (UX7–UX19): do zrobienia, odpowiedzi w D563–D565 (P19: mm:ss zostaje). `docs/decyzje-techniczne.md` ma
+      ~186 / 200 KB – przed nowymi T w paczce 3 wydzielić T1100–T1999 do osobnego pliku (jak T1967).
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;

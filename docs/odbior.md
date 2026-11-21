@@ -279,6 +279,15 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] PX6 Dwuklik ikony i panelu otwiera okno główne (1.32.0)
    - [ ] PX7 Dwuklik paska pulpitu otwiera okno główne (1.33.0)
    - [ ] PX8 Pasek schowany „×” wraca po minimalizacji i zamknięciu okna głównego, przełącznik w Ustawieniach (1.33.0)
+   - [ ] UX1.1 Blok „po bloku” → „o godzinie” zostaje o swojej godzinie (1.34.0)
+   - [ ] UX1.2 Menu „⋯” w „Dziś”: Esc, klik obok, strzałki (1.34.0)
+   - [ ] UX1.3 „Przenieś na…” liczy od dziś, z datą w podpisie (1.34.0)
+   - [ ] UX1.4 Jedna szerokość paneli, słowa w oknie usuwania, „Zgadza się” (1.34.0)
+   - [ ] UX2.1 Przytrzymany Ctrl+N i dwuklik „+ Szablon” – jeden rekord (1.34.0)
+   - [ ] UX2.2 Okienko „Nowy blok” w „Tygodniu” zapisuje się przy zmianie ekranu (1.34.0)
+   - [ ] UX2.3 Ten sam dymek nie dubluje się (1.34.0)
+   - [ ] UX3.1 Komunikaty prowadzą na miejsce: Historia, Dane, kreator (1.34.0)
+   - [ ] UX3.2 Ctrl K: „Plan dnia”, „Kalendarze”, „Nowe zadanie” (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3031,6 +3040,71 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** kliknij „×” na pasku pulpitu, otwórz okno główne (dwuklik ikony), zminimalizuj je. Powtórz z zamknięciem okna „×”. Potem w Ustawieniach wyłącz „Pasek wraca z oknem głównym” i powtórz.
 - **Oczekiwany efekt:** przy włączonym przełączniku pasek wraca w tym samym miejscu po minimalizacji i po zamknięciu okna; przy wyłączonym zostaje schowany do „Pokaż pasek pulpitu” w menu ikony; przełącznik pamięta się po ponownym uruchomieniu.
 - **Nie przechodzi, gdy:** pasek nie wraca przy włączonym przełączniku; wraca przy wyłączonym; wraca w innym miejscu; przełącznika nie ma w Ustawieniach przy włączonym pasku.
+
+### UX – ciąg poprawek użytkowych (1.34.0, D561–D565)
+
+#### UX1.1 Blok „po bloku” przełączony na „o godzinie” zostaje o swojej godzinie
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux1-start.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” otwórz blok ustawiony „po bloku” (np. prognoza 15:20) i przełącz początek na „o godzinie”. To samo w Szablonie.
+- **Oczekiwany efekt:** pole godziny pokazuje 15:20 (godzinę z prognozy osi), blok nie skacze na 9:00.
+- **Nie przechodzi, gdy:** blok przeskakuje na 9:00 albo inną godzinę niż ta, w której stał na osi; w Szablonie zachowuje się inaczej niż w „Dziś”.
+
+#### UX1.2 Menu „⋯” w „Dziś”: Esc, klik obok, strzałki
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/day-menu.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” otwórz „⋯”; zamknij Esc; otwórz znowu i kliknij obok; otwórz i przejdź strzałkami, Enter.
+- **Oczekiwany efekt:** Esc i klik obok zamykają menu, fokus wraca na „⋯”; strzałki przesuwają zaznaczenie, Enter wykonuje pozycję; drugi klik w „⋯” zamyka menu.
+- **Nie przechodzi, gdy:** menu zostaje otwarte po Esc albo kliknięciu obok; strzałki nic nie robią; Esc zamyka razem z menu inne okno.
+
+#### UX1.3 „Przenieś na…” liczy od dziś, z datą w podpisie
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/move-shortcuts.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** otwórz w „Dziś” dzień za tydzień, przy bloku „Przenieś na…”.
+- **Oczekiwany efekt:** „Jutro”, „Pojutrze”, „Za tydzień” liczone od dzisiejszej daty, z dniem tygodnia i datą w podpisie (np. „Jutro (nd 22.11)”); skrót na oglądany dzień jest wyłączony z podpowiedzią dlaczego.
+- **Nie przechodzi, gdy:** „Jutro” przenosi na dzień po oglądanym; brak daty w podpisie; skrót na ten sam dzień działa i nic nie zmienia.
+
+#### UX1.4 Jedna szerokość paneli, słowa w oknie usuwania i „Zgadza się”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux1-labels.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” otwórz blok i zamknij go, patrząc na oś; usuń dowolny rekord; w rytuale najedź na „✓”.
+- **Oczekiwany efekt:** oś nie zmienia szerokości przy otwarciu bloku (panel bloku tak szeroki jak panel boczny); okno usuwania mówi „Enter – <słowo przycisku>, Esc – anuluj”; „✓” ma podpowiedź „Zgadza się”.
+- **Nie przechodzi, gdy:** oś skacze przy otwarciu bloku; okno usuwania mówi „Enter – tak” przy innym słowie przycisku; „✓” bez podpowiedzi.
+
+#### UX2.1 Przytrzymany Ctrl+N i dwuklik „+ Szablon” dają jeden rekord
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/new-double.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Szablonach przytrzymaj Ctrl+N przez sekundę; kliknij dwa razy szybko „+ Szablon”. To samo w Rutynach.
+- **Oczekiwany efekt:** za każdym razem powstaje jeden nowy szablon (rutyna).
+- **Nie przechodzi, gdy:** na liście pojawia się kilka nowych rekordów naraz.
+
+#### UX2.2 Okienko „Nowy blok” w „Tygodniu” zapisuje się przy zmianie ekranu
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/week-new-leave.test.ts`, E2E `week.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Tygodniu” kliknij w siatkę, wpisz nazwę i bez zamykania okienka naciśnij Ctrl 1 (albo wybierz inny ekran z menu). Powtórz z okienkiem, w którym nic nie wpisałeś.
+- **Oczekiwany efekt:** blok z wpisaną nazwą jest zapisany w tym dniu; nietknięte okienko znika bez bloku.
+- **Nie przechodzi, gdy:** wpisany blok ginie; pusty klik zostawia blok „Inne”; okienko zostaje na innym ekranie.
+
+#### UX2.3 Ten sam dymek nie dubluje się
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/toast-dedupe.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** wywołaj dwa razy ten sam komunikat bez przycisku (np. dwa razy ta sama nieudana operacja).
+- **Oczekiwany efekt:** jeden dymek, jego czas odlicza się od nowa; dymki z „Cofnij” dalej są osobne.
+- **Nie przechodzi, gdy:** dwa identyczne dymki jeden pod drugim; dymek „Cofnij” znika, bo przyszedł drugi podobny.
+
+#### UX3.1 Komunikaty prowadzą na miejsce
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux3-routes.test.ts`. Ty: rzut oka, gdy któryś komunikat się pokaże.
+- **Jak sprawdzić:** przy pytaniu o uszkodzony plik kliknij „Historia”; przy banerze kopii kliknij jego przycisk; w Ustawieniach przy „Folder danych: Nie wybrano” kliknij „Otwórz kreator”.
+- **Oczekiwany efekt:** „Historia” otwiera historię tego rekordu; baner kopii przewija Ustawienia do sekcji „Dane”; „Otwórz kreator” otwiera kreator.
+- **Nie przechodzi, gdy:** przycisku nie ma; otwiera się góra Ustawień albo cała Historia zamiast rekordu.
+
+#### UX3.2 Ctrl K: „Plan dnia”, „Kalendarze”, „Nowe zadanie”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/search-settings-sections.test.ts`, `tests/web/search-palette.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** Ctrl K, wpisz „plan dnia”, potem „kalendarze”, potem „nowe zadanie”.
+- **Oczekiwany efekt:** dwie pierwsze przewijają Ustawienia do swojej sekcji, nagłówek sekcji widać w całości pod paskiem „od jutra”; „Nowe zadanie” otwiera nowe zadanie w Sprawach.
+- **Nie przechodzi, gdy:** brak wyniku; nagłówek sekcji schowany pod paskiem; „Nowe zadanie” otwiera prośbę.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
