@@ -7,7 +7,7 @@ import type { GoalsProgress } from '@shared/engine/goals'
 import type { StayHow } from '@shared/engine/planEdit'
 import { pushedText } from '@shared/engine/pushApart'
 import type { HorizonBlockState, HorizonDay } from '@shared/engine/week'
-import { countLabel, durationLabel, formatNumber, ofLabel, WEEKDAY_NAMES, WEEKDAY_SHORT } from '@shared/format'
+import { countLabel, durationLabel, formatNumber, ofLabel, plDayMonth, WEEKDAY_NAMES, WEEKDAY_SHORT } from '@shared/format'
 import type { GoalArea } from '@shared/model/goals'
 import { addDays, weekday } from '@shared/time/zone'
 import { MONTH_NAMES } from '../calendar/MonthGrid'
@@ -27,7 +27,7 @@ export function weekTitle(week: string): string {
 }
 
 /** A column's first line: „pn 3.11” (`index` 0 = Monday). */
-export const dayHeading = (date: string, index: number): string => `${WEEKDAY_SHORT[index]} ${day(date)}.${month(date)}`
+export const dayHeading = (date: string, index: number): string => `${WEEKDAY_SHORT[index]} ${plDayMonth(date)}`
 
 /** What a column says to a screen reader: the weekday and how many blocks it holds („wtorek: 2 bloki”). */
 export const columnLabel = (index: number, blocks: number): string => `${WEEKDAY_FULL[index]}: ${countLabel(blocks, 'blok', 'bloki', 'bloków')}`

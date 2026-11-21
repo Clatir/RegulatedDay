@@ -21,7 +21,7 @@ describe('tytuł tygodnia i nagłówki kolumn', () => {
   })
 
   it('dzień i data kolumny; nazwa miesiąca', () => {
-    expect(dayHeading('2026-11-03', 1)).toBe('wt 3.11')
+    expect(dayHeading('2026-11-03', 1)).toBe('wt 03.11')
     expect(dayHeading('2026-11-15', 6)).toBe('nd 15.11')
     expect(monthLabel('2026-11')).toBe('listopad 2026')
     expect(monthName('2026-02')).toBe('luty')

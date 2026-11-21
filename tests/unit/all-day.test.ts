@@ -103,9 +103,10 @@ describe('wydarzenia dnia i zakresu', () => {
   it('daty: jeden dzień, w miesiącu, przez miesiąc, przez rok', () => {
     expect(rangeText(ev('a', '2026-11-18'))).toBe('18.11')
     expect(rangeText(ev('a', '2026-11-18', '2026-11-20'))).toBe('18–20.11')
-    expect(rangeText(ev('a', '2026-11-30', '2026-12-02'))).toBe('30.11–2.12')
-    expect(rangeText(ev('a', '2026-12-30', '2027-01-02'))).toBe('30.12.2026–2.01.2027')
-    expect(rangeText(ev('a', '2026-01-05'))).toBe('5.01')
+    expect(rangeText(ev('a', '2026-11-30', '2026-12-02'))).toBe('30.11–02.12')
+    expect(rangeText(ev('a', '2026-12-30', '2027-01-02'))).toBe('30.12.2026–02.01.2027')
+    expect(rangeText(ev('a', '2026-01-05'))).toBe('05.01')
+    expect(rangeText(ev('a', '2026-11-03', '2026-11-09'))).toBe('03–09.11')
   })
 })
 

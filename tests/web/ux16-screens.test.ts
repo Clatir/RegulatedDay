@@ -9,6 +9,10 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { DataView, RawRecord } from '@shared/api'
 import { WEEKDAY_SHORT } from '@shared/format'
+import { rangeText } from '@shared/model/allDay'
+import { dayWord } from '@renderer/features/allday/allDayView'
+import { agendaHeading } from '@renderer/features/week/weekViews'
+import { dayHeading } from '@renderer/features/week/weekText'
 import { planBlock, type Template } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { newTask, requestFrom } from '@shared/model/requests'
@@ -77,7 +81,7 @@ describe('„Skopiuj ten dzień do…” = okno dni szablonu (F6)', () => {
   const SOURCE = '2026-11-26'
   const model = { date: SOURCE, ctx: { plan: [] }, dayFile: null } as unknown as DayModel
 
-  it('ma pola Od i Do w DD.MM.RRRR; osiem cyfr staje się datą; dzień kopiowany nie liczy się do celów; za długi zakres jest nazwany', async () => {
+  it('ma pola Od i Do w DD.MM.RRRR; osiem cyfr staje się datą; dzień kopiowany nie liczy się do celów; kopia nie ma limitu dni', async () => {
     await mount(createElement(CopyDayDialog, { model, today: '2026-11-21', onClose: () => undefined }))
     const from = q('copy-dialog-from') as HTMLInputElement
     const to = q('copy-dialog-to') as HTMLInputElement
@@ -92,8 +96,10 @@ describe('„Skopiuj ten dzień do…” = okno dni szablonu (F6)', () => {
     // „3.01” works as in every field of a date: the nearest 3 January from today – 25.11 to 3.01 is 40 days, 39 without the day copied from.
     await type(to, '3.01')
     expect(q('copy-apply')!.textContent).toBe('Skopiuj (39)')
+    // The copy has no cap of its own as the drag in the grid has none (review 1, 7): a range of more than a year is taken.
     await type(to, '3.01.2028')
-    expect(q('copy-dialog-count')!.textContent).toContain('Zakres dłuższy')
+    expect(q('copy-dialog-count')!.textContent).not.toContain('Zakres dłuższy')
+    expect(q('copy-apply')!.textContent).toBe('Skopiuj (404)')
   })
 
   it('zakres wpisany w polach to cele kopii: „Skopiuj” wysyła dni bez dnia kopiowanego', async () => {
@@ -119,6 +125,72 @@ describe('„Skopiuj ten dzień do…” = okno dni szablonu (F6)', () => {
   })
 })
 
+describe('okno dni: pole błędne, puste, dzień kopiowany, minione (przegląd 1)', () => {
+  const model = { date: '2026-11-26', ctx: { plan: [] }, dayFile: null } as unknown as DayModel
+  const press = async (id: string, shift = false) => {
+    const el = q(id)!
+    await act(async () => {
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, shiftKey: shift }))
+      el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, shiftKey: shift }))
+    })
+  }
+
+  it('pole, które nie jest datą, wyłącza zatwierdzenie – stare zaznaczenie nie zostaje do zapisu', async () => {
+    await mount(createElement(CopyDayDialog, { model, today: '2026-11-21', onClose: () => undefined }))
+    await type(q('copy-dialog-from')!, '25.11.2026')
+    await type(q('copy-dialog-to')!, '27.11.2026')
+    expect((q('copy-apply') as HTMLButtonElement).disabled).toBe(false)
+    // Typing on: „27.11.202” is no date yet – the selection of „27.11.2026” must not be copied.
+    await type(q('copy-dialog-to')!, '27.11.202')
+    expect((q('copy-apply') as HTMLButtonElement).disabled).toBe(true)
+    await click(q('copy-apply'))
+    expect(copied.calls).toEqual([])
+    await type(q('copy-dialog-to')!, '27.11.2026')
+    expect((q('copy-apply') as HTMLButtonElement).disabled).toBe(false)
+    await type(q('copy-dialog-from')!, '19.11.20')
+    expect((q('copy-apply') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('opróżnione „Od” czyści zaznaczenie', async () => {
+    await mount(createElement(CopyDayDialog, { model, today: '2026-11-21', onClose: () => undefined }))
+    await type(q('copy-dialog-from')!, '25.11.2026')
+    expect(q('copy-apply')!.textContent).toBe('Skopiuj (1)')
+    await type(q('copy-dialog-from')!, '')
+    expect(q('copy-apply')!.textContent).toBe('Skopiuj')
+    expect((q('copy-apply') as HTMLButtonElement).disabled).toBe(true)
+    expect(q('day-2026-11-25')!.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('rok spoza zakresu („01.01.0500”) nie zmienia zaznaczenia i nie zawiesza okna', async () => {
+    await mount(createElement(CopyDayDialog, { model, today: '2026-11-21', onClose: () => undefined }))
+    await type(q('copy-dialog-from')!, '25.11.2026')
+    await type(q('copy-dialog-to')!, '01.01.0500')
+    expect((q('copy-apply') as HTMLButtonElement).disabled).toBe(true)
+    await type(q('copy-dialog-to')!, '01010500')
+    expect(q('copy-dialog-to') as HTMLInputElement).toHaveProperty('value', '01010500')
+    expect((q('copy-apply') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('pola Od i Do pokazują zaznaczenie bez dnia kopiowanego', async () => {
+    await mount(createElement(CopyDayDialog, { model, today: '2026-11-21', onClose: () => undefined }))
+    await press('day-2026-11-26')
+    await press('day-2026-11-28', true)
+    expect((q('copy-dialog-from') as HTMLInputElement).value).toBe('27.11.2026')
+    expect((q('copy-dialog-to') as HTMLInputElement).value).toBe('28.11.2026')
+    expect(q('copy-apply')!.textContent).toBe('Skopiuj (2)')
+  })
+
+  it('„(minione: N)” liczy to samo co ostrzeżenie kopii: dni do dziś włącznie', async () => {
+    await mount(createElement(CopyDayDialog, { model, today: '2026-11-27', onClose: () => undefined }))
+    await type(q('copy-dialog-from')!, '25.11.2026')
+    await type(q('copy-dialog-to')!, '28.11.2026')
+    // 25, 27 (today) and 28; the 26th is the day copied from.
+    expect(q('copy-dialog-count')!.textContent).toBe('Wybrane: 3 dni (minione: 2)')
+    await click(q('copy-apply'))
+    expect(q('copy-warning')!.textContent).toContain('25.11.2026, 27.11.2026')
+  })
+})
+
 describe('puste stany i opisy: szablon, seria, rutyna (F9)', () => {
   const tpl = (blocks: ReturnType<typeof planBlock>[]): Template => ({ id: 't1', name: 'Dzień pracy', dayType: 'zwykly', weekdays: [], versions: [{ from: '2026-01-01', blocks, budgetMin: null, maxMin: null }], archived: false })
   const routine: Routine = { id: 'r1', name: 'Poranna', normal: [{ id: 's1', name: 'Woda', min: 5 }], worse: [], archived: false }
@@ -132,6 +204,8 @@ describe('puste stany i opisy: szablon, seria, rutyna (F9)', () => {
     expect(q('series-list')!.textContent).toContain('Serie')
     expect(q('series-empty')!.textContent).toContain('„Powtarzaj”')
     expect(document.body.textContent).toContain(THING_KINDS_HINT)
+    // One definition of each, not two (review 1): the screen's own sentence is gone.
+    expect(document.body.textContent!.split('Szablon to').length - 1).toBe(1)
   })
 
   it('„Szablony” z serią: lista serii bez podpowiedzi pustego stanu', async () => {
@@ -145,18 +219,39 @@ describe('puste stany i opisy: szablon, seria, rutyna (F9)', () => {
     useData.setState({ routines: [], templates: [], series: [], rd: rdFrom({}), view })
     await mount(createElement(RoutinesPage))
     expect(document.body.textContent).toContain(THING_KINDS_HINT)
+    expect(document.body.textContent!.split('kroki z czasem').length - 1).toBe(1)
   })
 
   it('rutyna mówi, gdzie jest używana: szablony i serie z jej imieniem', async () => {
     const t = tpl([planBlock({ id: 'b', categoryId: 'rutyny', startMin: 420, durationMin: 30, origin: 'template', routine: 'r1' })])
-    expect(routineUses('r1', [t], [series('s1', 'r1'), series('s2', null)], (s) => s.versions[0]!.block.name ?? '')).toEqual({ templates: ['Dzień pracy'], series: ['Spacer'] })
+    expect(routineUses('r1', [t], [series('s1', 'r1'), series('s2', null)], (s) => s.versions[0]!.block.name ?? '', '2026-11-18')).toEqual({ templates: ['Dzień pracy'], series: ['Spacer'] })
     expect(usesText({ templates: ['Dzień pracy'], series: ['Spacer'] })).toBe('Używana w szablonach: „Dzień pracy” · w seriach: „Spacer”')
+    // A series cut into parts (one `root`) is one on the list „Serie”: only the part in force counts, once (review 1).
+    const part = (id: string, start: string, until: string | null, routineId: string | null, name: string): Series => {
+      const base = series(id, routineId)
+      return { ...base, root: 'long', start, until, versions: [{ ...base.versions[0]!, from: start, block: { ...base.versions[0]!.block, name } }] } as Series
+    }
+    const early = part('p1', '2026-01-01', '2026-06-30', 'r1', 'Wczesna')
+    const late = part('p2', '2026-07-01', null, null, 'Późna')
+    const nameOf = (s: Series) => s.versions[0]!.block.name ?? ''
+    expect(routineUses('r1', [], [early, late], nameOf, '2026-11-18').series).toEqual([])
+    expect(routineUses('r1', [], [early, { ...late, versions: [{ ...late.versions[0]!, block: { ...late.versions[0]!.block, routine: 'r1' } }] }], nameOf, '2026-11-18').series).toEqual(['Późna'])
     expect(usesText({ templates: [], series: [] })).toBe('Nie jest użyta w żadnym szablonie ani serii.')
     useData.setState({ routines: [routine], templates: [t], series: [series('s1', 'r1')], rd: rdFrom({}), view })
     ;(window as unknown as { rd: unknown }).rd = {}
     await mount(createElement(RoutinesPage))
     await click(q('routine-item'))
     expect(q('routine-used')!.textContent).toBe('Używana w szablonach: „Dzień pracy” · w seriach: „Spacer”')
+  })
+})
+
+describe('krótka data z zerem: „01.11”, nie „1.11” (przegląd 1)', () => {
+  it('słowa dni i linie: dayWord, rangeText, dayHeading, nagłówek Agendy', () => {
+    expect(dayWord('2026-11-01')).toBe('nd 01.11')
+    expect(rangeText({ startDate: '2026-11-03', endDate: '2026-11-09' })).toBe('03–09.11')
+    expect(rangeText({ startDate: '2026-11-01', endDate: '2026-11-01' })).toBe('01.11')
+    expect(dayHeading('2026-11-01', 6)).toBe('nd 01.11')
+    expect(agendaHeading('2026-11-01', '2026-11-18')).toBe('niedziela 01.11')
   })
 })
 

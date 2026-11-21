@@ -221,7 +221,7 @@ export function TemplatesPage() {
         ) : current ? (
           <Editor key={current.id} template={current} today={today} openBlock={openBlock} onBlockOpened={() => setOpenBlock(null)} onCopied={setSelected} onRemoved={() => setSelected(null)} />
         ) : (
-          <EmptyState why={templates.length ? 'Wybierz szablon z listy.' : `Nie ma jeszcze szablonów. Szablon to plan dnia danego typu, z którego powstaje każdy taki dzień. ${THING_KINDS_HINT}`} action={{ label: '+ Szablon', run: () => void create() }} />
+          <EmptyState why={templates.length ? 'Wybierz szablon z listy.' : `Nie ma jeszcze szablonów. ${THING_KINDS_HINT}`} action={{ label: '+ Szablon', run: () => void create() }} />
         )}
       </div>
       {leaving && <UnsavedRuleDialog title="Zapisać zmianę serii?" busy={leavingBusy} onSave={() => void answerLeaving(true)} onDiscard={() => void answerLeaving(false)} onClose={() => !leavingBusy && setLeaving(null)} />}

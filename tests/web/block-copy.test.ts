@@ -121,7 +121,7 @@ describe('D513 – „Tydzień” i „3 dni”: kopia Ctrl + przeciągnięciem'
     expect(copy).toMatchObject({ startMin: lm('12:00'), durationMin: 60, note: '**ważne**', moves: 0, movedFrom: null, origin: 'user' })
     // No history: the original's ticks stay its own.
     expect(dayFileFrom(s.files[D2]!, D2).stepsDone).toEqual({})
-    expect(toast().text).toBe('Skopiowano: Raport na wt 6.01')
+    expect(toast().text).toBe('Skopiowano: Raport na wt 06.01')
   })
 
   it('na zajętym miejscu rozsuwa kolejne elastyczne dnia docelowego w tym samym wpisie; jedno „Cofnij” zdejmuje kopię i przywraca godziny', async () => {
@@ -131,7 +131,7 @@ describe('D513 – „Tydzień” i „3 dni”: kopia Ctrl + przeciągnięciem'
     expect(s.sent).toHaveLength(1)
     expect(startOf(s.files[D2], D2, 'a')).toBe(lm('19:00'))
     expect(startOf(s.files[D2], D2, 'b')).toBe(lm('20:00'))
-    expect(toast().text).toBe('Skopiowano: Raport na wt 6.01 · przesunięto 2 bloki')
+    expect(toast().text).toBe('Skopiowano: Raport na wt 06.01 · przesunięto 2 bloki')
     // A day not today: no word to the bar.
     expect(s.told).toEqual([])
     await undo(s)

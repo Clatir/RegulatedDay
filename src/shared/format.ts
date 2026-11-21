@@ -50,6 +50,8 @@ export const plDate = (date: string): string => `${date.slice(8, 10)}.${date.sli
 
 /** A moment → „21.11.2026 14:30” – a moment as a date and the 24-hour clock of Warsaw (the one format of „Historia” and the lists of versions, D565 P24). */
 export const plDateTime = (ms: number): string => {
+  // A time no date can show (`at: 1e20` of a damaged version): the number as it is – the formatter would throw.
+  if (!Number.isFinite(new Date(ms).getTime())) return String(ms)
   const p = Object.fromEntries(
     new Intl.DateTimeFormat('pl-PL', { timeZone: PL_ZONE, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(ms).map((x) => [x.type, x.value])
   ) as Record<string, string>
@@ -131,8 +133,9 @@ export function parseInteger(text: string, min: number, max: number): Parsed<num
   return ok(n)
 }
 
-/** 'RRRR-MM-DD' of a real day; null = no such day (31.02, 29.02 of a common year). */
+/** 'RRRR-MM-DD' of a real day; null = no such day (31.02, 29.02 of a common year, a year that has not four digits – it would not be an ISO date). */
 export function isoDay(y: number, mo: number, d: number): string | null {
+  if (!Number.isInteger(y) || y < 1000 || y > 9999) return null
   const dt = new Date(Date.UTC(y, mo - 1, d))
   if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null
   return `${y}-${pad2(mo)}-${pad2(d)}`

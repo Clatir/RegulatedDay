@@ -15,7 +15,6 @@ import { isSaved } from '../../store/data'
 import { useBusy } from '../../lib/busy'
 import { DaysDialog } from '../calendar/DaysDialog'
 import { monthOf } from '../calendar/MonthGrid'
-import { APPLY_DAYS_MAX } from '../templates/applyDays'
 import { tellMoved } from '../week/weekActions'
 import { copyDayTo, moveDayBlock } from './dayActions'
 
@@ -136,7 +135,7 @@ export function CopyDayDialog({ model, today, onClose }: { model: DayModel; toda
           </>
         ) : undefined
       }
-      max={APPLY_DAYS_MAX}
+      past={(d) => d <= today}
     />
   )
 }

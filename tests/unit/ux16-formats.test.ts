@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { dayOfText, type AllDayEvent } from '@shared/model/allDay'
 import { ofLabel, parseDate, plDate, plDateTime, WEEKDAY_SHORT } from '@shared/format'
+import { parseDmy } from '@shared/dateInput'
 import { stepsProgress } from '@shared/model/steps'
 
 const TODAY = '2026-11-21'
@@ -61,5 +62,30 @@ describe('licznik „x z y” (F2)', () => {
     const e = { id: 'k', title: 'Konferencja', startDate: '2026-11-18', endDate: '2026-11-20' } as AllDayEvent
     expect(dayOfText(e, '2026-11-19')).toBe('(2 z 3)')
     expect(ofLabel(2, 3)).toBe('2 z 3')
+  })
+})
+
+describe('rok spoza czterocyfrowego zakresu nie jest datą (przegląd 1)', () => {
+  it('„01.01.0500”, „01010500”, „0500-01-01” – odrzucone, rok 1000 i 9999 – przechodzą', () => {
+    for (const t of ['01.01.0500', '01010500', '0500-01-01', '1.1.0999', '01.01.0000']) expect(value(t)).toBeNull()
+    expect(value('01.01.1000')).toBe('1000-01-01')
+    expect(value('31.12.9999')).toBe('9999-12-31')
+  })
+
+  it('okno dni (`parseDmy`): ten sam rok 1900–2999', () => {
+    expect(parseDmy('01.01.0500', TODAY)).toBeNull()
+    expect(parseDmy('01010500', TODAY)).toBeNull()
+    expect(parseDmy('01.01.1899', TODAY)).toBeNull()
+    expect(parseDmy('01.01.3000', TODAY)).toBeNull()
+    expect(parseDmy('01.01.1900', TODAY)).toBe('1900-01-01')
+  })
+})
+
+describe('plDateTime nie rzuca (przegląd 1)', () => {
+  it('czas spoza zakresu daty (1e20, NaN, ±Infinity) – tekst liczby, nie RangeError', () => {
+    expect(plDateTime(1e20)).toBe(String(1e20))
+    expect(plDateTime(Number.NaN)).toBe('NaN')
+    expect(plDateTime(Number.POSITIVE_INFINITY)).toBe('Infinity')
+    expect(plDateTime(Date.UTC(2026, 10, 21, 13, 30))).toBe('21.11.2026 14:30')
   })
 })

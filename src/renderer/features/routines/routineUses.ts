@@ -4,7 +4,7 @@
  * of steps, D473).
  */
 import type { Template } from '@shared/model/plan'
-import type { Series } from '@shared/model/series'
+import { currentSeries, type Series } from '@shared/model/series'
 
 export interface RoutineUses {
   templates: string[]
@@ -13,13 +13,14 @@ export interface RoutineUses {
 
 /**
  * The names of the templates and series whose blocks use the routine `id` (an archived template too – it comes back with its blocks; a removed series is gone);
- * each name once. `seriesName` – a series by its block's name, as the list in „Szablony” has it.
+ * each name once. A series cut into parts is one: only the part the list „Serie” shows (`currentSeries` of `today`) counts. `seriesName` – a series
+ * by its block's name, as the list in „Szablony” has it.
  */
-export function routineUses(id: string, templates: readonly Template[], series: readonly Series[], seriesName: (s: Series) => string): RoutineUses {
+export function routineUses(id: string, templates: readonly Template[], series: readonly Series[], seriesName: (s: Series) => string, today: string): RoutineUses {
   const names = (list: string[]) => [...new Set(list)]
   return {
     templates: names(templates.filter((t) => t.versions.some((v) => v.blocks.some((b) => b.routine === id))).map((t) => t.name)),
-    series: names(series.filter((s) => !s.archived && s.versions.some((v) => v.block.routine === id)).map(seriesName))
+    series: names(currentSeries(series, today).filter((s) => s.versions.some((v) => v.block.routine === id)).map(seriesName))
   }
 }
 

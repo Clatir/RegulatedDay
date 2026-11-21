@@ -94,7 +94,7 @@ export function RoutinesPage() {
         )}
       </div>
       <div className="min-w-0 flex-1 overflow-y-auto p-4">
-        {current ? <Editor routine={current} onRemoved={() => setSelected(null)} /> : <EmptyState why={routines.length ? 'Wybierz rutynę z listy.' : `Nie ma jeszcze rutyn. Rutyna to kroki z czasem każdego – np. poranna: woda, karmienie kota, prysznic. ${THING_KINDS_HINT}`} action={{ label: '+ Rutyna', run: () => void create() }} />}
+        {current ? <Editor routine={current} onRemoved={() => setSelected(null)} /> : <EmptyState why={routines.length ? 'Wybierz rutynę z listy.' : `Nie ma jeszcze rutyn. ${THING_KINDS_HINT} Np. poranna: woda, karmienie kota, prysznic.`} action={{ label: '+ Rutyna', run: () => void create() }} />}
       </div>
     </div>
   )
@@ -112,7 +112,7 @@ function Editor({ routine, onRemoved }: { routine: Routine; onRemoved: () => voi
   // F9: where the routine is used – the templates and series whose blocks point at it.
   const used = useMemo(() => {
     const names = { rd, settings: settingsOn(rd.settings, today), routines, requests }
-    return usesText(routineUses(routine.id, templates, series, (s) => blockName(seriesBlockOf(s, today), names)))
+    return usesText(routineUses(routine.id, templates, series, (s) => blockName(seriesBlockOf(s, today), names), today))
   }, [routine.id, templates, series, rd, today, routines, requests])
   /** The routine changed by `fn` from what it is when the change's turn comes (A6-01). */
   const change = (fn: (r: Routine) => Partial<Routine>) =>
