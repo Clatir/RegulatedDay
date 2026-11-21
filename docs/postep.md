@@ -117,7 +117,9 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
       | UX10 | scalone 21.11 (712ba76): T2100–T2109, odbiór UX10.1–UX10.5; przegląd xhigh 4 rundy (ponowne otwarcie panelu, dwuklik, stopka „schowaj / pokaż” według zamiaru, warianty według okna); `npm test` po scaleniu – pada tylko `installer-close`; uwagi na później: mignięcie wysokości panelu przy ponownym otwarciu (`iconPanel.ts` `open()` z ostatnią wysokością) |
       | UX13 | przeniesione do strumienia C (po UX18) |
       | UX8 | scalone 21.11 (25e289f, konflikt w `shortcuts.ts` – zapis „Ctrl+K”): T2010–T2015, odbiór UX8.1–UX8.4; przegląd high 4 rundy (Ctrl+N w Kalendarzu, bloki ukryte i zaparkowane, klawisze przy okienku, „← Tydzień” po Ctrl K); `npm test` 4797/4805 (tylko `installer-close`); uwagi na później: pamięć okresu tylko w oknie (restart – bieżący), `useUi.memory`/`from` do `interfejs.md`, „← Tydzień” zostaje po Ctrl K na „Dziś” także przy dniu daleko od zapamiętanego tygodnia |
-      | UX11 (`ux-b`), UX17 (`ux-c`, runda 4), UX14 (`ux-d`, strumień D – UX14 → UX15, T2300–T2399; runda 1 xhigh poprawiana) | w pracy |
+      | UX17 (`ux-c`) | runda 4 zakończona (commit na gałęzi `claude/ux-c`) – do scalenia; T i odbiór w scratchpadzie sesji (`ux17-raport.md`), inaczej z commitów |
+      | UX14 (`ux-d`) | runda 2 xhigh (3d2a0ea) – poprawki u `ux14w` (withdrawBlock bez `made`, podkategoria – napis zamiast przycisku) |
+      | UX9 (`ux-a`), UX11 (`ux-b`) | w pracy (wykonawcy) |
       | UX9, UX11–UX13, UX15, UX17–UX19 | do zrobienia; szkic CHANGELOG – w raportach wykonawców (scratchpad sesji), sekcja 1.34.0 na końcu |
 
 ## Do odbioru na Windows
