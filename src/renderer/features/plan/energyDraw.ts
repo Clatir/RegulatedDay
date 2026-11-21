@@ -18,8 +18,11 @@ export { POOL_LETTER }
 export const RESERVE_COLOR = '#D49A97'
 /** The scale every drawing of the energy names (D500). */
 export const ENERGY_SCALE = 'energia 0–100'
-/** What the cost beside a tile is (D7): the unit and the range – a cost k takes 3·k points of the pool's 0–100 an hour (spec „Koszt bloku”). */
-export const COST_SCALE_TEXT = `koszt bloku (liczby przy kafelku): punkty energii na godzinę, od ${costNumber(COST_MIN)} do ${COST_MAX}; koszt 1 to 3 punkty`
+/**
+ * What the numbers beside a tile are (D7) – one text for the legend and the tile's window: a level of cost an hour, between −5 and 5; a cost k
+ * takes 3·k points of the pool's 0–100 an hour (spec „Koszt na godzinę”).
+ */
+export const COST_SCALE_TEXT = `koszt na godzinę, od ${costNumber(COST_MIN)} do ${COST_MAX}; 1 = 3 punkty energii`
 
 /** A pool's curve: its samples with a value (time, value) and the slope at each one (value a minute). */
 export interface Curve {

@@ -7,7 +7,7 @@
  * window of a new block say what the gestures do; the note's toolbar says what Esc does.
  */
 import { readFileSync } from 'node:fs'
-import { act, createElement } from 'react'
+import { act, createElement, Fragment } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DataView } from '@shared/api'
@@ -17,13 +17,15 @@ import { DEFAULT_SETTINGS } from '@shared/model/settings'
 import { rdFrom } from '@shared/model/rd'
 import { weekStart } from '@shared/time/day'
 import { EnergyLegendHelp } from '@renderer/features/plan/EnergyLanes'
+import { COST_SCALE_TEXT } from '@renderer/features/plan/energyDraw'
 import { BlockEditor } from '@renderer/features/plan/BlockEditor'
 import { Timeline, type TimelineItem } from '@renderer/features/plan/Timeline'
 import { NoteEditor } from '@renderer/features/note/NoteEditor'
 import { DayNumbers, DaySummary } from '@renderer/features/today/DayNumbers'
-import { DayWarnings } from '@renderer/features/today/DayWarnings'
-import { MorningHeader } from '@renderer/features/today/MorningPlan'
-import { RoutineCard } from '@renderer/features/today/RoutineCard'
+import { DayWarnings, dayWarningTexts } from '@renderer/features/today/DayWarnings'
+import { Boundary, MorningHeader } from '@renderer/features/today/MorningPlan'
+import { useBusy } from '@renderer/lib/busy'
+import { RoutineCard, RoutinesWaiting } from '@renderer/features/today/RoutineCard'
 import { NewBlockPopover } from '@renderer/features/week/NewBlockPopover'
 import { WeekPage } from '@renderer/features/week/WeekPage'
 import { installEscape } from '@renderer/lib/escape'
@@ -83,7 +85,7 @@ const click = (el: Element) => act(() => void el.dispatchEvent(new MouseEvent('c
 function overloaded() {
   const s = new Scenario({ date: DATE, plan: [dslBlock({ id: 'a', cat: 'analiza', at: '08:00', min: 13 * 60 }), dslBlock({ id: 'dz', cat: 'sesja', at: '21:30', min: 60, fixed: true })] })
   const state = s.state('07:00')
-  return { s, state, model: { date: DATE, state, ctx: s.contextAt(s.at('07:00')), dayFile: null, data: { dayFile: null } } as unknown as DayModel }
+  return { s, state, model: { date: DATE, state, energy: { warnings: [] }, ctx: s.contextAt(s.at('07:00')), dayFile: null, data: { dayFile: null } } as unknown as DayModel }
 }
 /** A day with one work block: a proposal of the boundary, none approved. */
 function proposed() {
@@ -96,10 +98,15 @@ describe('panel nowego bloku (D4)', () => {
   const open = (block = dslBlock({ id: 'a', cat: 'analiza', at: '08:00', min: 60 }), o: Partial<Parameters<typeof BlockEditor>[0]> = {}) =>
     render(createElement(BlockEditor, { block, plan: [], names, computers: [], onChange: () => undefined, onClose: () => undefined, ...o }))
 
-  it('szkic: nagłówek „Nowy blok” i linia o zapisie przy opuszczeniu panelu i o Esc', async () => {
-    await open(undefined, { newBlock: { add: () => undefined } })
+  it('szkic nietknięty: nagłówek „Nowy blok” i linia o zapisie przy opuszczeniu panelu i o Esc', async () => {
+    await open(undefined, { newBlock: { add: () => undefined, discards: true } })
     expect(q('block-editor')!.querySelector('h3')!.textContent).toBe('Nowy blok')
     expect(q('block-draft-hint')!.textContent).toBe('Zapisze się, gdy opuścisz panel · Esc – odrzuć')
+  })
+
+  it('szkic ruszony albo z rozpoczętym zapisem: Esc go nie odrzuci – linia mówi tylko o zapisie', async () => {
+    await open(undefined, { newBlock: { add: () => undefined, discards: false } })
+    expect(q('block-draft-hint')!.textContent).toBe('Zapisze się, gdy opuścisz panel')
   })
 
   it('zapisany blok: jego nazwa w nagłówku i bez linii o szkicu', async () => {
@@ -110,23 +117,41 @@ describe('panel nowego bloku (D4)', () => {
 })
 
 describe('ostrzeżenia dnia (D3, P10)', () => {
-  it('lista z silnika dnia; pusta – nic', async () => {
-    const { state } = overloaded()
+  it('teksty z planu porannego (godzina maksimum, liczby budżetu, co zrobić) – zostają, jedna lista dla obu paneli', () => {
+    const { model, state } = overloaded()
     expect(state.warnings.length).toBeGreaterThan(0)
-    await render(createElement(DayWarnings, { warnings: state.warnings }))
-    expect([...q('day-warnings')!.querySelectorAll('li')].map((li) => li.textContent)).toEqual(state.warnings)
+    const texts = dayWarningTexts(model)
+    expect(texts).toHaveLength(3)
+    expect(texts.join(' | ')).toMatch(/Praca kończy się po maksimum \(\d\d?:\d\d\)\. Możesz przenieść blok/)
+    expect(texts.join(' | ')).toMatch(/Plan przekracza budżet pracy \(.+ z .+\)/)
+    expect(texts.join(' | ')).toContain('Minimum regeneracji nie mieści się przed porą snu')
+  })
+
+  it('ostrzeżenie energii (rezerwa) też – po tekstach dnia, z wielką literą', () => {
+    const { model } = overloaded()
+    const withEnergy = { ...model, energy: { warnings: ['prognoza energii na poziomie rezerwy'] } } as unknown as DayModel
+    expect(dayWarningTexts(withEnergy).at(-1)).toBe('Prognoza energii na poziomie rezerwy')
+    const calm = new Scenario({ date: DATE, plan: [dslBlock({ id: 'a', cat: 'analiza', at: '08:00', min: 60 })] })
+    const quiet = { date: DATE, state: calm.state('07:00'), energy: { warnings: [] } } as unknown as DayModel
+    expect(dayWarningTexts(quiet)).toEqual([])
+    expect(dayWarningTexts({ ...quiet, energy: { warnings: ['prognoza energii na poziomie rezerwy'] } } as unknown as DayModel)).toEqual(['Prognoza energii na poziomie rezerwy'])
+  })
+
+  it('lista w komponencie; pusta – nic', async () => {
+    await render(createElement(DayWarnings, { warnings: ['a', 'b'] }))
+    expect([...q('day-warnings')!.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['a', 'b'])
     act(() => root!.unmount())
     await render(createElement(DayWarnings, { warnings: [] }))
     expect(q('day-warnings')).toBeNull()
   })
 
   it('panel bloku pokazuje je pod nagłówkiem (przekroczenie budżetu widać od razu przy otwartym bloku)', async () => {
-    const { state } = overloaded()
+    const { model } = overloaded()
     await render(
-      createElement(BlockEditor, { block: dslBlock({ id: 'a', cat: 'analiza', at: '08:00', min: 60 }), plan: [], names, computers: [], onChange: () => undefined, onClose: () => undefined, warnings: createElement(DayWarnings, { warnings: state.warnings }) })
+      createElement(BlockEditor, { block: dslBlock({ id: 'a', cat: 'analiza', at: '08:00', min: 60 }), plan: [], names, computers: [], onChange: () => undefined, onClose: () => undefined, dayNotes: createElement(DayWarnings, { warnings: dayWarningTexts(model) }) })
     )
     expect(q('block-editor')!.querySelector('[data-testid="day-warnings"]')).not.toBeNull()
-    expect(q('day-warnings')!.textContent).toContain('budżet pracy przekroczony')
+    expect(q('day-warnings')!.textContent).toContain('Plan przekracza budżet pracy')
   })
 })
 
@@ -153,6 +178,24 @@ describe('„Zatwierdź” w nagłówku planu porannego (D8)', () => {
     expect(onToggle).not.toHaveBeenCalled()
     await act(async () => click(q('morning-toggle')!))
     expect(onToggle).toHaveBeenCalledTimes(1)
+  })
+
+  it('oba „Zatwierdź” (nagłówek i dół karty) mają wspólne „zajęte” – drugi klik w czasie zapisu nie zatwierdza drugi raz', async () => {
+    const { model } = proposed()
+    let finish: (v: boolean) => void = () => undefined
+    vi.mocked(logEvents).mockImplementationOnce(() => new Promise<boolean>((r) => (finish = r)))
+    const Both = () => {
+      const busy = useBusy()
+      return createElement(Fragment, null, createElement(MorningHeader, { model, open: true, plan: true, onToggle: () => undefined, busy }), createElement(Boundary, { model, lm: () => '08:00', approved: null, proposal: model.state.boundary.proposal, busy }))
+    }
+    await render(createElement(Both))
+    expect((q('boundary-approve') as HTMLButtonElement).disabled).toBe(false)
+    await act(async () => click(q('morning-approve')!))
+    expect((q('morning-approve') as HTMLButtonElement).disabled).toBe(true)
+    expect((q('boundary-approve') as HTMLButtonElement).disabled).toBe(true)
+    await act(async () => click(q('boundary-approve')!))
+    expect(logEvents).toHaveBeenCalledTimes(1)
+    await act(async () => finish(true))
   })
 
   it('bez przycisku: krok pytań (check-in, cele, Strona B), plan zatwierdzony, dzień bez propozycji', async () => {
@@ -191,6 +234,29 @@ describe('karta rutyny (D8)', () => {
   })
 })
 
+describe('rutyna w toku przy otwartym panelu bloku (D8, P10)', () => {
+  const waiting = (due: Array<{ block: string }>, onShow = vi.fn()) => {
+    const plan = due.map((d) => dslBlock({ id: d.block, cat: 'rutyny', at: '07:00', min: 10 }))
+    const model = { date: DATE, ctx: { plan }, state: {}, dayFile: null } as unknown as DayModel
+    return render(createElement(RoutinesWaiting, { due: due as unknown as RoutineDue[], model, names, onShow })).then(() => onShow)
+  }
+
+  it('jedna rutyna: „Rutyna „X” czeka na kroki” i przejście do karty (zamknięcie panelu)', async () => {
+    const onShow = await waiting([{ block: 'rut' }])
+    expect(q('routine-waiting')!.textContent).toContain('czeka na kroki')
+    await act(async () => click(q('routine-waiting-show')!))
+    expect(onShow).toHaveBeenCalledTimes(1)
+  })
+
+  it('kilka rutyn: liczba mnoga; żadna – nic', async () => {
+    await waiting([{ block: 'a' }, { block: 'b' }])
+    expect(q('routine-waiting')!.textContent).toContain('czekają na kroki')
+    act(() => root!.unmount())
+    await waiting([])
+    expect(q('routine-waiting')).toBeNull()
+  })
+})
+
 describe('legenda energii pod „?” (P10) i koszt (D7)', () => {
   it('zwinięta na starcie; „?” ją rozwija i zwija', async () => {
     await render(createElement(EnergyLegendHelp, { reserve: 30 }))
@@ -204,12 +270,9 @@ describe('legenda energii pod „?” (P10) i koszt (D7)', () => {
     expect(q('energy-legend')).toBeNull()
   })
 
-  it('legenda mówi o koszcie: jednostka (punkty energii na godzinę) i zakres od −5 do 5', async () => {
+  it('legenda mówi o koszcie: poziom na godzinę od −5 do 5, 1 = 3 punkty energii', async () => {
     await render(createElement(EnergyLegendHelp, { reserve: 30, open: true }))
-    const cost = q('energy-legend-cost')!.textContent!
-    expect(cost).toContain('punkty energii')
-    expect(cost).toContain('na godzinę')
-    expect(cost).toContain('od −5 do 5')
+    expect(q('energy-legend-cost')!.textContent).toContain('koszt na godzinę, od −5 do 5; 1 = 3 punkty energii')
   })
 
   const item = (cost: TimelineItem['cost']): TimelineItem => ({ id: 'a', startMin: 600, endMin: 660, title: 'Blok a', marks: [], color: '#F2B66D', categoryId: 'analiza', background: false, movable: true, cost })
@@ -218,10 +281,9 @@ describe('legenda energii pod „?” (P10) i koszt (D7)', () => {
     const c = { head: 3, emotions: 1, senses: 1, body: 0 }
     await render(createElement(Timeline, { items: [item({ costs: c, base: c, own: false, edit: true })], markers: [], selected: null, onSelect: vi.fn(), onCosts: vi.fn(), from: 6 * 60, to: 22 * 60 }))
     await act(async () => click(q('block-a-cost')!))
-    const head = q('cost-pop-head')!.textContent!
-    expect(head).toContain('Koszt na godzinę')
-    expect(head).toContain('punkty energii')
-    expect(head).toContain('od −5 do 5')
+    // The same words as the legend's (one text).
+    expect(q('cost-pop-head')!.textContent).toContain(COST_SCALE_TEXT)
+    expect(COST_SCALE_TEXT).toBe('koszt na godzinę, od −5 do 5; 1 = 3 punkty energii')
   })
 })
 
@@ -275,6 +337,9 @@ describe('podpowiedzi gestów (D10)', () => {
   it('pasek narzędzi notatki mówi, co robi Esc (P11); notatka tylko do odczytu – bez napisu', async () => {
     await render(createElement(NoteEditor, { value: '', onCommit: () => undefined, olderComputers: [] }))
     expect(q('note-esc-hint')!.textContent).toBe('Esc – cofnij zmiany')
+    // „Powiększ”: Esc only shrinks the note then (the unsaved text stays).
+    await act(async () => click(q('note-expand')!))
+    expect(q('note-esc-hint')!.textContent).toBe('Esc – pomniejsz')
     act(() => root!.unmount())
     await render(createElement(NoteEditor, { value: '', onCommit: () => undefined, olderComputers: [], readOnly: true }))
     expect(q('note-esc-hint')).toBeNull()
@@ -289,6 +354,8 @@ describe('układ nad osią „Dziś” (P10) – w kodzie strony', () => {
   it('karty rutyn stoją w panelu bocznym, nie nad osią', () => {
     expect(side).toContain('<RoutineCards')
     expect(day).not.toContain('<RoutineCards')
+    // The panel of a block replaces the side panel: a routine waiting says so there and leads to its card.
+    expect(day).toContain('<RoutinesWaiting')
   })
 
   it('ostrzeżenia dnia: panel boczny i panel bloku (jedna lista), nie plan poranny', () => {
@@ -296,6 +363,8 @@ describe('układ nad osią „Dziś” (P10) – w kodzie strony', () => {
     expect(day).toContain('<DayWarnings')
     const morning = readFileSync('src/renderer/features/today/MorningPlan.tsx', 'utf8')
     expect(morning).not.toContain('morningWarnings(')
+    expect(side).toContain('dayWarningTexts(model)')
+    expect(day).toContain('dayWarningTexts(model)')
     expect(morning).not.toContain('warning-')
   })
 

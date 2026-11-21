@@ -37,6 +37,26 @@ export function RoutineCards({ model, names }: { model: DayModel; names: Names }
   )
 }
 
+/**
+ * The routines begun and not ticked off, said in the panel of a block (D8, P10): the panel takes the side panel's place, and the cards stand
+ * there – the line leads to them (`onShow` closes the panel). Nothing when none waits.
+ */
+export function RoutinesWaiting({ due, model, names, onShow }: { due: readonly RoutineDue[]; model: DayModel; names: Names; onShow: () => void }) {
+  const named = due.flatMap((r) => {
+    const block = model.ctx.plan.find((p) => p.id === r.block)
+    return block ? [`„${blockName(block, names)}”`] : []
+  })
+  if (!named.length) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded border border-line px-2 py-1.5 text-[12.5px]" data-testid="routine-waiting">
+      <span className="min-w-0 flex-1">{named.length === 1 ? `Rutyna ${named[0]} czeka na kroki` : `Rutyny czekają na kroki: ${named.join(', ')}`}</span>
+      <button type="button" className="btn" onClick={onShow} data-testid="routine-waiting-show">
+        Pokaż kartę
+      </button>
+    </div>
+  )
+}
+
 export function RoutineCard({ model, due, block, name }: { model: DayModel; due: RoutineDue; block: PlanBlock; name: string }) {
   const [busy, run] = useBusy()
   const date = model.date

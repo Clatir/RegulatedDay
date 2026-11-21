@@ -74,7 +74,7 @@ export function BlockEditor({
   forecastStart,
   onEscape,
   day,
-  warnings
+  dayNotes
 }: {
   block: PlanBlock
   plan: readonly PlanBlock[]
@@ -103,9 +103,10 @@ export function BlockEditor({
   /**
    * A new block not saved yet (before „Dodaj”): the cursor starts in „Nazwa” (D430), Enter there adds it as „Dodaj” does, with
    * the name typed (`add`, D431; `false` – refused, a save running: the cursor stays, T1028). Left out – an existing block:
-   * Enter only commits the name.
+   * Enter only commits the name. `discards: false` – Esc would not throw it away (a field touched, a save started: `escapeDraft`), the
+   * line under the heading then says only that it saves itself (D4).
    */
-  newBlock?: { add: (name: string | null) => boolean | void }
+  newBlock?: { add: (name: string | null) => boolean | void; discards?: boolean }
   /** A block just made and saved at once (a click or a range on the axis of „Szablony”): the cursor starts in „Nazwa” too (D431). */
   focusName?: boolean
   /** Where the forecast ends a block that follows another („po bloku”, D464): its „Koniec” says „ok. HH:MM”; left out – no forecast (templates, series). */
@@ -119,8 +120,11 @@ export function BlockEditor({
    * category. Left out – the day of `place`, else none (a template, a series: used from today on).
    */
   day?: string
-  /** The day's warnings (`DayWarnings`, D3):under the heading while this panel stands in the place of the side panel; left out – none (templates, series). */
-  warnings?: ReactNode
+  /**
+   * What the side panel says of the day (the warnings, a routine waiting – D3, D8) while this panel stands in its place: under the heading;
+   * left out – nothing (templates, series).
+   */
+  dayNotes?: ReactNode
 }) {
   useEscapeLayer(true, onEscape ?? onClose)
   const owner = place ? ownerToAdd(block, place) : null
@@ -178,10 +182,10 @@ export function BlockEditor({
       </div>
       {newBlock && (
         <p className="-mt-1 text-[11.5px] text-muted" data-testid="block-draft-hint">
-          Zapisze się, gdy opuścisz panel · Esc – odrzuć
+          {newBlock.discards === false ? 'Zapisze się, gdy opuścisz panel' : 'Zapisze się, gdy opuścisz panel · Esc – odrzuć'}
         </p>
       )}
-      {warnings}
+      {dayNotes}
       {/* D430: its own name, as the title of an event; empty – named as before (the placeholder says how). */}
       <Field label="Nazwa" labelWidth={92}>
         <TextField

@@ -174,7 +174,7 @@ describe('pole „Nazwa” w panelu bloku', () => {
   it('„Dziś”: Enter w nazwie i zatwierdzenie pola idą przez jeden pierwszy zapis szkicu (`firstSave`) – blok nie zapisze się dwa razy (D461: bez „Dodaj”, T1072)', () => {
     const page = readFileSync('src/renderer/features/today/TodayPage.tsx', 'utf8')
     expect(page).not.toContain('block-add')
-    expect(page).toMatch(/newBlock=\{draft \? \{ add: \(name\) => \(firstSave\.of\(draft\.id\) \? false : void changeBlock\(draft, \{ name \}, true\)\) \} : undefined\}/)
+    expect(page).toMatch(/newBlock=\{draft \? \{ add: \(name\) => \(firstSave\.of\(draft\.id\) \? false : void changeBlock\(draft, \{ name \}, true\)\), discards: escapeDraft\(.+\) === 'discard' \} : undefined\}/)
   })
 
   it('zakończona seria (tylko do odczytu): pole nie przyjmuje wpisu', async () => {

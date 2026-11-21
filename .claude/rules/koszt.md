@@ -87,7 +87,7 @@ T1360–T1374, T1395–T1399, T1430–T1437, T1440–T1447.
   daty zmian, bez pytania o serię). „Rutyny” i okno ✎ rutyny – `RoutineCostField` (`TileCost` z
   `routineCostShown`: bez kosztu – koszt kategorii rodzaju „rutyna”), zapis `saveRoutineRecord` (`tryUpdateRecord`, sam rekord – T1430); w ✎ okienko
   zmienia formularz do „Zapisz” (T1397).
-- Jednostka i zakres (UX9 D7): okienko ma nagłówek `cost-pop-head` („Koszt na godzinę” / `COST_POP_UNIT` – „punkty energii, od −5 do 5”; `POP_H` liczy go), legenda energii – linię `energy-legend-cost` (`COST_SCALE_TEXT` w `energyDraw.ts`; koszt 1 = 3 punkty na godzinę, jak w specyfikacji „Koszt na godzinę”).
+- Jednostka i zakres (UX9 D7): okienko ma nagłówek `cost-pop-head` („Koszt bloku” i `COST_SCALE_TEXT` z `energyDraw.ts` – „koszt na godzinę, od −5 do 5; 1 = 3 punkty energii”; `POP_H` go liczy), legenda energii – linię `energy-legend-cost` z tym samym zdaniem (liczba to poziom kosztu, nie punkty).
 - `TileCost` (napis + okienko w portalu): `edit` = `costEditable(fakt, dzień miniony, minięty)` – niezaczęty nieminięty, zaczęty do
   końca (także poza planem); skończony i dzień miniony – sam napis. Kliknięcia to zamiary (krok puli, „Jak podkategoria”) po kolei –
   pierwszy od razu, każdy nad tym, co zapisane, gdy przyjdzie jego kolej; żaden nie przepada, wyjątek = odmowa; okienko pokazuje

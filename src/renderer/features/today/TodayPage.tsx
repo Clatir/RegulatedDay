@@ -82,14 +82,15 @@ import { draftTile } from './blockDraft'
 import { escapeDraft, firstSave } from './draftSave'
 import { DayMenu } from './DayMenu'
 import { DayNumbers, DaySummary } from './DayNumbers'
-import { DayWarnings } from './DayWarnings'
+import { DayWarnings, dayWarningTexts } from './DayWarnings'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
 import { CopyDayDialog, MoveDialog } from './MoveDialogs'
-import { RoutineCards } from './RoutineCard'
+import { RoutineCards, RoutinesWaiting } from './RoutineCard'
 import { TypeChangeDialog } from './TypeChangeDialog'
 import { ritualDue } from '@shared/engine/ritual'
+import { routinesDue } from '@shared/engine/routineCheck'
 import { GameLine } from '../game/GameLine'
 import { PeersFreshness } from '../settings/ComputersSection'
 import { RitualPanel } from '../ritual/RitualPanel'
@@ -816,8 +817,13 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
             names={names}
             computers={view.computers}
             onChange={(patch) => changeBlock(block, patch, draft != null)}
-            // D3, D563 P10: the day's warnings stand in the panel of the block as in the side panel it replaces.
-            warnings={<DayWarnings warnings={model.state.warnings} />}
+            // D3, D8, D563 P10: what the side panel says of the day stands in the panel of the block, which replaces it – the warnings and a routine waiting.
+            dayNotes={
+              <>
+                <DayWarnings warnings={dayWarningTexts(model)} />
+                {isToday && <RoutinesWaiting due={routinesDue(model.ctx, model.state, routines, model.dayFile)} model={model} names={names} onShow={closePanel} />}
+              </>
+            }
             // „Zamknij” leaves a new block – saved as it stands, a bare click of the axis untouched thrown away (D461, T1045); Esc
             // throws away only an untouched one whose save has not started, any other it leaves as „Zamknij” does (T1080).
             onClose={closePanel}
@@ -828,7 +834,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
             // D430, D431, D461: „+ Blok” (Ctrl+N, a range on the axis, „Więcej” of „Tydzień”) – the cursor in „Nazwa”, Enter there
             // saves the block with the name just typed (the draft of this render does not have it yet; a name that was changed
             // is committed by the blur and has started the save already). A save running: the cursor stays in the field (T1028).
-            newBlock={draft ? { add: (name) => (firstSave.of(draft.id) ? false : void changeBlock(draft, { name }, true)) } : undefined}
+            newBlock={draft ? { add: (name) => (firstSave.of(draft.id) ? false : void changeBlock(draft, { name }, true)), discards: escapeDraft(firstSave.of(draft.id) != null, stored?.touched ?? false) === 'discard' } : undefined}
             steps={
               <StepsEditor
                 steps={routineList?.steps ?? block.steps}
@@ -915,7 +921,7 @@ function SidePanel({ model, names, routines, onSelect, onMove, cases }: { model:
       {routines && <RoutineCards model={model} names={names} />}
       {cases}
       <DayNumbers model={model} />
-      <DayWarnings warnings={s.warnings} />
+      <DayWarnings warnings={dayWarningTexts(model)} />
       {parked.length > 0 && (
         <div className="flex flex-col gap-1.5">
           <h4 className="text-[12px] text-muted">Zaparkowane</h4>

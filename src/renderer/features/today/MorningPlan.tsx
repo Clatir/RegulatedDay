@@ -70,7 +70,11 @@ const QUESTIONS: Array<{ pool: Pool; text: string }> = [
 const POOL_NAMES: Record<Pool, string> = { head: 'głowa', emotions: 'emocje', senses: 'bodźce', body: 'ciało' }
 const EXCEPTION_REASONS = ['NFP', 'CPI', 'FOMC', 'inne dane']
 
+/** The busy state of the card's writes that approve or undo the boundary: one for the header's „Zatwierdź” and the card's (a second click in the time of a save does nothing). */
+type Busy = ReturnType<typeof useBusy>
+
 export function MorningPlan({ model, names }: { model: DayModel; names: Names }) {
+  const busy = useBusy()
   const s = model.state
   // The approval in force is yours (not one the first work block made, nor one opened again by „Cofnij”).
   const approvedByYou = s.boundary.approved != null && !s.boundary.auto
@@ -90,7 +94,7 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
   const allDayLine = morningAllDayLine(useData((d) => d.allDay), model.date)
   return (
     <section className="rounded-lg border border-line bg-panel" data-testid="morning-plan" data-prompt-card={approvedByYou ? undefined : 'true'}>
-      <MorningHeader model={model} open={open} plan={!sideB && !goals && !checkinOpen(needCheckin, checkinSkipped, model.date)} onToggle={() => setOpen(!open)} />
+      <MorningHeader model={model} open={open} plan={!sideB && !goals && !checkinOpen(needCheckin, checkinSkipped, model.date)} onToggle={() => setOpen(!open)} busy={busy} />
       {allDayLine && (
         <div className="px-4 pb-2.5 text-[12.5px] text-muted" data-testid="morning-allday">
           {allDayLine}
@@ -98,7 +102,7 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
       )}
       {open && (
         <div className="flex flex-col gap-3 border-t border-line px-4 py-3">
-          {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep key={month} month={month} /> : checkinOpen(needCheckin, checkinSkipped, model.date) ? <Checkin model={model} onSkip={() => skipCheckin(model.date)} /> : <Plan model={model} names={names} />}
+          {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep key={month} month={month} /> : checkinOpen(needCheckin, checkinSkipped, model.date) ? <Checkin model={model} onSkip={() => skipCheckin(model.date)} /> : <Plan model={model} names={names} busy={busy} />}
         </div>
       )}
     </section>
@@ -117,8 +121,9 @@ export function approveEvents(model: DayModel): Parameters<typeof logEvents>[0] 
  * before it): with the boundary proposed and not approved, „Zatwierdź” stands here, so the plan is approved without scrolling the card down
  * to its end. It is a button of its own beside the fold's (a button in a button is none).
  */
-export function MorningHeader({ model, open, plan, onToggle }: { model: DayModel; open: boolean; plan: boolean; onToggle: () => void }) {
-  const [busy, run] = useBusy()
+export function MorningHeader({ model, open, plan, onToggle, busy: shared }: { model: DayModel; open: boolean; plan: boolean; onToggle: () => void; busy?: Busy }) {
+  const own = useBusy()
+  const [busy, run] = shared ?? own
   const approvedByYou = model.state.boundary.approved != null && !model.state.boundary.auto
   const approve = plan ? approveEvents(model) : null
   return (
@@ -192,7 +197,7 @@ export function Checkin({ model, onSkip }: { model: DayModel; onSkip: () => void
   )
 }
 
-function Plan({ model, names }: { model: DayModel; names: Names }) {
+function Plan({ model, names, busy: approving }: { model: DayModel; names: Names; busy: Busy }) {
   const { templates, lectures, series, seriesPlans, rd } = useData()
   const date = model.date
   const s = model.state
@@ -399,7 +404,7 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
       )}
       {/* D563 P10: the day's warnings are not here – the side panel and the block's panel have them (`DayWarnings`). */}
       <EnergyOrder model={model} names={names} />
-      <Boundary model={model} lm={lm} approved={approved} proposal={proposal} />
+      <Boundary model={model} lm={lm} approved={approved} proposal={proposal} busy={approving} />
     </div>
   )
 }
@@ -456,14 +461,15 @@ function Card({ children, ...rest }: { children: React.ReactNode; 'data-testid'?
 }
 
 /** The boundary to approve (approving it approves the plan) and its exception, up to +3 h with a reason (spec). */
-function Boundary({ model, lm, approved, proposal }: { model: DayModel; lm: (i: number) => string; approved: number | null; proposal: number | null }) {
+export function Boundary({ model, lm, approved, proposal, busy: shared }: { model: DayModel; lm: (i: number) => string; approved: number | null; proposal: number | null; busy?: Busy }) {
   const s = model.state
   const date = model.date
   const [exception, setException] = useState(false)
   const [minutes, setMinutes] = useState(60)
   const [reason, setReason] = useState('NFP')
   const [thisMonth, setThisMonth] = useState<number | null>(null)
-  const [busy, run] = useBusy()
+  const own = useBusy()
+  const [busy, run] = shared ?? own
   useEffect(() => {
     if (!exception) return
     // Unknown now: no count and no warning (the exception is still possible).

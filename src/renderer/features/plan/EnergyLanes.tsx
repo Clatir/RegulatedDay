@@ -123,7 +123,7 @@ export function EnergyLegend({ reserve }: { reserve: number }) {
         jaśniej – poniżej rezerwy
       </span>
       {/* D7: the unit and the range of the cost numbers on the tiles. */}
-      <span data-testid="energy-legend-cost">{COST_SCALE_TEXT}</span>
+      <span data-testid="energy-legend-cost">liczby przy kafelku: {COST_SCALE_TEXT}</span>
     </div>
   )
 }
