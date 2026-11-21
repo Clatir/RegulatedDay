@@ -12,7 +12,7 @@ import { paths } from '@shared/data/paths'
 import { inverseEdit, recordEdit } from '@shared/data/merge'
 import { rdFrom } from '@shared/model/rd'
 import { settingsOn, type SettingsChange } from '@shared/model/settings'
-import { withdrawnRd } from '@shared/model/settingsWithdraw'
+import { withdrawnRd, withoutPlannedCategory } from '@shared/model/settingsWithdraw'
 import { placeLogical } from '@shared/time/day'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs } from '../../src/main/data/fsio'
@@ -92,5 +92,35 @@ describe('wycofanie zaplanowanej zmiany w folderze danych', () => {
     write({ ...FILE, settings: [FILE.settings[0], { ...PLANNED, patch: { reserve: 18 } }] })
     expect((await folder.edit([withdrawEntry(seen)]))[0]!.status).toBe('conflict')
     expect(ids(read())).toEqual(['a', 'z'])
+  })
+})
+
+describe('„Usuń” podkategorii, której dodanie czeka na datę (T2353)', () => {
+  const costs = { head: 1, emotions: 1, senses: 1, body: 0 }
+  const ADD = ch('n', '2026-11-25', { categories: { nowa: { cls: 'work', kind: 'other', place: 'computer', costs } } })
+  const MIXED = ch('m', '2026-11-28', { reserve: 5, categories: { nowa: { costs: { ...costs, head: 2 } } } })
+  const WITH = { schema: 1, categories: { nowa: { name: 'Nowa', color: null, archived: false, group: 'g-praca' } }, settings: [FILE.settings[0], ADD, MIXED] }
+
+  it('jeden zapis przez kolejkę: zmiana dodająca i wpis podkategorii znikają, z innej zmiany tylko jej część; reszta zostaje', async () => {
+    write(WITH)
+    const folder = await open()
+    const seen = (await folder.recordView(paths.settings))!
+    const out = withoutPlannedCategory(seen, 'nowa', DAY)!
+    expect((await folder.edit([recordEdit(paths.settings, seen, out.raw)!]))[0]!.status).toBe('applied')
+    const file = read()
+    expect(ids(file)).toEqual(['a', 'm'])
+    expect((file.settings as SettingsChange[])[1]!.patch).toEqual({ reserve: 5 })
+    expect(file.categories).toEqual({})
+    expect(settingsOn(rdFrom(file).settings, '2026-11-30').categories.nowa).toBeUndefined()
+  })
+
+  it('wpis podkategorii przemianowany w tym czasie na innym komputerze: pytanie o niego, nic nie ginie po cichu', async () => {
+    write(WITH)
+    const folder = await open()
+    const seen = (await folder.recordView(paths.settings))!
+    write({ ...WITH, categories: { nowa: { ...WITH.categories.nowa, name: 'Inna nazwa' } } })
+    const out = withoutPlannedCategory(seen, 'nowa', DAY)!
+    expect((await folder.edit([recordEdit(paths.settings, seen, out.raw)!]))[0]!.status).toBe('conflict')
+    expect((read().categories as Record<string, { name: string }>).nowa!.name).toBe('Inna nazwa')
   })
 })

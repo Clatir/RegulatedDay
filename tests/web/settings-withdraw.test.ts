@@ -232,3 +232,49 @@ describe('„Wycofaj” zaplanowanej zmiany', () => {
     expect(q('settings-planned-z1')!.querySelector('button')).not.toBeNull()
   })
 })
+
+describe('„Usuń” podkategorii, której dodanie czeka na datę (T2353)', () => {
+  const costs = { head: 1, emotions: 1, senses: 1, body: 0 }
+  // From tomorrow – the page shows the settings from tomorrow („od jutra”), so its row is there.
+  const ADD = ch('n1', '2026-11-22', { categories: { nowa: { cls: 'work', kind: 'other', place: 'computer', costs } } })
+  const MIXED = ch('m1', '2026-11-28', { reserve: 5, categories: { nowa: { costs: { ...costs, head: 2 } } } })
+  const META = { nowa: { name: 'Korekty', color: null, archived: false } }
+  const rowOf = (id: string) => document.querySelector<HTMLElement>(`[data-testid="category-row"][data-category="${id}"]`)
+  const removeIn = async (id: string) => {
+    await click(rowOf(id)!.querySelector('[data-testid="category-more"]'))
+    return rowOf(id)!.querySelector<HTMLElement>('[data-testid="category-remove"]')
+  }
+
+  it('jeden zapis: zmiana dodająca, część zmiany późniejszej i wpis podkategorii znikają; wiersze znikają; dymek z „Cofnij” przywraca wszystko', async () => {
+    await mount({ schema: 1, categories: META, settings: [A, ADD, MIXED] })
+    expect(q('settings-planned-n1')).not.toBeNull()
+    const remove = await removeIn('nowa')
+    expect(remove?.textContent).toBe('Usuń podkategorię (dodana od 22.11.2026, jeszcze nie obowiązuje – znika całkiem)')
+    await click(remove)
+    expect(main.sent).toHaveLength(1)
+    const file = main.file as Record<string, unknown>
+    expect(rdFrom(file).settings.map((c) => c.id)).toEqual(['a', 'm1'])
+    expect(rdFrom(file).settings[1]!.patch).toEqual({ reserve: 5 })
+    expect(file.categories).toEqual({})
+    expect(rowOf('nowa')).toBeNull()
+    expect(q('settings-planned-n1')).toBeNull()
+    expect(lastToast()?.text).toBe('Usunięto podkategorię „Korekty” – dodana od 22.11.2026 jeszcze nie obowiązywała.')
+
+    await act(async () => lastToast()!.action!.run())
+    for (let i = 0; i < 5; i++) await act(async () => undefined)
+    expect(main.sent).toHaveLength(2)
+    expect((main.file as Record<string, unknown>).categories).toEqual(META)
+    expect(rdFrom(main.file).settings.map((c) => c.id)).toEqual(['a', 'n1', 'm1'])
+    expect(rdFrom(main.file).settings.find((c) => c.id === 'm1')!.patch).toEqual(MIXED.patch)
+    expect(rowOf('nowa')).not.toBeNull()
+  })
+
+  it('podkategoria w mocy: „Usuń” to archiwum jak dotąd (bez dymka)', async () => {
+    await mount({ schema: 1, categories: { analiza: { name: 'Analiza', color: null, archived: false } }, settings: [A] })
+    const remove = await removeIn('analiza')
+    expect(remove?.textContent).toBe('Usuń podkategorię (znika z wyboru, zostaje w historii)')
+    await click(remove)
+    expect(main.sent).toEqual([{ rel: 'rd.json', edits: [{ path: ['categories', 'analiza', 'archived'], base: false, value: true }] }])
+    expect(toasts()).toEqual([])
+  })
+})

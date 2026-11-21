@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { deepEqual, editStands, inverseEdit, recordEdit, setAt, valueAt } from '@shared/data/merge'
 import { SESSIONS_CHANGE_ID } from '@shared/model/sessionMigration'
 import { settingsOn, type SettingsChange } from '@shared/model/settings'
-import { isPlannedChange, withdrawRefusal, withdrawnRd } from '@shared/model/settingsWithdraw'
+import { isPlannedChange, plannedAddition, withdrawRefusal, withdrawnRd, withoutPlannedCategory } from '@shared/model/settingsWithdraw'
 
 const TODAY = '2026-11-21'
 const ch = (id: string, from: string, patch: Record<string, unknown>, extra: Partial<SettingsChange> = {}): SettingsChange => ({ id, from, at: null, made: 1, patch, ...extra })
@@ -100,13 +100,40 @@ describe('withdrawnRd', () => {
     expect('raw' in withdrawnRd({ settings: [a, ch('c', '2026-11-30', { reserve: 5 })] }, 'a', TODAY)).toBe(true)
   })
 
-  it('warianty podkategorii: po id – później zapisana lista z wariantem, jaki zmiana zrobiła, to odmowa; ze zmienionym albo innym – nie', () => {
+  it('warianty podkategorii: pole po polu – późniejsza lista, która trzyma dodany wariant albo zmienione pole wariantu, to odmowa', () => {
+    const costs = { head: 2, emotions: 0, senses: 0, body: 0 }
     const v1 = ch('v1', '2026-11-25', { categories: { analiza: { variants: [{ id: 'x', name: 'X' }] } } })
     const v2 = ch('v2', '2026-11-27', { categories: { analiza: { variants: [{ id: 'x', name: 'X' }, { id: 'y', name: 'Y' }] } } })
     expect(withdrawnRd({ settings: [v1, v2] }, 'v1', TODAY)).toMatchObject({ refused: 'later', later: { id: 'v2' } })
+    // `x` renamed later: it is still there – the variant `v1` added stays from that date, so `v1` waits for it.
     const renamed = ch('v2', '2026-11-27', { categories: { analiza: { variants: [{ id: 'x', name: 'X2' }, { id: 'y', name: 'Y' }] } } })
-    expect('raw' in withdrawnRd({ settings: [v1, renamed] }, 'v1', TODAY)).toBe(true)
+    expect(withdrawnRd({ settings: [v1, renamed] }, 'v1', TODAY)).toMatchObject({ refused: 'later', later: { id: 'v2' } })
+    // A field of a variant that was there: a later list with that field as `c` made it, another field changed – holds it.
+    const base = ch('b0', '2026-11-01', { categories: { analiza: { variants: [{ id: 'x', name: 'X', place: 'computer' }] } } })
+    const cost = ch('c1', '2026-11-25', { categories: { analiza: { variants: [{ id: 'x', name: 'X', place: 'computer', costs }] } } })
+    const keeps = ch('c2', '2026-11-27', { categories: { analiza: { variants: [{ id: 'x', name: 'X nowa', place: 'computer', costs }] } } })
+    expect(withdrawnRd({ settings: [base, cost, keeps] }, 'c1', TODAY)).toMatchObject({ refused: 'later', later: { id: 'c2' } })
+    // The same later list with the cost given back to „jak podkategoria”: nothing of `c1` in it – `c1` goes.
+    const gives = ch('c2', '2026-11-27', { categories: { analiza: { variants: [{ id: 'x', name: 'X nowa', place: 'computer', costs: null }] } } })
+    expect('raw' in withdrawnRd({ settings: [base, cost, gives] }, 'c1', TODAY)).toBe(true)
+    // Another subcategory's list: no refusal.
     expect('raw' in withdrawnRd({ settings: [v1, ch('v3', '2026-11-27', { categories: { inna: { variants: [] } } })] }, 'v1', TODAY)).toBe(true)
+  })
+
+  it('lista późniejszej zmiany czytana bez wycofywanej (jak po wycofaniu): pole, którego nie pisze, nie bierze jej wartości', () => {
+    const week = (sat: string) => ['zwykly', 'zwykly', 'zwykly', 'zwykly', 'zwykly', sat, 'weekend']
+    const a = ch('a', '2026-11-25', { weekTypes: week('wolne') })
+    // Saturday unreadable in `b`: read with `a` it would be `a`'s „wolne”, without it – what was before (`weekend`).
+    const b = ch('b', '2026-11-30', { weekTypes: ['wolne', 'zwykly', 'zwykly', 'zwykly', 'zwykly', 'nieznany', 'weekend'] })
+    expect('raw' in withdrawnRd({ settings: [a, b] }, 'a', TODAY)).toBe(true)
+  })
+
+  it('lista, której ta wersja nie zna, porównywana tak, jak jest zapisana', () => {
+    const a = ch('a', '2026-11-25', { przyszle: { lista: ['p', 'q'] } })
+    const holds = ch('b', '2026-11-30', { przyszle: { lista: ['p', 'q', 'r'] } })
+    expect(withdrawnRd({ settings: [ch('z0', '2026-11-01', { przyszle: { lista: ['p'] } }), a, holds] }, 'a', TODAY)).toMatchObject({ refused: 'later', later: { id: 'b' } })
+    const not = ch('b', '2026-11-30', { przyszle: { lista: ['p', 's'] } })
+    expect('raw' in withdrawnRd({ settings: [ch('z0', '2026-11-01', { przyszle: { lista: ['p'] } }), a, not] }, 'a', TODAY)).toBe(true)
   })
 
   it('zmiana, która dodaje podkategorię (nie ma jej w ustawieniach tuż przed nią) – odmowa „podkategoria”, z nazwą; wiersz to wie', () => {
@@ -134,5 +161,45 @@ describe('withdrawnRd', () => {
     const back = inverseEdit(entry, file as Record<string, unknown>, null)!
     for (const f of back.edits) if (deepEqual(valueAt(file, f.path), f.base)) file = setAt(file, f.path, f.value)
     expect(settingsOn(changesOf(file as Record<string, unknown>), '2026-11-25')).toEqual(settingsOn(changesOf(raw), '2026-11-25'))
+  })
+})
+
+describe('podkategoria, której dodanie jeszcze czeka na datę (T2353)', () => {
+  const costs = { head: 1, emotions: 1, senses: 1, body: 0 }
+  const add = ch('n', '2026-11-25', { categories: { nowa: { cls: 'work', kind: 'other', place: 'computer', costs } } })
+  const later = ch('m', '2026-11-28', { reserve: 5, categories: { nowa: { costs: { ...costs, head: 2 } }, analiza: { costs } } }, { made: 2 })
+  const only = ch('k', '2026-11-29', { categories: { nowa: { place: 'away' } } }, { made: 3 })
+  const raw = { schema: 1, categories: { nowa: { name: 'Nowa', color: null, archived: false, group: 'g-praca' }, analiza: { name: 'Analiza', color: null, archived: false } }, settings: [ch('a', '2026-11-01', { reserve: 12 }), add, later, only] }
+
+  it('plannedAddition: pierwsza zmiana, która ją pisze, czeka na datę, a ustawienia tuż przed nią jej nie mają', () => {
+    expect(plannedAddition('nowa', changesOf(raw), TODAY)?.id).toBe('n')
+    // Its date came: it is in force – no planned addition.
+    expect(plannedAddition('nowa', changesOf(raw), '2026-11-25')).toBeNull()
+    // A default subcategory, one that is not there at all.
+    expect(plannedAddition('analiza', changesOf(raw), TODAY)).toBeNull()
+    expect(plannedAddition('brak', changesOf(raw), TODAY)).toBeNull()
+  })
+
+  it('withoutPlannedCategory: zmiana dodająca i zmiana tylko jej – całe; z innej zmiany tylko jej część; wpis w „categories” znika', () => {
+    const out = withoutPlannedCategory(raw, 'nowa', TODAY)!
+    expect(out.added.id).toBe('n')
+    const list = changesOf(out.raw)
+    expect(list.map((c) => c.id)).toEqual(['a', 'm'])
+    expect(list[1]!.patch).toEqual({ reserve: 5, categories: { analiza: { costs } } })
+    expect(out.raw.categories).toEqual({ analiza: raw.categories.analiza })
+    // From every date: as if it never was.
+    for (const d of ['2026-11-25', '2026-11-28', '2026-11-30']) expect(settingsOn(list, d).categories.nowa).toBeUndefined()
+    expect(settingsOn(list, '2026-11-28').reserve).toBe(5)
+    // One edit of rd.json; its inverse puts everything back.
+    const entry = recordEdit('rd.json', raw, out.raw)!
+    let file: unknown = out.raw
+    for (const f of inverseEdit(entry, out.raw, null)!.edits) if (deepEqual(valueAt(file, f.path), f.base)) file = setAt(file, f.path, f.value)
+    expect(settingsOn(changesOf(file as Record<string, unknown>), '2026-11-29')).toEqual(settingsOn(changesOf(raw), '2026-11-29'))
+    expect((file as Record<string, unknown>).categories).toEqual(raw.categories)
+  })
+
+  it('dodanie w mocy (data nadeszła) albo podkategoria z ustawień: null – „Usuń” to archiwum jak dotąd', () => {
+    expect(withoutPlannedCategory(raw, 'nowa', '2026-11-25')).toBeNull()
+    expect(withoutPlannedCategory(raw, 'analiza', TODAY)).toBeNull()
   })
 })
