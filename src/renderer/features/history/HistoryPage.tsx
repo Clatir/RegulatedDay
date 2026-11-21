@@ -5,7 +5,7 @@
  * (never keys, ids, UTC or milliseconds), and „Przywróć” makes it the record again (an edit: the version replaced goes to
  * the history too).
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { HistoryRecord, HistoryVersion } from '@shared/api'
 import { diffRecords } from '@shared/data/merge'
 import { countLabel, plDate, plDateTime } from '@shared/format'
@@ -18,11 +18,12 @@ import { EmptyState, cx } from '../../components/ui'
 import { fieldText, keyOf, valueText } from '../../lib/recordText'
 import { useBusy } from '../../lib/busy'
 import { rawRecord, reloadData, useData } from '../../store/data'
-import { takeFoundPick, toast, useUi } from '../../store/ui'
+import { closeToast, takePick, takeFoundPick, toast, useUi } from '../../store/ui'
 import { blockName } from '../plan/blockView'
 import { seriesBlockOf } from '../series/seriesForm'
 
 const KIND_NAMES: Record<string, string> = { settings: 'Ustawienia', template: 'Szablony', series: 'Serie', schedule: 'Plan wykładów', day: 'Plany dni', request: 'Sprawy', routine: 'Rutyny', allDay: 'Wydarzenia', attachment: 'Załączniki' }
+const READ_FAILED_TEXT = 'Nie udało się odczytać historii – spróbuj za chwilę.'
 const REASONS: Record<string, string> = { edit: 'przed edycją', delete: 'przed usunięciem', merge: 'przed scaleniem', conflict: 'wersja z konfliktu', restore: 'przed przywróceniem' }
 
 /** The record chosen, by its key, from the list as it is now – after „Przywróć” no longer „usunięty” (A7-10). */
@@ -38,8 +39,23 @@ export function HistoryPage() {
   // UX18 (E7): the kinds to show (`FilterBar`, remembered on this computer) and the words searched in a record's name and kind.
   const [chosenKinds, setChosenKinds] = useFilters('history')
   const [query, setQuery] = useState('')
+  // A read that fails is no „empty” history and no „no versions”: said as it is (UX18) – the screen and a message – and a record picked waits for nothing.
+  const [failed, setFailed] = useState(false)
+  const failedToast = useRef<number | null>(null)
   useEffect(() => {
-    void window.rd.historyList().then(setRecords).catch(() => setRecords([]))
+    void window.rd
+      .historyList()
+      .then((r) => {
+        if (failedToast.current != null) closeToast(failedToast.current)
+        failedToast.current = null
+        setFailed(false)
+        setRecords(r)
+      })
+      .catch(() => {
+        takePick((x) => x.kind === 'history')
+        failedToast.current = toast(READ_FAILED_TEXT, 'error')
+        setFailed(true)
+      })
   }, [stamp])
   // A record picked by a message („Historia” by a broken file, UX3, A9; „Historia” beside a record, UX18): chosen once the list is read; one without
   // versions – said, never left waiting. The filters and the search are cleared then: the record chosen is never hidden by them.
@@ -53,7 +69,7 @@ export function HistoryPage() {
     setQuery('')
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `setChosenKinds` is a new function at every render; only a new pick or list matters
   }, [pick, records])
-  if (!records) return <div className="p-6 text-muted">Czytam historię…</div>
+  if (!records) return failed ? <EmptyState why={READ_FAILED_TEXT} /> : <div className="p-6 text-muted">Czytam historię…</div>
   if (!records.length) return <EmptyState why="Historia jest pusta: wersje zapisują się, gdy zmieniasz albo usuwasz plan, szablon, sprawę, rutynę czy ustawienia." />
   // Only the records the list has a name for (the counter, the filters and the list say the same); a day is found by its ISO date too.
   const known = records.filter((r) => KIND_NAMES[r.kind])
