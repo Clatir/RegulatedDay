@@ -123,7 +123,7 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   kliknięcie tylko po kliknięciu w siebie (dwuklik w „Skończył się o…” nie trafia w −5, które stanęło w jego miejscu). Przyciski
   nagłówka i stopki panelu (`PanelButton`) – to samo `detail`.
 - Pasek pulpitu „↗” i „×” (D564 P12, D559, T1975): `BarCorner` (`bar-corner`) w pasie 24 px – u góry `bar-open-main` (`showMain` na puszczenie),
-  pod nim „×” (`bar-close`); `BAR_BASE_WIDTH` 504, treść `pr-8` → `barClose('x'|'quit')`,
+  pod nim „×” (`bar-close`, kursor – `bar-close-hint` w pasku); `BAR_BASE_WIDTH` 504, treść `pr-8` → `barClose('x'|'quit')`,
   `barCloseOf` tylko od nadawcy `bar`; `barClosed` w `barWanted` do pokazania albo restartu.
   Dwuklik ikony → `openMainFromIcon`; dwuklik w panelu – `doubleOpensMain` (bez warunku `data-busy` i rozwinięcia).
 - Pasek schowany „×” (D564 P16, UX11): `WidgetView.barClosed` = schowany i włączony (`widgetView`; wyłączony – false). Pokazują go: „Pasek pulpitu” w menu
@@ -134,6 +134,10 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   „×” – `unclosesBar`: wyłączony → włączony zawsze, już włączony tylko `settings` (kreator `setPrefs(w.prefs)` nie).
   `barNote` (pomocnik, nieudane położenie) i linia „schowany” nigdy razem – notka tylko bez „×”.
 - Dwuklik paska pulpitu (D560, T1976): `barDouble.ts` – dwa puszczenia (nie `dblclick`: wciśnięcie często nie dochodzi, T1500) ≤ 500 ms i ≤ 4 px na `freeSpot` → `showMain`. Powrót paska: `barBackWithMain` przy `minimize`/`hide` okna głównego, pref `barBackWithMain` (domyślnie true).
+- Wiersz przycisków (UX12, D564 P17–P20): `bar-buttons` – „Dalej: <nazwa>” (`buttons.nextName`, `nextLabel`; też odpowiedź „Dalej?”), Pauza,
+  Przedłuż, Koniec pracy, „+ Skrzynka”, „⋯”; Odcinam się, „Prośba ▸”, „Sygnały ▸” – `bar-more-actions` w „⋯” (noc: „Prośba ▸” w wierszu); przy
+  „Dalej?” wiersz bez jego odpowiedzi (C5); `BarButton fit` – nazwa się tnie (jeden wiersz przy 100 %); koszt z „Anuluj” (`cancelPending`);
+  linia `clickUndo:<rodzaj>` „<akcja> · Cofnij” – pierwsza, `CLICK_UNDO_MS` 10 s (`clickUndoView`, `undoClick` – `timer.md`).
 - Wydarzenia całodniowe (D405, T740–T743): `WidgetView.allDay` (`barAllDay`, dziś = doba logiczna) – kropka i tytuł (≤ 20 znaków, „+N”) z lewej strony pierwszego wiersza
   paska pulpitu (`AllDayLabel`, tylko `desktop`), tylko odczyt, pełne tytuły po najechaniu w miejscu; miejsce zabiera tylko elastyczna nazwa bloku.
 

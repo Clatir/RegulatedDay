@@ -9,9 +9,10 @@
  * line's button clicked with the real cursor (the gap's „Przesuń resztę wcześniej”, D368) writes its change and opens no
  * window, the bar staying where it lay in the order. The bar's „↗” clicked for real brings the main window to the foreground
  * with one click (D564 P12), its „+ Skrzynka” the window „Do skrzynki” on top with the focus (P15) – the bar stays under the
- * other windows. Hidden by its „×” and shown again by the settings (P16), it lies under them too.
+ * other windows. Hidden by its „×” and shown again by the settings (P16), it lies under them too. The row of a block of work stands in
+ * one line at 100% and 125% (C4, P17 – with a shot of the bar), and a real „Dalej” with its „Cofnij” (P18) opens no window.
  */
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication } from '@playwright/test'
@@ -550,6 +551,90 @@ test('pasek schowany „×” pokazany z ustawień (przełącznik, miejsce paska
       }
       expect(logOf(userData, 'main')).toContain('pasek pulpitu pokazany ponownie po „×” – włączony w ustawieniach')
       expect(logOf(userData, 'main')).toContain('pasek pulpitu pokazany ponownie po „×” – miejsce wybrane w ustawieniach')
+    })
+  } finally {
+    await app.close()
+  }
+})
+
+/**
+ * The row of a block of work on the desktop bar (C4, D564 P17): „Dalej: <nazwa>” (a long name of the next block – cut), Pauza,
+ * Przedłuż, Koniec pracy, „+ Skrzynka” and „⋯” stand in one line at 100% and at 125% (a scale forced on the app – the text is drawn
+ * at it as on such a screen); the shot of the bar is attached to the report of the run.
+ */
+test('wiersz bloku pracy na pasku pulpitu mieści się w jednym wierszu przy 100 % i 125 % – zrzut paska (C4, D564 P17)', async () => {
+  test.setTimeout(180_000)
+  const nowMin = logicalMinuteOf(logicalToday(), Date.now())
+  test.skip(nowMin > 28 * 60 - 150, 'następny blok za godzinę nie mieści się już w dobie logicznej (koniec o 04:00)')
+  for (const scale of [1, 1.25]) {
+    const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-bar-row-'))
+    const planned = Math.ceil((nowMin + 70) / 5) * 5
+    seedAwake(dataDir, [{ id: 'n', categoryId: 'inne', name: 'Przegląd tygodnia i planowanie kolejnych dni', startMin: planned, durationMin: 60, fixed: false, origin: 'user' }])
+    const { app, page: main, userData } = await launch({ env: { RD_DATA_DIR: dataDir }, args: scale === 1 ? [] : [`--force-device-scale-factor=${scale}`] })
+    try {
+      await withMainLog(userData, async () => {
+        await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+        await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).day), { timeout: 30_000 }).not.toBeNull()
+        await main.evaluate(() => window.rd.timer({ a: 'startNew', block: 'e2e-row', categoryId: 'inne', durationMin: 30 }))
+        const page = await viewPage(app, 'bar')
+        await expect(page.getByTestId('bar-next')).toContainText('Dalej: Przegląd', { timeout: 30_000 })
+        await settledBarBounds(app)
+        expect((await barInfo(app)).scale).toBeCloseTo(scale, 2)
+        const row = await page.getByTestId('bar-buttons').evaluate((el) =>
+          [...el.querySelectorAll('button')].map((b) => ({ id: b.getAttribute('data-testid'), top: Math.round(b.getBoundingClientRect().top), right: Math.round(b.getBoundingClientRect().right) }))
+        )
+        const shot = await page.screenshot()
+        await test.info().attach(`pasek-pulpitu-${scale * 100}.png`, { body: shot, contentType: 'image/png' })
+        if (process.env.RD_E2E_SHOTS) writeFileSync(join(process.env.RD_E2E_SHOTS, `ux12-pasek-${scale * 100}.png`), shot)
+        expect(row.map((b) => b.id)).toEqual(['bar-next', 'bar-pause', 'bar-extend', 'bar-end-work', 'bar-quick', 'bar-group-more'])
+        expect(new Set(row.map((b) => b.top)).size, `wiersz w kilku liniach: ${JSON.stringify(row)}`).toBe(1)
+        // Within the content (the strip of „↗” and „×” stays free): the last button ends left of it.
+        const corner = await page.getByTestId('bar-corner').evaluate((el) => el.getBoundingClientRect().left)
+        expect(row.at(-1)!.right).toBeLessThanOrEqual(Math.round(corner))
+      })
+    } finally {
+      await app.close()
+    }
+  }
+})
+
+/**
+ * „Dalej” clicked for real on the desktop bar (D564 P18, B7): „Skończono: … · Cofnij” stands in the bar, and its „Cofnij” clicked for
+ * real within its 10 s brings the block back – no new window, the bar still under the other windows.
+ */
+test('„Dalej” i „Cofnij” paska pulpitu prawdziwym kliknięciem: linia „Skończono: … · Cofnij”, blok wraca – bez nowego okna, pasek dalej pod oknami (D564 P18)', async () => {
+  test.setTimeout(120_000)
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-bar-undo-'))
+  seedAwake(dataDir, [])
+  const { app, page: main, userData } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).day), { timeout: 30_000 }).not.toBeNull()
+      await main.evaluate(() => window.rd.timer({ a: 'startNew', block: 'e2e-undo', categoryId: 'inne', durationMin: 60 }))
+      const page = await viewPage(app, 'bar')
+      await expect(page.getByTestId('bar-next')).toBeVisible({ timeout: 30_000 })
+      await settledBarBounds(app)
+      const bar = await barInfo(app)
+      const covers = uncover(bar.hwnd)
+      const next = await barPoint(app, 'bar-next')
+      await expect.poll(() => windowsAt([next]), { message: `„Dalej” zasłonięte (${covers.join(', ') || 'nic nie zminimalizowano'})`, timeout: 10_000 }).toEqual([bar.hwnd])
+      const before = pidWindows(bar.pid)
+      const orderBefore = topWindows()
+      click(...next)
+      await expect(page.getByTestId('bar-line-clickUndo:next')).toContainText('Skończono: Inne obowiązki', { timeout: 5_000 })
+      await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).block)).toBeNull()
+      // The bar grew by the line: its new place first, then the real click on „Cofnij” (well within its 10 s).
+      await settledBarBounds(app)
+      const undo = await barPoint(app, 'bar-act-clickUndo-undo')
+      await expect.poll(() => windowsAt([undo]), { timeout: 5_000 }).toEqual([bar.hwnd])
+      click(...undo)
+      await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).block?.name ?? null), { timeout: 5_000 }).toBe('Inne obowiązki')
+      await expect(page.getByTestId('bar-line-clickUndo:next')).toHaveCount(0)
+      expect(pidWindows(bar.pid)).toEqual(before)
+      const orderAfter = topWindows()
+      expect(movedAcross(orderBefore, orderAfter, bar.hwnd)).toEqual([])
+      expect(zIndex(orderAfter, bar.hwnd)).toBeLessThan(desktopIndex(orderAfter, bar.hwnd))
     })
   } finally {
     await app.close()

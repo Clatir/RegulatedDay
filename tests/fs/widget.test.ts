@@ -71,7 +71,7 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
       folder: () => (open ? folder : null),
       timer: async (c) => {
         const r = await folder.timerClick(c as never)
-        return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}) }
+        return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}), ...(r.wrote ? { wrote: r.wrote } : {}) }
       },
       edit: async (entries) => {
         if (editFails) throw new Error('plik jest teraz nieczytelny – zmiana nie została zapisana, spróbuj za chwilę')
@@ -2603,5 +2603,156 @@ describe('„+ Skrzynka” paska pulpitu – okienko „Do skrzynki” (D564 P15
     expect(w.current().day).toBeNull()
     await w.act('quickOpen', undefined, 'bar')
     expect(opened).toBe(2)
+  })
+})
+
+describe('„<akcja> · Cofnij” po kliknięciu paska (D564 P18, UX12)', () => {
+  /** A day of two flexible blocks with names of their own (the bar's words say them). */
+  const twoBlocks = (extra: object[] = []) =>
+    writeFileSync(
+      join(dataDir, paths.day(DAY)),
+      JSON.stringify({
+        schema: 1,
+        date: DAY,
+        blocks: [
+          { id: 'a', categoryId: 'inne', name: 'Pisanie', startMin: 10 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'b', categoryId: 'inne', name: 'Raport', startMin: 11 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          ...extra
+        ]
+      })
+    )
+  const undoLine = (w: WidgetEngine) => w.current().lines.find((l) => l.id.startsWith('clickUndo:')) ?? null
+
+  it('„Dalej: Raport” – po kliknięciu „Skończono: Pisanie, zaczęto: Raport · Cofnij” na początku linii; „Cofnij” – Pisanie biegnie dalej, Raport się nie zaczął', async () => {
+    twoBlocks()
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 30)
+    await w.refresh()
+    expect(w.current().buttons).toMatchObject({ next: true, nextName: 'Raport' })
+    await w.act('next', undefined, 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
+    expect(w.current().lines[0]).toEqual({ id: 'clickUndo:next', text: 'Skończono: Pisanie, zaczęto: Raport', actions: [{ id: 'undo', label: 'Cofnij' }], dot: false })
+    clock.now += 2_000
+    await w.act('line', 'clickUndo:next|undo', 'bar')
+    const t = await folder.timer(DAY)
+    expect(t.fg?.info.id).toBe('a')
+    expect(t.paused.map((p) => p.info.id)).toEqual([])
+    expect(undoLine(w)).toBeNull()
+  })
+
+  it('linia stoi 10 s; po nich jej nie ma, a blok zostaje skończony', async () => {
+    twoBlocks()
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 30)
+    await w.act('next', undefined, 'main')
+    clock.now += 9_000
+    await w.refresh()
+    expect(undoLine(w)?.id).toBe('clickUndo:next')
+    clock.now += 1_001
+    await w.refresh()
+    expect(undoLine(w)).toBeNull()
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
+  })
+
+  it('„Dalej” z kosztem: koszt startu z „Anuluj”; „Potwierdź” dopisuje start do tej samej linii, a „Cofnij” cofa oba', async () => {
+    twoBlocks()
+    const { w, folder, at, clock } = await make()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 58)
+    await w.act('next', undefined, 'bar')
+    expect(w.current().pending).toMatchObject({ button: 'start' })
+    expect(undoLine(w)?.text).toBe('Skończono: Pisanie')
+    // „Anuluj”: the cost goes at once – nothing begins, the line of „Dalej” stays.
+    clock.now += 1_000
+    await w.act('cancelPending', undefined, 'bar')
+    expect(w.current().pending).toBeNull()
+    expect(undoLine(w)?.text).toBe('Skończono: Pisanie')
+    expect((await folder.timer(DAY)).fg).toBeNull()
+
+    // Again, confirmed this time: the start joins the line of its „Dalej”.
+    clock.now += 1_000
+    await w.act('line', 'clickUndo:next|undo', 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+    clock.now += 1_000
+    await w.act('next', undefined, 'bar')
+    clock.now += 2_000
+    await w.act('confirm', undefined, 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
+    expect(undoLine(w)?.text).toBe('Skończono: Pisanie, zaczęto: Raport')
+    clock.now += 1_000
+    await w.act('line', 'clickUndo:next|undo', 'bar')
+    const t = await folder.timer(DAY)
+    expect(t.fg?.info.id).toBe('a')
+    expect(t.bg).toEqual([])
+  })
+
+  it('„Koniec pracy”, „Skończyłem” i „Zakończ teraz” mają swoją linię z „Cofnij”; nowe kliknięcie zastępuje poprzednią', async () => {
+    twoBlocks([
+      { id: 'ny', categoryId: 'sesja', startMin: 15 * 60 + 30, durationMin: 60, fixed: true, background: false, origin: 'user' },
+      { id: 'tlo', categoryId: 'inne', name: 'Pranie', startMin: 15 * 60 + 30, durationMin: 60, fixed: false, background: true, origin: 'user' }
+    ])
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 20)
+    await w.act('endWork', undefined, 'bar')
+    expect(undoLine(w)).toMatchObject({ id: 'clickUndo:workEnd', text: 'Koniec pracy' })
+    // The session still ahead makes it a break (D216): the block ended, nothing parked.
+    expect((await folder.timer(DAY)).fg).toBeNull()
+    clock.now += 1_000
+    await w.act('line', 'clickUndo:workEnd|undo', 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+    expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'undo')).toHaveLength(2)
+
+    at(15 * 60 + 35)
+    await folder.timerClick({ a: 'start', block: 'ny' })
+    await folder.timerClick({ a: 'start', block: 'tlo' })
+    await w.refresh()
+    await w.act('finished', undefined, 'bar')
+    expect(undoLine(w)).toMatchObject({ id: 'clickUndo:finished', text: 'Skończono: Sesja tradingowa' })
+    clock.now += 1_000
+    await w.act('bgEnd', 'tlo', 'bar')
+    // The newer click's line replaces the older one.
+    expect(w.current().lines.filter((l) => l.id.startsWith('clickUndo:')).map((l) => l.text)).toEqual(['Skończono: Pranie'])
+    clock.now += 1_000
+    await w.act('line', 'clickUndo:bgEnd|undo', 'bar')
+    expect((await folder.timer(DAY)).bg.map((b) => b.info.id)).toEqual(['tlo'])
+  })
+
+  it('sygnał i ocena puli z „Sygnały ▸”: „Sygnał: okulary · Cofnij”, „Głowa: gorzej · Cofnij” – „Cofnij” zapisuje cofnięcie sygnału', async () => {
+    const { w, folder, clock } = await make()
+    await w.refresh()
+    await w.act('signal', 'glasses', 'bar')
+    expect(undoLine(w)).toMatchObject({ id: 'clickUndo:signal', text: 'Sygnał: okulary' })
+    clock.now += 1_000
+    await w.act('relative', 'head|-10', 'panel')
+    expect(undoLine(w)).toMatchObject({ id: 'clickUndo:signal', text: 'Głowa: gorzej' })
+    clock.now += 1_000
+    await w.act('line', 'clickUndo:signal|undo', 'panel')
+    const events = (await folder.readDay(DAY)).events
+    const relative = events.find((e) => e.k === 'energy.relative')!
+    expect(events.filter((e) => e.k === 'undo').map((e) => (e as unknown as { target: string }).target)).toEqual([relative.id])
+    expect(undoLine(w)).toBeNull()
+  })
+
+  it('„Cofnij”, którego już nie da się zrobić, mówi dlaczego', async () => {
+    twoBlocks()
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 30)
+    await w.act('next', undefined, 'bar')
+    // Raport paused since (here, in the window): its „Dalej” cannot come back.
+    await folder.timerClick({ a: 'pause' })
+    clock.now += 1_000
+    await w.act('line', 'clickUndo:next|undo', 'bar')
+    expect(w.current().note?.text).toBe('tego już nie cofniesz – po kliknięciu zmieniło się coś w dniu')
+    expect((await folder.timer(DAY)).paused.map((p) => p.info.id)).toEqual(['b'])
   })
 })

@@ -308,6 +308,8 @@ export type WidgetAction =
   | 'signal'
   | 'relative'
   | 'confirm'
+  /** „Anuluj” of a cost waiting for its second click (C6): it goes at once. */
+  | 'cancelPending'
   | 'line'
   | 'openMain'
   | 'request'
@@ -551,6 +553,8 @@ export interface TimerIn {
   /** A routine ticked off (`routineDone`, D328): its version and the steps done. */
   version?: 'normal' | 'worse'
   steps?: string[]
+  /** „Cofnij” of a click of the bar (`undoClick`, D564 P18): the ids of the events that click wrote – the main process's own, never a window's. */
+  ids?: string[]
 }
 
 /** What a click did: nothing (why), or a cost waiting for the second click within 10 s. */
@@ -558,6 +562,8 @@ export interface TimerResult {
   ok: boolean
   why: string | null
   confirm: { block: string; minutes: number; overrun: boolean; bedtime: boolean } | null
+  /** What it wrote (a click that did something): its day and the ids of its events – the bar's „Cofnij” of the click (D564 P18). */
+  wrote?: { day: string; ids: string[] }
   /** Why it did nothing, when the caller must tell it from other refusals (D336, T1109): never read from `why`. */
   code?: ResultCode
 }

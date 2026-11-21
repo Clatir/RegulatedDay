@@ -332,7 +332,7 @@ Każda funkcja korzysta z tych samych definicji dnia i czasu; nie ma drugiego sp
   liczbę minut (przycisk zamienia się w swoim miejscu w gotowe długości „+15 · +30 · +60”, wybór długości jest pierwszym
   kliknięciem, a przed drugim długość zmienia się krokami ±15 min, każdy z nowym kosztem i nowymi 10 s),
   pierwszym kliknięciem pokazuje koszt w miejscu przycisku („przedłużenie · −40 min puli”, przy
-  pustej puli „pora snu +40 min”), a drugim w ciągu 10 s je wykonuje; dwa kliknięcia w ciągu 0,5 s liczą się jak jedno.
+  pustej puli „pora snu +40 min”) z „Potwierdź · Anuluj” (C6: „Anuluj” zdejmuje koszt od razu, nic nie robiąc), a drugim w ciągu 10 s je wykonuje; dwa kliknięcia w ciągu 0,5 s liczą się jak jedno.
   Między kliknięciami tryb ciszy się nie kończy, a pasek nie zmienia rozmiaru ani miejsca przycisku. Otwarcie długości
   „Przedłuż”, kroki ±15 min i pierwsze kliknięcie bez drugiego nie są reakcją na koniec bloku stałego (poza „Dalej”,
   które zawsze kończy blok, niżej); pasek pokazuje wtedy „Nie przedłużono · Przedłuż”, najwyżej do 30 min po planowanym
@@ -1368,7 +1368,7 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   pulpit” i na pulpitach wirtualnych ustala próba w E0, a gdy okno wtedy znika, ograniczenie jest opisane w aplikacji).
   Gdy reguła mówi, że widget jest ukryty, pasek pulpitu znika, a ikona jest szara, bez kroków koloru i bez kropki; lewe
   kliknięcie otwiera wtedy panel tylko z linią stanu („Zajęcia do 15:00”, „Odcinam się od 15:10 · Wracam”, „Prośba ▸”,
-  „Zrobione teraz”, „Koniec prośby”, gdy prośba trwa) i z pytaniem, które czeka (np. „Zajęcia skończyły się wcześniej?”
+  „Prośba: <osoba> · Koniec”, gdy prośba trwa) i z pytaniem, które czeka (np. „Zajęcia skończyły się wcześniej?”
   na komputerze, na którym użyto komputera, bez kropki, D240), a przy pasku schowanym „×” także z linią „Pasek pulpitu schowany · Pokaż po „Wracam”” (zdejmuje „×” od razu, pasek wraca po „Wracam”, D564 P16). Pasek pulpitu przy każdym pokazaniu pomocnik kładzie tuż
   nad pulpitem, pod wszystkimi oknami, zanim się pokaże (SetWindowPos wywołane synchronicznie, bez SWP\_ASYNCWINDOWPOS,
   w osobnym wątku z limitem 2 s, wprost nad najwyższym oknem pulpitu – Progman, WorkerW z ikonami pulpitu
@@ -1502,13 +1502,13 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   rezerwy, przypomnienie o rytuale i „Koniec pracy?” pokazują się w nim jako cicha ikona w pasku, bez okna. Wyłączenie
   modułu energii nie kończy tego trybu.
 - W trybach ciszy (sesja, zajęcia, „mniej pytań”) pasek jest zwarty i przygaszony, bez przezroczystych przerw, a ikona jest ciemniejsza, ale zachowuje kolor, kroki koloru i kropkę; kliknięcie w pasek nigdy nie trafia w okno pod spodem.
-- Zawsze widać w nim Dalej, Pauza, Przedłuż, Koniec pracy i Odcinam się, a w biegnącej sesji także Skończyłem. Reszta
+- Wiersz bloku pracy (D564 P17, wariant A): „Dalej: <nazwa>” (nazwa bloku, który „Dalej” zacznie; bez takiego – samo „Dalej”, P20), Pauza, Przedłuż, Koniec pracy, „+ Skrzynka” i „⋯”, a w biegnącej sesji także Skończyłem – na pasku pulpitu w jednym wierszu przy 100 % (za długa nazwa po „Dalej:” skraca się). Odcinam się, „Prośba ▸” i „Sygnały ▸” stoją na początku „⋯” (w ciszy nocnej, bez „⋯”, „Prośba ▸” stoi w wierszu, D346); „Prośba ▸” i „Sygnały ▸” rozwijają się w miejscu „⋯”. Przy pytaniu „Dalej?” wiersz pod nim nie powtarza jego odpowiedzi (C5): bez „Dalej”, „Przedłuż” i – gdy pytanie je ma – „Koniec pracy”; odpowiedź „Dalej” pytania też mówi „Dalej: <nazwa>”. Uchwyt ⠿ paska pulpitu jest zawsze widoczny, przygaszony, a kursor nad „×” rysuje w samym pasku podpowiedź „Schowaj pasek · Shift+× – zakończ aplikację” (bez okna i bez zmiany wysokości, C6). Po „Dalej”, „Skończyłem”, „Koniec pracy”, „Zakończ teraz” (blok w tle) i sygnale albo ocenie puli z „Sygnały ▸” pasek przez 10 s ma jako pierwszą linię „<akcja> · Cofnij” („Skończono: Pisanie, zaczęto: Raport”, „Koniec pracy”, „Sygnał: okulary”, „Głowa: gorzej”; P18, B7) – „Cofnij” cofa dokładnie to, co zapisało to kliknięcie (także start po „Potwierdź” kosztu „Dalej”), a gdy po kliknięciu coś się zaczęło albo zmieniło przy jego bloku, mówi „tego już nie cofniesz”; nowsze takie kliknięcie zastępuje linię. Odliczanie zostaje mm:ss (P19). Reszta
   jest w grupach rozwijanych w samym pasku: „Prośba ▸” (D311: „Zrobione teraz:” i „Pilne:” z 3 osobami najczęściej
   proszącymi w ostatnich 28 dniach i „inna…” – poza trybami ciszy otwiera ekran Prośby, w nich zapisuje „osoba: ?”;
   „Pilne” po osobie pyta o szacunek 5 · 15 · 30 · 60 min, ±5, „Zacznij” – w trybach ciszy bez pytania, 15 min; „+ Prośba
   do kolejki” otwiera ekran Prośby), „Sygnały ▸” (sygnały i ocena względna) i „⋯” (bloki w tle z „Zakończ teraz” i
   „Przedłuż”, wypite, „Mniej pytań” albo „Jest lepiej”, „Przestaw plan”, lista „zrobione automatycznie”). Trwająca
-  prośba stoi w miejscu bloku: „Pilne · Mama · 0:12 z 30 min · Koniec” albo „Zrobione teraz · Ola · 0:04 · Koniec”,
+  prośba stoi w miejscu bloku: „Pilne · Mama · 0:12 z 30 min · Koniec” albo „Prośba: Ola · 0:04 · Koniec” (D564 P20),
   także prośba sprzed 04:00 w pasku nowego dnia (jej „Koniec” trafia do jej dnia); przerwany blok jest pod nią cichą
   linią („Nauka – pauza, wróci po „Koniec””), bez kropki i bez „Koniec pracy?” do jej końca (D312, T503); w „Odcinam
   się” panel ikony ma tę linię z „Koniec” i „Prośba ▸” (D245). Pytanie „Dalej?” ma stałe miejsce na początku paska;

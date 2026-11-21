@@ -2337,8 +2337,8 @@ export class DataFolder {
    * A click of the timer (spec „Akcje widgetu wykonuje proces główny i zapisuje je jako zdarzenia w logu”): judged on the
    * day as it is now – a second click of the same action finds it done and does nothing (no two entries) – one at a time.
    */
-  timerClick(click: TimerClick): Promise<ActionResult> {
-    const run = async (): Promise<ActionResult> => {
+  timerClick(click: TimerClick): Promise<ActionResult & { wrote?: { day: string; ids: string[] } }> {
+    const run = async (): Promise<ActionResult & { wrote?: { day: string; ids: string[] } }> => {
       const now = this.clock.now()
       // The day before chosen – counted once, by the choice itself (as `widgetModel`).
       const chosen = click.day && isIsoDate(click.day) ? { day: click.day } : await this.barActiveDay(now, click.a === 'requestEnd' ? click.request : null)
@@ -2354,7 +2354,8 @@ export class DataFolder {
       // computer's observation too.
       const activity = undoNeedsActivity(state, act as TimerAction) ? await this.activityFor(day, read, now) : undefined
       const r = act.a === 'requestNow' || act.a === 'requestEnd' || act.a === 'requestAfter' ? requestAction(state, act as RequestAction, now) : timerAction(ctx, state, act as TimerAction, now, activity)
-      if (r.ok && r.events.length && !probe) await this.writeOn(day, laid, r.events, chosen.before)
+      // What it wrote, by id: the bar's „Cofnij” of its click takes back exactly that (D564 P18).
+      if (r.ok && r.events.length && !probe) return { ...r, wrote: { day, ids: (await this.writeOn(day, laid, r.events, chosen.before)).map((e) => e.id) } }
       return r
     }
     return this.serial(run)
@@ -2569,9 +2570,9 @@ export class DataFolder {
    * A signal or the relative assessment from the bar (spec „Sygnały w ciągu dnia”): an anchor with the exact state before
    * it as this computer knows it now – later corrections of earlier times never change the state after it.
    */
-  energySignal(s: { signal: Signal } | { pool: Pool; delta: -10 | 0 | 10 }): Promise<void> {
-    // One at a time with the clicks: both may write the ends laid over the day (D345).
-    const run = async (): Promise<void> => {
+  energySignal(s: { signal: Signal } | { pool: Pool; delta: -10 | 0 | 10 }): Promise<{ day: string; id: string }> {
+    // One at a time with the clicks: both may write the ends laid over the day (D345). Answers its day and id (the bar's „Cofnij”, D564 P18).
+    const run = async (): Promise<{ day: string; id: string }> => {
       const at = this.clock.now()
       const day = logicalDayOf(at)
       const read = await this.log.readDay(day)
@@ -2582,8 +2583,9 @@ export class DataFolder {
       const check = parseEvent(JSON.stringify({ ...draft, id: 'x', c: this.o.computer, n: 0, t: at, l: at, v: this.rulesVersion }))
       if (!check.ok) throw new Error(`sygnał: ${check.why}`)
       await this.writeOn(day, laid, [])
-      this.append(draft)
+      const e = this.append(draft)
       await this.log.flush()
+      return { day, id: e.id }
     }
     return this.serial(run)
   }

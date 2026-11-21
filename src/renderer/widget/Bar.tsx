@@ -1,11 +1,14 @@
 /**
  * The bar (spec „Widget”, „Cisza”): the same content at the top of the main window, in the icon's panel and on the
  * desktop bar – the engine's view from the main process (one neutral line without a data folder, D327). „Dalej?” has its fixed
- * place at the start; Dalej, Pauza, Przedłuż, Koniec pracy and Odcinam się always stand (in a session also Skończyłem);
- * the other questions and lines at the end, and what does not fit gathers in „⋯” with a count. Everything is chosen by a
+ * place at the start, and the row under it never repeats its answers (C5); the row of a block of work is „Dalej: <nazwa>”, Pauza,
+ * Przedłuż, Koniec pracy, „+ Skrzynka” and „⋯” (D564 P17 – one line of the desktop bar at 100%; in a session also Skończyłem),
+ * and „⋯” holds Odcinam się, „Prośba ▸” and „Sygnały ▸” first (in the night's quiet, without „⋯”, „Prośba ▸” stands in the row,
+ * D346); the other questions and lines at the end, and what does not fit gathers in „⋯” with a count. Everything is chosen by a
  * click inside the bar – groups, the lengths of „Przedłuż”, the steps of „Skończył się o …” unfold within the bar itself,
  * never as a separate window (D229). A first click with a cost shows it in place of its button; the second within 10 s
- * does it. The second click of a double click on a button never acts again (C8). On the desktop bar the buttons act on the
+ * does it, „Anuluj” drops it (C6). After a click it can take back the main process gives a line „<akcja> · Cofnij” (D564 P18).
+ * The second click of a double click on a button never acts again (C8). On the desktop bar the buttons act on the
  * mouse button's release and there are no tooltips; its „↗” opens the main window with one click (D564 P12), and so does a
  * double click on a free spot of it (D560).
  */
@@ -15,7 +18,7 @@ import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/r
 import { TITLE_MAX } from '@shared/model/requests'
 import { quickPreview } from '@shared/quickDates'
 import { barBackground, TONE_SETS } from '@shared/theme'
-import { ALL_STEPS_TEXT, BAR_CLOSED_TEXT, barStepText, OPEN_MAIN_TEXT, SEEN_LINE, SHOW_BAR_AFTER_BACK_TEXT, SHOW_BAR_TEXT, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from '@shared/widget'
+import { ALL_STEPS_TEXT, ASSESS_TEXT, BAR_CLOSED_TEXT, barStepText, nextLabel, OPEN_MAIN_TEXT, SIGNAL_TEXT, SEEN_LINE, SHOW_BAR_AFTER_BACK_TEXT, SHOW_BAR_TEXT, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
 import { useMachine } from '../store/machine'
 import { cx } from '../components/ui'
@@ -29,12 +32,7 @@ import { freeSpot, secondRelease, type BarRelease } from './barDouble'
 export type BarMode = 'main' | 'panel' | 'desktop'
 type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | 'quick' | 'parallel' | null
 
-const SIGNALS: Array<[string, string]> = [
-  ['glasses', 'okulary'],
-  ['earplugs', 'zatyczki'],
-  ['rocking', 'więcej bujania'],
-  ['questions', 'drażnią pytania']
-]
+const SIGNALS = Object.entries(SIGNAL_TEXT)
 const POOLS: Array<[string, string]> = [
   ['head', 'głowa'],
   ['emotions', 'emocje'],
@@ -69,9 +67,11 @@ const ButtonClicks = createContext<{ current: LastClick } | null>(null)
  * A button of the bar: on the desktop bar it acts on the release of the mouse button (no activation, D229). The second
  * click of a double click does nothing (C8) – in the window and the panel Chromium counts it (`detail` 2 and more: the
  * clicks of one spot; a key gives 0), on the desktop bar the releases do (its window often never hears the press, T1500).
- * `repeat`: a step (±5 min) – a quick click counts too, when the click before it was on this very step.
+ * `repeat`: a step (±5 min) – a quick click counts too, when the click before it was on this very step. `fit`: a label with a name
+ * („Dalej: <nazwa>”, „Start: <nazwa>”) – it takes the room the row has left, at least „Dalej: X…”, and its name is cut (C4): the
+ * row of a block of work stays one line of the desktop bar.
  */
-function BarButton({ mode, onAct, children, testId, pressed, accent, label, repeat }: { mode: BarMode; onAct: () => void; children: ReactNode; testId?: string; pressed?: boolean; accent?: boolean; label?: string; repeat?: boolean }) {
+function BarButton({ mode, onAct, children, testId, pressed, accent, label, repeat, fit }: { mode: BarMode; onAct: () => void; children: ReactNode; testId?: string; pressed?: boolean; accent?: boolean; label?: string; repeat?: boolean; fit?: boolean }) {
   const last = useContext(ButtonClicks)
   /** This click again on the button clicked just before (a step clicked quickly once more). */
   const again = (button: EventTarget) => !last || last.current.button === button
@@ -101,13 +101,15 @@ function BarButton({ mode, onAct, children, testId, pressed, accent, label, repe
       aria-pressed={pressed}
       aria-label={label}
       className={cx(
-        'inline-flex h-[24px] shrink-0 items-center rounded border px-2 text-[12px] leading-none whitespace-nowrap',
+        'inline-flex h-[24px] items-center rounded border px-2 text-[12px] leading-none whitespace-nowrap',
+        // Its basis 0 and least width break the row's lines; it grows to its whole label where the row has room.
+        fit ? 'max-w-max min-w-[4.5rem] flex-[1_1_0%] overflow-hidden' : 'shrink-0',
         accent ? 'border-lamp/60 text-fg' : 'border-line-strong text-fg',
         pressed ? 'bg-raised' : 'bg-transparent hover:bg-hover'
       )}
       {...props}
     >
-      {children}
+      {fit ? <span className="min-w-0 truncate">{children}</span> : children}
     </button>
   )
 }
@@ -157,29 +159,39 @@ function endGrip(g: Grip, why: 'up' | 'cancel' | 'lost' | null): void {
   if (why) window.rd.barDrag('end', why)
 }
 
+/** The hint of the desktop bar's „×” (C6), drawn in the bar while the pointer is over it. */
+export const CLOSE_HINT_TEXT = 'Schowaj pasek · Shift+× – zakończ aplikację'
+
 const CORNER_BUTTON = 'flex h-5 w-5 items-center justify-center rounded text-[14px] leading-none text-muted hover:bg-hover hover:text-fg'
 
 /**
  * The desktop bar's own strip of 24 px on the right (D559, D564 P12; the bar is wider by it – the content stays as before),
  * above the content: „↗” on top opens the main window with one click (C2), „×” under it hides the bar until „Pokaż pasek
  * pulpitu” in the icon's menu, with Shift ends the app. Like every button of the desktop bar both act on the release (the
- * window without activation often never hears the press – no `click`, T1500).
+ * window without activation often never hears the press – no `click`, T1500). The pointer over „×” draws its hint in the bar
+ * itself (C6: a tooltip would be a window of its own, D229) – over the row, never changing the bar's height (T748).
  */
 function BarCorner() {
+  const [hint, setHint] = useState(false)
   return (
     <div className="absolute top-1 right-1 z-10 flex flex-col gap-1" data-testid="bar-corner">
       <button type="button" className={CORNER_BUTTON} aria-label={OPEN_MAIN_TEXT} onPointerUp={(e) => e.button === 0 && window.rd.showMain()} data-testid="bar-open-main">
         ↗
       </button>
-      <button type="button" className={CORNER_BUTTON} aria-label="Schowaj pasek (z Shift – zakończ aplikację)" onPointerUp={(e) => e.button === 0 && window.rd.barClose(e.shiftKey ? 'quit' : 'x')} data-testid="bar-close">
+      <button type="button" className={CORNER_BUTTON} aria-label="Schowaj pasek (z Shift – zakończ aplikację)" onPointerUp={(e) => e.button === 0 && window.rd.barClose(e.shiftKey ? 'quit' : 'x')} onPointerEnter={() => setHint(true)} onPointerLeave={() => setHint(false)} data-testid="bar-close">
         ×
       </button>
+      {hint && (
+        <span className="pointer-events-none absolute top-6 right-full mr-1 rounded border border-line bg-raised px-1.5 py-1 text-[11px] leading-none whitespace-nowrap text-fg" data-testid="bar-close-hint">
+          {CLOSE_HINT_TEXT}
+        </span>
+      )}
     </div>
   )
 }
 
 /**
- * The handle the desktop bar is dragged by (D303), seen on hover, over the left padding of the bar's main part: the
+ * The handle the desktop bar is dragged by (D303), always seen dimmed and full on hover (D564 P17), over the left padding of the bar's main part: the
  * main process moves the bar after the cursor and remembers where it is let go. The drag begins at the press – or, when
  * Windows never handed the page the press (T1500), at the first move over the handle with the button held; while it is
  * held the whole page listens to the pointer that grabbed it: a move without the left button or a release anywhere ends it,
@@ -253,7 +265,7 @@ function DragHandle() {
       ref={ref}
       aria-label="przeciągnij pasek"
       data-testid="bar-drag"
-      className="absolute top-0 left-0 z-10 flex h-full w-3 cursor-grab items-center justify-center text-[12px] text-muted opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+      className="absolute top-0 left-0 z-10 flex h-full w-3 cursor-grab items-center justify-center text-[12px] text-muted opacity-40 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
       onPointerDown={(e) => {
         if (e.button !== 0) return
         e.stopPropagation()
@@ -308,13 +320,13 @@ function elapsed(ms: number): string {
   return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`
 }
 
-/** The request running now, in place of the block (D312): „Pilne · Mama · 0:12 z 30 min · Koniec”. */
+/** The request running now, in place of the block (D312): „Pilne · Mama · 0:12 z 30 min · Koniec”, „Prośba: Ola · 0:04 · Koniec” (D564 P20). */
 function RequestLine({ run, mode, now, before }: { run: RunningRequest; mode: BarMode; now: number; before?: ReactNode }) {
   return (
     <span className="flex min-w-[120px] flex-1 items-center gap-1.5" data-testid="bar-request">
       {before}
       <span className="min-w-0 truncate text-fg">
-        {run.mode === 'urgent' ? 'Pilne' : 'Zrobione teraz'} · {run.person} · <span className="num">{elapsed(now - run.from)}</span>
+        {run.mode === 'urgent' ? `Pilne · ${run.person}` : `Prośba: ${run.person}`} · <span className="num">{elapsed(now - run.from)}</span>
         {run.mode === 'urgent' && run.estimateMin != null ? ` z ${run.estimateMin} min` : ''}
       </span>
       <BarButton mode={mode} accent testId="bar-request-end" onAct={() => act('requestEnd')}>
@@ -799,11 +811,21 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
   const holds = (left: number) => termHolds(received.current.at, left, performance.now())
   const pending = view.pending && holds(view.pending.left) ? view.pending : null
   useSeen(view, mode, unfold === 'more' ? view.lines : shownLines)
+  // „Dalej?” answers „Dalej”, „Przedłuż” (and „Koniec pracy” after the last work) itself: the row under it leaves them out (C5) –
+  // the cost of „Przedłuż” still stands in the row, in its place.
+  const asked = new Set(view.question?.actions.map((a) => a.id) ?? [])
+  const rowNext = view.buttons.next && !asked.has('next')
+  const rowExtend = view.buttons.extend && (!asked.has('extend') || pending?.button === 'extend')
+  const rowWorkEnd = view.buttons.workEnd && !asked.has('workEnd')
+  // „⋯” stands (not in the night's quiet): Odcinam się, „Prośba ▸” and „Sygnały ▸” wait in it (D564 P17).
+  const more = !view.night
+  // What came out of „⋯” („Prośba ▸”, „Sygnały ▸”) keeps it pressed; its click folds it.
+  const fromMore = unfold === 'more' || unfold === 'request' || unfold === 'signals'
   // The cost stands in place of its button when that button is on view; otherwise in the row under the buttons.
   const inPlace =
     !!pending &&
-    ((pending.button === 'next' && view.buttons.next) ||
-      (pending.button === 'extend' && view.buttons.extend) ||
+    ((pending.button === 'next' && rowNext) ||
+      (pending.button === 'extend' && rowExtend) ||
       (pending.button === 'start' && !!view.buttons.start) ||
       (pending.button.startsWith('bgExtend:') && unfold === 'more' && view.background.some((b) => `bgExtend:${b.id}` === pending.button)))
 
@@ -855,14 +877,19 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
     if (unfold === 'routine' && !routineOpen) setUnfold(null)
   }, [unfold, routineOpen])
 
-  /** A button of the bar's own, or its cost waiting for the second click in its place. */
-  const own = (id: string, label: string, action: WidgetAction, testId: string, arg?: string) =>
+  /** A button of the bar's own, or its cost waiting for the second click in its place – with „Anuluj” (C6). `fit`: a label with a name. */
+  const own = (id: string, label: string, action: WidgetAction, testId: string, arg?: string, fit?: boolean) =>
     pending?.button === id ? (
-      <BarButton key={id} mode={mode} testId={`${testId}-confirm`} accent onAct={() => act('confirm')}>
-        {pending.text} · Potwierdź
-      </BarButton>
+      <Fragment key={id}>
+        <BarButton mode={mode} testId={`${testId}-confirm`} accent onAct={() => act('confirm')}>
+          {pending.text} · Potwierdź
+        </BarButton>
+        <BarButton mode={mode} testId={`${testId}-cancel`} onAct={() => act('cancelPending')}>
+          Anuluj
+        </BarButton>
+      </Fragment>
     ) : (
-      <BarButton key={id} mode={mode} testId={testId} onAct={() => act(action, arg)}>
+      <BarButton key={id} mode={mode} testId={testId} fit={fit} onAct={() => act(action, arg)}>
         {label}
       </BarButton>
     )
@@ -907,7 +934,7 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
                 <span className="text-[12px] text-muted">{label}</span>
                 {([-10, 0, 10] as const).map((d) => (
                   <BarButton key={d} mode={mode} onAct={() => (act('relative', `${pool}|${d}`), setUnfold(null))}>
-                    {d < 0 ? 'gorzej' : d > 0 ? 'lepiej' : 'tak samo'}
+                    {ASSESS_TEXT[String(d) as keyof typeof ASSESS_TEXT]}
                   </BarButton>
                 ))}
               </span>
@@ -931,6 +958,22 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
       )}
       {unfold === 'more' && (
         <div className="flex flex-col gap-1.5">
+          {/* The rarer actions of the row (D564 P17): „Prośba ▸” and „Sygnały ▸” unfold in place of „⋯”. */}
+          <div className="flex flex-wrap gap-1.5" data-testid="bar-more-actions">
+            {view.buttons.cutOff && (
+              <BarButton mode={mode} testId="bar-cut-off" onAct={() => act('cutOff')}>
+                Odcinam się
+              </BarButton>
+            )}
+            <BarButton mode={mode} testId="bar-group-request" onAct={() => toggle('request')}>
+              Prośba ▸
+            </BarButton>
+            {view.signals && (
+              <BarButton mode={mode} testId="bar-group-signals" onAct={() => toggle('signals')}>
+                Sygnały ▸
+              </BarButton>
+            )}
+          </div>
           {view.background.map((b) => (
             <div key={b.id} className="flex flex-wrap items-center gap-1.5" data-testid={`bar-bg-${b.id}`}>
               <span className="text-[12px] text-muted">
@@ -1145,14 +1188,14 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
             {view.requests.interrupted}
           </div>
         )}
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          {view.buttons.next && own('next', 'Dalej', 'next', 'bar-next')}
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid="bar-buttons">
+          {rowNext && own('next', nextLabel(view.buttons.nextName), 'next', 'bar-next', undefined, true)}
           {view.buttons.pause && (
             <BarButton mode={mode} testId="bar-pause" onAct={() => act('pause')}>
               Pauza
             </BarButton>
           )}
-          {view.buttons.extend &&
+          {rowExtend &&
             (pending?.button === 'extend' ? (
               // Before the second click the length goes by 15 min, each step with its own cost (T289).
               <span key="extend" className="inline-flex items-center gap-1">
@@ -1169,7 +1212,7 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
                 Przedłuż
               </BarButton>
             ))}
-          {view.buttons.workEnd && (
+          {rowWorkEnd && (
             <BarButton mode={mode} testId="bar-end-work" onAct={() => act('endWork')}>
               Koniec pracy
             </BarButton>
@@ -1179,29 +1222,21 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
               Skończyłem
             </BarButton>
           )}
-          {view.buttons.start && own('start', view.buttons.start, 'start', 'bar-start')}
-          {view.buttons.cutOff && (
-            <BarButton mode={mode} testId="bar-cut-off" onAct={() => act('cutOff')}>
-              Odcinam się
-            </BarButton>
-          )}
+          {view.buttons.start && own('start', view.buttons.start, 'start', 'bar-start', undefined, true)}
           {view.ritual && (
             <BarButton mode={mode} testId="bar-ritual" onAct={() => act('openMain', 'ritual')}>
               Rytuał
             </BarButton>
           )}
-          {/* Also in the night's quiet: a request can start before 04:00 (D346). */}
-          <BarButton mode={mode} testId="bar-group-request" pressed={unfold === 'request'} onAct={() => toggle('request')}>
-            Prośba ▸
-          </BarButton>
-          <QuickButton mode={mode} open={unfold === 'quick'} toggle={() => toggle('quick')} />
-          {view.signals && !view.night && (
-            <BarButton mode={mode} testId="bar-group-signals" pressed={unfold === 'signals'} onAct={() => toggle('signals')}>
-              Sygnały ▸
+          {/* In the night's quiet „⋯” is not there – „Prośba ▸” stands in the row: a request can start before 04:00 (D346). */}
+          {!more && (
+            <BarButton mode={mode} testId="bar-group-request" pressed={unfold === 'request'} onAct={() => toggle('request')}>
+              Prośba ▸
             </BarButton>
           )}
-          {!view.night && (
-            <BarButton mode={mode} testId="bar-group-more" pressed={unfold === 'more'} onAct={() => toggle('more')}>
+          <QuickButton mode={mode} open={unfold === 'quick'} toggle={() => toggle('quick')} />
+          {more && (
+            <BarButton mode={mode} testId="bar-group-more" pressed={fromMore} onAct={() => setUnfold(fromMore ? null : 'more')}>
               ⋯{extra.length ? ` ${extra.length}` : ''}
             </BarButton>
           )}
@@ -1222,6 +1257,9 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
                 +15
               </BarButton>
             )}
+            <BarButton mode={mode} testId="bar-cancel" onAct={() => act('cancelPending')}>
+              Anuluj
+            </BarButton>
           </div>
         )}
         {view.note && holds(view.note.left) && (

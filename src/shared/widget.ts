@@ -31,6 +31,8 @@ export interface BarLine {
 /** Which of the bar's own buttons stand now (spec „Cisza”: Dalej, Pauza, Przedłuż, Koniec pracy, Odcinam się; Skończyłem in a session). */
 export interface BarButtons {
   next: boolean
+  /** The block „Dalej” begins now (D564 P20: „Dalej: <nazwa>”), null – it begins nothing (the last of the plan, its group goes on). */
+  nextName: string | null
   pause: boolean
   extend: boolean
   workEnd: boolean
@@ -236,7 +238,15 @@ export interface BarVariants {
 export const NO_REQUESTS: BarRequests = { people: [], running: null, interrupted: null }
 export const NO_VARIANTS: BarVariants = { marker: false, open: null }
 
-export const ALL_BUTTONS: BarButtons = { next: true, pause: true, extend: true, workEnd: true, finished: false, cutOff: true, start: null }
+export const ALL_BUTTONS: BarButtons = { next: true, nextName: null, pause: true, extend: true, workEnd: true, finished: false, cutOff: true, start: null }
+
+/** „Dalej” with the block it begins (D564 P20) – the bar's button and the answer of „Dalej?”. */
+export const nextLabel = (name: string | null): string => (name ? `Dalej: ${name}` : 'Dalej')
+
+/** The signals of „Sygnały ▸” as the bar names them (its buttons and the line „Sygnał: … · Cofnij”, D564 P18). */
+export const SIGNAL_TEXT = { glasses: 'okulary', earplugs: 'zatyczki', rocking: 'więcej bujania', questions: 'drażnią pytania' } as const
+/** A pool's assessment of „Sygnały ▸”: worse, the same, better. */
+export const ASSESS_TEXT = { '-10': 'gorzej', '0': 'tak samo', '10': 'lepiej' } as const
 
 /**
  * One name for the way to the main window (C7, D564 P13): the icon's menu, the panel's footer, the desktop bar's „↗” and the
@@ -289,7 +299,7 @@ export function noFolderView(status: 'none' | 'opening' | 'failed' = 'none'): Wi
     tooltip: status === 'none' ? 'Brak folderu danych – otwórz okno główne' : text,
     barNote: null,
     barClosed: false,
-    buttons: { ...ALL_BUTTONS, next: false, pause: false, extend: false, workEnd: false, finished: false, cutOff: false, start: null },
+    buttons: { ...ALL_BUTTONS, next: false, nextName: null, pause: false, extend: false, workEnd: false, finished: false, cutOff: false, start: null },
     background: [],
     autos: { groups: [], items: [] },
     fewer: false,

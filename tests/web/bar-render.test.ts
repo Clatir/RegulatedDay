@@ -26,11 +26,10 @@ describe('pasek w ciszy nocnej (D346)', () => {
     }
   })
 
-  it('poza nocą stoją wszystkie trzy grupy', () => {
+  it('poza nocą stoi „⋯” – „Prośba ▸”, „Sygnały ▸” i „Odcinam się” czekają w nim (D564 P17)', () => {
     const out = html(dayView({ night: false, signals: true }))
-    expect(out).toContain('data-testid="bar-group-request"')
-    expect(out).toContain('data-testid="bar-group-signals"')
     expect(out).toContain('data-testid="bar-group-more"')
+    for (const id of ['bar-group-request', 'bar-group-signals', 'bar-cut-off']) expect(out).not.toContain(`data-testid="${id}"`)
   })
 })
 

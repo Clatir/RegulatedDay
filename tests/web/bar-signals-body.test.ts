@@ -39,6 +39,8 @@ async function unfold() {
   root = createRoot(host)
   const view: WidgetView = { ...noFolderView(), day: '2026-11-18', lines: [], block: null, signals: true, requests: { people: [], running: null, interrupted: null } }
   await act(async () => root!.render(createElement(Bar, { view, mode: 'main' })))
+  // „Sygnały ▸” waits in „⋯” (D564 P17).
+  await act(async () => q('bar-group-more')!.click())
   await act(async () => q('bar-group-signals')!.click())
 }
 const buttonsOf = (pool: string) => [...host!.querySelectorAll<HTMLElement>('span.inline-flex')].find((s) => s.firstElementChild?.textContent === pool)!.querySelectorAll<HTMLButtonElement>('button')

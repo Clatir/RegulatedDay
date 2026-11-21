@@ -463,7 +463,8 @@ test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na 
       await expect(page.getByTestId('bar-block')).toContainText('Inne obowiązki')
       // The block stands on the axis where it runs (from now, not at 03:00 of its plan).
       await expect(page.getByTestId('block-late')).not.toContainText('03:00')
-      await page.getByTestId('bar-next').click()
+      // Past its plan „Dalej?” stands with its own „Dalej” – the row then has none (C5).
+      await page.locator('[data-testid="bar-main"] :is([data-testid="bar-next"], [data-testid="bar-q-next"])').first().click()
       await expect(page.getByTestId('bar-block')).not.toContainText('Inne obowiązki')
       // „Odcinam się”: the panel shows its line with „Wracam”, which ends it.
       await page.evaluate(() => window.rd.barAction('openPanel'))
@@ -1100,26 +1101,30 @@ test('kalibracja (D119): po okresie karta w planie porannym – „Nie teraz” 
   }
 })
 
-test('prośby w pasku (D311, D312): „Prośba ▸” – „Zrobione teraz” z osobą i „Koniec”; „Pilne” z szacunkiem', async () => {
+test('prośby w pasku (D311, D312, D564 P17, P20): „⋯” – „Prośba ▸” – „Zrobione teraz” z osobą, „Prośba: Mama · 0:0x · Koniec”; „Pilne” z szacunkiem', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-requests-'))
   // Without today's sessions: in a session (a quiet mode) „Pilne” starts with 15 min without asking (D311).
   seed(dataDir, { sessions: false })
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
-      // The engine's view; „Prośba ▸” stands at any hour, also in the night's quiet (D346).
+      // The engine's view; „Prośba ▸” is there at any hour – in „⋯” (D564 P17), in the night's quiet in the row (D346).
       await expect.poll(() => page.evaluate(async () => (await window.rd.widget()).day), { timeout: 30_000 }).not.toBeNull()
-      await expect(page.getByTestId('bar-group-request')).toHaveCount(1)
-      await page.getByTestId('bar-group-request').click()
+      const openRequest = async () => {
+        if (!(await page.evaluate(async () => (await window.rd.widget()).night))) await page.getByTestId('bar-main').getByTestId('bar-group-more').click()
+        await expect(page.getByTestId('bar-group-request')).toHaveCount(1)
+        await page.getByTestId('bar-group-request').click()
+      }
+      await openRequest()
       await expect(page.getByTestId('bar-request-group')).toContainText('Zrobione teraz:')
       await page.getByTestId('bar-request-now-mama').click()
-      await expect(page.getByTestId('bar-request')).toContainText('Zrobione teraz · Mama · 0:0')
+      await expect(page.getByTestId('bar-request')).toContainText('Prośba: Mama · 0:0')
       await page.getByTestId('bar-request-end').click()
       await expect(page.getByTestId('bar-request')).toHaveCount(0)
       // A quiet mode (a session waits for „Zacznij” – the session mode): „Pilne” starts
       // with 15 min without asking (D311).
       const quiet = await page.evaluate(async () => (await window.rd.widget()).quiet)
-      await page.getByTestId('bar-group-request').click()
+      await openRequest()
       await page.getByTestId('bar-request-urgent-mama').click()
       if (!quiet) {
         await expect(page.getByTestId('bar-request-estimate-value')).toHaveText('15 min')

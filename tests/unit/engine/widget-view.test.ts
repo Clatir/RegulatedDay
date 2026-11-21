@@ -115,6 +115,17 @@ describe('widok paska z silnika', () => {
     expect(view(s, '08:30')).toMatchObject({ toneSet: 'cieple', color: '#E8A15A', iconColor: '#E8A15A' })
   })
 
+  it('„Dalej: <nazwa>” (D564 P20): nazwa bloku, który „Dalej” zacznie – także w odpowiedzi pytania „Dalej?”; bez następnego samo „Dalej”', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'm', cat: 'posilek', at: '09:00', min: 30 })] }).observe('07:00', null)
+    expect(view(s, '07:50').buttons.nextName).toBeNull()
+    click(s, '08:00', { a: 'start', block: 'a' })
+    expect(view(s, '08:30').buttons).toMatchObject({ next: true, nextName: 'Posiłek' })
+    expect(view(s, '09:05').question?.actions.find((x) => x.id === 'next')).toEqual({ id: 'next', label: 'Dalej: Posiłek' })
+    click(s, '09:10', { a: 'next' })
+    // The last block of the plan: „Dalej” begins nothing.
+    expect(view(s, '09:15').buttons).toMatchObject({ next: true, nextName: null })
+  })
+
   it('kropka tylko przy tym, co czeka na kliknięcie: „Dalej?” i „Zacznij · Odwołaj”; lista automatyczna z „Cofnij”', () => {
     const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'ny', cat: 'sesja', at: '15:30', min: 60, fixed: true, bg: false })] }).observe('07:00', null)
     click(s, '08:00', { a: 'start', block: 'a' })
