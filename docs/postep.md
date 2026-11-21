@@ -116,7 +116,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
       | UX16 | scalone 21.11 (a0fe20d): T2200–T2207, odbiór UX16.1–UX16.5; przegląd high 3 rundy + drobne; po scaleniu UX7+UX16 `npm test` 4724/4732 (pada tylko `installer-close`); uwagi na później: „Terminy” w wierszu sprawy bez wielokropka, Banners/DataSection/ComputersSection – Intl pl-PL (część dzień.miesiąc), formaty paska i osi bez zmian |
       | UX10 | scalone 21.11 (712ba76): T2100–T2109, odbiór UX10.1–UX10.5; przegląd xhigh 4 rundy (ponowne otwarcie panelu, dwuklik, stopka „schowaj / pokaż” według zamiaru, warianty według okna); `npm test` po scaleniu – pada tylko `installer-close`; uwagi na później: mignięcie wysokości panelu przy ponownym otwarciu (`iconPanel.ts` `open()` z ostatnią wysokością) |
       | UX13 | przeniesione do strumienia C (po UX18) |
-      | UX8 (`ux-a`), UX14 (`ux-d`, strumień D od 15:45 – UX14 → UX15, T2300–T2399; C zostaje UX17 → UX18) | w pracy |
+      | UX8 | scalone 21.11 (25e289f, konflikt w `shortcuts.ts` – zapis „Ctrl+K”): T2010–T2015, odbiór UX8.1–UX8.4; przegląd high 4 rundy (Ctrl+N w Kalendarzu, bloki ukryte i zaparkowane, klawisze przy okienku, „← Tydzień” po Ctrl K); `npm test` 4797/4805 (tylko `installer-close`); uwagi na później: pamięć okresu tylko w oknie (restart – bieżący), `useUi.memory`/`from` do `interfejs.md`, „← Tydzień” zostaje po Ctrl K na „Dziś” także przy dniu daleko od zapamiętanego tygodnia |
+      | UX11 (`ux-b`), UX17 (`ux-c`, runda 4), UX14 (`ux-d`, strumień D – UX14 → UX15, T2300–T2399; runda 1 xhigh poprawiana) | w pracy |
       | UX9, UX11–UX13, UX15, UX17–UX19 | do zrobienia; szkic CHANGELOG – w raportach wykonawców (scratchpad sesji), sekcja 1.34.0 na końcu |
 
 ## Do odbioru na Windows

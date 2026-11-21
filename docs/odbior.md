@@ -311,6 +311,10 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX10.3 „Pasek pulpitu: schowaj / pokaż” w stopce panelu (1.34.0)
    - [ ] UX10.4 „+ Skrzynka” na pasku pulpitu – okienko „Do skrzynki” (1.34.0)
    - [ ] UX10.5 Dwuklik w przycisk paska działa raz, panel otwiera się zwinięty (1.34.0)
+   - [ ] UX8.1 Powrót do tygodnia „← Tydzień” na zapamiętany okres (1.34.0)
+   - [ ] UX8.2 PgUp / PgDn / Home na każdym widoku okresów (1.34.0)
+   - [ ] UX8.3 Ctrl+N w „Tygodniu”, „3 dniach” i Kalendarzu (1.34.0)
+   - [ ] UX8.4 Przycisk „dziś” i pusty dzień Agendy (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3292,6 +3296,35 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** dwuklik w „Dalej” w panelu i na pasku pulpitu; dwuklik w „Skończył się o…”; rozwiń „Prośba ▸”, schowaj panel i otwórz go znowu.
 - **Oczekiwany efekt:** jedno „Dalej”; dwuklik w „Skończył się o…” nie zmienia godziny o −5; ponownie otwarty panel bez rozwiniętego „Prośba ▸” ani „±5”; kliknięcie powiadomienia przy otwartym panelu nie czyści wpisanego tekstu.
 - **Nie przechodzi, gdy:** dwa bloki przeskoczone; rozwinięcie wraca po ponownym otwarciu; wpisany tekst ginie.
+
+
+#### UX8.1 Powrót do tygodnia „← Tydzień” na zapamiętany okres
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux8-pages.test.ts`, E2E `week`. Ty: rzut oka.
+- **Jak sprawdzić:** „Tydzień” → następny tydzień → klik bloku → „← Tydzień”; osobno Kalendarz → inny miesiąc → dzień → „← Kalendarz”; potem w „Dziś” Ctrl K → „Jutro”.
+- **Oczekiwany efekt:** wracasz na ten sam następny tydzień (miesiąc), oś ustawiona jak przy otwarciu; Ctrl K na „Dziś” nie zabiera „← Tydzień”; wejście z menu bocznego nie pokazuje przycisku.
+- **Nie przechodzi, gdy:** wraca bieżący tydzień; brak przycisku po kliknięciu bloku; przycisk prowadzi do złego tygodnia.
+
+#### UX8.2 PgUp / PgDn / Home na każdym widoku okresów
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux8-pages.test.ts`, `tests/web/ux8-keys-new.test.ts`, E2E `week`. Ty: Agenda i Kalendarz.
+- **Jak sprawdzić:** PgDn, PgUp, Home w „Dziś”, „Tygodniu”, „3 dniach”, Agendzie, Kalendarzu; potem w polu tekstowym i przy otwartym okienku nowego bloku.
+- **Oczekiwany efekt:** okres zmienia się jak strzałką (Agenda o 7 dni, nie przed dziś), Home wraca do dziś; w polu i przy otwartym okienku nic się nie dzieje; lista skrótów ma nowe klawisze.
+- **Nie przechodzi, gdy:** klawisz przewija stronę zamiast zmienić okres; działa w polu; przy otwartym okienku zmienia miesiąc.
+
+#### UX8.3 Ctrl+N w „Tygodniu”, „3 dniach” i Kalendarzu
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux8-calendar.test.ts`, `tests/web/ux8-keys-new.test.ts`, E2E `week`. Ty: rzut oka.
+- **Jak sprawdzić:** Ctrl+N w „Tygodniu”, „3 dniach” i Kalendarzu (także z ukrytym kalendarzem, który ma blok o najbliższej godzinie); potem w widoku samych minionych dni.
+- **Oczekiwany efekt:** okienko nowego bloku dziś (albo w pierwszym dniu od dziś) o najbliższej wolnej godzinie, z pominięciem bloków ukrytych kalendarzy; w widoku minionym dymek „W tym widoku nie ma dnia od dziś – wróć do bieżącego okresu (Home).”
+- **Nie przechodzi, gdy:** okienko się nie otwiera; stoi na zajętej godzinie albo w rogu okna; brak dymku w widoku minionym.
+
+#### UX8.4 Przycisk „dziś” i pusty dzień Agendy
+- [ ] Odebrane
+- **Tylko Ty:** wygląd.
+- **Jak sprawdzić:** przycisk „dziś” na każdym ekranie okresów w bieżącym i innym okresie; „+ Blok” przy pustym dniu Agendy.
+- **Oczekiwany efekt:** przycisk „dziś” zawsze widoczny, wyłączony w bieżącym okresie; „+ Blok” otwiera ten dzień z nowym blokiem.
+- **Nie przechodzi, gdy:** przycisk znika albo jest aktywny w bieżącym okresie; „+ Blok” otwiera inny dzień.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
