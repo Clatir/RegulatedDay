@@ -81,11 +81,11 @@ describe('komunikat pod odrzuconym polem (D347)', () => {
   it('CommitField i pole tekstowe z wymaganą wartością pokazują komunikat we wspólnej powłoce, a w rogu zostaje toast', () => {
     const commit = fields.slice(fields.indexOf('export function CommitField'), fields.indexOf('/** A length typed within'))
     expect(commit).toContain('<FieldShell')
-    expect(commit).toContain("toast(r.refused, 'error', 6000)")
+    expect(commit).toContain("refusalToast(r.refused, 6000)")
     expect(commit).toContain('aria-describedby')
     const text = fields.slice(fields.indexOf('export function TextField'))
     expect(text).toContain('<FieldShell')
-    expect(text).toContain("toast('To pole nie może być puste.'")
+    expect(text).toContain("refusalToast('To pole nie może być puste.'")
   })
 
   it('godzina odpowiedzi o dniu (dayTime) idzie przez to samo pole', () => {

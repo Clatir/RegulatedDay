@@ -374,6 +374,20 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       expect(Math.abs(apply.y - (await page.getByTestId('template-revoke').boundingBox())!.y)).toBeLessThan(12)
       await shot(page, 'e3-07-templates')
 
+      // UX18 (E7): „Historia” in the template's editor – the history with this template chosen and its versions shown.
+      // (the open block's panel in a template has none: the editor's is the only one)
+      await page.getByTestId('template-editor').getByTestId('history-open').click()
+      await expect(page.getByTestId('history-versions')).toBeVisible({ timeout: 15_000 })
+      // The list: the filter of kinds with the counts, the counter „x z y”, the search narrowing it down.
+      await expect(page.getByTestId('filters-history')).toBeVisible()
+      const all = await page.getByTestId('history-record').count()
+      await expect(page.getByTestId('count-history')).toHaveText(`${all} z ${all}`)
+      await page.getByTestId('history-search').fill('qqqqqq')
+      await expect(page.getByTestId('history-record')).toHaveCount(0)
+      await expect(page.getByTestId('count-history')).toHaveText(`0 z ${all}`)
+      await expect(page.getByTestId('history-none')).toBeVisible()
+      await page.getByTestId('history-search').fill('')
+
       // Historia: the request edited – its earlier version, restored.
       await page.getByTestId('nav-history').click()
       await expect(page.getByTestId('history-record').first()).toBeVisible({ timeout: 15_000 })
@@ -384,7 +398,7 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       const budget = page.getByTestId('setting-zwykly-budgetMin')
       await budget.fill('17h')
       await budget.press('Enter')
-      await expect(page.getByRole('status').filter({ hasText: 'Najdłużej 16 h' })).toBeVisible()
+      await expect(page.getByRole('alert').filter({ has: page.getByTestId('toast-close') }).filter({ hasText: 'Najdłużej 16 h' })).toBeVisible()
       await budget.fill('7h')
       await budget.press('Enter')
       await expect(budget).toHaveValue('7 h')

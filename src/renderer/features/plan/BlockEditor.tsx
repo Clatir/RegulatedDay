@@ -30,11 +30,13 @@ import { olderComputers } from '@shared/model/note'
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { forecastEndText } from '@shared/blockEnd'
 import { Choice, DurationField, EndField, TextField, TimeField } from '../../components/fields'
+import { HistoryButton } from '../../components/HistoryButton'
 import { cx, Field, Segmented, SIDE_PANEL_WIDTH } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
 import { useData, type SaveAnswer } from '../../store/data'
 import { useAttachDrop } from '../attachments/attachDrop'
 import { AttachmentsSection } from '../attachments/AttachmentsSection'
+import { blockHistoryRel } from '../history/historyTarget'
 import { NoteEditor } from '../note/NoteEditor'
 import { anchorCandidates, blockName, groupedCategoryOptions, type Names } from './blockView'
 import { EditCategoryDialog, EditRoutineDialog, EditVariantDialog, useSettingsNow } from './EditThingDialogs'
@@ -74,7 +76,8 @@ export function BlockEditor({
   forecastStart,
   onEscape,
   day,
-  dayNotes
+  dayNotes,
+  historyOf
 }: {
   block: PlanBlock
   plan: readonly PlanBlock[]
@@ -125,6 +128,8 @@ export function BlockEditor({
    * left out – nothing (templates, series).
    */
   dayNotes?: ReactNode
+  /** The file of the record „Historia” opens when the place does not say it (a series: the part edited – `series/<id>.json`, UX18); a day's block has its day's plan. */
+  historyOf?: string
 }) {
   useEscapeLayer(true, onEscape ?? onClose)
   const owner = place ? ownerToAdd(block, place) : null
@@ -146,6 +151,7 @@ export function BlockEditor({
   const [making, setMaking] = useState<'routine' | 'variant' | 'category' | null>(null)
   const today = useData((s) => s.view?.today ?? '')
   const blockDay = day ?? (place?.scope === 'day' ? place.date : null)
+  const historyRel = newBlock ? null : (historyOf ?? blockHistoryRel(place, day))
   // A variant and a category are made „od dziś”: a day gone by would not have them (T1067).
   const newDated = blockDay == null || (today !== '' && blockDay >= today)
   const newOption = (dated: boolean) => (readOnly || (dated && !newDated) ? [] : [NEW_OPTION])
@@ -176,6 +182,8 @@ export function BlockEditor({
       <div className="flex items-center gap-2">
         {/* D4: a new block not saved yet is a draft – the heading says so (it is the block's name once saved). */}
         <h3 className="min-w-0 flex-1 truncate text-[14px] font-medium">{newBlock ? 'Nowy blok' : blockName(block, names)}</h3>
+        {/* UX18 (E7): the history of the record the block is in (its day, template or series); a block not saved yet has none. */}
+        {historyRel && <HistoryButton rel={historyRel} className="text-[12px] text-muted hover:text-fg" />}
         <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={onClose} data-testid="block-editor-close">
           Zamknij
         </button>

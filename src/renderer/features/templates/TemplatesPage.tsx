@@ -26,6 +26,7 @@ import { SERIES_MARK, seriesText } from '@shared/seriesText'
 import { addDays } from '@shared/time/zone'
 import { UNDO_LINE_MS } from '@shared/widget'
 import { DateField, TextField } from '../../components/fields'
+import { HistoryButton } from '../../components/HistoryButton'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
 import { isSaved, saveRecord, storedAnswer, tryUpdateRecord, updateRecord, useData, type SaveAnswer, type SendState } from '../../store/data'
 import { useBusy } from '../../lib/busy'
@@ -387,6 +388,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           <div className="flex flex-wrap items-center gap-2">
             <TextField value={template.name} onCommit={(name) => void saveTemplate({ name })} required max={80} shellClassName="max-w-[260px]" aria-label="Nazwa szablonu" data-testid="template-name" />
             <span className="flex-1" />
+            <HistoryButton rel={rel} />
             <button type="button" className="btn" onClick={() => void copy()} data-testid="template-copy">
               Skopiuj szablon
             </button>

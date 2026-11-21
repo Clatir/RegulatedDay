@@ -16,9 +16,9 @@ afterEach(() => {
 
 describe('dymki: identyczny nie dubluje się (F7)', () => {
   it('ten sam tekst i rodzaj: jeden dymek, ten sam id, czas liczony od nowa', () => {
-    const a = toast('Nie zapisano.', 'error', 5000)
+    const a = toast('Zapisano.', 'success', 5000)
     vi.advanceTimersByTime(4000)
-    const b = toast('Nie zapisano.', 'error', 5000)
+    const b = toast('Zapisano.', 'success', 5000)
     expect(b).toBe(a)
     expect(shown()).toHaveLength(1)
     vi.advanceTimersByTime(4000)

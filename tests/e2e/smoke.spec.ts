@@ -731,7 +731,7 @@ test('konwencje: długość „1h30”, ułamek odrzucony z komunikatem, Esc cof
       await d.fill('1,5')
       await d.press('Tab')
       await expect(d).toHaveValue('1 h 30 min')
-      await expect(page.getByRole('status').filter({ hasText: 'pełnych minutach' })).toBeVisible()
+      await expect(page.getByRole('alert').filter({ has: page.getByTestId('toast-close') }).filter({ hasText: 'pełnych minutach' })).toBeVisible()
       await d.fill('45')
       await d.press('Escape')
       await expect(d).toHaveValue('1 h 30 min')

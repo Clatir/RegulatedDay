@@ -200,7 +200,7 @@ describe('menu „…” wiersza (P25)', () => {
     await render()
     await click(q('case-menu', row('a'))!)
     expect(q('case-menu-list-popup')).not.toBeNull()
-    expect(menuItems().map((e) => e.getAttribute('data-testid'))).toEqual(['case-menu-done', 'case-menu-list', 'case-menu-priority', 'case-menu-dates', 'case-menu-steps', 'case-menu-repeat', 'case-menu-remove'])
+    expect(menuItems().map((e) => e.getAttribute('data-testid'))).toEqual(['case-menu-done', 'case-menu-list', 'case-menu-priority', 'case-menu-dates', 'case-menu-steps', 'case-menu-repeat', 'case-menu-history', 'case-menu-remove'])
     expect(q('case-menu-list')!.getAttribute('aria-haspopup')).toBe('menu')
     expect(q('case-menu-priority')!.getAttribute('aria-haspopup')).toBe('menu')
   })
@@ -282,9 +282,9 @@ describe('menu „…” wiersza (P25)', () => {
   })
 
   it('czyste: sprawa zrobiona ma listę i „Usuń”, bez „Zrobione”, priorytetu i terminów', () => {
-    const acts: RowMenuActs = { list: () => undefined, priority: () => undefined, done: () => undefined, dates: () => undefined, steps: () => undefined, repeat: () => undefined, remove: () => undefined }
+    const acts: RowMenuActs = { list: () => undefined, priority: () => undefined, done: () => undefined, dates: () => undefined, steps: () => undefined, repeat: () => undefined, history: () => undefined, remove: () => undefined }
     const [d] = caseItems([requestFrom({ ...task('d', 1), state: 'done', list: 'done', doneAt: Date.now() })!], TODAY, () => undefined)
-    expect(caseRowMenu(d!, acts).flatMap((e) => (e.kind === 'separator' ? [] : [e.label]))).toEqual(['Przenieś na listę', 'Kroki…', 'Usuń'])
+    expect(caseRowMenu(d!, acts).flatMap((e) => (e.kind === 'separator' ? [] : [e.label]))).toEqual(['Przenieś na listę', 'Kroki…', 'Historia', 'Usuń'])
   })
 })
 

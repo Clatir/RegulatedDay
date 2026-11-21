@@ -12,6 +12,7 @@ import { newId } from '@shared/model/ids'
 import { ROUTINE_SCHEMA, routineFrom, routineMinutes, type Routine, type RoutineVersion } from '@shared/model/routines'
 import { settingsOn } from '@shared/model/settings'
 import { TextField } from '../../components/fields'
+import { HistoryButton } from '../../components/HistoryButton'
 import { EmptyState, cx } from '../../components/ui'
 import { RoutineCostField, saveRoutineRecord } from './routineCost'
 import { RoutineSteps } from './RoutineSteps'
@@ -129,6 +130,7 @@ function Editor({ routine, onRemoved }: { routine: Routine; onRemoved: () => voi
       <div className="flex items-center gap-2">
         <TextField value={routine.name} onCommit={(name) => save({ name })} required max={80} shellClassName="max-w-[320px]" className="text-[14px]" aria-label="Nazwa rutyny" data-testid="routine-name" />
         <span className="flex-1" />
+        <HistoryButton rel={rel} />
         <button type="button" className="btn" onClick={() => save({ archived: !routine.archived })}>
           {routine.archived ? 'Przywróć z archiwum' : 'Archiwizuj'}
         </button>

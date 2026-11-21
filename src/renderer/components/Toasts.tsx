@@ -5,11 +5,12 @@ import { cx } from './ui'
 export function Toasts() {
   const toasts = useUi((s) => s.toasts)
   return (
-    <div className="pointer-events-none fixed right-3 bottom-3 z-[60] flex flex-col items-end gap-1.5">
+    <div className="pointer-events-none fixed right-3 bottom-3 z-[60] flex flex-col items-end gap-1.5" data-toast="">
       {toasts.map((t) => (
         <div
           key={t.id}
-          role="status"
+          // An error stays until „×” closes it (UX18, D565 P26) and is announced at once; the others go by themselves.
+          role={t.kind === 'error' ? 'alert' : 'status'}
           className={cx(
             'pointer-events-auto max-w-[460px] animate-slide-up rounded border bg-raised px-3 py-1.5 text-[12.5px]',
             t.kind === 'error' ? 'border-rose/70' : t.kind === 'success' ? 'border-sea/60' : 'border-line-strong'
@@ -27,6 +28,11 @@ export function Toasts() {
               data-testid="toast-action"
             >
               {t.action.label}
+            </button>
+          )}
+          {t.kind === 'error' && (
+            <button className="ml-3 px-1 text-muted hover:text-fg" aria-label="Zamknij komunikat" title="Zamknij" onClick={() => closeToast(t.id)} data-testid="toast-close">
+              ×
             </button>
           )}
         </div>
