@@ -87,8 +87,7 @@ export const SETTINGS_GROUPS: readonly SettingsGroupInfo[] = [
     title: 'O aplikacji',
     sections: [
       { id: 'settings-updates', title: 'Aktualizacje', when: 'none' },
-      { id: 'settings-info', title: 'Informacje', when: 'none' },
-      { id: 'settings-shortcuts', title: 'Skróty klawiszowe', when: 'none' }
+      { id: 'settings-info', title: 'Informacje', when: 'none' }
     ]
   }
 ]

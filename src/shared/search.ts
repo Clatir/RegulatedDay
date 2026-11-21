@@ -8,7 +8,7 @@
 export type Range = [number, number]
 
 /** `history` is no record of the search: only a pick – the history of one record, left for „Historia” by a message („Historia” by a broken file, UX3, A9); id = `kind/id` of the history. */
-export type SearchKind = 'command' | 'screen' | 'setting' | 'category' | 'block' | 'allDay' | 'template' | 'templateBlock' | 'series' | 'request' | 'routine' | 'history'
+export type SearchKind = 'command' | 'screen' | 'setting' | 'category' | 'block' | 'allDay' | 'template' | 'templateBlock' | 'series' | 'request' | 'routine' | 'help' | 'history'
 
 /** One thing that can be found. `title` and `text` are shown (and searched), `keys` only searched, `hint` only shown. */
 export interface SearchRecord {
@@ -26,12 +26,13 @@ export interface SearchRecord {
   hint?: string
 }
 
-export type GroupId = 'command' | 'screen' | 'category' | 'block' | 'allDay' | 'template' | 'request' | 'routine'
+export type GroupId = 'command' | 'screen' | 'help' | 'category' | 'block' | 'allDay' | 'template' | 'request' | 'routine'
 
 /** The groups in the order they are shown. */
 export const GROUPS: ReadonlyArray<{ id: GroupId; label: string; kinds: readonly SearchKind[] }> = [
   { id: 'command', label: 'Polecenia', kinds: ['command'] },
   { id: 'screen', label: 'Ekrany i ustawienia', kinds: ['screen', 'setting'] },
+  { id: 'help', label: 'Pojęcia', kinds: ['help'] },
   { id: 'category', label: 'Kategorie', kinds: ['category'] },
   { id: 'block', label: 'Bloki', kinds: ['block'] },
   { id: 'allDay', label: 'Wydarzenia', kinds: ['allDay'] },

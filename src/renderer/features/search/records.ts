@@ -24,6 +24,7 @@ import { textWithSteps } from '@shared/model/steps'
 import type { SearchRecord } from '@shared/search'
 import { addDays, weekday } from '@shared/time/zone'
 import { PAGES, type Page } from '../../store/ui'
+import { glossaryRecords } from '../help/glossary'
 import { SECTION_KEYS, settingRecords } from '../settings/settingsIndex'
 import { SETTINGS_SECTIONS } from '../settings/settingsLayout'
 
@@ -37,7 +38,9 @@ export const COMMANDS: SearchRecord[] = [
   { kind: 'command', id: 'newTask', title: 'Nowe zadanie', hint: 'Ctrl+N w „Sprawach”', keys: 'nowe' },
   { kind: 'command', id: 'tomorrow', title: 'Jutro', hint: 'plan na jutro' },
   { kind: 'command', id: 'yesterday', title: 'Wczoraj', hint: 'plan wczorajszego dnia' },
-  { kind: 'command', id: 'ritual', title: 'Rytuał', hint: 'rytuał dzisiejszego dnia', keys: 'wieczór podsumowanie' }
+  { kind: 'command', id: 'ritual', title: 'Rytuał', hint: 'rytuał dzisiejszego dnia', keys: 'wieczór podsumowanie' },
+  { kind: 'command', id: 'concepts', title: 'Jak to działa', hint: 'pule, rezerwa, granica, nuty…', keys: 'pojęcia słowniczek pomoc' },
+  { kind: 'command', id: 'shortcuts', title: 'Skróty klawiszowe', hint: 'F1', keys: 'klawisze lista pomoc' }
 ]
 
 /** The sections of the settings by the test id of their box (the screen scrolls to it; the layout of the page is the source, UX14); words only searched. */
@@ -68,6 +71,8 @@ export function searchRecords(i: RecordsInput): SearchRecord[] {
   for (const p of PAGES) out.push({ kind: 'screen', id: p, title: i.pageLabel[p], ...(i.pageKeys(p) ? { hint: i.pageKeys(p)! } : {}) })
   // The sections of the settings and their fields by the labels (UX14): Enter scrolls to the field.
   out.push(...settingRecords())
+  // The concepts of „Jak to działa” (UX15, E3): Enter opens the window at the concept.
+  out.push(...glossaryRecords())
   // The tree of „Kategorie” (D510): categories, subcategories (the category in the hint) and variants – Enter opens it in the settings.
   const groupName = new Map(i.rd.categoryGroups.map((g) => [g.id, g.name]))
   for (const g of i.rd.categoryGroups) out.push({ kind: 'category', id: `${GROUP_PICK}${g.id}`, title: g.name, hint: g.archived ? 'kategoria w archiwum' : 'kategoria w ustawieniach' })

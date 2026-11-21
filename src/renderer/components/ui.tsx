@@ -5,6 +5,9 @@
  */
 import type { ReactNode } from 'react'
 import { ofLabel } from '@shared/format'
+import { FIELD_TERMS } from '../features/help/glossary'
+import { FIELD_HINTS } from '../lib/fieldHints'
+import { HelpMark } from './HelpMark'
 
 /**
  * The width of the panel at the right of the axis (D9): „Dziś” beside the plan (the side panel and the block's panel) and „Szablony”
@@ -16,13 +19,27 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')
 }
 
-/** The row of a field; the `data-testid` of the settings' fields is the id the search of the settings and Ctrl K scroll to (UX14). */
+/**
+ * The row of a field; the `data-testid` of the settings' fields is the id the search of the settings and Ctrl K scroll to (UX14).
+ * Its description (UX15, E3) is the `hint` given or, without one, the table `FIELD_HINTS` by that id – marked `data-hint`, which
+ * the test of the page looks for; a field with a concept of „Jak to działa” (`FIELD_TERMS`) has a „?” after its label.
+ */
 export function Field({ label, children, hint, labelWidth = 180, ...rest }: { label: ReactNode; children: ReactNode; hint?: ReactNode; labelWidth?: number; 'data-testid'?: string }) {
+  const id = rest['data-testid']
+  const term = id ? FIELD_TERMS[id] : undefined
+  const text = hint ?? (id ? FIELD_HINTS[id] : undefined)
   return (
-    <div className="grid items-center gap-x-3 gap-y-0.5" data-testid={rest['data-testid']} style={{ gridTemplateColumns: `${labelWidth}px minmax(0,1fr)` }}>
-      <span className="text-[12.5px] leading-snug text-muted">{label}</span>
+    <div className="grid items-center gap-x-3 gap-y-0.5" data-testid={id} style={{ gridTemplateColumns: `${labelWidth}px minmax(0,1fr)` }}>
+      <span className="text-[12.5px] leading-snug text-muted">
+        {label}
+        {term && <HelpMark term={term} />}
+      </span>
       <div className="min-w-0">{children}</div>
-      {hint && <div className="col-start-2 text-[12px] leading-snug text-muted">{hint}</div>}
+      {text && (
+        <div className="col-start-2 text-[12px] leading-snug text-muted" data-hint="">
+          {text}
+        </div>
+      )}
     </div>
   )
 }

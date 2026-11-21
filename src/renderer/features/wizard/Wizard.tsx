@@ -20,6 +20,8 @@ import { blockFill } from '@shared/theme'
 import { setMachinePrefs, useMachine } from '../../store/machine'
 import { BRIGHTNESS_STEPS } from '@shared/machine'
 import { Field, Section, Segmented, Toggle, cx } from '../../components/ui'
+import { BAR_UNDER_WINDOWS, MAXIMUM_INTRO, ONEDRIVE_PIN, STATIONARY } from '../../lib/sameWords'
+import { useFirstDay } from '../../store/firstDay'
 import { navigate, toast } from '../../store/ui'
 import { reloadData, useData } from '../../store/data'
 import { countDay } from '../../store/day'
@@ -101,6 +103,8 @@ export function Wizard() {
     if (w.machine.desktopBar) await window.rd.barAction('corner', w.machine.corner).catch(() => undefined)
     await reloadData()
     patchWizard({ busy: false, open: false })
+    // The first computer gets the list of the first day (UX15, E8); the next one joins data that are already in use.
+    if (!joining) useFirstDay.setState({ show: true })
     navigate('today')
     toast(joining ? 'Ten komputer dołączył do danych.' : 'Gotowe – dane zapisane w folderze.', 'success', 5000)
   }
@@ -142,9 +146,17 @@ export function Wizard() {
                   {w.busy ? 'Zapisuję…' : 'Zakończ'}
                 </button>
               ) : (
-                <button type="button" className="btn btn-accent" disabled={!canGoOn} onClick={() => go(1)} data-testid="wizard-next">
-                  Dalej
-                </button>
+                <>
+                  {/* UX15, E4, D565 P23: after the folder the rest may stay as it is – the answers given so far are written, the others are the defaults. */}
+                  {w.step > 0 && (
+                    <button type="button" className="btn" disabled={w.busy || !canGoOn} onClick={() => void finish()} title="Zapisuje to, co jest teraz w kreatorze (reszta zostaje domyślna) – wszystko zmienisz potem w Ustawieniach." data-testid="wizard-finish-defaults">
+                      {w.busy ? 'Zapisuję…' : 'Zakończ z domyślnymi'}
+                    </button>
+                  )}
+                  <button type="button" className="btn btn-accent" disabled={!canGoOn} onClick={() => go(1)} data-testid="wizard-next">
+                    Dalej
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -164,7 +176,7 @@ function StepView({ step, today }: { step: StepId; today: string }) {
     case 'hours':
       return <DayTypeTable keys={['wakeMin', 'bedtimeMin']} intro="Pobudka i pora snu każdego typu dnia. Pora snu wypada najpóźniej tyle przed jutrzejszą pobudką, ile wynosi docelowy sen." extra={<TargetSleep />} />
     case 'work':
-      return <DayTypeTable keys={['budgetMin', 'maxMin']} intro="Budżet pracy to suma czasu bloków pracy dnia. Maksimum granicy to najpóźniejsza godzina, do której sięga granica bez wyjątku." />
+      return <DayTypeTable keys={['budgetMin', 'maxMin']} intro={`Budżet pracy to suma czasu bloków pracy dnia. ${MAXIMUM_INTRO}`} />
     case 'regen':
       return <DayTypeTable keys={['minRegenMin', 'projectLimitMin']} intro="Minimum regeneracji chroni odpoczynek przed porą snu; limit projektów to najwięcej projektów dziennie." />
     case 'sessions':
@@ -566,8 +578,8 @@ function StepCosts() {
         <Field label="Posiłki" labelWidth={300}>
           <Segmented value={meal.place === 'passive' ? 'passive' : 'away'} options={[{ value: 'passive', label: 'przy komputerze (pasywnie)' }, { value: 'away', label: 'z dala od niego' }]} onChange={(v) => patchSettings({ categories: { posilek: { place: v } } })} data-testid="wizard-meals" />
         </Field>
-        <Field label="Na zajęciach stacjonarnych używasz tego komputera?" labelWidth={300}>
-          <Segmented value={machine.stationaryClasses ? 'yes' : 'no'} options={[{ value: 'no', label: 'nie' }, { value: 'yes', label: 'tak' }]} onChange={(v) => patchWizard({ machine: { ...machine, stationaryClasses: v === 'yes' } })} data-testid="wizard-stationary" />
+        <Field label={STATIONARY.label} hint={STATIONARY.hint} labelWidth={300}>
+          <Segmented value={machine.stationaryClasses ? 'yes' : 'no'} options={[{ value: 'no', label: STATIONARY.no }, { value: 'yes', label: STATIONARY.yes }]} onChange={(v) => patchWizard({ machine: { ...machine, stationaryClasses: v === 'yes' } })} data-testid="wizard-stationary" />
         </Field>
       </div>
       <div className="grid items-center gap-x-2 gap-y-1.5" style={{ gridTemplateColumns: 'minmax(0,1fr) repeat(4, 64px)' }}>
@@ -618,7 +630,7 @@ function StepComputer() {
     <div className="flex flex-col gap-3">
       <Lead>Ustawienia tylko tego komputera.</Lead>
       <Section title="Pasek i ikona">
-        <Field label="Pasek pulpitu" hint="Leży pod oknami innych aplikacji – nigdy nad nimi.">
+        <Field label="Pasek pulpitu" hint={BAR_UNDER_WINDOWS}>
           <Toggle checked={m.desktopBar} onChange={(desktopBar) => set({ desktopBar })} label={m.desktopBar ? 'włączony' : 'wyłączony'} data-testid="wizard-desktop-bar" />
         </Field>
         {m.desktopBar && (
@@ -642,13 +654,13 @@ function StepComputer() {
           <Toggle checked={m.autostart} onChange={(autostart) => set({ autostart })} label={m.autostart ? 'włączone' : 'wyłączone'} data-testid="wizard-autostart" />
         </Field>
         {w.probe?.inOneDrive && (
-          <Field label="Zawsze przechowuj na tym urządzeniu" hint="OneDrive trzyma wtedy cały folder na dysku (bez kopii zapasowych), więc dane są dostępne także bez sieci.">
+          <Field label={ONEDRIVE_PIN.label} hint={ONEDRIVE_PIN.hint}>
             <Toggle checked={m.pin} onChange={(pin) => set({ pin })} label={m.pin ? 'tak' : 'nie'} data-testid="wizard-pin" />
           </Field>
         )}
         {w.probe?.hasData && (
-          <Field label="Na zajęciach stacjonarnych używasz tego komputera?">
-            <Segmented value={m.stationaryClasses ? 'yes' : 'no'} options={[{ value: 'no', label: 'nie' }, { value: 'yes', label: 'tak' }]} onChange={(v) => set({ stationaryClasses: v === 'yes' })} data-testid="wizard-stationary-join" />
+          <Field label={STATIONARY.label} hint={STATIONARY.hint}>
+            <Segmented value={m.stationaryClasses ? 'yes' : 'no'} options={[{ value: 'no', label: STATIONARY.no }, { value: 'yes', label: STATIONARY.yes }]} onChange={(v) => set({ stationaryClasses: v === 'yes' })} data-testid="wizard-stationary-join" />
           </Field>
         )}
         <Field label="Jasność" hint="Przyciemnia tło, grafikę i akcenty; tekst zostaje tak samo czytelny. Działa od razu.">
@@ -659,22 +671,61 @@ function StepComputer() {
   )
 }
 
+/** One line of the summary: what was set and a link to the step that sets it (UX15, E4). */
+function SummaryLine({ step, children }: { step: StepId; children: ReactNode }) {
+  const joining = !!useWizard((x) => x.probe?.hasData)
+  return (
+    <li className="flex flex-wrap items-baseline gap-x-2" data-testid={`wizard-line-${step}`}>
+      <span className="min-w-0 flex-1">{children}</span>
+      <button type="button" className="text-[12px] text-lamp hover:underline" onClick={() => patchWizard({ step: (joining ? NEXT : FIRST).indexOf(step), error: null })} aria-label={`Zmień: ${TITLES[step]}`} data-testid={`wizard-goto-${step}`}>
+        Zmień · {TITLES[step]}
+      </button>
+    </li>
+  )
+}
+
 function StepSummary() {
   const w = useWizard()
   const s = w.settings
   const joining = !!w.probe?.hasData
+  const m = w.machine
+  const computer = `pasek pulpitu ${m.desktopBar ? `włączony (${CORNERS.find((c) => c.value === m.corner)?.label})` : 'wyłączony'}, uruchamianie z Windows ${m.autostart ? 'włączone' : 'wyłączone'}`
   if (joining)
-    return <Lead>Ten komputer dołączy do danych w folderze {w.probe?.path}. Zapiszą się tylko jego własne ustawienia.</Lead>
+    return (
+      <div className="flex flex-col gap-2 leading-relaxed" data-testid="wizard-summary">
+        <Lead>Ten komputer dołączy do danych w folderze {w.probe?.path}. Zapiszą się tylko jego własne ustawienia.</Lead>
+        <ul className="flex list-disc flex-col gap-1 pl-5 text-[12.5px]">
+          <SummaryLine step="folder">Folder: {w.probe?.path}.</SummaryLine>
+          <SummaryLine step="computer">Ten komputer: {computer}.</SummaryLine>
+        </ul>
+      </div>
+    )
   const special = Object.keys(w.days).length
+  const z = s.dayTypes.zwykly
+  const ways = s.categories.regeneracja!.variants.filter((v) => !v.archived).length
   return (
     <div className="flex flex-col gap-2 leading-relaxed" data-testid="wizard-summary">
-      <Lead>Po „Zakończ” aplikacja zapisze dane w folderze {w.probe?.path}. Wszystko zmienisz potem w ustawieniach (zmiany działają domyślnie od jutra).</Lead>
-      <ul className="list-disc pl-5 text-[12.5px]">
-        <li>
-          Dzień zwykły: pobudka {logicalClock(s.dayTypes.zwykly.wakeMin)}, pora snu {logicalClock(s.dayTypes.zwykly.bedtimeMin)}, budżet {durationLabel(s.dayTypes.zwykly.budgetMin)}, maksimum {logicalClock(s.dayTypes.zwykly.maxMin)}.
-        </li>
-        <li>Wykłady: {w.lectures.length}, dni zaznaczone w kalendarzu: {special}, osoby: {w.people.length}.</li>
-        <li>Moduły: {MODULES.filter((m) => w.general.modules[m]).map((m) => MODULE_NAMES[m].toLowerCase()).join(', ') || 'żaden'}.</li>
+      <Lead>Po „Zakończ” aplikacja zapisze dane w folderze {w.probe?.path}. Wszystko zmienisz potem w ustawieniach (zmiany działają domyślnie od jutra). „Zmień” wraca do kroku.</Lead>
+      <ul className="flex list-disc flex-col gap-1 pl-5 text-[12.5px]">
+        <SummaryLine step="folder">Folder: {w.probe?.path}.</SummaryLine>
+        <SummaryLine step="week">Tydzień: {WEEKDAY_SHORT.map((d, i) => `${d} ${DAY_TYPE_NAMES[s.weekTypes[i]!].toLowerCase()}`).join(', ')}.</SummaryLine>
+        <SummaryLine step="hours">
+          Dzień zwykły: pobudka {logicalClock(z.wakeMin)}, pora snu {logicalClock(z.bedtimeMin)}, docelowy sen {durationLabel(s.targetSleepMin)}.
+        </SummaryLine>
+        <SummaryLine step="work">
+          Dzień zwykły: budżet {durationLabel(z.budgetMin)}, maksimum {logicalClock(z.maxMin)}.
+        </SummaryLine>
+        <SummaryLine step="regen">
+          Dzień zwykły: minimum regeneracji {durationLabel(z.minRegenMin)}, limit projektów {durationLabel(z.projectLimitMin)}.
+        </SummaryLine>
+        <SummaryLine step="sessions">Sesje: {s.sessions.map((x) => x.name).join(', ') || 'brak'}.</SummaryLine>
+        <SummaryLine step="lectures">Wykłady: {w.lectures.length}.</SummaryLine>
+        <SummaryLine step="calendar">Dni zaznaczone w kalendarzu: {special}.</SummaryLine>
+        <SummaryLine step="people">Osoby: {w.people.length}.</SummaryLine>
+        <SummaryLine step="regenWays">Sposoby regeneracji: {ways}.</SummaryLine>
+        <SummaryLine step="costs">Koszty podkategorii: wartości startowe, zajęcia stacjonarne: {m.stationaryClasses ? STATIONARY.yes : STATIONARY.no}.</SummaryLine>
+        <SummaryLine step="modules">Moduły: {MODULES.filter((x) => w.general.modules[x]).map((x) => MODULE_NAMES[x].toLowerCase()).join(', ') || 'żaden'}.</SummaryLine>
+        <SummaryLine step="computer">Ten komputer: {computer}.</SummaryLine>
       </ul>
       <p className="text-[12px] text-muted">Dzień, w którym przechodzisz kreator, jest poza grą – gra liczy od jutra.</p>
     </div>

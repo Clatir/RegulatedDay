@@ -119,3 +119,33 @@ test('kreator pierwszego komputera: pusty folder, kroki z wartościami domyślny
   }
   expect(Object.keys(after).filter((rel) => !(rel in before))).toEqual([])
 })
+
+test('kreator (UX15, P23): po kroku folderu „Zakończ z domyślnymi” kończy kreator w dwóch ekranach; lista „Pierwszy dzień” z drogami; dane zapisane z wartościami domyślnymi', async () => {
+  const oneDrive = mkdtempSync(join(tmpdir(), 'rd-e2e-onedrive-'))
+  const folder = join(oneDrive, 'RegulatedDay')
+  const { app, page, userData, errors } = await launch({ env: { OneDrive: oneDrive } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('wizard')).toBeVisible()
+      await expect(page.getByTestId('wizard-finish-defaults')).toHaveCount(0)
+      await page.getByTestId('wizard-first').click()
+      await page.getByTestId('wizard-next').click()
+      await expect(page.getByTestId('wizard-step')).toContainText('2 z 14')
+      expect(existsSync(folder)).toBe(false)
+      await page.getByTestId('wizard-finish-defaults').click()
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      expect(existsSync(join(folder, 'rd.json'))).toBe(true)
+      expect(existsSync(join(folder, 'templates', 'zwykly.json'))).toBe(true)
+      // The list of the first day: the ways, the close.
+      await expect(page.getByTestId('first-day')).toBeVisible()
+      await page.getByTestId('first-day-concepts').click()
+      await expect(page.getByTestId('help-concepts')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await page.getByTestId('first-day-close').click()
+      await expect(page.getByTestId('first-day')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

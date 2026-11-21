@@ -8,7 +8,9 @@ import type { MovedTo } from '@shared/api'
 import { formatNumber, plDate } from '@shared/format'
 import { unsyncedText } from '@shared/sync/syncLines'
 import { useData } from '../store/data'
-import { openPick, setMovedLater, toast, useUi } from '../store/ui'
+import { useFirstDay } from '../store/firstDay'
+import { openConcepts, toggleShortcuts } from '../store/help'
+import { navigate, openPick, setMovedLater, toast, useUi } from '../store/ui'
 import { updateAction, useUpdate } from '../store/update'
 import { useWidget } from '../store/widget'
 
@@ -79,12 +81,48 @@ function BackupBanner() {
   )
 }
 
+/**
+ * The list of the first day (UX15, E8): after the wizard of the first computer, instead of a lone „Gotowe” – four things to do or look
+ * at, each with its way. Shown on any screen until „Zamknij”; never by itself again (it lives in the window's memory only).
+ */
+function FirstDayBanner() {
+  const show = useFirstDay((s) => s.show)
+  if (!show) return null
+  const item = (id: string, text: string, label: string, run: () => void) => (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1" key={id}>
+      <span className="min-w-0 flex-1">{text}</span>
+      <button type="button" className="btn" onClick={run} data-testid={`first-day-${id}`}>
+        {label}
+      </button>
+    </li>
+  )
+  return (
+    <div className="flex flex-col gap-1.5 border-b border-line bg-panel px-4 py-2.5 text-[12.5px]" data-testid="first-day">
+      <div className="flex items-center gap-2">
+        <span className="font-medium text-lamp">Pierwszy dzień</span>
+        <span className="text-muted">Dane są zapisane. Cztery rzeczy na początek:</span>
+        <span className="flex-1" />
+        <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={() => useFirstDay.setState({ show: false })} data-testid="first-day-close">
+          Zamknij
+        </button>
+      </div>
+      <ul className="flex flex-col gap-1.5">
+        {item('today', 'W „Dziś” odpowiedz na pytania o objawy i zatwierdź granicę w planie porannym – od tego aplikacja liczy resztę dnia.', 'Dziś', () => navigate('today'))}
+        {item('bar', 'Pasek pulpitu: sprawdź jego miejsce i, w ustawieniach paska zadań Windows, włącz ikonę Regulated Day, żeby była zawsze widoczna.', 'Ustawienia paska', () => openPick({ page: 'settings' }, { kind: 'setting', id: 'settings-bar' }))}
+        {item('concepts', 'Pule energii, rezerwa, granica, twardy koniec, nuty – znaczenie w paru zdaniach (też w Ctrl+K).', 'Jak to działa', () => void openConcepts())}
+        {item('shortcuts', 'Lista skrótów klawiszowych jest pod F1 i „Skróty” u dołu menu.', 'Skróty', () => void toggleShortcuts())}
+      </ul>
+    </div>
+  )
+}
+
 export function Banners() {
   return (
     <div className="flex shrink-0 flex-col">
       <AwayBanner />
       <BackupBanner />
       <MovedBanner />
+      <FirstDayBanner />
       <UpdateBanners />
     </div>
   )

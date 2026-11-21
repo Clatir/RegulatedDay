@@ -80,7 +80,7 @@ describe('E2: co ma datę, co działa od razu', () => {
   it('bez otwartego folderu: bez sekcji, które go potrzebują, i bez pustych grup; paska z datą nie ma', () => {
     const items = settingsItems(false)
     const shown = items.flatMap((i) => (i.type === 'section' ? [i.section.id] : []))
-    expect(shown).toEqual(['settings-bar', 'settings-notices', 'settings-machine', 'settings-data', 'settings-updates', 'settings-info', 'settings-shortcuts'])
+    expect(shown).toEqual(['settings-bar', 'settings-notices', 'settings-machine', 'settings-data', 'settings-updates', 'settings-info'])
     expect(items.filter((i) => i.type === 'group').map((i) => (i.type === 'group' ? i.group.title : ''))).toEqual(['Pasek i powiadomienia', 'Dane i kopie', 'O aplikacji'])
     expect(datedRange(items)).toBeNull()
   })

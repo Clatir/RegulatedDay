@@ -5,6 +5,7 @@
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, isIsoDate } from '@shared/time/zone'
 import { GROUP_SIZE, parseRecents, recordKey, rememberRecent, type GroupId, type SearchGroup, type SearchRecord } from '@shared/search'
+import { showHelp } from '../../store/help'
 import { navigate, openDay, openPick, openRitual, type Page } from '../../store/ui'
 
 export type Row =
@@ -48,9 +49,15 @@ export function choose(r: SearchRecord, today: string): void {
       else if (r.id === 'tomorrow' && isIsoDate(today)) openDay(addDays(today, 1), false)
       else if (r.id === 'yesterday' && isIsoDate(today)) openDay(addDays(today, -1), false)
       else if (r.id === 'ritual') openRitual()
+      // The help windows (UX15): the palette is the only dialog open and closes in the same step, so no guard.
+      else if (r.id === 'concepts') showHelp('concepts')
+      else if (r.id === 'shortcuts') showHelp('shortcuts')
       return
     case 'screen':
       navigate(r.id as Page)
+      return
+    case 'help':
+      showHelp('concepts', r.id)
       return
     case 'setting':
       openPick({ page: 'settings' }, { kind: 'setting', id: r.id })

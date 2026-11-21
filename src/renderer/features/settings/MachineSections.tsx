@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import type { AutostartState } from '@shared/api'
 import { BRIGHTNESS_STEPS, ZOOM_STEPS } from '@shared/machine'
 import { Field, NowTag, Section, Segmented, Toggle, cx } from '../../components/ui'
+import { STATIONARY } from '../../lib/sameWords'
 import { setMachinePrefs, useMachine } from '../../store/machine'
 import { useWidget } from '../../store/widget'
 import { BarPlaceMap } from './BarPlaceMap'
@@ -145,8 +146,8 @@ export function MachineSection() {
       <Field label="Animacje" data-testid="field-animations" hint="Bez animacji zostaje sam kolor ostrzeżeń.">
         <Toggle checked={prefs.animations} onChange={(v) => void setMachinePrefs({ animations: v })} label={prefs.animations ? 'włączone' : 'wyłączone'} data-testid="pref-animations" />
       </Field>
-      <Field label="Zajęcia stacjonarne" data-testid="field-stationary" hint="Używasz tego komputera na zajęciach stacjonarnych: koniec zajęć i dojazdu jest wtedy z planu, bez pytania, czy skończyły się wcześniej.">
-        <Toggle checked={prefs.stationaryClasses} onChange={(v) => void setMachinePrefs({ stationaryClasses: v })} label={prefs.stationaryClasses ? 'używam go' : 'nie używam'} data-testid="pref-stationary" />
+      <Field label={STATIONARY.label} data-testid="field-stationary" hint={STATIONARY.hint}>
+        <Toggle checked={prefs.stationaryClasses} onChange={(v) => void setMachinePrefs({ stationaryClasses: v })} label={prefs.stationaryClasses ? STATIONARY.yes : STATIONARY.no} data-testid="pref-stationary" />
       </Field>
     </Section>
   )

@@ -25,6 +25,17 @@ export function stepText(s: Pick<StreakStep, 'move' | 'frozen'>): string {
   return s.frozen ? text : `${text} · w toku`
 }
 
+/** What a day's status means, for the hint of the day in „Pokój” (UX15, E8; the rules of „Statusy dni i passa”). */
+export function stepHelp(move: StreakStep['move']): string {
+  return {
+    up: 'Dzień dotrzymany: bez przedłużenia pracy po granicy – passa rośnie.',
+    held: 'Dzień „bez danych”: przy zamrożeniu nie było potwierdzonego końca pracy – nie przerywa passy i jej nie wydłuża, najwyżej 2 razy w tygodniu.',
+    protected: 'Dzień ochronny: zastąpił pierwszy niedotrzymany dzień tygodnia – passa trwa, ale się nie wydłuża.',
+    broken: 'Dzień niedotrzymany: praca po granicy przerywa passę. Gra niczego z tego powodu nie odbiera.',
+    skip: 'Dzień poza grą (wolne, dzień instalacji, wyłączona gra): nie przerywa passy i jej nie wydłuża.'
+  }[move]
+}
+
 /** The ISO week's number of a Monday (its Thursday carries it). */
 export function weekNumber(monday: string): number {
   const thursday = addDays(monday, 3)
