@@ -30,3 +30,18 @@ Wpisy zamkniętych paczek ciągu UX przeniesione z `docs/postep.md` (≤ 20 KB).
   UX6 – klik obok, który zapisuje bez pytania „Wolne”, połyka kliknięcie (trzeba kliknąć drugi raz); Esc w oknie
   reguły w trakcie zapisu; „+ Szablon” / Ctrl K przy niezapisanej regule – zapis szablonu przed pytaniem; prawy klik
   zatwierdza pole (`useOutsidePointer`); strażnik `seq` w AllDayBar bez osobnego testu.
+
+## Paczki 3–8 – zadania scalone 21.11
+
+| Zadanie | Stan |
+| --- | --- |
+| UX7 | scalone 21.11 (06e60ff): T2000–T2009, odbiór UX7.1–UX7.4; przegląd high 4 rundy (karty-prośby nad osią, śledzenie treści, Agenda, zmiana doby, przewinięcia z kodu); uwagi na później: w dev śledzenie zależy od StrictMode; skurczenie treści kończy śledzenie; E2E w dzień nie sprawdza przewinięcia (tylko web) |
+| UX16 | scalone 21.11 (a0fe20d): T2200–T2207, odbiór UX16.1–UX16.5; przegląd high 3 rundy + drobne; po scaleniu UX7+UX16 `npm test` 4724/4732 (pada tylko `installer-close`); uwagi na później: „Terminy” w wierszu sprawy bez wielokropka, Banners/DataSection/ComputersSection – Intl pl-PL (część dzień.miesiąc), formaty paska i osi bez zmian |
+| UX10 | scalone 21.11 (712ba76): T2100–T2109, odbiór UX10.1–UX10.5; przegląd xhigh 4 rundy (ponowne otwarcie panelu, dwuklik, stopka „schowaj / pokaż” według zamiaru, warianty według okna); `npm test` po scaleniu – pada tylko `installer-close`; uwagi na później: mignięcie wysokości panelu przy ponownym otwarciu (`iconPanel.ts` `open()` z ostatnią wysokością) |
+| UX8 | scalone 21.11 (25e289f, konflikt w `shortcuts.ts` – zapis „Ctrl+K”): T2010–T2015, odbiór UX8.1–UX8.4; przegląd high 4 rundy (Ctrl+N w Kalendarzu, bloki ukryte i zaparkowane, klawisze przy okienku, „← Tydzień” po Ctrl K); `npm test` 4797/4805 (tylko `installer-close`); uwagi na później: pamięć okresu tylko w oknie (restart – bieżący), `useUi.memory`/`from` do `interfejs.md`, „← Tydzień” zostaje po Ctrl K na „Dziś” także przy dniu daleko od zapamiętanego tygodnia |
+| UX17 | scalone 21.11 (3a48462): T2230–T2236, odbiór UX17.1–UX17.4; przegląd high 4 rundy; uwagi na później: menu „…” i rozwinięcie dublują akcje; przy zaznaczeniu ≥ 2 spraw menu nie sprawdza niezapisanej reguły; licznik kroków tylko w rozwinięciu; „Priorytet ▸” w grupowym menu spraw |
+| UX14 | scalone 21.11 (c805a2c): T2300–T2308, odbiór UX14.1–UX14.6; przegląd xhigh 4 rundy (folder danych – „Wycofaj”); uwagi na później: pola ustawień mogą zalewać Ctrl K przy ogólnych frazach (osobna grupa „Pola ustawień”?), „Cofnij” wycofania nie sprawdza zmian zrobionych w międzyczasie, wpis podkategorii zmieniony na innym komputerze przy „Usuń” zaplanowanej – pytanie, odpowiedź „ich” zostawia nazwę bez reguł |
+| UX11 | scalone 21.11 (81a230b, konflikt: sekcja paska w `MachineSections.tsx` od UX14): T2123–T2128, odbiór UX11.1–UX11.4 (PX4 poprawione); przegląd xhigh 3 rundy; uwagi na później: po nieudanym położeniu ptaszek menu zaznaczony (zamiar), wyłączenie schowanego „×” – dwa kliknięcia |
+| UX9 | scalone 21.11 (c76f0b9, konflikt `TodayPage.tsx` z UX17): T2040–T2045, odbiór UX9.1–UX9.5; przegląd high 4 rundy; uwagi na później: karty rutyn niewidoczne przy otwartym panelu bloku (jest linia „czeka na kroki”), test linii rutyny bloku otwartego przez konstrukcję |
+| UX18 | scalone 21.11 (71abbd8, konflikt `BlockEditor.tsx` z UX9): T2260–T2262, odbiór UX18.1–UX18.4; przegląd high 4 rundy; uwagi na później: Esc zamykający najwyższy dymek błędu, stos dymków może chwilowo przekroczyć 4 |
+| UX15 | scalone 21.11 (konflikty `ui.tsx` Toggle z UX11, `wizard.spec.ts`): T2360–T2365, odbiór UX15.1–UX15.5; przegląd high 2 rundy; uwagi na później: „?” w kreatorze nie działa (straż jak Ctrl K), Ctrl+Z do listy skrótów po UX19, krótkie własne podpowiedzi pól na granicy testu 20 znaków |
