@@ -83,6 +83,15 @@ describe('„Cofnij” po „Zamknij dzień” z rytuału (D563 P1, rozszerza D4
     expect(el('ritual-close')).not.toBeNull()
   })
 
+  it('odmowa zamknięcia bez powodu: dymek błędu, bez „Cofnij”, bez wyjścia z rytuału (onClosed), dzień nadal otwarty', async () => {
+    const { rd, onClosed } = await mount({ ok: true, why: null, confirm: null })
+    rd.closeDay.mockImplementationOnce(async () => ({ ok: false, why: null, confirm: null, written: [] }))
+    await click('ritual-close')
+    expect(onClosed).not.toHaveBeenCalled()
+    expect(useUi.getState().toasts.map((t) => ({ kind: t.kind, action: t.action }))).toEqual([{ kind: 'error', action: undefined }])
+    expect(el('ritual-close')).not.toBeNull()
+  })
+
   it('odmowa „Cofnij” (dzień zamrożony): powód w dymku', async () => {
     const why = 'ten dzień jest już zamrożony – zamknięcia nie da się cofnąć'
     await mount({ ok: false, why, confirm: null })

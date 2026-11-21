@@ -151,7 +151,15 @@ export function CommitField<T>({ value, onCommit, parse, format, placeholder, cl
             else entered.current = true
             e.currentTarget.blur()
           }
-          if (e.key === 'Escape' && draft != null) {
+          if (e.key === 'Escape' && draft != null && onEscape) {
+            // An editor around the field (`onEscape`): the first Esc throws the text away and the focus stays, so the next Esc comes
+            // to this field again and cancels the editor (a blur would send it to the window).
+            e.stopPropagation()
+            e.preventDefault()
+            setDraft(null)
+            setError(null)
+            if (value != null) onAccept?.(value)
+          } else if (e.key === 'Escape' && draft != null) {
             // The first Esc only cancels the edit; the next one goes to whatever is around.
             e.stopPropagation()
             e.preventDefault()
