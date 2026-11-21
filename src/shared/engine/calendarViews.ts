@@ -140,7 +140,16 @@ export interface MonthCell {
   items: MonthItem[]
   /** All the rest of the day (D422, T1013): the all-day events and every block not shown as a bar – „+N”; 0 – none. */
   more: number
+  /** What `more` is made of (P7): the all-day events, the trading sessions, the other blocks. */
+  moreOf: MoreOf
   load: LoadLevel | null
+}
+
+/** The kinds of what „+N” hides; they add up to `MonthCell.more`. */
+export interface MoreOf {
+  events: number
+  sessions: number
+  blocks: number
 }
 
 /**
@@ -153,7 +162,14 @@ export function monthCell(day: MonthDay, allDay: readonly AllDayEvent[], max = M
   const barred = (fixed: boolean): MonthItem[] => day.blocks.filter((b) => monthBarred(b) && b.fixed === fixed).map((block) => ({ kind: 'block' as const, block }))
   const bars: MonthItem[] = [...events.map((event) => ({ kind: 'allDay' as const, event })), ...barred(true), ...barred(false)]
   const items = bars.slice(0, max)
-  return { items, more: Math.max(0, events.length + day.blocks.length - items.length), load: day.load }
+  const shown = new Set(items.flatMap((i) => (i.kind === 'block' ? [i.block.id] : [])))
+  const hidden = day.blocks.filter((b) => !shown.has(b.id))
+  const moreOf: MoreOf = {
+    events: events.length - items.filter((i) => i.kind === 'allDay').length,
+    sessions: hidden.filter((b) => b.session).length,
+    blocks: hidden.filter((b) => !b.session).length
+  }
+  return { items, more: moreOf.events + moreOf.sessions + moreOf.blocks, moreOf, load: day.load }
 }
 
 /** A block of „Agenda” (D418): its hour, what names it, its length and category. */

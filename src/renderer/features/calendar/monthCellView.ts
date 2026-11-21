@@ -3,9 +3,9 @@
  * fixed and flexible blocks, „+N” for everything else it holds, and the dot of the load. From `monthCell` (`@shared/engine/calendarViews`, the
  * same count for every place) – here only the words and the colours of what is drawn.
  */
-import { monthCell, type LoadLevel, type MonthDay } from '@shared/engine/calendarViews'
+import { monthCell, type LoadLevel, type MonthDay, type MoreOf } from '@shared/engine/calendarViews'
 import { barTitle } from '../allday/allDayText'
-import { durationLabel, logicalClock } from '@shared/format'
+import { durationLabel, logicalClock, plural } from '@shared/format'
 import type { AllDayEvent } from '@shared/model/allDay'
 import type { CalendarSieve } from '@shared/model/calendars'
 import { ALL_DAY_COLOR_HEX, blockFill } from '@shared/theme'
@@ -34,11 +34,33 @@ export interface MonthCellView {
   bars: MonthBar[]
   /** „+N”: everything the day has that has no bar here (0 – none). */
   more: number
+  /** What the cell says of it (P7): „+2 sesje”, „+1 blok”, „+3 pozycje” (more than one kind); empty – none. */
+  moreText: string
+  /** What it says when pointed at: the kinds, one by one („1 sesja, 3 bloki”); empty – none. */
+  moreTitle: string
   load: MonthLoad | null
 }
 
 /** „Praca 5 h 10 min z 6 h” – what the dot says when pointed at. */
 export const loadTitle = (workMin: number, limitMin: number): string => `Praca ${durationLabel(workMin)} z ${durationLabel(limitMin)}`
+
+const KINDS: ReadonlyArray<{ of: keyof MoreOf; forms: [string, string, string] }> = [
+  { of: 'events', forms: ['wydarzenie', 'wydarzenia', 'wydarzeń'] },
+  { of: 'sessions', forms: ['sesja', 'sesje', 'sesji'] },
+  { of: 'blocks', forms: ['blok', 'bloki', 'bloków'] }
+]
+
+/**
+ * „+N” with what it hides (D5, P7): one kind – its noun („+2 sesje”, „+1 blok”, „+1 wydarzenie”); more kinds – „+N pozycje”, the kinds told
+ * one by one in `title`. Nothing hidden – both empty.
+ */
+export function moreWords(more: MoreOf): { text: string; title: string } {
+  const parts = KINDS.filter((k) => more[k.of] > 0)
+  const n = parts.reduce((sum, k) => sum + more[k.of], 0)
+  if (n === 0) return { text: '', title: '' }
+  const told = parts.map((k) => `${more[k.of]} ${plural(more[k.of], ...k.forms)}`)
+  return { text: parts.length === 1 ? `+${told[0]}` : `+${n} ${plural(n, 'pozycja', 'pozycje', 'pozycji')}`, title: told.join(', ') }
+}
 
 /** A day with nothing known of its blocks (a day of the neighbouring month's weeks, not read): its all-day events only. */
 export const emptyMonthDay = (date: string): MonthDay => ({ date, when: 'future', read: 'unknown', dayType: null, blocks: [], load: null, workMin: null, limitMin: null })
@@ -70,5 +92,6 @@ export function monthCellView(day: MonthDay, allDay: readonly AllDayEvent[], nam
     return { key: `block-${b.id}`, label: name, fill: blockFill(color, brightness), edge: color, title: `${name} · ${logicalClock(b.startMin)}–${logicalClock(b.endMin)} · ${blockStateText(b.state, b.outsidePlan)}` }
   })
   const load = cell.load && day.workMin != null && day.limitMin != null ? { level: cell.load, title: loadTitle(day.workMin, day.limitMin) } : null
-  return { bars, more: cell.more, load }
+  const more = moreWords(cell.moreOf)
+  return { bars, more: cell.more, moreText: more.text, moreTitle: more.title, load }
 }

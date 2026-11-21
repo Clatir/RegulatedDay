@@ -4,7 +4,7 @@
  * exception), getting up later, the change of the day's type, the exchange for a work block added after the approval,
  * moving and copying.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { costText } from '@shared/costText'
 import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
@@ -57,7 +57,8 @@ import { judgeBlocks } from '../plan/groupRun'
 import { rememberNewBlockCategory } from '../plan/lastCategory'
 import { edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
-import { Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
+import { PPM as AXIS_PPM, Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
+import { contentTop, scrollAxis } from '../../lib/axisScroll'
 import { EnergyLegend, LANES_WIDTH } from '../plan/EnergyLanes'
 import { hasEnergy } from '../plan/energyDraw'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
@@ -349,6 +350,20 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     ritualRef.current.scrollIntoView({ block: 'start' })
     useUi.setState({ focus: null })
   }, [focus, ritual])
+  // D563 (P6): the axis opens with today's „teraz” a third of the way down, another day from an hour before its wake (again at each
+  // other day – the page is not remounted by the arrows). Only a day sets it – the clock's tick must not. The ritual's own scroll (above, a passive
+  // effect) runs after this layout one and wins.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const box = scrollRef.current
+    const axisEl = box?.querySelector<HTMLElement>('[data-testid="timeline-axis"]')
+    if (!box || !axisEl) return
+    const at = (id: string) => {
+      const el = box.querySelector<HTMLElement>(`[data-testid="marker-${id}"]`)
+      return el ? contentTop(el, box) : null
+    }
+    scrollAxis(box, { axisTop: contentTop(axisEl, box), nowY: at('teraz'), wakeY: at('pobudka'), hourPx: 60 * AXIS_PPM })
+  }, [date])
 
   // D367: a day to come pushes blocks apart (a day gone is history).
   const pushes = date >= today
@@ -644,7 +659,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
         />
       </div>
       <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto">
+        <div className="min-w-0 flex-1 overflow-y-auto" ref={scrollRef} data-testid="day-scroll">
           <div className="flex flex-col gap-3 p-4">
             <AllDayLines page="today" />
             {lateWake && lateShown && <LateWakeCard model={model} lw={lateWake} names={names} />}

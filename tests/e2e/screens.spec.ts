@@ -245,6 +245,18 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.keyboard.press('Escape')
       await page.getByTestId('day-today').click()
 
+      // D563 (P6): „Dziś” opened again (another page and back) has „teraz” in the visible part of the axis, whatever the hour.
+      await page.getByTestId('nav-calendar').click()
+      await page.getByTestId('nav-today').click()
+      await expect(page.getByTestId('marker-teraz')).toHaveCount(1)
+      await expect
+        .poll(async () => {
+          const box = await page.getByTestId('day-scroll').boundingBox()
+          const line = await page.getByTestId('marker-teraz').boundingBox()
+          return box != null && line != null && line.y >= box.y && line.y < box.y + box.height
+        })
+        .toBe(true)
+
       // Kalendarz: today keeps its type here – it changes in „Dziś” (A7-03).
       await page.getByTestId('nav-calendar').click()
       await expect(page.getByTestId('calendar')).toBeVisible()

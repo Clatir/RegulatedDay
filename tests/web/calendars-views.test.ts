@@ -271,7 +271,7 @@ describe('miesiąc w „Kalendarzu” (D419)', () => {
     await mount()
     expect(q('calendar-chips')).not.toBeNull()
     expect(host!.querySelectorAll(`[data-testid="month-bar-${D}"]`)).toHaveLength(3)
-    expect(q(`month-more-${D}`)!.textContent).toBe('+1')
+    expect(q(`month-more-${D}`)!.textContent).toBe('+1 blok')
     expect(hiddenText()).toBeNull()
   })
 

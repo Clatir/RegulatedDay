@@ -144,7 +144,7 @@ export type { EnergyTrack }
 
 const TONE: Record<TimelineMarker['tone'], string> = { lamp: '#F2B66D', rose: '#D49A97', sea: '#79AFAB', muted: '#B8AAB0', fg: '#EEE3D6' }
 /** Pixels per minute of the axis. */
-const PPM = 1.1
+export const PPM = 1.1
 const MIN_H = 20
 /** A dropped block waits this long at its new start for the day to bring it there (the edit refused: it goes back). */
 const DROP_HOLD_MS = 2000

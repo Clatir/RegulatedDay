@@ -195,8 +195,8 @@ export function MonthGrid({
                     </span>
                   ))}
                   {c.detail.more > 0 && (
-                    <span className="num text-[10px] leading-tight text-muted" data-testid={`month-more-${d}`}>
-                      +{c.detail.more}
+                    <span className="num truncate text-[10px] leading-tight text-muted" title={c.detail.moreTitle} data-testid={`month-more-${d}`}>
+                      {c.detail.moreText}
                     </span>
                   )}
                 </span>

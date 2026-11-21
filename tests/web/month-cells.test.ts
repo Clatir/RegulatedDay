@@ -62,8 +62,9 @@ describe('komórka miesiąca z paskami (D418, D422)', () => {
     await mount({ [D]: month(D, { blocks, load: 'low', workMin: 100, limitMin: 400 }) }, [event('e1', 'Konferencja', D)])
     expect(host!.querySelectorAll(`[data-testid="month-bar-${D}"]`)).toHaveLength(3)
     expect([...host!.querySelectorAll(`[data-testid="month-bar-${D}"]`)].map((b) => b.textContent)).toEqual(['Konferencja', 'Inne obowiązki', 'Inne obowiązki'])
-    // 1 event + 6 blocks, 3 bars: „+N” is the other four (D422).
-    expect(q(`month-more-${D}`)!.textContent).toBe('+4')
+    // 1 event + 6 blocks, 3 bars: „+N” is the other four (D422) – a session and three blocks: it says „pozycje” (P7).
+    expect(q(`month-more-${D}`)!.textContent).toBe('+4 pozycje')
+    expect(q(`month-more-${D}`)!.title).toBe('1 sesja, 3 bloki')
   })
 
   it('D429: po wydarzeniach i stałych paski mają nazwy bloków elastycznych, z godzinami w podpowiedzi', async () => {
@@ -88,7 +89,20 @@ describe('komórka miesiąca z paskami (D418, D422)', () => {
     await mount({ [D]: month(D, { blocks }) }, [])
     const bars = [...host!.querySelectorAll<HTMLElement>(`[data-testid="month-bar-${D}"]`)]
     expect(bars.map((b) => b.title)).toEqual(['Inne obowiązki · 09:00–10:00 · zrobiony', 'Inne obowiązki · 10:00–11:00 · trwa · poza planem', 'Inne obowiązki · 11:00–12:00 · zapauzowany'])
-    expect(q(`month-more-${D}`)!.textContent).toBe('+2')
+    expect(q(`month-more-${D}`)!.textContent).toBe('+2 bloki')
+  })
+
+  it('P7: „+N” mówi, co kryje – same sesje, jeden blok, pięć sesji; mieszane (wyżej) – „pozycje” z rozbiciem w podpowiedzi', async () => {
+    const sessions = [block('s1', 480, { fixed: true, session: true }), block('s2', 600, { fixed: true, session: true })]
+    await mount({ [D]: month(D, { blocks: sessions }), '2026-11-19': month('2026-11-19', { blocks: [block('m', 480, { state: 'missed' })] }), '2026-11-20': month('2026-11-20', { blocks: [block('s', 480, { fixed: true, session: true })] }) }, [])
+    expect(q(`month-more-${D}`)!.textContent).toBe('+2 sesje')
+    expect(q('month-more-2026-11-19')!.textContent).toBe('+1 blok')
+    expect(q('month-more-2026-11-20')!.textContent).toBe('+1 sesja')
+    const five = Array.from({ length: 5 }, (_, i) => block(`s${i}`, 480 + i * 30, { fixed: true, session: true }))
+    await act(async () => root!.unmount())
+    host!.remove()
+    await mount({ [D]: month(D, { blocks: five }) }, [])
+    expect(q(`month-more-${D}`)!.textContent).toBe('+5 sesji')
   })
 
   it('dzień bez niczego: bez pasków i bez „+N”; numer dnia zostaje', async () => {
