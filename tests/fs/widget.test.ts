@@ -113,7 +113,7 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
       ...(o.openQuick ? { openQuick: o.openQuick } : {})
     })
   const w = build()
-  return { folder, clock, w, build, shown, failLater, views, closeFolder: () => (open = false), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
+  return { folder, clock, w, build, shown, failLater, views, closeFolder: () => (open = false), openFolder: () => (open = true), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
 }
 
 describe('widget w procesie głównym', () => {
@@ -1690,6 +1690,24 @@ describe('warianty w pasku (D313)', () => {
     clock.now += 1_000
     await w.act('variants', 'open', 'main')
     expect(w.current().variants.by).toBe('main')
+  })
+
+  it('panel wariantów bez policzonego dnia: widok zastępczy mówi, kto go otworzył; „variants|close” przechodzi – po powrocie dnia warianty nie wracają', async () => {
+    const m = await over()
+    await m.w.act('variants', 'open', 'panel')
+    expect(m.w.current().variants.open).not.toBeNull()
+    m.closeFolder()
+    await m.w.refresh()
+    expect(m.w.current().day).toBeNull()
+    expect(m.w.current().variants).toMatchObject({ open: null, by: 'panel' })
+    m.clock.now += 1_000
+    await m.w.act('variants', 'close', 'panel')
+    expect(m.w.current().variants.by).toBeUndefined()
+    m.openFolder()
+    await m.w.refresh()
+    expect(m.w.current().day).not.toBeNull()
+    expect(m.w.current().variants.open).toBeNull()
+    expect(m.w.current().variants.by).toBeUndefined()
   })
 
   it('T623: wariant przyczyny, gdy plan jest już tak zmieniony (drugi komputer) – zamyka przyczynę jak przed J5, bez zapisu i bez uwagi', async () => {

@@ -301,7 +301,7 @@ export class WidgetEngine {
   /** The view now (the neutral bar until the engine has one). */
   current(): WidgetView {
     const v = this.view
-    if (!v) return noFolderView(this.d.folderStatus?.() ?? 'none')
+    if (!v) return this.withPanelBy(noFolderView(this.d.folderStatus?.() ?? 'none'))
     if (!v.pending && !v.note) return v
     // The terms (the cost waiting, the note) say what is left of them when the view is sent – each time, also for the view
     // sent again to a window that opens (the window counts them from the moment it receives it).
@@ -309,6 +309,14 @@ export class WidgetEngine {
     const pending = v.pending && this.pending && this.pending.until > mono ? { ...v.pending, left: this.pending.until - mono } : null
     const note = v.note && this.note && this.note.until > mono ? { ...v.note, left: this.note.until - mono } : null
     return { ...v, pending, note }
+  }
+
+  /**
+   * A stand-in view (no folder, a day not counted now) says who opened the panel of variants still held here – the icon's
+   * panel closes its own at its next opening also then (C8).
+   */
+  private withPanelBy(v: WidgetView): WidgetView {
+    return this.panel ? { ...v, variants: { ...v.variants, by: this.panel.by } } : v
   }
 
   start(): void {
@@ -425,7 +433,7 @@ export class WidgetEngine {
       if (!this.failing) this.d.log('warn', 'widok widgetu nie policzył się', e)
       this.failing = true
       this.model = null
-      this.view = unknownView()
+      this.view = this.withPanelBy(unknownView())
       this.awayView(folder)
     }
     // The warning steps of the view's own day (none while the widget is hidden or the day not counted).
@@ -952,7 +960,9 @@ export class WidgetEngine {
       if (from === 'bar') this.d.openQuick?.()
       return
     }
-    if (v.day == null && action !== 'openMain') return
+    // Without a day counted now only the way to the window – and the closing of the panel of variants (the icon's panel folds
+    // its own at its next opening, C8; kept, it would come back with the day).
+    if (v.day == null && action !== 'openMain' && !(action === 'variants' && arg === 'close')) return
     const day = v.day ?? undefined
     let r: TimerResult | null = null
     let label = ''

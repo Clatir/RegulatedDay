@@ -12,6 +12,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RdApi } from '@shared/api'
+import { DEFAULT_MACHINE_PREFS } from '@shared/machine'
+import { useMachine } from '@renderer/store/machine'
 import { useWidget } from '@renderer/store/widget'
 import { Bar, type BarMode } from '@renderer/widget/Bar'
 import { BAR_DOUBLE_MS } from '@renderer/widget/barDouble'
@@ -22,10 +24,9 @@ beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 })
 
-/** A day with the bar's own buttons (Dalej, Pauza, Przedłuż …), one line „Skończył się o…” (its ±5 min in the line), the desktop bar on the screen. */
+/** A day with the bar's own buttons (Dalej, Pauza, Przedłuż …) and one line „Skończył się o…” (its ±5 min in the line). */
 const dayView = (): WidgetView => ({
   ...noFolderView(),
-  barShown: true,
   day: '2026-11-21',
   block: null,
   buttons: { ...ALL_BUTTONS },
@@ -45,6 +46,7 @@ let rd: {
   barAction: ReturnType<typeof vi.fn<RdApi['barAction']>>
   panelClose: ReturnType<typeof vi.fn<RdApi['panelClose']>>
   barClose: ReturnType<typeof vi.fn<RdApi['barClose']>>
+  barLayout: ReturnType<typeof vi.fn<RdApi['barLayout']>>
 }
 
 beforeEach(() => {
@@ -56,14 +58,14 @@ beforeEach(() => {
     widgetAction: vi.fn<RdApi['widgetAction']>(() => Promise.resolve()),
     barAction: vi.fn<RdApi['barAction']>(() => Promise.resolve()),
     panelClose: vi.fn<RdApi['panelClose']>(),
-    barClose: vi.fn<RdApi['barClose']>()
+    barClose: vi.fn<RdApi['barClose']>(),
+    barLayout: vi.fn<RdApi['barLayout']>()
   }
   const api: Partial<RdApi> = {
     ...rd,
     quickToday: () => Promise.resolve('2026-11-21'),
     onPanelTarget: (cb) => ((target = cb), () => undefined),
     panelTouch: () => undefined,
-    barLayout: () => undefined,
     barDrag: () => undefined,
     onBarDragOver: () => () => undefined
   }
@@ -80,6 +82,7 @@ afterEach(() => {
   root = null
   host = null
   act(() => useWidget.setState({ view: null }))
+  useMachine.setState({ prefs: DEFAULT_MACHINE_PREFS })
   vi.useRealTimers()
   delete (window as unknown as { rd?: unknown }).rd
   if (!hadObserver) delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver
@@ -260,30 +263,30 @@ describe('panel ikony – nagłówek i stopka (P13 wariant A, C1, C7)', () => {
     expect(rd.showMain).toHaveBeenCalledTimes(1)
   })
 
-  it('pasek nie na ekranie (schowany „×”, wyłączony, bez pomocnika) – „Pasek pulpitu: pokaż”, nigdy „schowaj”', async () => {
-    act(() => useWidget.setState({ view: { ...dayView(), barShown: false, barClosed: true } }))
+  it('według zamiaru, nie widoczności: włączony i bez „×” – „schowaj”, także przy pasku chwilowo ukrytym (pomocnik, „Odcinam się”)', async () => {
+    act(() => useWidget.setState({ view: { ...dayView(), barNote: 'Pasek pulpitu ukryty: pomocnik nie działa' } }))
+    await render(createElement(PanelApp))
+    expect(q('panel-bar-toggle')!.textContent).toBe('▣ Pasek pulpitu: schowaj')
+    act(() => useWidget.setState({ view: { ...dayView(), hidden: true, stateLine: 'Odcinam się od 10:00' } }))
+    const button = q('panel-bar-toggle') as HTMLButtonElement
+    expect([button.textContent, button.disabled]).toEqual(['▣ Pasek pulpitu: schowaj', false])
+    click(button)
+    expect(rd.barAction.mock.calls).toEqual([['hideBar']])
+  })
+
+  it('schowany „×” albo wyłączony w ustawieniach – „pokaż” (także przy „Odcinam się”)', async () => {
+    act(() => useWidget.setState({ view: { ...dayView(), barClosed: true } }))
     await render(createElement(PanelApp))
     expect(q('panel-bar-toggle')!.textContent).toBe('▣ Pasek pulpitu: pokaż')
     click(q('panel-bar-toggle')!)
     expect(rd.barAction.mock.calls).toEqual([['showBar']])
-    act(() => useWidget.setState({ view: { ...dayView(), barShown: false, barNote: 'Pasek pulpitu ukryty: pomocnik nie działa' } }))
+    act(() => useWidget.setState({ view: { ...dayView(), barClosed: true, hidden: true, stateLine: 'Odcinam się od 10:00' } }))
     expect(q('panel-bar-toggle')!.textContent).toBe('▣ Pasek pulpitu: pokaż')
     act(() => useWidget.setState({ view: dayView() }))
+    act(() => useMachine.setState({ prefs: { ...DEFAULT_MACHINE_PREFS, desktopBar: false } }))
+    expect(q('panel-bar-toggle')!.textContent).toBe('▣ Pasek pulpitu: pokaż')
+    act(() => useMachine.setState({ prefs: DEFAULT_MACHINE_PREFS }))
     expect(q('panel-bar-toggle')!.textContent).toBe('▣ Pasek pulpitu: schowaj')
-  })
-
-  it('„Odcinam się”: przycisk paska w stopce nieaktywny – „Pasek wróci po „Wracam””, kliknięcie nic nie robi', async () => {
-    act(() => useWidget.setState({ view: { ...dayView(), barShown: false, hidden: true, stateLine: 'Odcinam się od 10:00' } }))
-    await render(createElement(PanelApp))
-    const button = q('panel-bar-toggle') as HTMLButtonElement
-    expect(button.disabled).toBe(true)
-    expect(button.textContent).toBe('▣ Pasek wróci po „Wracam”')
-    expect(button.getAttribute('aria-label')).toBe('Pasek wróci po „Wracam”')
-    click(button)
-    expect(rd.barAction).not.toHaveBeenCalled()
-    expect(rd.showMain).not.toHaveBeenCalled()
-    act(() => useWidget.setState({ view: dayView() }))
-    expect((q('panel-bar-toggle') as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('tytuł nagłówka, odstępy i „·” stopki to nie wolne pole – chybienie obok przycisku nie otwiera okna głównego', async () => {
@@ -400,6 +403,17 @@ describe('panel otwarty ponownie – nic rozwiniętego sprzed schowania (C8)', (
     act(() => useWidget.setState({ view: dayView() }))
     await opened()
     expect(acts()).toEqual(['variants|close'])
+  })
+
+  it('nowe otwarcie przy wariantach otwartych w oknie głównym – strona mówi panelowi, że jest rozwinięty (60 s go nie zamyka)', async () => {
+    act(() => useWidget.setState({ view: { ...dayView(), variants: { marker: true, open, by: 'main' } } }))
+    await render(createElement(PanelApp))
+    await opened()
+    rd.barLayout.mockClear()
+    // The main process takes every new opening for folded – the page says how it is now.
+    await opened()
+    expect(rd.barLayout.mock.calls.at(-1)?.[0]).toMatchObject({ unfolded: true })
+    expect(acts()).toEqual([])
   })
 
   it('kliknięte w panelu, ale odmówione („Plan się mieści”), potem otwarte w oknie głównym – otwarcie panelu ikony ich nie zamyka', async () => {

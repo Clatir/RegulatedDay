@@ -123,11 +123,6 @@ export interface WidgetView {
    * process sets it (`widgetView`), the engine's view never knows it.
    */
   barClosed: boolean
-  /**
-   * The desktop bar on the screen by its own rules (D564 P13): on, not hidden by „×” nor by a rule („Odcinam się”), laid
-   * under the windows – the panel's footer says „schowaj” only then, else „pokaż”. Set by the main process (`widgetView`).
-   */
-  barShown: boolean
   /** The bar's own buttons now. */
   buttons: BarButtons
   /** Blocks in the background with „Zakończ teraz” and „Przedłuż” (in „⋯”). */
@@ -279,7 +274,6 @@ export function noFolderView(status: 'none' | 'opening' | 'failed' = 'none'): Wi
     tooltip: status === 'none' ? 'Brak folderu danych – otwórz okno główne' : text,
     barNote: null,
     barClosed: false,
-    barShown: false,
     buttons: { ...ALL_BUTTONS, next: false, pause: false, extend: false, workEnd: false, finished: false, cutOff: false, start: null },
     background: [],
     autos: { groups: [], items: [] },

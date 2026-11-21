@@ -122,6 +122,7 @@ const OPEN_QUICK_ALLOWED = {
  */
 export function checkQuickOpeners(sources) {
   const problems = []
+  for (const path of Object.keys(OPEN_QUICK_ALLOWED)) if (!(path in sources)) problems.push(`${path}: brak pliku – sprawdzenie, kto otwiera okienko „Do skrzynki”, nie ma czego sprawdzić`)
   for (const [path, code] of Object.entries(sources)) {
     const calls = [...code.matchAll(/\.openFromBar\(/g)].length
     const allowed = path === 'src/main/index.ts' ? [...code.matchAll(/\bopenQuick:\s*\(\)\s*=>\s*quick\?\.openFromBar\(\)/g)].length : 0
@@ -241,6 +242,7 @@ function selfTest() {
     [checkQuickOpeners({ ...OPENERS_OK, 'src/main/widget.ts': OPENERS_OK['src/main/widget.ts'] + ' this.d.openQuick?.()' }).length === 1, 'otwierający okienko: openQuick drugi raz'],
     [checkQuickOpeners({ ...OPENERS_OK, 'src/main/widget.ts': OPENERS_OK['src/main/widget.ts'] + ' const open = this.d.openQuick' }).length === 1, 'otwierający okienko: openQuick goła referencja'],
     [checkQuickOpeners({ ...OPENERS_OK, 'src/main/other.ts': 'deps.openQuick()' }).length === 1, 'otwierający okienko: openQuick w innym pliku'],
+    [checkQuickOpeners({ 'src/main/index.ts': OPENERS_OK['src/main/index.ts'] }).length === 1, 'otwierający okienko: brak widget.ts'],
     [checkQuickOpeners({ ...OPENERS_OK, 'src/main/index.ts': OPENERS_OK['src/main/index.ts'] + ' const q = deps.openQuick' }).length === 1, 'otwierający okienko: openQuick czytane w index.ts'],
     [checkQuickWindow(QUICK_OK.replace('private raise(', 'raise(')).length === 1, 'okienko: raise nie prywatne'],
     [checkQuickWindow(QUICK_OK.replace('show: false', 'show: true')).length === 1, 'okienko: pokazane od razu (show: true)'],

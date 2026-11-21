@@ -50,45 +50,6 @@ export function barFromPanel(want: 'showBar' | 'hideBar', from: string, s: { clo
   return { ok: true, closed: false, switchOn: !s.desktopBar, why: s.desktopBar ? 'pasek pulpitu pokazany z panelu ikony' : 'pasek pulpitu włączony i pokazany z panelu ikony' }
 }
 
-/** Why the desktop bar is hidden although it is on: no helper to lay it, or the helper could not lay it under the windows. */
-export type BarProblem = 'helper' | 'failed'
-
-/**
- * The desktop bar as the windows hear of it (D270, D564 P13): why it is hidden although it is on (`problem` – the note
- * „Pasek pulpitu ukryty…”), and whether it is on the screen now (`shown` – the panel's „schowaj” only then): wanted by its
- * rules (`barWanted`: on, not hidden by „×” nor by „Odcinam się”, not „na wierzchu” over a full screen or behind the main
- * window in front) and its window really shown – laid under the windows and confirmed by the helper, or on top. Each change
- * of either is told once (`tell` – the view to every window); the same state again tells nothing.
- */
-export class BarSeen {
-  private now: { shown: boolean; problem: BarProblem | null } = { shown: false, problem: null }
-
-  constructor(private readonly tell: () => void) {}
-
-  get shown(): boolean {
-    return this.now.shown
-  }
-
-  get problem(): BarProblem | null {
-    return this.now.problem
-  }
-
-  setProblem(problem: BarProblem | null): void {
-    this.set({ ...this.now, problem })
-  }
-
-  /** After every change of the bar's window (`layoutBar`, the helper's word): on the screen = wanted and really shown. */
-  see(s: { wanted: boolean; visible: boolean }): void {
-    this.set({ ...this.now, shown: s.wanted && s.visible })
-  }
-
-  private set(next: { shown: boolean; problem: BarProblem | null }): void {
-    if (next.shown === this.now.shown && next.problem === this.now.problem) return
-    this.now = next
-    this.tell()
-  }
-}
-
 /**
  * The main window minimized or closed into the tray (D560): the bar hidden by its „×” comes back when „Pasek wraca z oknem
  * głównym” is on and the bar itself is on (switched on again, it shows by itself) – never while the app quits.

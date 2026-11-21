@@ -590,9 +590,11 @@ function Line({ line, mode, onSteps }: { line: BarLine; mode: BarMode; onSteps?:
 
 /**
  * The window of the desktop bar or the panel tells the main process its content's height (it sizes the window within
- * the work area) and whether something is unfolded (the panel's 60 s do not run then).
+ * the work area) and whether something is unfolded (the panel's 60 s do not run then) – at every change, and at every new
+ * opening of the icon's panel (`opening`: the main process takes a new opening for folded, but the panel of variants open
+ * in the main window stays unfolded in it).
  */
-export function useReportLayout(ref: React.RefObject<HTMLElement | null>, unfolded: boolean): void {
+export function useReportLayout(ref: React.RefObject<HTMLElement | null>, unfolded: boolean, opening = 0): void {
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
@@ -601,7 +603,7 @@ export function useReportLayout(ref: React.RefObject<HTMLElement | null>, unfold
     const ro = new ResizeObserver(report)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [ref, unfolded])
+  }, [ref, unfolded, opening])
 }
 
 /**

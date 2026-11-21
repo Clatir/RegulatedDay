@@ -51,7 +51,7 @@ import { Autostart, HIDDEN_ARG } from './autostart'
 import { AppTray, trayMenuItems } from './tray'
 import { displays, primaryDisplay } from './displays'
 import { createMainWindow, revealMainWindow } from './windows/mainWindow'
-import { BarSeen, DesktopBar, barBackWithMain, barCloseOf, barFromPanel } from './windows/desktopBar'
+import { DesktopBar, barBackWithMain, barCloseOf, barFromPanel } from './windows/desktopBar'
 import { IconPanel, panelCloseOf } from './windows/iconPanel'
 import { QUICK_RETRY_MS, QuickWindow, shortcutOf, touchesShortcut } from './windows/quickWindow'
 import { HelperClient, type HelperMessage } from './helper/client'
@@ -157,11 +157,8 @@ let sessionResume: ReturnType<typeof setTimeout> | null = null
 /** The bar's content height now (CSS px), whether something in it is unfolded, and its height folded. */
 let barLayoutNow: BarLayout = { height: 64, unfolded: false }
 let barFoldedHeight = 64
-/**
- * Why the desktop bar is hidden although it is on (the settings and the panel say it) and whether it is on the screen now
- * (the panel's „schowaj”): every change tells the windows (`BarSeen`).
- */
-const barSeen = new BarSeen(() => broadcast(CH.onWidget, widgetView()))
+/** Why the desktop bar is hidden although it is on (the settings and the panel say it) – changed only by `setBarProblem`. */
+let barProblem: 'helper' | 'failed' | null = null
 /** The bar hidden by its „×” (D559): until „Pokaż pasek pulpitu” in the icon's menu, the bar switched on again in the settings or the next start. */
 let barClosed = false
 
@@ -231,15 +228,15 @@ function quickAdd(title: unknown): Promise<QuickAddResult> {
 
 function widgetView(): WidgetView {
   const view = widget.current()
-  const problem = barSeen.problem
-  const barNote = !prefs().desktopBar || barClosed || view.hidden ? null : problem === 'failed' ? BAR_NOTE_FAILED : problem === 'helper' ? BAR_NOTE_HELPER : null
-  // On the screen now (D564 P13 – the panel's „schowaj” only then): wanted by its rules and its window really shown.
-  return { ...view, barNote, barClosed, barShown: barSeen.shown }
+  const barNote = !prefs().desktopBar || barClosed || view.hidden ? null : barProblem === 'failed' ? BAR_NOTE_FAILED : barProblem === 'helper' ? BAR_NOTE_HELPER : null
+  return { ...view, barNote, barClosed }
 }
 
-/** The bar's window changed: whether it is on the screen now, told to the windows when that changed (not at the quit). */
-function seeBar(): void {
-  if (bar?.alive) barSeen.see({ wanted: barWanted(), visible: bar.isVisible })
+/** Why the bar is hidden although it is on, changed: the windows hear it at once (its note, D270). */
+function setBarProblem(problem: 'helper' | 'failed' | null): void {
+  if (barProblem === problem) return
+  barProblem = problem
+  broadcast(CH.onWidget, widgetView())
 }
 
 /**
@@ -413,12 +410,6 @@ const barWanted = (): boolean => prefs().desktopBar && !barClosed && !widgetView
  * „Zawsze na wierzchu” chosen on this computer (D291), above them, still without activation, hidden over a full screen.
  */
 function layoutBar(): void {
-  layBar()
-  // Whatever the layout did (shown, hidden, waiting for the helper): the panel's „pokaż / schowaj” follows it.
-  seeBar()
-}
-
-function layBar(): void {
   // Destroyed at the quit: the helper's last status and events come after the windows. Dragged now: it follows the cursor.
   if (!bar?.alive) return
   if (barDrag && dragHolds(barDrag.last, performance.now())) return
@@ -430,7 +421,7 @@ function layBar(): void {
     fullscreenNow = false
   }
   if (!barWanted()) {
-    barSeen.setProblem(null)
+    setBarProblem(null)
     bar.apply({ visible: false })
     helper?.send('bar.unwatch')
     return
@@ -447,13 +438,13 @@ function layBar(): void {
   bar.webContents?.send('rd:barGrows', r.growsUp ? 'up' : 'down')
   if (onTop) {
     // Above the windows: nothing to lay under them, no confirmation needed.
-    barSeen.setProblem(null)
+    setBarProblem(null)
     helper?.send('bar.unwatch')
     bar.apply({ visible: true })
     return
   }
   if (!helper?.running) {
-    barSeen.setProblem('helper')
+    setBarProblem('helper')
     bar.apply({ visible: false })
     return
   }
@@ -473,15 +464,15 @@ function onHelperEvent(m: HelperMessage): void {
   if (m.type === 'bar') {
     if (m.state !== lastBarState) log('info', `pasek pulpitu: ${String(m.state)}${m.detail ? ` (${String(m.detail)})` : ''}`)
     lastBarState = String(m.state)
+    // Its note follows the helper's word (`setBarProblem` tells the windows when it changes).
     if (m.state === 'confirmed') {
-      barSeen.setProblem(null)
+      setBarProblem(null)
       // A confirmation of a watch sent just before the bar was switched off or hidden: it stays hidden.
       if (barWanted()) bar?.apply({ visible: true })
     } else if (m.state === 'failed') {
-      barSeen.setProblem('failed')
+      setBarProblem('failed')
       bar?.apply({ visible: false })
     }
-    seeBar()
   } else if (m.type === 'foreground') {
     const hwnd = String(m.hwnd ?? '')
     panel?.foreground(hwnd, m.shell === true)
@@ -790,8 +781,11 @@ function setBarClosed(closed: boolean): void {
  * hidden by the panel's „▣ Pasek pulpitu: pokaż / schowaj” (D564 P13).
  */
 async function barAction(action: BarActionId, arg: string | undefined, from: string): Promise<void> {
-  if (action === 'placeBar') retryBar()
-  else if (action === 'corner') {
+  if (action === 'placeBar') {
+    setBarProblem(null)
+    helper?.send('bar.retry')
+    layoutBar()
+  } else if (action === 'corner') {
     const all = displays()
     const current = bar?.currentBounds
     const now = (current ? displayAt(all, (d) => d.workArea, { x: current.x + current.width / 2, y: current.y + current.height / 2 }) : null) ?? primaryDisplay()
@@ -805,17 +799,8 @@ async function barAction(action: BarActionId, arg: string | undefined, from: str
     if (!r.ok) return
     // Switched on in the settings: `setPrefs` shows one hidden by its „×” too (D559).
     if (r.switchOn) await setPrefs({ desktopBar: true })
-    else if (r.closed !== barClosed) setBarClosed(r.closed)
-    // On and not hidden by „×”, yet not on the screen (no helper, not laid under the windows): laid again, as its „Pokaż pasek”.
-    else if (action === 'showBar') retryBar()
+    else setBarClosed(r.closed)
   }
-}
-
-/** The desktop bar laid again (its „Pokaż pasek”, the panel's „Pasek pulpitu: pokaż”): the helper tries once more. */
-function retryBar(): void {
-  barSeen.setProblem(null)
-  helper?.send('bar.retry')
-  layoutBar()
 }
 
 // ------------------------------------------------------------------ settings
@@ -831,7 +816,7 @@ async function setPrefs(patch: unknown): Promise<MachinePrefs> {
   if (touchesShortcut(patch)) quick?.setShortcut(shortcutOf(next))
   // The bar switched on again in the settings: one hidden by its „×” shows too (D559).
   if (next.desktopBar && !before.desktopBar) barClosed = false
-  // Switched on or off: the windows hear it (the note, the panel's „Pasek pulpitu: pokaż / schowaj” – `barShown`).
+  // Switched on or off: the windows hear it at once (the note – `barNote`; the panel reads the switch from the settings).
   if (next.desktopBar !== before.desktopBar) broadcast(CH.onWidget, widgetView())
   broadcast(CH.onPrefs, next)
   layoutBar()
