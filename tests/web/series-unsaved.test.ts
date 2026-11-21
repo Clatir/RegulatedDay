@@ -12,13 +12,14 @@ import { newSeries } from '@shared/engine/series'
 import { rdFrom } from '@shared/model/rd'
 import type { SeriesBlock } from '@shared/model/series'
 import { TemplatesPage } from '@renderer/features/templates/TemplatesPage'
-import { changeSeries } from '@renderer/features/series/seriesActions'
+import { changeSeries, removeSeries } from '@renderer/features/series/seriesActions'
 import { installEscape } from '@renderer/lib/escape'
 import { useData } from '@renderer/store/data'
 
 vi.mock('@renderer/features/series/seriesActions', async (orig) => ({
   ...(await orig<typeof import('@renderer/features/series/seriesActions')>()),
-  changeSeries: vi.fn(async () => true as const)
+  changeSeries: vi.fn(async () => true as const),
+  removeSeries: vi.fn(async () => true as const)
 }))
 
 let root: Root | null = null
@@ -128,6 +129,51 @@ describe('niezapisana reguła serii przy wyborze innej pozycji (D563 P5)', () =>
     await click(items()[0]!)
     expect(q('rule-unsaved')).toBeNull()
     await click(q('series-save'))
+    expect(changeSeries).toHaveBeenCalledTimes(1)
+  })
+  it('„Zamknij” panelu serii z niezapisaną regułą pyta; „Odrzuć” zamyka panel, bez zmiany – zamyka od razu', async () => {
+    await open()
+    await click(q('block-editor-close'))
+    expect(q('series-editor')).toBeNull()
+    await click(items()[0]!)
+    await editRule('workdays')
+    await click(q('block-editor-close'))
+    expect(q('rule-unsaved')).not.toBeNull()
+    expect(q('series-editor')).not.toBeNull()
+    await click(q('rule-unsaved-discard'))
+    expect(q('series-editor')).toBeNull()
+    expect(changeSeries).not.toHaveBeenCalled()
+  })
+
+  it('Esc panelu serii z niezapisaną regułą pyta', async () => {
+    await open()
+    await editRule('workdays')
+    await act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(q('rule-unsaved')).not.toBeNull()
+    expect(q('series-editor')).not.toBeNull()
+  })
+
+  it('„Usuń serię” zamyka panel bez pytania o regułę', async () => {
+    await open()
+    await editRule('workdays')
+    await click(q('series-remove'))
+    expect(removeSeries).toHaveBeenCalledTimes(1)
+    expect(q('rule-unsaved')).toBeNull()
+    expect(q('series-editor')).toBeNull()
+  })
+
+  it('Esc w oknie w trakcie zapisu nie zostawia okna ani nie anuluje przejścia: po zapisie przechodzi raz', async () => {
+    let done!: (v: true) => void
+    vi.mocked(changeSeries).mockImplementationOnce(() => new Promise<true>((r) => (done = r)))
+    await open()
+    await editRule('workdays')
+    await click(items()[1]!)
+    await click(q('rule-unsaved-save'))
+    await act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(q('rule-unsaved')).not.toBeNull()
+    await act(async () => done(true))
+    expect(q('rule-unsaved')).toBeNull()
+    expect(shown()).toContain('Druga')
     expect(changeSeries).toHaveBeenCalledTimes(1)
   })
 })

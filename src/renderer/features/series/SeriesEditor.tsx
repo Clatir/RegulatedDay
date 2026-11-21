@@ -27,7 +27,7 @@ export function useSeriesNames(today: string): Names {
   return useMemo(() => ({ rd, settings: settingsOn(rd.settings, today), routines, requests }), [rd, today, routines, requests])
 }
 
-export function SeriesEditor({ series, today, onClosed, guard }: { series: Series; today: string; onClosed: () => void; guard?: MutableRefObject<RuleGuard | null> }) {
+export function SeriesEditor({ series, today, onClosed, onRemoved, guard }: { series: Series; today: string; onClosed: () => void; onRemoved?: () => void; guard?: MutableRefObject<RuleGuard | null> }) {
   const { seriesPlans } = useData()
   const view = useData((s) => s.view)!
   const names = useSeriesNames(today)
@@ -63,7 +63,7 @@ export function SeriesEditor({ series, today, onClosed, guard }: { series: Serie
   const end = () => run(async () => void (await endSeries(series.id, addDays(today, -1), `Seria zakończona: ${name}`)))
   const remove = () =>
     run(async () => {
-      if ((await removeSeries({ seriesId: series.id }, 'all', `Usunięta seria: ${name}`)) === true) onClosed()
+      if ((await removeSeries({ seriesId: series.id }, 'all', `Usunięta seria: ${name}`)) === true) (onRemoved ?? onClosed)()
     })
   // D462: Del on the selected series (its row of the list, clicked) removes it, as „Usuń serię” does.
   useDeleteResolver('series', (id) => (id === series.id ? removeTarget(name, remove) : null))

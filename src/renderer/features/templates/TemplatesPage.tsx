@@ -88,7 +88,7 @@ export function TemplatesPage() {
   const openSeries = (id: string | null) => (id == null || id === selectedSeries ? openSeriesNow(id) : leave(() => openSeriesNow(id)))
   const answerLeaving = async (save: boolean) => {
     const go = leaving
-    if (!go) return
+    if (!go || leavingBusy) return
     if (save) {
       setLeavingBusy(true)
       const ok = await rule.current?.save().catch(() => false)
@@ -201,14 +201,14 @@ export function TemplatesPage() {
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         {currentSeriesRecord ? (
-          <SeriesEditor key={currentSeriesRecord.id} series={currentSeriesRecord} today={today} onClosed={() => openSeriesNow(null)} guard={rule} />
+          <SeriesEditor key={currentSeriesRecord.id} series={currentSeriesRecord} today={today} onClosed={() => leave(() => openSeriesNow(null))} onRemoved={() => openSeriesNow(null)} guard={rule} />
         ) : current ? (
           <Editor key={current.id} template={current} today={today} openBlock={openBlock} onBlockOpened={() => setOpenBlock(null)} onCopied={setSelected} onRemoved={() => setSelected(null)} />
         ) : (
           <EmptyState why={templates.length ? 'Wybierz szablon z listy.' : 'Nie ma jeszcze szablonów. Szablon to plan dnia danego typu, z którego powstaje każdy taki dzień.'} action={{ label: '+ Szablon', run: () => void create() }} />
         )}
       </div>
-      {leaving && <UnsavedRuleDialog title="Zapisać zmianę serii?" busy={leavingBusy} onSave={() => void answerLeaving(true)} onDiscard={() => void answerLeaving(false)} onClose={() => setLeaving(null)} />}
+      {leaving && <UnsavedRuleDialog title="Zapisać zmianę serii?" busy={leavingBusy} onSave={() => void answerLeaving(true)} onDiscard={() => void answerLeaving(false)} onClose={() => !leavingBusy && setLeaving(null)} />}
     </div>
   )
 }
