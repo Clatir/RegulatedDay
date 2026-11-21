@@ -3,7 +3,8 @@
  * on top, the cursor in it; empty – named as before), the category, the start, the end and the length (D464: the end changes the
  * length, the start stays – for each of the days). No „Dodaj” (D461): the block is saved in each of the days at that hour
  * by Enter in „Nazwa” or by a click outside the window when it was dragged out or a field was changed (a bare click on the grid
- * leaves nothing behind – D461); it says so with „Cofnij” (`newBlocksToast`). A click outside that has to wait – today's exchange asked, today still
+ * leaves nothing behind – D461; a change of the screen or the day – Ctrl 1…9, the search's pick, a click of the menu – leaves it the
+ * same way through `onLeaveBlockDraft` of `store/ui`: the touched window saves, the untouched one closes); it says so with „Cofnij” (`newBlocksToast`). A click outside that has to wait – today's exchange asked, today still
  * counted – is held: the window stays, the click starts nothing below (T1049). „Anuluj” and Esc throw it away; „Więcej” (one day
  * only) takes it to the full editing of „Dziś” – the block still unsaved there, with its name, saved at its first field or when you
  * leave it. The days gone by among them are warned of, nothing is refused (D72).
@@ -21,7 +22,7 @@ import { useBusy } from '../../lib/busy'
 import { useEscapeLayer } from '../../lib/escape'
 import { holdGesture, useOutsidePointer } from '../../lib/outside'
 import { useDay, type DayModel } from '../../store/day'
-import { toast } from '../../store/ui'
+import { onLeaveBlockDraft, toast } from '../../store/ui'
 import { blockName, categoryOptions, groupedCategoryOptions, type Names } from '../plan/blockView'
 import { lastNewBlockCategory, rememberNewBlockCategory, startCategory } from '../plan/lastCategory'
 import { ExchangeDialog } from '../today/ExchangeDialog'
@@ -34,6 +35,8 @@ import { daysLabel, pastWarning } from './weekText'
 /** How long a click outside waits for today to be counted (its exchange is asked from it) before it says nothing was added (T1049). */
 export const TODAY_WAIT_MS = 10_000
 export const TODAY_UNCOUNTED_TEXT = 'Nie dodano bloku – dzisiejszego dnia nie da się teraz policzyć. Spróbuj za chwilę.'
+/** A change of the screen cannot ask today's exchange (the window goes with it): the block waits for no answer, and it is said so. */
+export const EXCHANGE_UNASKED_TEXT = 'Nie dodano bloku – dzisiejszy dzień wymaga wymiany. Dodaj blok jeszcze raz w „Tygodniu” albo w „Dziś”.'
 
 /** A block to be added to a day (the exchange of today's comes first, the rest after it). */
 interface Entry {
@@ -145,13 +148,18 @@ export function NewBlockPopover({
    * `press`: that click, held when the exchange is asked (it would start another window, a day, a screen – and the dialog, in this
    * window, would go with it unanswered).
    */
-  const add = (n = held.current.name, press?: PointerEvent) =>
+  const add = (n = held.current.name, press?: PointerEvent, byScreen = false) =>
     run(async () => {
       const entries = dates.map((date) => ({ date, block: blockOn(date, n) }))
       const mine = entries.find((e) => e.date === today)
       if (mine && model) {
         const proposal = proposeExchange(model.ctx, model.state, mine.block)
         if (proposal.needed) {
+          // The screen changes at once: no dialog to ask it in – nothing is saved, and the toast says so.
+          if (byScreen) {
+            toast(EXCHANGE_UNASKED_TEXT, 'error', 8000)
+            return
+          }
           // The exchange first: nothing is saved until today's block is decided; the other days follow it.
           if (press) holdGesture(press)
           setExchange({ entry: mine, rest: entries.filter((e) => e !== mine), proposal })
@@ -179,6 +187,21 @@ export function NewBlockPopover({
     void add(undefined, press)
   }
   useOutsidePointer(true, ref, (press) => leave.current(press))
+  // A change of the screen or the day (`navigate`, `openDay`, `openPick`, `openRitual`) leaves the window as the screen's own draft is
+  // left: touched – saved as it stands (the same `add`: saved / pending / failed as after a click outside), untouched – closed.
+  const handedOn = useRef(false)
+  const leaveScreen = useRef(() => undefined as void)
+  leaveScreen.current = () => {
+    // „Więcej” hands the block to the draft of „Dziś” and opens the day itself: that change of the day is not a leave of this window.
+    if (handedOn.current || busy || exchange) return
+    if (!dragged && !touched.current) return onClose()
+    if (todayIn && !model) {
+      toast(TODAY_UNCOUNTED_TEXT, 'error', 8000)
+      return onClose()
+    }
+    void add(undefined, undefined, true)
+  }
+  useEffect(() => onLeaveBlockDraft(() => leaveScreen.current()), [])
   // Today counted while a click outside waits: the leave goes on (an exchange asked stands in this window, still open).
   useEffect(() => {
     if (!waiting || !model) return
@@ -250,7 +273,10 @@ export function NewBlockPopover({
           Anuluj
         </button>
         {dates.length === 1 && (
-          <button type="button" className="btn" onClick={() => onMore(blockOn(dates[0]!))} data-testid="week-new-more">
+          <button type="button" className="btn" onClick={() => {
+              handedOn.current = true
+              onMore(blockOn(dates[0]!))
+            }} data-testid="week-new-more">
             Więcej
           </button>
         )}

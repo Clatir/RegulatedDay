@@ -16,6 +16,7 @@ import { EmptyState, cx } from '../../components/ui'
 import { RoutineCostField, saveRoutineRecord } from './routineCost'
 import { RoutineSteps } from './RoutineSteps'
 import { saveRecord, tryRemoveRecord, updateRecord, useData } from '../../store/data'
+import { useBusy } from '../../lib/busy'
 import { useNewShortcut } from '../../lib/escape'
 import { removeTarget, useDeleteResolver } from '../../lib/deleteKey'
 import { takeFoundPick, undoToast, useUi } from '../../store/ui'
@@ -33,11 +34,14 @@ export function RoutinesPage() {
   const routines = useData((s) => s.routines)
   const [selected, setSelected] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
-  const create = async () => {
-    const id = newId()
-    await saveRecord(paths.record('routine', id), null, { schema: ROUTINE_SCHEMA, id, name: 'Nowa rutyna', normal: [{ id: newId(10), name: '', min: 5 }], worse: [], archived: false })
-    setSelected(id)
-  }
+  const [busy, run] = useBusy()
+  const create = () =>
+    // One at a time (A5): a second click or Ctrl+N while this still saves would make a second routine.
+    run(async () => {
+      const id = newId()
+      await saveRecord(paths.record('routine', id), null, { schema: ROUTINE_SCHEMA, id, name: 'Nowa rutyna', normal: [{ id: newId(10), name: '', min: 5 }], worse: [], archived: false })
+      setSelected(id)
+    })
   useNewShortcut(() => void create())
   // A routine picked in the search (Ctrl K): open for editing once (an archived one shows with the archive).
   const pick = useUi((s) => s.pick)
@@ -59,7 +63,7 @@ export function RoutinesPage() {
   return (
     <div className="flex min-h-0 flex-1" data-testid="routines">
       <div className="flex w-[280px] shrink-0 flex-col gap-2 border-r border-line p-3">
-        <button type="button" className="btn btn-accent" onClick={() => void create()} data-testid="routine-new">
+        <button type="button" className="btn btn-accent" onClick={() => void create()} disabled={busy} data-testid="routine-new">
           + Rutyna
         </button>
         {list.map((r) => (

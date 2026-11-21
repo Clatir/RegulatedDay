@@ -1009,6 +1009,57 @@ test('Miesiąc (D429): po bloku stałym paski mają nazwy bloków elastycznych p
   }
 })
 
+test('Tydzień (D461, szkice): okienko „Nowy blok” z wpisaną nazwą przy Ctrl 1 i przy wyborze w Ctrl K zapisuje blok jak klik obok; nietknięte znika bez zapisu', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-week-new-leave-'))
+  seed(dataDir)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      const { tue, wed, thu } = await nextWeek(page)
+      const small = page.getByTestId('week-new')
+      // Touched (a name typed): Ctrl 1 changes the screen and the block is saved, as by a click outside.
+      const h1 = await freeHour(page, tue, 120)
+      await page.mouse.click(await centreOf(page, tue), await hourY(page, h1))
+      await expect(small).toBeVisible()
+      await page.getByTestId('week-new-name').fill('Z Ctrl 1')
+      await page.keyboard.press('Control+1')
+      await expect(page.getByTestId('today')).toBeVisible()
+      await expect(small).toHaveCount(0)
+      await expect.poll(() => planOf(dataDir, tue).map((b) => [b.name, b.startMin, b.durationMin]), { timeout: 15_000 }).toEqual([['Z Ctrl 1', h1, 60]])
+
+      // The same through the search (Ctrl K, Enter on a screen).
+      await nextWeek(page)
+      const h2 = await freeHour(page, wed, 120)
+      await page.mouse.click(await centreOf(page, wed), await hourY(page, h2))
+      await expect(small).toBeVisible()
+      await page.getByTestId('week-new-name').fill('Z Ctrl K')
+      await page.keyboard.press('Control+K')
+      await page.getByTestId('search-input').fill('Rutyny')
+      await page.getByTestId('search-input').press('Enter')
+      await expect(page.getByTestId('routines')).toBeVisible()
+      await expect(small).toHaveCount(0)
+      await expect.poll(() => planOf(dataDir, wed).map((b) => [b.name, b.startMin, b.durationMin]), { timeout: 15_000 }).toEqual([['Z Ctrl K', h2, 60]])
+
+      // Untouched (a bare click of the grid): the window goes with the screen, nothing is saved.
+      await nextWeek(page)
+      const h3 = await freeHour(page, thu, 120)
+      await page.mouse.click(await centreOf(page, thu), await hourY(page, h3))
+      await expect(small).toBeVisible()
+      await page.keyboard.press('Control+1')
+      await expect(page.getByTestId('today')).toBeVisible()
+      await expect(small).toHaveCount(0)
+      await page.getByTestId('nav-week').click()
+      await expect(small).toHaveCount(0)
+      expect(planOf(dataDir, thu)).toEqual([])
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('Miesiąc (SNT1, D418, D422): w komórce dnia do trzech pasków stałych bloków, „+N” za resztę i kropka obciążenia ze zdaniem', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-month-'))
   seed(dataDir)

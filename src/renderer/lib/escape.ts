@@ -79,7 +79,10 @@ export function onModal(): { id: number; off: () => void } {
 export const modalOpen = (): boolean => modals.length > 0
 export const topModal = (): number | null => modals.at(-1) ?? null
 
-/** Ctrl+N of a page (spec „Tworzenie”): one way for every page, waiting while a dialog is open (A6-21). */
+/**
+ * Ctrl+N of a page (spec „Tworzenie”): one way for every page, waiting while a dialog is open (A6-21). A held key (`repeat`) is not
+ * another press: only the first makes a record (A5) – the repeats are taken (no browser's „new window”) and do nothing.
+ */
 export function useNewShortcut(create: () => void): void {
   const ref = useRef(create)
   ref.current = create
@@ -87,6 +90,7 @@ export function useNewShortcut(create: () => void): void {
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.altKey || e.shiftKey || e.code !== 'KeyN' || modalOpen()) return
       e.preventDefault()
+      if (e.repeat) return
       ref.current()
     }
     window.addEventListener('keydown', onKey)
