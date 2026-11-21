@@ -46,7 +46,7 @@ import { useNewShortcut } from '../../lib/escape'
 import { usePeriodKeys } from '../../lib/periodKeys'
 import { NewBlockPopover } from '../week/NewBlockPopover'
 import { NEW_BLOCK_WIDTH, popoverPlace } from '../week/weekLayout'
-import { freeHourStart, newBlockDay, NO_NEW_DAY_TEXT } from '../week/weekNew'
+import { freeHourStart, newBlockDay, NO_NEW_DAY_TEXT, type BusySpan } from '../week/weekNew'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { logicalMinuteOf } from '@shared/time/day'
 import { setWakeOnDays } from '../today/dayActions'
@@ -133,18 +133,33 @@ export function CalendarPage() {
   // Ctrl+N (D6, P9): the small window of a new block today – or on the first day of the grid from today – at the nearest free hour, beside its cell.
   const root = useRef<HTMLDivElement>(null)
   const freshSeq = useRef(0)
+  const asking = useRef(false)
   useNewShortcut(() => {
-    if (importing || fresh) return
-    // Only the days of the month shown: the blocks are counted for them (the days of the neighbouring months of the grid have events only).
-    const date = newBlockDay(monthDates, today)
+    if (importing || fresh || asking.current) return
+    // Today when it is on the grid (also in a neighbouring month's cells); else the first day of the month shown from today (the other days of the grid have events only).
+    const date = dates.includes(today) ? today : newBlockDay(monthDates, today)
     if (!date) return void toast(NO_NEW_DAY_TEXT)
-    const own = fileOf(date)
-    const wakeMin = own?.wakeMin ?? settingsOn(rd.settings, date).dayTypes[info(date).type].wakeMin
-    const startMin = freeHourStart(monthView?.days.find((d) => d.date === date)?.blocks ?? [], { isToday: date === today, nowMin: logicalMinuteOf(date, Date.now()), wakeMin }, DEFAULT_NEW_BLOCK_MIN)
-    const box = root.current?.getBoundingClientRect()
-    const at = root.current?.querySelector(`[data-testid="day-${date}"]`)?.getBoundingClientRect()
-    const place = box && at ? popoverPlace({ gridWidth: box.width, colLeft: at.left - box.left, colRight: at.right - box.left, top: at.top - box.top, width: NEW_BLOCK_WIDTH }) : { left: 0, top: 0 }
-    setFresh({ seq: ++freshSeq.current, date, startMin, place })
+    const open = (blocks: readonly BusySpan[]) => {
+      const own = fileOf(date)
+      const wakeMin = own?.wakeMin ?? settingsOn(rd.settings, date).dayTypes[info(date).type].wakeMin
+      const startMin = freeHourStart(blocks, { isToday: date === today, nowMin: logicalMinuteOf(date, Date.now()), wakeMin }, DEFAULT_NEW_BLOCK_MIN)
+      const box = root.current?.getBoundingClientRect()
+      const at = root.current?.querySelector(`[data-testid="day-${date}"]`)?.getBoundingClientRect()
+      const place = box && at ? popoverPlace({ gridWidth: box.width, colLeft: at.left - box.left, colRight: at.right - box.left, top: at.top - box.top, width: NEW_BLOCK_WIDTH }) : { left: 0, top: 0 }
+      setFresh({ seq: ++freshSeq.current, date, startMin, place })
+    }
+    // The blocks as counted for the month (before the calendar filter); a day of another month is not in that view – its blocks are read as the week's are.
+    const known = monthView?.days.find((d) => d.date === date)?.blocks
+    if (known) return open(known)
+    asking.current = true
+    void window.rd
+      .daysView([date], { energy: false })
+      .then((v) => v.days[0]?.blocks ?? [])
+      .catch(() => [])
+      .then((blocks) => {
+        asking.current = false
+        if (root.current) open(blocks)
+      })
   })
   const namesOf = (d: string) => ({ rd, settings: settingsOn(rd.settings, d), routines, requests })
   /** The menu opens once the files of its days are known: the ✓ and „—” are of the days as they are, whichever month they are in. */

@@ -257,9 +257,11 @@ export function DayGrid({
   }
   const spanHeld = held ? dayIndexes(held.from, held.to) : []
   const picking = pick != null
+  const onPickingRef = useRef(onPicking)
+  onPickingRef.current = onPicking
   useEffect(() => {
-    onPicking?.(picking)
-    return () => onPicking?.(false)
+    onPickingRef.current?.(picking)
+    return () => onPickingRef.current?.(false)
   }, [picking])
   // Ctrl+N (D6, P9): the window of a new block today – or on the first day shown from today – at the nearest free hour (`weekNew.ts`); one window at a time.
   useNewShortcut(() => {
@@ -269,7 +271,7 @@ export function DayGrid({
     const d = days[i]
     if (!d) return void toast(NO_NEW_DAY_TEXT)
     const whole = allDays?.find((x) => x.date === d.date) ?? d
-    const wakeMin = whole.wakeMin ?? typeWakeMin(settingsOn(rd.settings, d.date), d.date, whole.dayType)
+    const wakeMin = whole.wakeMin ?? typeWakeMin(settingsOn(rd.settings, d.date), d.date)
     const startMin = freeHourStart(whole.blocks, { isToday: d.date === today, nowMin: logicalMinuteOf(d.date, Date.now()), wakeMin }, DEFAULT_NEW_BLOCK_MIN)
     pickOn(i, i, { startMin, endMin: startMin + DEFAULT_NEW_BLOCK_MIN }, false)
   })

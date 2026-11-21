@@ -40,8 +40,7 @@ export function freeHourStart(blocks: readonly BusySpan[], where: { isToday: boo
   return Math.min(at, DAY_END_MIN - lengthMin)
 }
 
-/** The wake the settings give a day whose own wake is not known (not read): the type in force (`dayType`) else the weekday's type. */
-export function typeWakeMin(s: { dayTypes: Record<DayTypeId, { wakeMin: number }>; weekTypes: readonly DayTypeId[] }, date: string, dayType: string | null): number {
-  const type = dayType != null && dayType in s.dayTypes ? (dayType as DayTypeId) : s.weekTypes[weekday(date) - 1]!
-  return s.dayTypes[type].wakeMin
+/** The wake the settings give a day whose own wake is not known (not read): the weekday's type (a day not read has no type of its own known). */
+export function typeWakeMin(s: { dayTypes: Record<DayTypeId, { wakeMin: number }>; weekTypes: readonly DayTypeId[] }, date: string): number {
+  return s.dayTypes[s.weekTypes[weekday(date) - 1]!].wakeMin
 }

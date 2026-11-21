@@ -32,7 +32,7 @@ const press = (code: string, init: KeyboardEventInit = {}, target: EventTarget =
 
 beforeEach(() => {
   vi.mocked(useMonthView).mockReturnValue({ view: null, failed: false })
-  ;(window as unknown as { rd: unknown }).rd = { dayFiles: async (dates: string[]) => Object.fromEntries(dates.map((d) => [d, null])), edit: async () => [], dataView: async () => undefined }
+  ;(window as unknown as { rd: unknown }).rd = { dayFiles: async (dates: string[]) => Object.fromEntries(dates.map((d) => [d, null])), edit: async () => [], dataView: async () => undefined, daysView: async (dates: string[]) => ({ today: TODAY, days: dates.map((date) => ({ date, blocks: [] })), from: 0, to: 0 }) }
   useData.setState({ rd: rdFrom({ schema: 1 }), view: { today: TODAY, allDay: [], computers: [] } as unknown as DataView, allDay: [] })
   useUi.setState({ page: 'calendar', day: null, pick: null, toasts: [], from: null, memory: NO_MEMORY })
   useCalendarFilter.setState({ hidden: [], revealed: null })
@@ -124,6 +124,23 @@ describe('Ctrl+N w „Kalendarzu” (D6, P9)', () => {
     await press('KeyN', { ctrlKey: true })
     expect(q('week-new')!.getAttribute('data-date')).toBe('2026-12-01')
     expect(q('week-new')!.getAttribute('data-start')).toBe(String(9 * 60))
+  })
+  it('dziś w siatce następnego miesiąca: Ctrl+N bierze dziś (nie 1. dzień miesiąca), jego bloki czyta z dni (nie ma ich w widoku miesiąca)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-30T05:00:00'))
+    const blk = { id: 'a', named: { categoryId: 'inne', variantId: null, routine: null, requests: [], note: '', origin: 'user', sourceId: null }, categoryId: 'inne', startMin: 6 * 60, endMin: 7 * 60, state: 'planned', background: false, outsidePlan: false }
+    ;(window as unknown as { rd: Record<string, unknown> }).rd.daysView = async (dates: string[]) => ({ today: '2026-11-30', days: [{ date: dates[0], blocks: [blk] }], from: 0, to: 0 })
+    useData.setState({ view: { today: '2026-11-30', allDay: [], computers: [] } as unknown as DataView })
+    try {
+      await mount()
+      await click('month-next')
+      await press('KeyN', { ctrlKey: true })
+      await act(async () => undefined)
+      expect(q('week-new')!.getAttribute('data-date')).toBe('2026-11-30')
+      expect(q('week-new')!.getAttribute('data-start')).toBe(String(7 * 60))
+    } finally {
+      vi.useRealTimers()
+    }
   })
   it('przy otwartym okienku PgUp / PgDn / Home nie zmieniają miesiąca', async () => {
     await mount()

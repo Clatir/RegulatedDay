@@ -153,12 +153,14 @@ export function setMemory(patch: Partial<ViewMemory>): void {
 /**
  * Where a day of „Dziś” opened now comes from (D2): the screen of periods it is opened on; from „Dziś” itself it stays what it was (the arrows
  * and „Dziś” of its heading); from any other place – nowhere. Other screens have no origin. `here` false – the call is not from the screen
- * (the search, Ctrl K): no way back is offered then.
+ * (the search, Ctrl K): no way back is offered for a jump from another screen.
  */
 function originOf(target: Page, here: boolean): DayOrigin | null {
-  if (target !== 'today' || !here) return null
+  if (target !== 'today') return null
   const { page, from } = useUi.getState()
-  return page === 'week' || page === 'calendar' ? page : page === 'today' ? from : null
+  // On „Dziś” itself the way back stays whoever asks (the search too); `here` false only keeps a jump from another screen from offering one.
+  if (page === 'today') return from
+  return here && (page === 'week' || page === 'calendar') ? page : null
 }
 
 /** Every change of view first commits the active field (spec „Zatwierdzanie przed przejściem”). */

@@ -135,6 +135,15 @@ describe('skąd otwarty dzień „Dziś” (D2)', () => {
       expect(useUi.getState().from).toBeNull()
     }
   })
+  it('Ctrl K użyty już na „Dziś” otwartym z „Tygodnia” zostawia „← Tydzień” (zeruje tylko skok z innego ekranu)', () => {
+    useUi.setState({ page: 'week' })
+    openDay('2026-11-19')
+    expect(useUi.getState().from).toBe('week')
+    choose({ kind: 'command', id: 'tomorrow' } as SearchRecord, '2026-11-18')
+    expect(useUi.getState().from).toBe('week')
+    choose({ kind: 'block', id: 'a', date: '2026-11-20' } as SearchRecord, '2026-11-18')
+    expect(useUi.getState().from).toBe('week')
+  })
   it('pamięć okresów: ustawia i zeruje po jednym polu', () => {
     setMemory({ week: '2026-11-23', month: '2026-12' })
     setMemory({ week: null })
