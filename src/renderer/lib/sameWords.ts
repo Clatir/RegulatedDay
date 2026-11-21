@@ -18,6 +18,9 @@ export const ONEDRIVE_PIN = {
   hint: 'OneDrive trzyma wtedy cały folder na dysku („Zawsze przechowuj na tym urządzeniu”, bez kopii zapasowych), więc dane są dostępne także bez sieci.'
 } as const
 
+/** The switch of a module in the wizard and in the settings: the module's name is the label of the row, the switch says „tak” or „nie” (one form for every gender of the names). */
+export const moduleToggleLabel = (on: boolean): string => (on ? 'tak' : 'nie')
+
 /** What the bar does about other windows, in the wizard: the settings' „Zawsze na wierzchu” is the way to change it. */
 export const BAR_UNDER_WINDOWS = 'Domyślnie leży pod oknami innych aplikacji; nad nimi postawisz go w Ustawieniach (Zawsze na wierzchu).'
 

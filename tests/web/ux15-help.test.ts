@@ -22,6 +22,7 @@ import { onModal } from '@renderer/lib/escape'
 import { useData } from '@renderer/store/data'
 import { closeHelp, useHelp } from '@renderer/store/help'
 import { useUi } from '@renderer/store/ui'
+import { readFileSync } from 'node:fs'
 import { useWizard } from '@renderer/features/wizard/wizardStore'
 
 beforeAll(() => {
@@ -151,5 +152,16 @@ describe('E5: lista skrótów pod F1 i „Skróty” w menu', () => {
     expect(q('help-shortcuts')).toBeNull()
     act(() => q('help-to-shortcuts')!.click())
     expect(q('help-shortcuts')).not.toBeNull()
+  })
+})
+
+describe('przegląd UX15, runda 1', () => {
+  it('specyfikacja: Ctrl K ma grupę „Pojęcia” i polecenia „Jak to działa”, „Skróty klawiszowe”', () => {
+    const spec = readFileSync('docs/specyfikacja.md', 'utf8')
+    const at = spec.indexOf('**Wyszukiwarka Ctrl K (SNT6')
+    const bullet = spec.slice(at, spec.indexOf(String.fromCharCode(10), at))
+    expect(bullet).toContain('„Pojęcia”')
+    expect(bullet).toContain('„Jak to działa”')
+    expect(bullet).toContain('„Skróty klawiszowe”')
   })
 })

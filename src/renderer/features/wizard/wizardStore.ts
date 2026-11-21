@@ -5,6 +5,7 @@
  */
 import { create } from 'zustand'
 import type { FolderProbe } from '@shared/api'
+import { deepEqual } from '@shared/data/merge'
 import { defaultTemplates, firstComputerRecords, settingsPatch, SETUP_CHANGE_ID, SETUP_FROM } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
 import type { LectureSeries } from '@shared/model/plan'
@@ -90,6 +91,18 @@ export const wizardShown = (open: boolean, asked: boolean, status: string | null
 
 export function resetWizard(): void {
   useWizard.setState({ open: true, ...initial() })
+}
+
+/**
+ * How many categories the costs step changed from the defaults (UX15, review): a cost, the place or the contact of a category, the
+ * place of a variant. The ways of regeneration (added, renamed, archived variants of „Regeneracja”) have their own step and are not counted.
+ */
+export function changedCostCategories(s: Pick<RulesSettings, 'categories'>): number {
+  return Object.entries(s.categories).filter(([id, c]) => {
+    const d = DEFAULT_SETTINGS.categories[id]
+    if (!d) return true
+    return id === 'regeneracja' ? !deepEqual(c.costs, d.costs) : !deepEqual(c, d)
+  }).length
 }
 
 /** The draft's setting change as rd.json will hold it (for the preview of a day). */

@@ -20,7 +20,7 @@ import { blockFill } from '@shared/theme'
 import { setMachinePrefs, useMachine } from '../../store/machine'
 import { BRIGHTNESS_STEPS } from '@shared/machine'
 import { Field, Section, Segmented, Toggle, cx } from '../../components/ui'
-import { BAR_UNDER_WINDOWS, MAXIMUM_INTRO, ONEDRIVE_PIN, STATIONARY } from '../../lib/sameWords'
+import { BAR_UNDER_WINDOWS, MAXIMUM_INTRO, moduleToggleLabel, ONEDRIVE_PIN, STATIONARY } from '../../lib/sameWords'
 import { useFirstDay } from '../../store/firstDay'
 import { navigate, toast } from '../../store/ui'
 import { reloadData, useData } from '../../store/data'
@@ -30,7 +30,7 @@ import { MonthGrid, MONTH_NAMES, monthOf, shiftMonth } from '../calendar/MonthGr
 import { dayAxis } from '../plan/dayItems'
 import { Timeline } from '../plan/Timeline'
 import { SettingNumber } from '../settings/SettingNumber'
-import { draftChanges, draftTemplates, failedFinish, finishRecords, newLecture, patchSettings, patchWizard, takeProbe, useWizard, type Corner } from './wizardStore'
+import { changedCostCategories, draftChanges, draftTemplates, failedFinish, finishRecords, newLecture, patchSettings, patchWizard, takeProbe, useWizard, type Corner } from './wizardStore'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
 
@@ -136,7 +136,7 @@ export function Wizard() {
             )}
             <div className="flex items-center gap-2 pt-2">
               {w.step > 0 && (
-                <button type="button" className="btn" onClick={() => go(-1)} data-testid="wizard-back">
+                <button type="button" className="btn" disabled={w.busy} onClick={() => go(-1)} data-testid="wizard-back">
                   Wstecz
                 </button>
               )}
@@ -153,7 +153,7 @@ export function Wizard() {
                       {w.busy ? 'Zapisuję…' : 'Zakończ z domyślnymi'}
                     </button>
                   )}
-                  <button type="button" className="btn btn-accent" disabled={!canGoOn} onClick={() => go(1)} data-testid="wizard-next">
+                  <button type="button" className="btn btn-accent" disabled={!canGoOn || w.busy} onClick={() => go(1)} data-testid="wizard-next">
                     Dalej
                   </button>
                 </>
@@ -608,7 +608,9 @@ function StepModules() {
     <div className="flex flex-col gap-3">
       <Lead>Plan, timer, granica, czas wolny i rytuał działają zawsze. Moduły włączasz i wyłączasz sam – zmiana działa od razu; na start wszystkie są włączone.</Lead>
       {MODULES.map((m) => (
-        <Toggle key={m} checked={g.modules[m]} onChange={(v) => patchWizard({ general: { ...g, modules: { ...g.modules, [m]: v } } })} label={MODULE_NAMES[m]} data-testid={`wizard-module-${m}`} />
+        <Field key={m} label={MODULE_NAMES[m]} labelWidth={220}>
+          <Toggle checked={g.modules[m]} onChange={(v) => patchWizard({ general: { ...g, modules: { ...g.modules, [m]: v } } })} label={moduleToggleLabel(g.modules[m])} data-testid={`wizard-module-${m}`} />
+        </Field>
       ))}
     </div>
   )
@@ -674,10 +676,11 @@ function StepComputer() {
 /** One line of the summary: what was set and a link to the step that sets it (UX15, E4). */
 function SummaryLine({ step, children }: { step: StepId; children: ReactNode }) {
   const joining = !!useWizard((x) => x.probe?.hasData)
+  const busy = useWizard((x) => x.busy)
   return (
     <li className="flex flex-wrap items-baseline gap-x-2" data-testid={`wizard-line-${step}`}>
       <span className="min-w-0 flex-1">{children}</span>
-      <button type="button" className="text-[12px] text-lamp hover:underline" onClick={() => patchWizard({ step: (joining ? NEXT : FIRST).indexOf(step), error: null })} aria-label={`Zmień: ${TITLES[step]}`} data-testid={`wizard-goto-${step}`}>
+      <button type="button" className="text-[12px] text-lamp hover:underline disabled:cursor-default disabled:opacity-50 disabled:no-underline" disabled={busy} onClick={() => patchWizard({ step: (joining ? NEXT : FIRST).indexOf(step), error: null })} aria-label={`Zmień: ${TITLES[step]}`} data-testid={`wizard-goto-${step}`}>
         Zmień · {TITLES[step]}
       </button>
     </li>
@@ -723,7 +726,7 @@ function StepSummary() {
         <SummaryLine step="calendar">Dni zaznaczone w kalendarzu: {special}.</SummaryLine>
         <SummaryLine step="people">Osoby: {w.people.length}.</SummaryLine>
         <SummaryLine step="regenWays">Sposoby regeneracji: {ways}.</SummaryLine>
-        <SummaryLine step="costs">Koszty podkategorii: wartości startowe, zajęcia stacjonarne: {m.stationaryClasses ? STATIONARY.yes : STATIONARY.no}.</SummaryLine>
+        <SummaryLine step="costs">Koszty podkategorii: {changedCostCategories(s) ? `zmienione: ${changedCostCategories(s)}` : 'wartości startowe'}, zajęcia stacjonarne: {m.stationaryClasses ? STATIONARY.yes : STATIONARY.no}.</SummaryLine>
         <SummaryLine step="modules">Moduły: {MODULES.filter((x) => w.general.modules[x]).map((x) => MODULE_NAMES[x].toLowerCase()).join(', ') || 'żaden'}.</SummaryLine>
         <SummaryLine step="computer">Ten komputer: {computer}.</SummaryLine>
       </ul>

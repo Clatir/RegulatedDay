@@ -98,6 +98,17 @@ describe('E3: każde pole Ustawień ma opis', () => {
     expect(useHelp.getState()).toMatchObject({ open: 'concepts', term: 'reserve' })
   })
 
+  it('rezerwa mówi o zakresie pola (0–20 na skali puli 0–100)', async () => {
+    await mount()
+    expect(describedBy('field-reserve')).toContain('0–20')
+    expect(describedBy('field-reserve')).toContain('0–100')
+  })
+
+  it('moduły w Ustawieniach: przełącznik „tak / nie”, nie „włączony” przy nazwie rodzaju żeńskiego i nijakiego', async () => {
+    await mount()
+    for (const m of ['energy', 'requests', 'game']) expect(q(`module-${m}`)!.closest('label')!.textContent, m).toBe('tak')
+  })
+
   it('pojęcia z przeglądu (rezerwa, bufor propozycji granicy, wyjątek granicy, koszt w tle, próg bezczynności) mają „?” w Ustawieniach', async () => {
     await mount()
     for (const id of ['field-reserve', 'field-boundaryBufferMin', 'field-exceptionMaxMin', 'field-backgroundCostPct', 'field-idleThresholdMin']) {

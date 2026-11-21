@@ -15,6 +15,7 @@ import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { Choice, DateField, TextField } from '../../components/fields'
 import { HelpMark } from '../../components/HelpMark'
+import { moduleToggleLabel } from '../../lib/sameWords'
 import { FIELD_HINTS } from '../../lib/fieldHints'
 import { FIELD_TERMS } from '../help/glossary'
 import { Field, NowTag, Section, Segmented, Toggle } from '../../components/ui'
@@ -85,7 +86,7 @@ export function ModulesSection() {
       <p className="text-[12px] text-muted">Plan, timer, granica, czas wolny i rytuał działają zawsze. Włączenie albo wyłączenie modułu działa od razu, a jego nagrody z dnia zmiany nie liczą się w żadną stronę.</p>
       {MODULES.map((m) => (
         <Field key={m} label={MODULE_NAMES[m]} data-testid={`field-module-${m}`} labelWidth={200}>
-          <Toggle checked={g.modules[m]} onChange={(v) => void setModule(m, v)} label={g.modules[m] ? 'włączony' : 'wyłączony'} data-testid={`module-${m}`} />
+          <Toggle checked={g.modules[m]} onChange={(v) => void setModule(m, v)} label={moduleToggleLabel(g.modules[m])} data-testid={`module-${m}`} />
         </Field>
       ))}
     </Section>

@@ -22,7 +22,7 @@ export const FIELD_HINTS: Readonly<Record<string, string>> = {
   'field-boundaryBufferMin': 'Zapas dodawany do końca ostatniego bloku pracy przy propozycji granicy; granica nie wypada później niż maksimum.',
   'field-exceptionMaxMin': 'O ile wyjątek granicy z planu porannego może przesunąć maksimum (najwięcej +3 h).',
   // Energia
-  'field-reserve': 'Poziom puli energii (0–100), od którego pula jest „na rezerwie”: pasek zmienia kolor i pojawia się podpowiedź regeneracji.',
+  'field-reserve': 'Poziom na skali puli 0–100 (ustawiasz 0–20), od którego pula jest „na rezerwie”: pasek zmienia kolor i pojawia się podpowiedź regeneracji.',
   'field-backgroundCostPct': 'Jaką część kosztu energii z pierwszego planu płaci blok biegnący w tle; każdy blok można ustawić inaczej.',
   'field-signalEffects.glassesSenses': 'O ile spada koszt bodźców po kliknięciu „Okulary” albo „Zatyczki” w pasku.',
   'field-signalEffects.rockingAll': 'O ile spadają głowa, emocje i bodźce po kliknięciu „Więcej bujania” w pasku (ciało bez zmiany).',

@@ -11,12 +11,13 @@ import type { FolderProbe, RdApi, WizardFinish } from '@shared/api'
 import { rdFrom } from '@shared/model/rd'
 import { Banners } from '@renderer/app/Banners'
 import { Wizard } from '@renderer/features/wizard/Wizard'
-import { patchWizard, resetWizard, useWizard } from '@renderer/features/wizard/wizardStore'
+import { changedCostCategories, patchSettings, patchWizard, resetWizard, useWizard } from '@renderer/features/wizard/wizardStore'
 import { ONEDRIVE_PIN, STATIONARY } from '@renderer/lib/sameWords'
 import { useData } from '@renderer/store/data'
 import { useFirstDay } from '@renderer/store/firstDay'
 import { useHelp } from '@renderer/store/help'
 import { useUi } from '@renderer/store/ui'
+import { DEFAULT_SETTINGS } from '@shared/model/settings'
 
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -222,5 +223,52 @@ describe('E8: lista pierwszego dnia po kreatorze', () => {
     await flush()
     expect(finished.at(-1)).toMatchObject({ first: false })
     expect(useFirstDay.getState().show).toBe(false)
+  })
+})
+
+describe('przegląd UX15, runda 1', () => {
+  it('podsumowanie: koszty startowe – „wartości startowe”, po zmianie kosztu albo odpowiedzi kroku kosztów – „zmienione: N”', async () => {
+    expect(changedCostCategories(DEFAULT_SETTINGS)).toBe(0)
+    await set({ step: 13 })
+    await mount()
+    expect(q('wizard-line-costs')!.textContent).toContain('wartości startowe')
+    await act(async () => patchSettings({ categories: { analiza: { costs: { head: 5 } } } }))
+    expect(q('wizard-line-costs')!.textContent).toContain('zmienione: 1')
+    expect(q('wizard-line-costs')!.textContent).not.toContain('wartości startowe')
+    await act(async () => patchSettings({ categories: { posilek: { place: 'passive' } } }))
+    expect(q('wizard-line-costs')!.textContent).toContain('zmienione: 2')
+  })
+
+  it('w trakcie zapisu „Dalej”, „Wstecz” i linki „Zmień” są wyłączone', async () => {
+    await set({ step: 13 })
+    await mount()
+    await set({ busy: true })
+    for (const id of ['wizard-back', 'wizard-goto-week', 'wizard-goto-computer', 'wizard-finish']) expect((q(id) as HTMLButtonElement).disabled, id).toBe(true)
+    await set({ busy: false, step: 3 })
+    await set({ busy: true })
+    for (const id of ['wizard-back', 'wizard-next', 'wizard-finish-defaults']) expect((q(id) as HTMLButtonElement).disabled, id).toBe(true)
+  })
+
+  it('moduły: te same słowa w kreatorze i w Ustawieniach – nazwa modułu i „tak / nie”', async () => {
+    await set({ step: 11 })
+    await mount()
+    const toggle = q('wizard-module-game')!
+    expect(toggle.closest('label')!.textContent).toBe('tak')
+    expect(text()).toContain('Gra')
+    expect(text()).not.toContain('włączony')
+  })
+
+  it('„Pierwszy dzień”: punkt o pytaniach o objawy tylko przy włączonym module energii', async () => {
+    useFirstDay.setState({ show: true })
+    await mount(createElement(Banners))
+    expect(q('first-day-today')!.closest('li')!.textContent).toContain('pytania o objawy')
+    act(() => root?.unmount())
+    host?.remove()
+    const rd = rdFrom({})
+    useData.setState({ rd: { ...rd, general: { ...rd.general, modules: { ...rd.general.modules, energy: false } } } })
+    await mount(createElement(Banners))
+    const line = q('first-day-today')!.closest('li')!.textContent!
+    expect(line).not.toContain('objawy')
+    expect(line).toContain('granicę')
   })
 })
