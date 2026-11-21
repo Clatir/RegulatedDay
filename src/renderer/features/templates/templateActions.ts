@@ -13,11 +13,11 @@ import { paths } from '@shared/data/paths'
 import { defaultDayType } from '@shared/engine/createDay'
 import { ATTACHMENTS_UNREAD_TEXT, attachmentUndoOf, removalEdits, restoreEdits, sessionAttachmentDates, templateRemovalIds, type AttachmentUndo } from '@shared/model/attachment'
 import { templateJson } from '@shared/model/defaults'
-import { dayFileFrom, templateFor, templateFrom, withTemplateVersion, type PlanBlock, type Template } from '@shared/model/plan'
+import { dayFileFrom, templateFor, templateFrom, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { settingsOn, type SettingsChange } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
-import { deepEqual } from '@shared/data/merge'
+import { deepEqual, sameContentAs } from '@shared/data/merge'
 import { editNotice, editOf, isSaved, rawRecord, saveAnswer, tryUpdateRecord, trySaveWith, useData, withOwner, type SendState } from '../../store/data'
 import { toast, undoToast } from '../../store/ui'
 
@@ -173,11 +173,12 @@ export function freshAfter(fresh: string | null, selected: string | null, shown:
 
 /**
  * „Cofnij” of „Dodano blok” (D563 P2) – the inverse of the add (`made`: the template's record before it and right after it, as the page made it).
- * The template as it still stands as the add left it: written back as it was before. Changed since (the name typed in the panel, another
- * field): the block out by its id from every version from `from` that has it (also the ones copied later) and nothing else – what was changed
- * since stays and meets no question of its own – and the version the add made, when it is no more than the one in force before it (or empty, when
- * nothing was in force): never left behind as a version that would take the days with an empty plan. A block gone already says there is
- * nothing to take back, a record that cannot be read – that; a question (the queue's notice) or a refusal that the save said itself – nothing more.
+ * The template as it still stands as the add left it (`sameContentAs`: the main process stamps `updatedAt` and `updatedBy` on what it writes):
+ * written back as it was before. Changed since (the name typed in the panel, another field, a second add): one rule on the template as it is now –
+ * the block out by its id from every version that has it (also the ones copied later), and each version that lost it out as well when it is empty
+ * and nothing is in force before it, or when it is what the one in force before it is (blocks, budget, limit); a version that did not lose the
+ * block is left as it is. So no version stays that would take the days with an empty plan. A block gone already says there is nothing to take
+ * back, a record that cannot be read – that; a question (the queue's notice) or a refusal that the save said itself – nothing more.
  */
 export async function undoAddedBlock(templateId: string, from: string, blockId: string, made: { before: RawRecord; after: RawRecord }): Promise<void> {
   const rel = paths.record('template', templateId)
@@ -187,26 +188,27 @@ export async function undoAddedBlock(templateId: string, from: string, blockId: 
   const out = await tryUpdateRecord(
     rel,
     (raw) => {
+      const t = templateFrom(raw)
+      if (!t) return raw
       read = true
-      if (deepEqual(raw, made.after)) {
+      if (sameContentAs(raw, made.after)) {
         found = true
         return made.before
       }
-      const t = templateFrom(raw)
-      if (!t) return raw
-      const had = templateFrom(made.before)?.versions.some((v) => v.from === from) ?? false
       if (!t.versions.some((v) => v.from >= from && v.blocks.some((b) => b.id === blockId))) return raw
       found = true
-      let versions = t.versions.map((v) => (v.from >= from ? { ...v, blocks: v.blocks.filter((b) => b.id !== blockId) } : v))
-      if (!had) {
-        const at = versions.findIndex((v) => v.from === from)
-        const own = versions[at]
-        const before = at > 0 ? versions[at - 1] : undefined
-        // The version of the add is what was in force before it (its blocks, budget, limit) – or empty when nothing was – so it is not needed.
-        const same = own && (before ? deepEqual({ ...own, from: '' }, { ...before, from: '' }) : !own.blocks.length && own.budgetMin == null && own.maxMin == null)
-        if (same) versions = versions.filter((_, i) => i !== at)
+      const kept: TemplateVersion[] = []
+      for (const v of t.versions) {
+        if (!v.blocks.some((b) => b.id === blockId)) {
+          kept.push(v)
+          continue
+        }
+        const now = { ...v, blocks: v.blocks.filter((b) => b.id !== blockId) }
+        const before = kept.at(-1)
+        const gone = before ? deepEqual({ ...now, from: '' }, { ...before, from: '' }) : !now.blocks.length && now.budgetMin == null && now.maxMin == null
+        if (!gone) kept.push(now)
       }
-      return templateJson({ ...t, versions }, raw)
+      return templateJson({ ...t, versions: kept }, raw)
     },
     state
   )
