@@ -243,3 +243,44 @@ test('zjazdy z PDF: plik, który nie jest PDF-em, daje komunikat i żadnego podg
     await app.close()
   }
 })
+
+test('Kalendarz (UX5 / B2): jeden dzień zjazdu zmieniony na „Wolne” – dymek „Cofnij” przywraca typ i zajęcia zjazdu', async () => {
+  const today = logicalToday()
+  let s1 = addDays(today, 2)
+  while (weekday(s1) !== 6) s1 = addDays(s1, 1)
+  const work = mkdtempSync(join(tmpdir(), 'rd-e2e-zjazdy-day-undo-'))
+  const pdf = join(work, 'zjazdy-e2e.pdf')
+  writeFileSync(pdf, schedule(s1))
+  const dataDir = join(work, 'data')
+  seed(dataDir)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir, RD_E2E_PDF: pdf } })
+  const typeOf = (d: string) => (JSON.parse(readFileSync(dayFile(dataDir, d), 'utf8')) as { dayType?: string }).dayType
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-calendar').click()
+      await page.getByTestId('calendar-zjazdy').click()
+      await expect(page.getByTestId('zjazdy-preview')).toBeVisible()
+      await page.getByTestId('zjazdy-save').click()
+      await expect(page.getByText('Zapisano 3 dni zjazdów')).toBeVisible()
+      await expect.poll(() => zjazdBlocks(dataDir, s1).length).toBe(2)
+      const stored = typeOf(s1)
+      expect(stored).toMatch(/^zjazd-/)
+      await showMonthOf(page, s1)
+      await page.getByTestId(`day-${s1}`).click({ modifiers: ['Control'] })
+      await page.getByTestId('calendar-type-wolne').click()
+      // One day: no line of a group – the toast with its „Cofnij”.
+      const toast = page.getByRole('status').filter({ hasText: `Typ dnia ${plDate(s1)}: Wolne` })
+      await expect(toast).toBeVisible()
+      await expect(page.getByTestId('group-line-calendar')).toHaveCount(0)
+      await expect.poll(() => typeOf(s1)).toBe('wolne')
+      await expect.poll(() => zjazdBlocks(dataDir, s1).length).toBe(0)
+      await toast.getByTestId('toast-action').click()
+      await expect.poll(() => typeOf(s1)).toBe(stored)
+      await expect.poll(() => zjazdBlocks(dataDir, s1).length).toBe(2)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

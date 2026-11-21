@@ -22,6 +22,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `model/ids.ts` (losowe i wyliczane identyfikatory).
 - `engine/createDay.ts` – deterministyczna migawka dnia (szablon, ustawienia daty, wykłady, sesje ze strefy NY ze
   skróceniem, przesunięcie pobudki) i `dayPlan` (migawka + plik dnia).
+- Wybór szablonu dnia (`templateFor`: typ + dzień tygodnia, inaczej domyślny typu; przy kilku pasujących wygrywa mniejsze id – cicho) i jego opis (D563 P3, D72 – bez blokady): `templateClashes` / `templateUnused` / `freeWeekday` w `model/plan.ts` (domyślny i szablon dnia tygodnia się nie zderzają; archiwum i inny typ – nie; wersje nieczytane); okno: ramka `template-clash` w edytorze (`templates/clashText.ts`), „· nieużywany” na liście, „+ Szablon” przy domyślnym zaczyna od `freeWeekday`. Testy `template-clash.test.ts` (unit i web).
 - Sesje w szablonach (D511, D515, T1340–T1359, T1400–T1419, T1450–T1461): wpis = blok szablonu z `PlanBlock.session` i własną godziną
   (`isSessionEntry` w `model/plan.ts` – jedna reguła, bez kategorii; `zone`, `markets`, `days` – 7 odpowiedzi, `id` – sesji,
   `sessionIdOf`); godzina polska „jak zwykle”. `model/templateSessions.ts` – `daySettingsOf` (wpisy bez „nie” w dniu tygodnia

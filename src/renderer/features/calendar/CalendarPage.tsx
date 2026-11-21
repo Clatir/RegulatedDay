@@ -19,7 +19,7 @@ import { zjazdTypeRaw } from '@shared/import/zjazdDay'
 import { paths } from '@shared/data/paths'
 import { sessionShiftMin, sessionWindow } from '@shared/engine/createDay'
 import { knownSessionDefs } from '@shared/model/templateSessions'
-import { logicalClock } from '@shared/format'
+import { logicalClock, plDate } from '@shared/format'
 import type { ZjazdDay } from '@shared/import/zjazdy'
 import { eventsOn } from '@shared/model/allDay'
 import { dayFileFrom } from '@shared/model/plan'
@@ -189,8 +189,20 @@ export function CalendarPage() {
     // Two days or more changed: the line of the group with its „Cofnij” (D529) – the days left out counted with their reasons.
     if (isSaved(out) && days.length >= 2) showGroupLine('calendar', { text: groupLineText({ n: days.length, kind: 'day', skipped: all.filter((d) => d <= today).map((d) => (d === today ? 'dzisiejszy' : 'miniony')) }), undo: () => undoDayEdits(days) })
     else said()
+    // One day: no line of a group, the toast with its „Cofnij” instead (D563 – the same `undoDayEdits`: the type back and the classes of a „zjazd” the change took away).
+    if (isSaved(out) && days.length === 1) undoToast(`Typ dnia ${plDate(days[0]!.date)}: ${t ? DAY_TYPE_NAMES[t] : 'z tygodnia'}`, () => void undoOneDay(days))
     if (!isSaved(out)) return
     selection.clear()
+  }
+
+  /** „Cofnij” of the toast of one day's type: what stayed (changed since) is said as the line of a group says it; a write that failed says so. */
+  const undoOneDay = async (days: readonly WeekPushedDay[]) => {
+    try {
+      const kept = await undoDayEdits(days)
+      if (kept) toast(kept, 'info', 6000)
+    } catch {
+      toast('Nie cofnięto – zapis się nie udał.', 'error', 8000)
+    }
   }
 
   const setWakeOf = async (v: number | null, from: readonly string[] = selection.selected) => {
