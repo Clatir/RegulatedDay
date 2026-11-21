@@ -56,6 +56,8 @@ export function usePointerDrag<T>(resolve: (x: number, y: number) => T | null, o
     const stop = () => {
       off.current?.()
       setDrag(null)
+      // Every end of a gesture that started: the release, Esc, blur, a move with no button, a cancel.
+      if (moved) setTimeout(() => (started.current = false), 0)
     }
     const move = (ev: PointerEvent) => {
       // A move with no button held: the release was outside the window – the gesture is over, nothing is written.
@@ -68,7 +70,6 @@ export function usePointerDrag<T>(resolve: (x: number, y: number) => T | null, o
     }
     const end = (ev: PointerEvent) => {
       stop()
-      if (moved) setTimeout(() => (started.current = false), 0)
       if (!moved || ev.type === 'pointercancel') return
       const target = at.current(ev.clientX, ev.clientY)
       if (target != null) drop.current(id, target, ev.ctrlKey)

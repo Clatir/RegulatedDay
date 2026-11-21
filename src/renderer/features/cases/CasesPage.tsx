@@ -69,11 +69,12 @@ export function CasesPage() {
   // A sprawa that is gone (removed here or on another computer) takes its mark along: it comes back closed, and the set does not grow.
   useEffect(() => {
     setExpandedIds((now) => {
-      const live = new Set(all.map((x) => x.record.id))
+      // Against every sprawa there is, not the ones shown: the module of requests off and on again must not close their rows.
+      const live = new Set(items.map((x) => x.record.id))
       const kept = [...now].filter((id) => live.has(id))
       return kept.length === now.size ? now : new Set(kept)
     })
-  }, [all])
+  }, [items])
   const setExpandedOf = (id: string, on: boolean) =>
     setExpandedIds((now) => {
       if (now.has(id) === on) return now
@@ -320,7 +321,25 @@ function CaseRow({ x, today, marked, group, expanded, onExpand }: { x: CaseItem;
   // the subcategory of a task, the list, the priority, „Zrobione”, „Terminy”, „Kroki”, „Powtarzaj”, „Usuń” – under „▸” and in the menu „…” (the same states).
   const toggleRepeat = () => (repeating && rule.current?.unsaved() ? (setMoveAfter(null), setAsking(true)) : setRepeating(!repeating))
   // D563 P5: a move to another list (or „Zrobione”) takes the row to another section – a rule not saved yet would be lost with its form, so it is asked first.
-  const moveTo = (list: CaseList) => (repeating && rule.current?.unsaved() ? (setMoveAfter(list), setAsking(true)) : void moveCase(r.id, list))
+  // The list the sprawa is on is no move (nothing to ask, nothing to write). `ask` – a move that is asked about first (true: taken over, it goes on after the answer).
+  const ask = (list: CaseList): boolean => {
+    if (!repeating || !rule.current?.unsaved()) return false
+    setMoveAfter(list)
+    setAsking(true)
+    return true
+  }
+  const moveTo = (list: CaseList) => {
+    if (list === x.list || ask(list)) return
+    void moveCase(r.id, list)
+  }
+  // The menu of the right button moves a sprawa through the group (`useCasesGroup`): this row takes the move over when there is something to ask.
+  const guard = useRef(ask)
+  guard.current = ask
+  const { guardMove } = group
+  useEffect(() => {
+    guardMove(r.id, (list) => guard.current(list))
+    return () => guardMove(r.id, null)
+  }, [guardMove, r.id])
   const menu = caseRowMenu(x, {
     list: moveTo,
     priority: (v) => set({ priority: priorityFrom(v) }),

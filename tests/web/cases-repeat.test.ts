@@ -360,6 +360,42 @@ describe('niezapisane powtarzanie sprawy przy zamykaniu pola „Powtarzaj” (D5
     expect(listWrites(discarded.sent)).toEqual(['someday'])
   })
 
+  const rightClick = (el: Element) => act(async () => void el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 60, clientY: 80 })))
+
+  it('menu prawego przycisku wiersza („Zrobione”, „Przenieś na listę”) też pyta o niezapisaną regułę; „Odrzuć” przenosi', async () => {
+    const { sent } = await open()
+    await pick('workdays')
+    await rightClick(row())
+    await act(async () => q('cases-menu-done')!.click())
+    expect(q('rule-unsaved')!.textContent).toContain('Zapisać zmianę powtarzania?')
+    expect(sent).toEqual([])
+    await act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(q('rule-unsaved')).toBeNull()
+    await rightClick(row())
+    await act(async () => q('cases-menu-list')!.click())
+    await act(async () => q('cases-menu-list-today')!.click())
+    expect(q('rule-unsaved')).not.toBeNull()
+    expect(sent).toEqual([])
+    await act(async () => q('rule-unsaved-discard')!.click())
+    await act(async () => void (await new Promise((r) => setTimeout(r, 0))))
+    expect(listWrites(sent)).toEqual(['today'])
+  })
+
+  it('wybór listy, na której sprawa już jest, niczego nie pyta ani nie gubi reguły', async () => {
+    const { sent } = await open()
+    await pick('workdays')
+    await move('week')
+    expect(q('rule-unsaved')).toBeNull()
+    expect(sent).toEqual([])
+    // The same from the menu „…” (the list of the sprawa has the ✓).
+    await act(async () => q('case-menu', row())!.click())
+    await act(async () => q('case-menu-list')!.click())
+    await act(async () => q('case-menu-list-week')!.click())
+    expect(q('rule-unsaved')).toBeNull()
+    expect(sent).toEqual([])
+    expect((q('series-rule', row()) as HTMLSelectElement).value).toBe('workdays')
+  })
+
   it('bez zmiany w regule przeniesienie idzie od razu, bez pytania', async () => {
     const { sent } = await open()
     await move('today')

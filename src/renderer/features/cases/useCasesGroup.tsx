@@ -7,10 +7,11 @@
  * Every change says itself in the line of the screen (`GroupLine`, `view`). The hook hands the screen what each row needs (`rowProps`), the line
  * over the lists („Zaplanowano…” aside – that is the line of the window) and the overlay (menu, window).
  */
-import { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import type { CaseItem } from '@shared/engine/cases'
 import { caseSummaryItem } from '@shared/engine/casesGroup'
 import { groupSummary } from '@shared/groupSummary'
+import type { CaseList } from '@shared/model/requests'
 import { settingsOn } from '@shared/model/settings'
 import { ContextMenu, menuBind } from '../../components/ContextMenu'
 import { isEditable, type DeleteTarget } from '../../lib/deleteKey'
@@ -60,6 +61,12 @@ export interface CasesGroup {
     onPointerDownCapture: (e: ReactPointerEvent<HTMLElement>) => void
     'data-selected': 'true' | undefined
   }
+  /**
+   * A row that must be asked before its sprawa moves (a rule of „Powtarzaj” not saved yet would be lost with its form, D563 P5) registers its guard: it gets the list the
+   * sprawa is going to (`'done'` for „Zrobione”) and answers true when it took the move over (asked – it moves the sprawa itself after the answer). The menu of the right
+   * button asks it for a menu of one sprawa; null – the row goes (unmounts).
+   */
+  guardMove: (id: string, guard: ((list: CaseList) => boolean) | null) => void
   /** The menu and the window „Od której?” – rendered once by the screen. */
   overlay: ReactNode
 }
@@ -88,6 +95,10 @@ export function useCasesGroup(o: CasesGroupOptions): CasesGroup {
   const selected = useMemo(() => itemsOf(sel.selected), [sel.selected, byId, place])
   const listOf = (id: string) => lists.findIndex((l) => l.includes(id))
 
+  const guards = useRef(new Map<string, (list: CaseList) => boolean>())
+  const guardMove = useCallback((id: string, guard: ((list: CaseList) => boolean) | null) => void (guard ? guards.current.set(id, guard) : guards.current.delete(id)), [])
+  /** The move of one sprawa taken over by its row (see `guardMove`). */
+  const guarded = (ids: readonly string[], list: CaseList): boolean => ids.length === 1 && guards.current.get(ids[0]!)?.(list) === true
   const [menu, setMenu] = useState<{ at: { x: number; y: number }; ids: string[] } | null>(null)
   const [planning, setPlanning] = useState<string[] | null>(null)
   const down = useRef<{ x: number; y: number } | null>(null)
@@ -143,10 +154,10 @@ export function useCasesGroup(o: CasesGroupOptions): CasesGroup {
           at={menu.at}
           onClose={() => setMenu(null)}
           items={casesMenu(itemsOf(menu.ids), groups, {
-            list: (l) => void act(CASE_VERB.moved, () => moveCases(menu.ids, l)),
+            list: (l) => void (guarded(menu.ids, l) || act(CASE_VERB.moved, () => moveCases(menu.ids, l))),
             category: (c) => void act(CASE_VERB.changed, () => categoryCases(menu.ids, c)),
             estimate: (m) => void act(CASE_VERB.changed, () => estimateCases(menu.ids, m)),
-            done: () => void act(CASE_VERB.done, () => doneCases(menu.ids)),
+            done: () => void (guarded(menu.ids, 'done') || act(CASE_VERB.done, () => doneCases(menu.ids))),
             restore: () => void act(CASE_VERB.restored, () => restoreCases(menu.ids)),
             plan: () => setPlanning(menu.ids),
             remove: () => void removeGroup(o.view, menu.ids)
@@ -156,5 +167,5 @@ export function useCasesGroup(o: CasesGroupOptions): CasesGroup {
       {planning && <PlanGroupDialog items={itemsOf(planning)} today={o.today} view={o.view} onClose={() => setPlanning(null)} />}
     </>
   )
-  return { sel, selected, summary, removeTarget, rowProps, overlay }
+  return { sel, selected, summary, removeTarget, rowProps, guardMove, overlay }
 }
