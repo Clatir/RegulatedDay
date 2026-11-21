@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { deepEqual, editStands, inverseEdit, recordEdit, setAt, valueAt } from '@shared/data/merge'
 import { SESSIONS_CHANGE_ID } from '@shared/model/sessionMigration'
 import { settingsOn, type SettingsChange } from '@shared/model/settings'
-import { isPlannedChange, withdrawnRd } from '@shared/model/settingsWithdraw'
+import { isPlannedChange, withdrawRefusal, withdrawnRd } from '@shared/model/settingsWithdraw'
 
 const TODAY = '2026-11-21'
 const ch = (id: string, from: string, patch: Record<string, unknown>, extra: Partial<SettingsChange> = {}): SettingsChange => ({ id, from, at: null, made: 1, patch, ...extra })
@@ -76,30 +76,43 @@ describe('withdrawnRd', () => {
     expect(withdrawnRd(moved, 's', TODAY)).toMatchObject({ refused: 'sessions' })
   })
 
-  it('późniejsza zmiana zrobiona po niej zapisała tę samą listę całą (typy dni tygodnia, warianty) – odmowa „później”, z tą zmianą', () => {
-    const week = (sat: string) => ['zwykly', 'zwykly', 'zwykly', 'zwykly', 'zwykly', sat, 'weekend']
-    const a = ch('a', '2026-11-25', { weekTypes: week('wolne'), reserve: 3 }, { made: 1 })
-    // Made after `a` from the settings of its date: its list holds the Saturday of `a`.
-    const b = ch('b', '2026-11-30', { weekTypes: ['wolne', ...week('wolne').slice(1)] }, { made: 2 })
+  it('późniejsza zmiana tej samej listy (typy dni tygodnia, warianty) trzyma wartość, którą zmiana zmieniła – odmowa „później”, z tą zmianą', () => {
+    const week = (mon: string, sat: string) => [mon, 'zwykly', 'zwykly', 'zwykly', 'zwykly', sat, 'weekend']
+    // `a`: Saturday → „wolne”.
+    const a = ch('a', '2026-11-25', { weekTypes: week('zwykly', 'wolne'), reserve: 3 })
+    // `b` keeps the Saturday of `a` (and changes Monday): withdrawing `a` would leave its Saturday from the date of `b`.
+    const b = ch('b', '2026-11-30', { weekTypes: week('wolne', 'wolne') })
     expect(withdrawnRd({ settings: [a, b] }, 'a', TODAY)).toMatchObject({ refused: 'later', later: { id: 'b' } })
+    // Whoever made it and when (`made` of another computer is no order of making): the same.
+    expect(withdrawnRd({ settings: [a, { ...b, made: 0 }] }, 'a', TODAY)).toMatchObject({ refused: 'later', later: { id: 'b' } })
     // The later one goes first; then `a` can go.
     const first = withdrawnRd({ settings: [a, b] }, 'b', TODAY)
     if (!('raw' in first)) throw new Error('odmowa')
     expect('raw' in withdrawnRd(first.raw, 'a', TODAY)).toBe(true)
-    // Made before `a` (its list cannot hold the value of `a`): no refusal.
-    expect('raw' in withdrawnRd({ settings: [a, { ...b, made: 0 }] }, 'a', TODAY)).toBe(true)
-    // A later change of another field, or a single value of the same field: no refusal.
-    expect('raw' in withdrawnRd({ settings: [a, ch('c', '2026-11-30', { reserve: 5 }, { made: 2 })] }, 'a', TODAY)).toBe(true)
-    // The variants of a subcategory are one list too.
-    const v1 = ch('v1', '2026-11-25', { categories: { analiza: { variants: [{ id: 'x', name: 'X' }] } } }, { made: 1 })
-    const v2 = ch('v2', '2026-11-27', { categories: { analiza: { variants: [{ id: 'x', name: 'X' }, { id: 'y', name: 'Y' }] } } }, { made: 2 })
-    expect(withdrawnRd({ settings: [v1, v2] }, 'v1', TODAY)).toMatchObject({ refused: 'later', later: { id: 'v2' } })
-    expect('raw' in withdrawnRd({ settings: [v1, ch('v3', '2026-11-27', { categories: { inna: { variants: [] } } }, { made: 2 })] }, 'v1', TODAY)).toBe(true)
+    // `b` brings Saturday back and changes Monday: it holds nothing of `a` – `a` can go, `b` stays as it was.
+    const back = ch('b2', '2026-11-30', { weekTypes: week('wolne', 'weekend') })
+    const out = withdrawnRd({ settings: [a, back] }, 'a', TODAY)
+    if (!('raw' in out)) throw new Error('odmowa')
+    expect(settingsOn(changesOf(out.raw), '2026-11-30').weekTypes).toEqual(week('wolne', 'weekend'))
+    // The first later change that holds it is named, past one that does not.
+    expect(withdrawnRd({ settings: [a, back, { ...b, id: 'b3', from: '2026-12-05' }] }, 'a', TODAY)).toMatchObject({ refused: 'later', later: { id: 'b3' } })
+    // A later change of another field, or a single value: no refusal.
+    expect('raw' in withdrawnRd({ settings: [a, ch('c', '2026-11-30', { reserve: 5 })] }, 'a', TODAY)).toBe(true)
   })
 
-  it('zmiana, która dodaje podkategorię (nie ma jej w ustawieniach tuż przed nią) – odmowa „podkategoria”, z nazwą', () => {
+  it('warianty podkategorii: po id – później zapisana lista z wariantem, jaki zmiana zrobiła, to odmowa; ze zmienionym albo innym – nie', () => {
+    const v1 = ch('v1', '2026-11-25', { categories: { analiza: { variants: [{ id: 'x', name: 'X' }] } } })
+    const v2 = ch('v2', '2026-11-27', { categories: { analiza: { variants: [{ id: 'x', name: 'X' }, { id: 'y', name: 'Y' }] } } })
+    expect(withdrawnRd({ settings: [v1, v2] }, 'v1', TODAY)).toMatchObject({ refused: 'later', later: { id: 'v2' } })
+    const renamed = ch('v2', '2026-11-27', { categories: { analiza: { variants: [{ id: 'x', name: 'X2' }, { id: 'y', name: 'Y' }] } } })
+    expect('raw' in withdrawnRd({ settings: [v1, renamed] }, 'v1', TODAY)).toBe(true)
+    expect('raw' in withdrawnRd({ settings: [v1, ch('v3', '2026-11-27', { categories: { inna: { variants: [] } } })] }, 'v1', TODAY)).toBe(true)
+  })
+
+  it('zmiana, która dodaje podkategorię (nie ma jej w ustawieniach tuż przed nią) – odmowa „podkategoria”, z nazwą; wiersz to wie', () => {
     const add = ch('n', '2026-11-25', { categories: { nowa: { cls: 'work', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1, body: 0 } } } })
     const raw = { categories: { nowa: { name: 'Nowa', color: null, archived: false } }, settings: [add] }
+    expect(withdrawRefusal(add, [add], TODAY)).toBe('newCategory')
     expect(withdrawnRd(raw, 'n', TODAY)).toMatchObject({ refused: 'newCategory', category: 'nowa', name: 'Nowa' })
     expect(withdrawnRd({ settings: [add] }, 'n', TODAY)).toMatchObject({ refused: 'newCategory', category: 'nowa', name: null })
     // A later change of that subcategory's cost (it is there before it), and one of a default subcategory: no refusal.

@@ -189,10 +189,11 @@ describe('„Wycofaj” zaplanowanej zmiany', () => {
     expect(lastToast()?.text).toBe('Nie cofnięto – data zmiany (25.11.2026) już nadeszła. Ustaw ją jeszcze raz od jutra.')
   })
 
-  it('późniejsza zmiana tej samej listy (typy dni tygodnia), zrobiona po niej: nic nie wysłane, dymek każe wycofać najpierw ją', async () => {
-    const week = (sat: string) => ['zwykly', 'zwykly', 'zwykly', 'zwykly', 'zwykly', sat, 'weekend']
-    const a = { ...ch('w1', '2026-11-25', { weekTypes: week('wolne') }), made: 1 }
-    const b = { ...ch('w2', '2026-11-30', { weekTypes: ['wolne', ...week('wolne').slice(1)] }), made: 2 }
+  it('późniejsza zmiana tej samej listy (typy dni tygodnia) trzyma jej sobotę: nic nie wysłane, dymek każe wycofać najpierw ją', async () => {
+    const week = (mon: string, sat: string) => [mon, 'zwykly', 'zwykly', 'zwykly', 'zwykly', sat, 'weekend']
+    const a = ch('w1', '2026-11-25', { weekTypes: week('zwykly', 'wolne') })
+    // It keeps the Saturday of `w1` (and changes Monday).
+    const b = ch('w2', '2026-11-30', { weekTypes: week('wolne', 'wolne') })
     await mount({ schema: 1, settings: [A, a, b] })
     await click(q('settings-withdraw-w1'))
     expect(main.sent).toEqual([])
@@ -204,12 +205,23 @@ describe('„Wycofaj” zaplanowanej zmiany', () => {
     expect(rdFrom(main.file).settings.map((c) => c.id)).toEqual(['a'])
   })
 
-  it('zmiana, która dodaje podkategorię: nic nie wysłane, dymek odsyła do „Kategorii” z nazwą podkategorii', async () => {
+  it('późniejsza zmiana tej samej listy, która przywraca sobotę i zmienia poniedziałek: zmiana schodzi, tamta zostaje', async () => {
+    const week = (mon: string, sat: string) => [mon, 'zwykly', 'zwykly', 'zwykly', 'zwykly', sat, 'weekend']
+    const a = ch('w1', '2026-11-25', { weekTypes: week('zwykly', 'wolne') })
+    const b = ch('w2', '2026-11-30', { weekTypes: week('wolne', 'weekend') })
+    await mount({ schema: 1, settings: [A, a, b] })
+    await click(q('settings-withdraw-w1'))
+    expect(rdFrom(main.file).settings.map((c) => c.id)).toEqual(['a', 'w2'])
+    expect(lastToast()?.text).toBe('Wycofano zaplanowaną zmianę od 25.11.2026.')
+  })
+
+  it('zmiana, która dodaje podkategorię: w wierszu bez „Wycofaj”, napis odsyła do „Kategorii”', async () => {
     const add = ch('n1', '2026-11-25', { categories: { nowa: { cls: 'work', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1, body: 0 } } } })
     await mount({ schema: 1, categories: { nowa: { name: 'Korekty', color: null, archived: false } }, settings: [A, add] })
-    await click(q('settings-withdraw-n1'))
-    expect(main.sent).toEqual([])
-    expect(lastToast()?.text).toBe('Ta zmiana dodaje podkategorię „Korekty” – usuń podkategorię w „Kategoriach”.')
+    const row = q('settings-planned-n1')!
+    expect(row.querySelector('button')).toBeNull()
+    expect(q('settings-withdraw-fixed-n1')?.textContent).toBe('dodaje podkategorię – usuń ją w „Kategoriach”')
+    expect(row.textContent).toContain('Podkategoria „Korekty”')
   })
 
   it('zmiana warstwy sesji (przeniesienie do szablonów): w wierszu bez „Wycofaj”, z wyjaśnieniem', async () => {

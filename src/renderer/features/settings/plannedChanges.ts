@@ -5,7 +5,7 @@
  */
 import { DAY_TYPE_NAMES, isPlain, type SettingsChange } from '@shared/model/settings'
 import { NUMBER_FIELDS, TOGGLE_FIELDS, formatField } from '@shared/model/fields'
-import { isPlannedChange, withdrawRefusal } from '@shared/model/settingsWithdraw'
+import { isPlannedChange, withdrawRefusal, type WithdrawFixed } from '@shared/model/settingsWithdraw'
 
 export interface PlannedItem {
   label: string
@@ -17,8 +17,11 @@ export interface PlannedChange {
   id: string
   from: string
   items: PlannedItem[]
-  /** „Wycofaj” takes it back (`withdrawRefusal`); false – a change of the layer of sessions, which the templates hold (D511). */
-  withdrawable: boolean
+  /**
+   * Why the row has no „Wycofaj” (`withdrawRefusal`): a change of the layer of sessions, which the templates hold (D511), or one that adds a
+   * subcategory (it goes with the subcategory, T2350); null – „Wycofaj” takes it back.
+   */
+  fixed: Exclude<WithdrawFixed, 'inForce'> | null
 }
 
 /** The names of the subcategories (id → name) – a plan never shows an id. */
@@ -57,5 +60,8 @@ export function plannedChanges(settings: readonly SettingsChange[], today: strin
   return settings
     .filter((c) => isPlannedChange(c, today))
     .sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : (a.made ?? 0) - (b.made ?? 0)))
-    .map((c) => ({ id: c.id, from: c.from, items: itemsOf(c.patch, names), withdrawable: withdrawRefusal(c, today) == null }))
+    .map((c) => {
+      const fixed = withdrawRefusal(c, settings, today)
+      return { id: c.id, from: c.from, items: itemsOf(c.patch, names), fixed: fixed === 'inForce' ? null : fixed }
+    })
 }

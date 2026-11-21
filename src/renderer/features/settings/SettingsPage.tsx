@@ -24,6 +24,7 @@ import { BarSection, MachineSection, NoticesSection } from './MachineSections'
 import { PlannedChanges, WithdrawAction } from './PlannedList'
 import { SettingsSearch, SettingsToc } from './SettingsNav'
 import { datedRange, settingsItems, type SettingsItem } from './settingsLayout'
+import { needsDataFolder } from './settingsIndex'
 import { scrollToSetting } from './settingsScroll'
 import { resetSettingsFrom } from './settingsStore'
 
@@ -189,12 +190,12 @@ export function SettingsPage() {
   const today = useData((s) => s.view?.today ?? '')
   const [visitDay] = useState(today)
   // A section or a field picked in the search (Ctrl K) or in the box of the page: brought into view once (a section to the top, a field
-  // to the middle and marked). Those that need the folder are not there without it.
+  // to the middle and marked). Those that need the folder are not there without it; one that is not there at all – „nie ma”.
   const pick = useUi((s) => s.pick)
   useEffect(() => {
     if (pick?.kind !== 'setting') return
     const found = () => document.querySelector(`[data-testid="${pick.id}"]`) !== null
-    if (!dataOpen && !found()) {
+    if (!dataOpen && !found() && needsDataFolder(pick.id)) {
       if (takePick((p) => p.kind === 'setting')) toast('Ta część ustawień jest dostępna po otwarciu folderu danych.', 'info')
     } else if (takeFoundPick((p) => p.kind === 'setting', found, pick.id.startsWith('field-') ? 'Tego pola ustawień nie ma.' : 'Tej sekcji ustawień nie ma.')) scrollToSetting(pick.id)
   }, [pick, dataOpen])

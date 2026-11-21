@@ -296,6 +296,16 @@ describe('przegląd UX14, runda 1', () => {
     expect(useUi.getState().toasts.map((t) => t.text)).toContain('Ta część ustawień jest dostępna po otwarciu folderu danych.')
   })
 
+  it('bez otwartego folderu: pole i sekcja, których nie ma wcale, mają „nie ma”, nie „po otwarciu folderu”', async () => {
+    useData.setState({ view: view({ status: 'none', folder: null }) })
+    useUi.setState({ pick: { kind: 'setting', id: 'field-nie-ma' } })
+    await mount()
+    expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['Tego pola ustawień nie ma.'])
+    act(() => useUi.setState({ toasts: [], pick: { kind: 'setting', id: 'settings-nie-ma' } }))
+    await act(async () => undefined)
+    expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['Tej sekcji ustawień nie ma.'])
+  })
+
   it('pole, którego nie ma, ma komunikat o polu, a sekcja – o sekcji', async () => {
     useUi.setState({ pick: { kind: 'setting', id: 'field-nie-ma' } })
     await mount()

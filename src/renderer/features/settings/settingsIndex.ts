@@ -70,6 +70,13 @@ export const SETTING_FIELDS: readonly SettingField[] = [
   ...TOGGLE_FIELDS.map((f): SettingField => ({ id: `field-${f.key}`, title: f.label, section: `settings-${f.group}` }))
 ]
 
+/** A section or a field the page has only with the data folder open (a pick of it without the folder says so); an unknown id – false. */
+export function needsDataFolder(id: string): boolean {
+  const field = SETTING_FIELDS.find((f) => f.id === id)
+  if (field) return field.needsData === true || sectionOf(field.section)?.needsData === true
+  return sectionOf(id)?.needsData === true
+}
+
 /**
  * The records of the sections and of the fields for the search (kind `setting`; Enter opens `id` on the settings page). Without
  * the data folder open (`dataOpen` false) the page lacks the sections that need it – the box of the page leaves them out; Ctrl K

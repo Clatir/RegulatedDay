@@ -40,13 +40,24 @@ export function PlannedChanges({ action }: { action?: (change: PlannedChange) =>
   )
 }
 
+/** What a row without „Wycofaj” says instead (`PlannedChange.fixed`). */
+const FIXED_TEXT: Record<NonNullable<PlannedChange['fixed']>, string> = {
+  sessions: 'sesje są w szablonach – zmień je w „Szablonach”',
+  newCategory: 'dodaje podkategorię – usuń ją w „Kategoriach”'
+}
+
 /**
  * „Wycofaj” of a row (one save; the toast says how it went, with „Cofnij”). A change of the layer of sessions has none – the templates
- * hold those sessions (D511) – the row says where they change.
+ * hold those sessions (D511) – nor one that adds a subcategory (T2350): the row says where they change.
  */
 export function WithdrawAction({ change }: { change: PlannedChange }) {
   const [busy, run] = useBusy()
-  if (!change.withdrawable) return <span className="text-[12px] text-muted">sesje są w szablonach – zmień je w „Szablonach”</span>
+  if (change.fixed)
+    return (
+      <span className="text-[12px] text-muted" data-testid={`settings-withdraw-fixed-${change.id}`}>
+        {FIXED_TEXT[change.fixed]}
+      </span>
+    )
   return (
     <button type="button" className="btn" disabled={busy} onClick={() => void run(() => withdrawPlanned(change.id))} data-testid={`settings-withdraw-${change.id}`}>
       Wycofaj

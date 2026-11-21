@@ -10,7 +10,7 @@ import { rdFrom } from '@shared/model/rd'
 import { buildIndex, searchIndex } from '@shared/search'
 import { SETTING_SECTIONS, searchRecords } from '@renderer/features/search/records'
 import { choose } from '@renderer/features/search/paletteLogic'
-import { SETTING_FIELDS, settingRecords } from '@renderer/features/settings/settingsIndex'
+import { SETTING_FIELDS, needsDataFolder, settingRecords } from '@renderer/features/settings/settingsIndex'
 import { sectionOf } from '@renderer/features/settings/settingsLayout'
 import { useUi } from '@renderer/store/ui'
 
@@ -78,5 +78,17 @@ describe('Ctrl K zna pola', () => {
     choose({ kind: 'setting', id: 'field-reserve', title: 'Rezerwa energii' }, '2026-11-21')
     expect(useUi.getState().page).toBe('settings')
     expect(useUi.getState().pick).toEqual({ kind: 'setting', id: 'field-reserve' })
+  })
+})
+
+describe('needsDataFolder', () => {
+  it('sekcja i pole z folderem danych – tak; pole sekcji bez folderu, id, którego nie ma – nie', () => {
+    expect(needsDataFolder('settings-categories')).toBe(true)
+    expect(needsDataFolder('field-reserve')).toBe(true)
+    expect(needsDataFolder('field-backups')).toBe(true)
+    expect(needsDataFolder('settings-bar')).toBe(false)
+    expect(needsDataFolder('settings-data')).toBe(false)
+    expect(needsDataFolder('field-nie-ma')).toBe(false)
+    expect(needsDataFolder('settings-nie-ma')).toBe(false)
   })
 })

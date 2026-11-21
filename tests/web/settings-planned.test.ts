@@ -45,16 +45,18 @@ describe('plannedChanges', () => {
     expect(c!.items).toEqual([{ label: 'Inne ustawienie', value: '' }])
   })
 
-  it('„Wycofaj” ma każda zmiana poza zmianą warstwy sesji (przeniesienie do szablonów, D511)', () => {
+  it('„Wycofaj” ma każda zmiana poza zmianą warstwy sesji (przeniesienie do szablonów, D511) i zmianą, która dodaje podkategorię', () => {
     const list = plannedChanges(
-      [ch('a', '2026-11-25', { reserve: 20 }), ch(`${SESSIONS_CHANGE_ID}-2026-11-28`, '2026-11-28', { sessions: [] }), ch('s', '2026-11-29', { dayTypes: { zwykly: { sessions: ['yes', 'yes', 'yes', 'yes', 'yes', 'no', 'no'] } } })],
+      [ch('a', '2026-11-25', { reserve: 20 }), ch(`${SESSIONS_CHANGE_ID}-2026-11-28`, '2026-11-28', { sessions: [] }), ch('s', '2026-11-29', { dayTypes: { zwykly: { sessions: ['yes', 'yes', 'yes', 'yes', 'yes', 'no', 'no'] } } }), ch('n', '2026-11-30', { categories: { nowa: { cls: 'work' } } }), ch('k', '2026-12-01', { categories: { nowa: { cls: 'rest' } } })],
       '2026-11-21',
       names
     )
-    expect(list.map((c) => [c.id, c.withdrawable])).toEqual([
-      ['a', true],
-      [`${SESSIONS_CHANGE_ID}-2026-11-28`, false],
-      ['s', false]
+    expect(list.map((c) => [c.id, c.fixed])).toEqual([
+      ['a', null],
+      [`${SESSIONS_CHANGE_ID}-2026-11-28`, 'sessions'],
+      ['s', 'sessions'],
+      ['n', 'newCategory'],
+      ['k', null]
     ])
   })
 
