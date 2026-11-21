@@ -7,8 +7,10 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Checkin } from '@renderer/features/today/MorningPlan'
+import { checkinOpen } from '@renderer/features/today/checkinLogic'
 import { logEvents } from '@renderer/store/data'
 import type { DayModel } from '@renderer/store/day'
+import { skipCheckin, useUi } from '@renderer/store/ui'
 
 vi.mock('@renderer/store/data', async (orig) => ({ ...(await orig<typeof import('@renderer/store/data')>()), logEvents: vi.fn(async () => true) }))
 
@@ -17,18 +19,28 @@ let host: HTMLElement | null = null
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 })
-beforeEach(() => vi.mocked(logEvents).mockClear().mockResolvedValue(true))
+beforeEach(() => {
+  vi.mocked(logEvents).mockClear().mockResolvedValue(true)
+  useUi.setState({ checkinAnswers: null, checkinSkipped: null })
+})
 afterEach(() => {
   act(() => root?.unmount())
   host?.remove()
   root = host = null
 })
-async function show() {
+async function show(date = '2026-11-18') {
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
-  await act(async () => root!.render(createElement(Checkin, { model: { date: '2026-11-18' } as DayModel, onSkip: () => undefined })))
+  await act(async () => root!.render(createElement(Checkin, { model: { date } as DayModel, onSkip: () => skipCheckin(date) })))
 }
+/** The screen left (another page) and come back. */
+async function leaveAndBack(date = '2026-11-18') {
+  act(() => root!.unmount())
+  host!.remove()
+  await show(date)
+}
+const picked = () => [0, 1, 2, 3, 4, 5, 6, 7].map((i) => q(`checkin-${i}`)!.querySelector('[aria-checked="true"]')!.textContent)
 const q = (id: string) => host!.querySelector<HTMLElement>(`[data-testid="${id}"]`)
 const pick = (i: number, label: string) => act(async () => [...q(`checkin-${i}`)!.querySelectorAll<HTMLElement>('[role="radio"]')].find((b) => b.textContent === label)!.click())
 
@@ -71,5 +83,40 @@ describe('check-in o ciało (D521)', () => {
     expect(q('checkin-save-fewer')).toBeNull()
     await pick(2, 'tak')
     expect(q('checkin-save-fewer')).not.toBeNull()
+  })
+})
+
+describe('check-in przy zmianie ekranu (B5, D563)', () => {
+  it('wpisane odpowiedzi zostają po wyjściu na inny ekran i powrocie tego samego dnia', async () => {
+    await show()
+    await pick(0, 'tak')
+    await pick(5, 'trochę')
+    await leaveAndBack()
+    expect(picked()).toEqual(['tak', 'nie', 'nie', 'nie', 'nie', 'trochę', 'nie', 'nie'])
+  })
+
+  it('inny dzień zaczyna od czysta', async () => {
+    await show()
+    await pick(0, 'tak')
+    await leaveAndBack('2026-11-19')
+    expect(picked()).toEqual(Array(8).fill('nie'))
+  })
+
+  it('po zapisie odpowiedzi nie wracają (następny check-in zaczyna od zer)', async () => {
+    await show()
+    await pick(0, 'tak')
+    await act(async () => q('checkin-save')!.click())
+    expect(useUi.getState().checkinAnswers).toBeNull()
+    await leaveAndBack()
+    expect(picked()).toEqual(Array(8).fill('nie'))
+  })
+
+  it('„Pomiń” zostaje na dzień: ten dzień nie pokazuje check-inu, inny tak', () => {
+    expect(checkinOpen(true, null, '2026-11-18')).toBe(true)
+    skipCheckin('2026-11-18')
+    const skipped = useUi.getState().checkinSkipped
+    expect(checkinOpen(true, skipped, '2026-11-18')).toBe(false)
+    expect(checkinOpen(true, skipped, '2026-11-19')).toBe(true)
+    expect(checkinOpen(false, null, '2026-11-18')).toBe(false)
   })
 })

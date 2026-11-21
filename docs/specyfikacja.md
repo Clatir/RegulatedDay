@@ -2251,7 +2251,7 @@ Te zasady obowiązują każdy ekran i każdy typ rekordu: blok, prośbę, szablo
 | Zaznaczanie wielu | Ctrl+klik, Shift+klik, Shift+strzałki, Ctrl+A, Esc; prawy przycisk – menu „Zmień N …”; zmiana od razu, linia z „Cofnij” (D527–D531, niżej) |
 | Historia | każdy rekord ma historię zmian z przywracaniem |
 | Edycja pól | zapis przy opuszczeniu pola albo Enterze, nie przy każdym klawiszu; Esc anuluje edycję, kolejny Esc zamyka okno; jeden porządek obsługi Esc |
-| Szkice | nowy blok nie ma „Dodaj” (D461): zapisuje się przy pierwszym zatwierdzonym polu albo gdy go opuścisz; niezapisany formularz (nowy blok czekający na wymianę, krok kreatora) przetrwa przejście na inny ekran |
+| Szkice | nowy blok nie ma „Dodaj” (D461): zapisuje się przy pierwszym zatwierdzonym polu albo gdy go opuścisz; niezapisany formularz (nowy blok czekający na wymianę, krok kreatora) przetrwa przejście na inny ekran. Karta wydarzenia całodniowego: klik obok zapisuje, gdy tytuł niepusty, pusty (albo bez zmian) zamyka bez zapisu, Esc i „Anuluj” odrzucają (D563 P4, zmienia D405). Niezapisana reguła serii („Zapisz zmianę serii”) albo powtarzania sprawy („Zapisz powtarzanie”) przy wyborze innej pozycji pyta „Zapisać zmianę serii?” / „Zapisać zmianę powtarzania?” · Zapisz · Odrzuć (Esc zostaje; D563 P5). „Pomiń” pierwszego check-inu, jego wpisane odpowiedzi i „Pomiń” niezamkniętych dni zostają do końca dnia przy zmianie ekranu, inny dzień zaczyna od czysta (D563 B5) |
 | Tylko do odczytu | wyraźne oznaczenie; brak komunikatów o sukcesie zapisu |
 | Listy i filtry | filtry pokazują liczby wyników i dają się wyczyścić jednym przyciskiem; zapamiętywane w jeden sposób, na danym komputerze |
 | Puste stany | wyjaśniają, dlaczego nic nie widać, i proponują akcję |

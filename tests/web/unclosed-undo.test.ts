@@ -8,6 +8,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { CloseResult, TimerResult, UnclosedDay } from '@shared/api'
 import { closedToastText, dayTitle, UnclosedDays } from '@renderer/features/ritual/UnclosedDays'
+import { useData } from '@renderer/store/data'
 import { useUi } from '@renderer/store/ui'
 
 const DAY = '2026-11-13'
@@ -24,7 +25,8 @@ afterEach(() => {
   host?.remove()
   root = null
   host = null
-  useUi.setState({ toasts: [] })
+  useUi.setState({ toasts: [], unclosedSkipped: null })
+  useData.setState({ view: undefined })
 })
 
 const flush = () => act(async () => void (await new Promise((r) => setTimeout(r, 0))))
@@ -94,5 +96,38 @@ describe('„Cofnij” po zamknięciu dnia rano (D468)', () => {
     expect(closedToastText(DAY, 'asWritten')).toBe('Zamknięto piątek 13.11.2026: jak zapisano')
     expect(closedToastText(DAY, 'free')).toBe('Zamknięto piątek 13.11.2026: wolny')
     expect(closedToastText(DAY, 'unknown')).toBe('Zamknięto piątek 13.11.2026: bez danych')
+  })
+})
+
+describe('„Pomiń” niezamkniętych dni przy zmianie ekranu (B5, D563)', () => {
+  const todayIs = (today: string) => useData.setState({ view: { today } as never })
+  const remount = async () => {
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(createElement(UnclosedDays)))
+    await flush()
+  }
+
+  it('po „Pomiń”, wyjściu na inny ekran i powrocie tego samego dnia sekcji nie ma', async () => {
+    todayIs('2026-11-14')
+    await mount({ ok: true, why: null, confirm: null })
+    await click('unclosed-skip')
+    expect(row()).toBeNull()
+    act(() => root!.unmount())
+    host!.remove()
+    await remount()
+    expect(host!.querySelector('[data-testid="unclosed-days"]')).toBeNull()
+  })
+
+  it('następnego dnia lista wraca', async () => {
+    todayIs('2026-11-14')
+    await mount({ ok: true, why: null, confirm: null })
+    await click('unclosed-skip')
+    act(() => root!.unmount())
+    host!.remove()
+    todayIs('2026-11-15')
+    await remount()
+    expect(row()).not.toBeNull()
   })
 })

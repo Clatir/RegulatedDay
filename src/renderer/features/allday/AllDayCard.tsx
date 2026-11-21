@@ -1,7 +1,8 @@
 /**
  * The card of an all-day event (D405, D406): a small window beside the strip – the title, the days from and to, one of six
  * colours, the calendar (D425; only with two or more – „Moje” is none), the note (the block's Markdown editor, D388), „To wolne (urlop, wyjazd)”; „Zapisz” · „Anuluj” · „Usuń” (only an
- * event that exists). Esc, „Anuluj” and a click outside close it and save nothing; a removal asks nothing (its line „Cofnij”
+ * event that exists). Esc and „Anuluj” close it and save nothing; a click outside saves what is written when the title is not empty (an event with nothing changed
+ * and an empty title just close, D563 P4 – it changes D405; days the wrong way round keep the card open under the problem); a removal asks nothing (its line „Cofnij”
  * is the strip's). After a „Zapisz” that turns „To wolne” on or changes the days of such an event the same window asks once
  * about the type „Wolne” for its days (T733: a mended title asks nothing).
  */
@@ -74,15 +75,17 @@ export function AllDayCard({
   useEffect(() => {
     ref.current?.scrollIntoView({ block: 'nearest' })
   }, [])
-  // A click outside closes it (the answer „Nie” on the question).
+  // A click outside (D563 P4): saves what is written when the title is not empty, closes at once with nothing written otherwise
+  // (the answer „Nie” on the question „Wolne”). The latest render's function – it reads the fields from the ref, never from a stale one.
+  const awayRef = useRef<() => void>(() => undefined)
   useEffect(() => {
     const away = (e: PointerEvent) => {
       // A dialog over it (Del's question, D462) with its overlay is no „outside”: the card waits for the answer.
-      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target) && !(e.target instanceof Element && e.target.closest(IN_DIALOG))) onClose()
+      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target) && !(e.target instanceof Element && e.target.closest(IN_DIALOG))) awayRef.current()
     }
     document.addEventListener('pointerdown', away)
     return () => document.removeEventListener('pointerdown', away)
-  }, [onClose])
+  }, [])
   const problems = cardProblems(shown)
 
   const save = () =>
@@ -106,6 +109,19 @@ export function AllDayCard({
       if (days.length) setAsk(days)
       else onClose()
     })
+  awayRef.current = () => {
+    // The question „Wolne” is up, or a save runs: nothing more to write here.
+    if (ask || busy) return onClose()
+    commitActiveField()
+    const e = { ...form.current, title: form.current.title.trim() }
+    if (!e.title || (base && (Object.keys(e) as Array<keyof AllDayEvent>).every((k) => base[k] === e[k]))) return onClose()
+    if (cardProblems(e).dates) return setTried(true)
+    // A save that asks the question „Wolne” stays in the card until it is answered (a click elsewhere is its „Nie”).
+    if (asksFreeAfter(base, e)) return void save()
+    // Closed at once: the click goes on to what it hit (another event, a day of the strip), the write follows.
+    onClose()
+    void saveAllDay(e, base)
+  }
   const remove = () =>
     run(async () => {
       if (!base) return

@@ -17,7 +17,7 @@ import type { CloseHow } from '@shared/model/events'
 import { logicalMinuteOf } from '@shared/time/day'
 import { weekday } from '@shared/time/zone'
 import { useData } from '../../store/data'
-import { openDay, toast, undoToast } from '../../store/ui'
+import { openDay, skipUnclosed, toast, undoToast, useUi } from '../../store/ui'
 import { DayTime, typedOf, useTypedTime } from './dayTime'
 import { effectText } from './RitualPanel'
 
@@ -45,7 +45,9 @@ export function offerUndo(date: string, how: CloseHow, written: readonly string[
 export function UnclosedDays() {
   const stamp = useData((s) => s.stamp)
   const [days, setDays] = useState<UnclosedDay[]>([])
-  const [skipped, setSkipped] = useState(false)
+  // „Pomiń” stays for the day, in the store (B5, D563): another screen and back does not bring the list again; tomorrow it does.
+  const today = useData((s) => s.view?.today) ?? ''
+  const skipped = useUi((u) => u.unclosedSkipped) === today
   const [tick, setTick] = useState(0)
   const [editing, setEditing] = useState<{ date: string; choice: string } | null>(null)
   const time = useTypedTime()
@@ -120,7 +122,7 @@ export function UnclosedDays() {
       <div className="flex items-baseline gap-2">
         <h2 className="text-[13px] font-medium">Niezamknięte dni</h2>
         <span className="flex-1" />
-        <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={() => setSkipped(true)} data-testid="unclosed-skip">
+        <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={() => skipUnclosed(today)} data-testid="unclosed-skip">
           Pomiń
         </button>
       </div>

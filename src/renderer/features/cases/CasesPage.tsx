@@ -8,7 +8,7 @@
  * HKU3 (D450): the switch „Listy · Macierz” on top (remembered by the window – `casesView.ts`), the quarter of a sprawa chosen in its row
  * (its stripe on the left), the matrix of Eisenhower (`CasesMatrix`) in place of the lists.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import type { RequestCounters } from '@shared/api'
 import { dueBadge } from '@shared/engine/caseDates'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
@@ -43,6 +43,7 @@ import { nextFreeStart, submitTitle } from './casesUi'
 import { useCasesGroup, type CasesGroup } from './useCasesGroup'
 import { planOnAxis } from './planOnAxis'
 import { SeriesFields } from '../series/SeriesFields'
+import { UnsavedRuleDialog, type RuleGuard } from '../series/UnsavedRuleDialog'
 import { draftProblem, repeatChanged, repeatDraft, repeatInputOf, type SeriesDraft } from '../series/seriesForm'
 import { StepsEditor } from '../steps/StepsEditor'
 import { stepsAnswer } from '../steps/stepsUi'
@@ -265,6 +266,9 @@ function CaseRow({ x, today, marked, group }: { x: CaseItem; today: string; mark
   const [dating, setDating] = useState(false)
   // D465: „Powtarzaj” of a task opens under its row (as „Terminy”).
   const [repeating, setRepeating] = useState(false)
+  // D563 P5: closing „Powtarzaj” with a rule written but not saved asks first (`UnsavedRuleDialog`); the form tells the row.
+  const rule = useRef<RuleGuard | null>(null)
+  const [asking, setAsking] = useState(false)
   // D440: a task's steps open under its row (as the note of a request is read there); the counter stays in the row.
   const [stepsOpen, setStepsOpen] = useState(false)
   const counter = isTask ? stepsCounter(r.steps) : null
@@ -317,7 +321,7 @@ function CaseRow({ x, today, marked, group }: { x: CaseItem; today: string; mark
               Terminy
             </button>
             {isTask && (
-              <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={repeating} onClick={() => setRepeating(!repeating)} data-testid="case-repeat-open">
+              <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={repeating} onClick={() => (repeating && rule.current?.unsaved() ? setAsking(true) : setRepeating(!repeating))} data-testid="case-repeat-open">
                 Powtarzaj
               </button>
             )}
@@ -328,7 +332,25 @@ function CaseRow({ x, today, marked, group }: { x: CaseItem; today: string; mark
         </button>
       </div>
       {dating && !done && <DatesForm x={x} set={set} />}
-      {repeating && isTask && !done && <RepeatForm x={x} today={today} onSaved={() => setRepeating(false)} />}
+      {repeating && isTask && !done && <RepeatForm x={x} today={today} onSaved={() => setRepeating(false)} guard={rule} />}
+      {asking && (
+        // `data-row-form`: a click in the question is not a click on the row (it would select it).
+        <div data-row-form="">
+          <UnsavedRuleDialog
+            title="Zapisać zmianę powtarzania?"
+            busy={false}
+            onSave={() =>
+              void (rule.current?.save() ?? Promise.resolve(false)).then((ok) => {
+                // Saved: the form closes by itself (`onSaved`); a save that did not go through stays on the form with its rule.
+                setAsking(false)
+                if (ok) setRepeating(false)
+              })
+            }
+            onDiscard={() => (setAsking(false), setRepeating(false))}
+            onClose={() => setAsking(false)}
+          />
+        </div>
+      )}
       {isTask && stepsOpen && (
         <div className="border-t border-line pt-1.5" data-row-form="" data-testid="case-steps">
           <StepsEditor steps={r.steps} ticks kind="task" onTick={(id, d) => tickCaseStep(r.id, id, d, caseTitle(r, rd), today)} onOp={async (op) => stepsAnswer(op, await changeTaskSteps(r.id, op))} />
@@ -362,7 +384,7 @@ export function DatesForm({ x, set }: { x: CaseItem; set: (patch: { dueDate?: st
  * rule counts its weeks from the task's date („Wykonać”, else „Termin”, else today – `patchedRaw`). Ticked off, the task gets
  * its next one at once (`changeRecord`).
  */
-function RepeatForm({ x, today, onSaved }: { x: CaseItem; today: string; onSaved: () => void }) {
+function RepeatForm({ x, today, onSaved, guard }: { x: CaseItem; today: string; onSaved: () => void; guard: MutableRefObject<RuleGuard | null> }) {
   const r = x.record
   const base = useMemo(() => repeatDraft(r.repeat, r.doDate ?? r.dueDate ?? today), [r.repeat, r.doDate, r.dueDate, today])
   // The saved repeat changed (here, on another computer) or another task: the form shows it again. Not the defaults of a new
@@ -386,6 +408,13 @@ function RepeatForm({ x, today, onSaved }: { x: CaseItem; today: string; onSaved
       if (input === undefined) return
       if ((await changeCase(r.id, { repeat: input })).saved) onSaved()
     })
+  // A complete rule that differs from the task's is what „Zapisz powtarzanie” would write (D563 P5).
+  const mine = useRef<RuleGuard | null>(null)
+  mine.current = guard.current = {
+    unsaved: () => input !== undefined && repeatChanged(r.repeat, draft) && draftProblem(draft) == null,
+    save: async () => input !== undefined && (await changeCase(r.id, { repeat: input })).saved === true
+  }
+  useEffect(() => () => void (guard.current === mine.current && (guard.current = null)), [guard])
   return (
     <div className="flex max-w-[460px] flex-col gap-2 border-t border-line pt-1.5 text-[12px]" data-row-form="" data-testid="case-repeat-form">
       <SeriesFields

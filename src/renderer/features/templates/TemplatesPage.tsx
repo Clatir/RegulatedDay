@@ -9,7 +9,7 @@
  * stays on the page for 15 min, or until the template changes again. Below the templates: the list of series (D381, D401) –
  * each with its rule in words, edited and ended there (`SeriesEditor`); Ctrl K finds a series as one record.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RawRecord } from '@shared/api'
 import { deepEqual } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
@@ -45,6 +45,7 @@ import { dayAxis } from '../plan/dayItems'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { Timeline } from '../plan/Timeline'
 import { SeriesEditor, useSeriesNames } from '../series/SeriesEditor'
+import { UnsavedRuleDialog, type RuleGuard } from '../series/UnsavedRuleDialog'
 import { seriesBlockOf } from '../series/seriesForm'
 import { StepsEditor } from '../steps/StepsEditor'
 import { stepsAnswer } from '../steps/stepsUi'
@@ -69,13 +70,34 @@ export function TemplatesPage() {
   const [selected, setSelectedTemplate] = useState<string | null>(null)
   // One thing is open on the right: a template or a series of the list.
   const [selectedSeries, setSelectedSeries] = useState<string | null>(null)
-  const setSelected = (id: string | null) => {
-    setSelectedTemplate(id)
-    if (id != null) setSelectedSeries(null)
-  }
-  const openSeries = (id: string | null) => {
+  // D563 P5: another item chosen while the series' rule is written but not saved asks first (`UnsavedRuleDialog`); the form tells the page.
+  const rule = useRef<RuleGuard | null>(null)
+  const [leaving, setLeaving] = useState<(() => void) | null>(null)
+  const [leavingBusy, setLeavingBusy] = useState(false)
+  const leave = (go: () => void) => (rule.current?.unsaved() ? setLeaving(() => go) : go())
+  const setSelected = (id: string | null) =>
+    leave(() => {
+      setSelectedTemplate(id)
+      if (id != null) setSelectedSeries(null)
+    })
+  const openSeriesNow = (id: string | null) => {
     setSelectedSeries(id)
     if (id != null) setSelectedTemplate(null)
+  }
+  // The same series again changes nothing; closing it (`null`: removed, ended) has no rule left to keep.
+  const openSeries = (id: string | null) => (id == null || id === selectedSeries ? openSeriesNow(id) : leave(() => openSeriesNow(id)))
+  const answerLeaving = async (save: boolean) => {
+    const go = leaving
+    if (!go) return
+    if (save) {
+      setLeavingBusy(true)
+      const ok = await rule.current?.save().catch(() => false)
+      setLeavingBusy(false)
+      // A save that did not go through (its reason is in a toast) stays on the series with the rule written.
+      if (!ok) return setLeaving(null)
+    }
+    setLeaving(null)
+    go()
   }
   const listed = useMemo(() => currentSeries(series, today), [series, today])
   const [showArchivedState, setShowArchived] = useState(false)
@@ -179,13 +201,14 @@ export function TemplatesPage() {
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         {currentSeriesRecord ? (
-          <SeriesEditor key={currentSeriesRecord.id} series={currentSeriesRecord} today={today} onClosed={() => openSeries(null)} />
+          <SeriesEditor key={currentSeriesRecord.id} series={currentSeriesRecord} today={today} onClosed={() => openSeriesNow(null)} guard={rule} />
         ) : current ? (
           <Editor key={current.id} template={current} today={today} openBlock={openBlock} onBlockOpened={() => setOpenBlock(null)} onCopied={setSelected} onRemoved={() => setSelected(null)} />
         ) : (
           <EmptyState why={templates.length ? 'Wybierz szablon z listy.' : 'Nie ma jeszcze szablonów. Szablon to plan dnia danego typu, z którego powstaje każdy taki dzień.'} action={{ label: '+ Szablon', run: () => void create() }} />
         )}
       </div>
+      {leaving && <UnsavedRuleDialog title="Zapisać zmianę serii?" busy={leavingBusy} onSave={() => void answerLeaving(true)} onDiscard={() => void answerLeaving(false)} onClose={() => setLeaving(null)} />}
     </div>
   )
 }
