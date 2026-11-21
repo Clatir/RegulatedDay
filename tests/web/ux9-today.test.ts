@@ -19,6 +19,7 @@ import { weekStart } from '@shared/time/day'
 import { EnergyLegendHelp } from '@renderer/features/plan/EnergyLanes'
 import { COST_SCALE_TEXT } from '@renderer/features/plan/energyDraw'
 import { BlockEditor } from '@renderer/features/plan/BlockEditor'
+import { popPlace } from '@renderer/features/plan/TileCost'
 import { Timeline, type TimelineItem } from '@renderer/features/plan/Timeline'
 import { NoteEditor } from '@renderer/features/note/NoteEditor'
 import { DayNumbers, DaySummary } from '@renderer/features/today/DayNumbers'
@@ -26,6 +27,9 @@ import { DayWarnings, dayWarningTexts } from '@renderer/features/today/DayWarnin
 import { Boundary, MorningHeader } from '@renderer/features/today/MorningPlan'
 import { useBusy } from '@renderer/lib/busy'
 import { RoutineCard, RoutinesWaiting } from '@renderer/features/today/RoutineCard'
+import { BlockDayNotes } from '@renderer/features/today/DayNotes'
+import { SidePanel } from '@renderer/features/today/TodayPage'
+import type { Routine } from '@shared/model/routines'
 import { NewBlockPopover } from '@renderer/features/week/NewBlockPopover'
 import { WeekPage } from '@renderer/features/week/WeekPage'
 import { installEscape } from '@renderer/lib/escape'
@@ -366,32 +370,91 @@ describe('podpowiedzi gestów (D10)', () => {
   })
 })
 
-describe('układ nad osią „Dziś” (P10) – w kodzie strony', () => {
-  const page = readFileSync('src/renderer/features/today/TodayPage.tsx', 'utf8')
-  const side = page.slice(page.indexOf('function SidePanel('))
-  const day = page.slice(0, page.indexOf('function SidePanel('))
+/** A day with a routine begun at 07:00 (not ticked off), a work block past the maximum and the budget: the engine warns, a routine waits. */
+function routineDay() {
+  const routine: Routine = { id: 'r', name: 'Poranna', normal: [{ id: 'woda', name: 'woda', min: 2 }, { id: 'kot', name: 'kot', min: 8 }], worse: [], archived: false }
+  const s = new Scenario({ date: DATE, plan: [{ ...dslBlock({ id: 'rut', cat: 'rutyny', at: '07:00', min: 10 }), routine: 'r' }, dslBlock({ id: 'a', cat: 'analiza', at: '08:00', min: 13 * 60 }), dslBlock({ id: 'dz', cat: 'sesja', at: '21:30', min: 60, fixed: true })] }).observe('06:30', null)
+  const t = s.at('07:30')
+  const model = { date: DATE, state: s.stateAt(t), ctx: s.contextAt(t), energy: { warnings: [] }, dayFile: null, data: { dayFile: null } } as unknown as DayModel
+  useData.setState({ routines: [routine] })
+  return { model, names: { ...names, routines: [routine] } }
+}
 
-  it('karty rutyn stoją w panelu bocznym, nie nad osią', () => {
-    expect(side).toContain('<RoutineCards')
-    expect(day).not.toContain('<RoutineCards')
-    // The panel of a block replaces the side panel: a routine waiting says so there and leads to its card.
-    expect(day).toContain('<RoutinesWaiting')
+describe('panel boczny i panel bloku w „Dziś” (P10, D3, D8) – w DOM', () => {
+  const side = (o: { routines: boolean; past: boolean }) => {
+    const { model, names: n } = routineDay()
+    return render(createElement(SidePanel, { model, names: n, routines: o.routines, past: o.past, onSelect: () => undefined, onMove: () => undefined }))
+  }
+  const notes = (today: string, onShow = vi.fn()) => {
+    const { model, names: n } = routineDay()
+    return render(createElement(BlockDayNotes, { model, names: n, today, onShow })).then(() => onShow)
+  }
+
+  it('panel boczny, dziś: karty rutyn w nim (nie nad osią), ostrzeżenia z radą', async () => {
+    await side({ routines: true, past: false })
+    expect(q('day-side')!.querySelector('[data-testid="routine-card"]')).not.toBeNull()
+    expect(q('day-warnings')!.textContent).toContain('Możesz przenieść blok')
+    expect(q('day-side')!.querySelector('[data-testid="side-boundary"]')).not.toBeNull()
   })
 
-  it('ostrzeżenia dnia: panel boczny i panel bloku (jedna lista), nie plan poranny', () => {
-    expect(side).toContain('<DayWarnings')
-    expect(day).toContain('<DayWarnings')
+  it('panel boczny dnia minionego: bez kart rutyn i bez rady – same ostrzeżenia', async () => {
+    await side({ routines: false, past: true })
+    expect(q('routine-card')).toBeNull()
+    expect(q('day-warnings')!.textContent).toContain('Praca kończy się po maksimum')
+    expect(q('day-warnings')!.textContent).not.toContain('Możesz przenieść blok')
+  })
+
+  it('panel bloku, dziś: te same ostrzeżenia i linia o rutynie – także rutyny otwartego bloku (panel nie ma „Zakończ rutynę”), z przejściem do karty', async () => {
+    const onShow = await notes(DATE)
+    expect(q('day-warnings')!.textContent).toContain('Możesz przenieść blok')
+    expect(q('routine-waiting')!.textContent).toBe('Rutyna „Poranna” czeka na krokiPokaż kartę')
+    await act(async () => click(q('routine-waiting-show')!))
+    expect(onShow).toHaveBeenCalledTimes(1)
+  })
+
+  it('panel bloku dnia minionego: ostrzeżenia bez rady, bez linii o rutynie', async () => {
+    await notes('2026-10-30')
+    expect(q('day-warnings')!.textContent).not.toContain('Możesz przenieść blok')
+    expect(q('routine-waiting')).toBeNull()
+  })
+
+  it('plan poranny nie niesie ostrzeżeń dnia (jedyne miejsca: panel boczny i panel bloku)', () => {
     const morning = readFileSync('src/renderer/features/today/MorningPlan.tsx', 'utf8')
     expect(morning).not.toContain('morningWarnings(')
-    expect(side).toContain('dayWarningTexts(model, past)')
-    expect(day).toContain('dayWarningTexts(model, date < today)')
-    // The routine of the block whose panel is open is not „waiting”: the panel has its steps.
-    expect(day).toContain('.filter((r) => r.block !== block.id)')
     expect(morning).not.toContain('warning-')
   })
 
-  it('legenda energii tylko pod „?”', () => {
+  it('legenda energii tylko pod „?”; karty rutyn nie nad osią', () => {
+    const page = readFileSync('src/renderer/features/today/TodayPage.tsx', 'utf8')
+    const day = page.slice(0, page.indexOf('function SidePanel('))
     expect(day).toContain('<EnergyLegendHelp')
     expect(day).not.toContain('<EnergyLegend ')
+    expect(day).not.toContain('<RoutineCards')
+  })
+})
+
+describe('okienko kosztu: wysokość mierzona (D7)', () => {
+  const item = (cost: TimelineItem['cost']): TimelineItem => ({ id: 'a', startMin: 600, endMin: 660, title: 'Blok a', marks: [], color: '#F2B66D', categoryId: 'analiza', background: false, movable: true, cost })
+  const anchor = { left: 100, right: 200, top: 486, bottom: 500 }
+  const view = { width: 1000, height: 768 }
+
+  it('popPlace: wysokość okienka z pomiaru decyduje, czy stanie pod napisem, czy nad nim', () => {
+    expect(popPlace(anchor, view)).toEqual({ left: 8, top: 504 })
+    expect(popPlace(anchor, view, 300).top).toBe(486 - 4 - 300)
+  })
+
+  it('okienko wyższe niż przewidziano (nagłówek zawinięty): po narysowaniu staje nad napisem, nie wychodzi pod dół ekranu', async () => {
+    const c = { head: 3, emotions: 1, senses: 1, body: 0 }
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ ...anchor, x: 100, y: 486, width: 100, height: 14, toJSON: () => ({}) } as DOMRect)
+    const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(300)
+    Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true })
+    try {
+      await render(createElement(Timeline, { items: [item({ costs: c, base: c, own: false, edit: true })], markers: [], selected: null, onSelect: vi.fn(), onCosts: vi.fn(), from: 6 * 60, to: 22 * 60 }))
+      await act(async () => click(q('block-a-cost')!))
+      expect(q('cost-pop')!.style.top).toBe(`${486 - 4 - 300}px`)
+    } finally {
+      rect.mockRestore()
+      height.mockRestore()
+    }
   })
 })

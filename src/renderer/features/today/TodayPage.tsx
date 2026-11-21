@@ -82,15 +82,15 @@ import { draftTile } from './blockDraft'
 import { escapeDraft, firstSave } from './draftSave'
 import { DayMenu } from './DayMenu'
 import { DayNumbers, DaySummary } from './DayNumbers'
+import { BlockDayNotes } from './DayNotes'
 import { DayWarnings, dayWarningTexts } from './DayWarnings'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
 import { CopyDayDialog, MoveDialog } from './MoveDialogs'
-import { RoutineCards, RoutinesWaiting } from './RoutineCard'
+import { RoutineCards } from './RoutineCard'
 import { TypeChangeDialog } from './TypeChangeDialog'
 import { ritualDue } from '@shared/engine/ritual'
-import { routinesDue } from '@shared/engine/routineCheck'
 import { GameLine } from '../game/GameLine'
 import { PeersFreshness } from '../settings/ComputersSection'
 import { RitualPanel } from '../ritual/RitualPanel'
@@ -818,12 +818,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
             computers={view.computers}
             onChange={(patch) => changeBlock(block, patch, draft != null)}
             // D3, D8, D563 P10: what the side panel says of the day stands in the panel of the block, which replaces it – the warnings and a routine waiting.
-            dayNotes={
-              <>
-                <DayWarnings warnings={dayWarningTexts(model, date < today)} />
-                {isToday && <RoutinesWaiting due={routinesDue(model.ctx, model.state, routines, model.dayFile).filter((r) => r.block !== block.id)} model={model} names={names} onShow={closePanel} />}
-              </>
-            }
+            dayNotes={<BlockDayNotes model={model} names={names} today={today} onShow={closePanel} />}
             // „Zamknij” leaves a new block – saved as it stands, a bare click of the axis untouched thrown away (D461, T1045); Esc
             // throws away only an untouched one whose save has not started, any other it leaves as „Zamknij” does (T1080).
             onClose={closePanel}
@@ -912,7 +907,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
 export const AXIS_HINT = 'Przeciągnij po osi, żeby dodać blok w tych godzinach, albo użyj „+ Blok” (Ctrl+N – w najbliższym wolnym miejscu).'
 
 /** Beside the plan when no block is selected: the warnings, the parked blocks, what the engine says of the day. */
-function SidePanel({ model, names, routines, past, onSelect, onMove, cases }: { model: DayModel; names: Names; routines: boolean; past: boolean; onSelect: (id: string) => void; onMove: (b: PlanBlock) => void; cases?: ReactNode }) {
+export function SidePanel({ model, names, routines, past, onSelect, onMove, cases }: { model: DayModel; names: Names; routines: boolean; past: boolean; onSelect: (id: string) => void; onMove: (b: PlanBlock) => void; cases?: ReactNode }) {
   const s = model.state
   const parked = model.ctx.plan.filter((b) => s.facts.blocks.get(b.id)?.parkedAt != null)
   return (
