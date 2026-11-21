@@ -171,16 +171,25 @@ export function freshAfter(fresh: string | null, selected: string | null, shown:
   return fresh != null && selected === fresh && shown !== fresh ? fresh : null
 }
 
+/** What a version holds without its date: blocks, budget, limit and the move of the layer of sessions. */
+const bodyOf = (v: TemplateVersion) => ({ blocks: v.blocks, budgetMin: v.budgetMin, maxMin: v.maxMin, sessionsMoved: v.sessionsMoved ?? null })
+
+/** A version nothing needs: empty with nothing in force before it (`before` – the version before it, none), or what the one in force before it is. */
+function needless(v: TemplateVersion, before: TemplateVersion | undefined): boolean {
+  return deepEqual(bodyOf(v), before ? bodyOf(before) : { blocks: [], budgetMin: null, maxMin: null, sessionsMoved: null })
+}
+
 /**
  * „Cofnij” of „Dodano blok” (D563 P2) – the inverse of the add (`made`: the template's record before it and right after it, as the page made it).
  * The template as it still stands as the add left it (`sameContentAs`: the main process stamps `updatedAt` and `updatedBy` on what it writes):
  * written back as it was before. Changed since (the name typed in the panel, another field, a second add): one rule on the template as it is now –
- * the block out by its id from every version that has it (also the ones copied later), and each version that lost it out as well when it is empty
- * and nothing is in force before it, or when it is what the one in force before it is (blocks, budget, limit); a version that did not lose the
- * block is left as it is. So no version stays that would take the days with an empty plan. A block gone already says there is nothing to take
- * back, a record that cannot be read – that; a question (the queue's notice) or a refusal that the save said itself – nothing more.
+ * the block out by its id from every version that has it (also the ones copied later), and each version that lost it out as well when it is
+ * needless now (`needless`: empty with nothing in force before it, or what the one in force before it is – blocks, budget, limit) and was not needless
+ * before the add (or was not there): no version stays that would take the days with an empty plan, and one that was empty before the add stays (a
+ * template without a version makes no day). A version that did not lose the block is left as it is. A block gone already says there is nothing to
+ * take back, a record that cannot be read – that; a question (the queue's notice) or a refusal that the save said itself – nothing more.
  */
-export async function undoAddedBlock(templateId: string, from: string, blockId: string, made: { before: RawRecord; after: RawRecord }): Promise<void> {
+export async function undoAddedBlock(templateId: string, blockId: string, made: { before: RawRecord; after: RawRecord }): Promise<void> {
   const rel = paths.record('template', templateId)
   const state: SendState = { afterSend: false }
   let read = false
@@ -195,8 +204,14 @@ export async function undoAddedBlock(templateId: string, from: string, blockId: 
         found = true
         return made.before
       }
-      if (!t.versions.some((v) => v.from >= from && v.blocks.some((b) => b.id === blockId))) return raw
+      if (!t.versions.some((v) => v.blocks.some((b) => b.id === blockId))) return raw
       found = true
+      // The versions as they were before the add: one that was needless then stays, whatever it is now.
+      const was = templateFrom(made.before)?.versions ?? []
+      const wasNeedless = (date: string): boolean => {
+        const i = was.findIndex((v) => v.from === date)
+        return i >= 0 && needless(was[i]!, was[i - 1])
+      }
       const kept: TemplateVersion[] = []
       for (const v of t.versions) {
         if (!v.blocks.some((b) => b.id === blockId)) {
@@ -204,9 +219,7 @@ export async function undoAddedBlock(templateId: string, from: string, blockId: 
           continue
         }
         const now = { ...v, blocks: v.blocks.filter((b) => b.id !== blockId) }
-        const before = kept.at(-1)
-        const gone = before ? deepEqual({ ...now, from: '' }, { ...before, from: '' }) : !now.blocks.length && now.budgetMin == null && now.maxMin == null
-        if (!gone) kept.push(now)
+        if (!needless(now, kept.at(-1)) || wasNeedless(v.from)) kept.push(now)
       }
       return templateJson({ ...t, versions: kept }, raw)
     },

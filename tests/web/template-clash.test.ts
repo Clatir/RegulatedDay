@@ -9,12 +9,16 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import type { DataView, RawRecord } from '@shared/api'
 import { planBlock, templateFor, templateFrom, type Template } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
+import { newId } from '@shared/model/ids'
 import { installEscape } from '@renderer/lib/escape'
 import { TemplatesPage } from '@renderer/features/templates/TemplatesPage'
 import { saveRecord, useData } from '@renderer/store/data'
 
-// The copy's id comes from `newId`: a small one (below every id of the folder) is raised – never smaller than an older template's.
-vi.mock('@shared/model/ids', async (orig) => ({ ...(await orig<typeof import('@shared/model/ids')>()), newId: vi.fn((length = 16) => '0'.repeat(length)) }))
+// The copy's id comes from `newId` (the test of „Kopiuj” makes it a small one – below every id of the folder: it is raised).
+vi.mock('@shared/model/ids', async (orig) => {
+  const real = await orig<typeof import('@shared/model/ids')>()
+  return { ...real, newId: vi.fn(real.newId) }
+})
 vi.mock('@renderer/store/data', async (orig) => ({
   ...(await orig<typeof import('@renderer/store/data')>()),
   saveRecord: vi.fn(async () => [{ status: 'applied' }])
@@ -88,8 +92,10 @@ describe('A7: „Kopiuj” szablon', () => {
   it('kopia nigdy nie ma id mniejszego niż istniejące (nie wygrywa z oryginałem po cichu)', async () => {
     await open([t('mmmmmmmmmmmmmmmm', 'Oryginał', [3])])
     await click(item('Oryginał'))
+    vi.mocked(newId).mockReturnValueOnce('0000000000000000')
     await click(q('template-copy'))
     const copy = templateFrom(vi.mocked(saveRecord).mock.calls[0]![2] as RawRecord)!
+    expect(copy.id.length).toBe(16)
     expect(copy.id > 'mmmmmmmmmmmmmmmm').toBe(true)
   })
 })
