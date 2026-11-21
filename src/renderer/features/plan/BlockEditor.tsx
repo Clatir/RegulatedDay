@@ -30,7 +30,7 @@ import { olderComputers } from '@shared/model/note'
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { forecastEndText } from '@shared/blockEnd'
 import { Choice, DurationField, EndField, TextField, TimeField } from '../../components/fields'
-import { Field, Segmented } from '../../components/ui'
+import { cx, Field, Segmented, SIDE_PANEL_WIDTH } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
 import { useData, type SaveAnswer } from '../../store/data'
 import { useAttachDrop } from '../attachments/attachDrop'
@@ -71,6 +71,7 @@ export function BlockEditor({
   newBlock,
   focusName,
   forecastEnd,
+  forecastStart,
   onEscape,
   day
 }: {
@@ -108,6 +109,8 @@ export function BlockEditor({
   focusName?: boolean
   /** Where the forecast ends a block that follows another („po bloku”, D464): its „Koniec” says „ok. HH:MM”; left out – no forecast (templates, series). */
   forecastEnd?: number | null
+  /** Where the forecast starts a block that follows another (A2): „o godzinie” after „po bloku” keeps the block there; left out – 9:00. A day's axis and a template's give it. */
+  forecastStart?: number | null
   /** Esc (the second one, after a field's own): left out – `onClose`. A new block not saved yet throws itself away by it (D461), „Zamknij” saves it. */
   onEscape?: () => void
   /**
@@ -162,7 +165,7 @@ export function BlockEditor({
   // D480: the routine and its length – its steps are never copied (the block shows the routine's while it has none of its own).
   const pickRoutine = (r: Routine | undefined) => void set({ routine: r ? r.id : null, ...(r && routineMinutes(r) > 0 ? { durationMin: routineMinutes(r) } : {}) })
   return (
-    <aside className="flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3" data-testid="block-editor" {...drop.bind}>
+    <aside className={cx('flex shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3', SIDE_PANEL_WIDTH)} data-testid="block-editor" {...drop.bind}>
       <div className="flex items-center gap-2">
         <h3 className="min-w-0 flex-1 truncate text-[14px] font-medium">{blockName(block, names)}</h3>
         <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={onClose} data-testid="block-editor-close">
@@ -221,7 +224,7 @@ export function BlockEditor({
               { value: 'at', label: 'o godzinie' },
               { value: 'after', label: 'po bloku', disabled: anchors.length === 0 }
             ]}
-            onChange={(v) => (v === 'at' ? set({ anchor: null, startMin: block.startMin ?? 9 * 60 }) : set({ anchor: anchors[0]!.value, startMin: null }))}
+            onChange={(v) => (v === 'at' ? set({ anchor: null, startMin: block.startMin ?? forecastStart ?? 9 * 60 }) : set({ anchor: anchors[0]!.value, startMin: null }))}
             aria-label="Początek"
           />
           {block.anchor ? (

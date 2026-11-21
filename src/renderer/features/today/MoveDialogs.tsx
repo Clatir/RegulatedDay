@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { blockName, type Names } from '@shared/blockName'
 import { plDate } from '@shared/format'
+import { shortDay } from '@shared/quickDates'
 import type { PlanBlock } from '@shared/model/plan'
 import { addDays } from '@shared/time/zone'
 import { Dialog } from '../../components/Dialog'
@@ -15,6 +16,22 @@ import { useBusy } from '../../lib/busy'
 import { MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from '../calendar/MonthGrid'
 import { tellMoved } from '../week/weekActions'
 import { copyDayTo, moveDayBlock } from './dayActions'
+
+/** The shortcuts of „Przenieś na…” (A6): counted from today (the logical day of the clock), never from the day shown; each says its weekday and date. */
+const SHORTCUTS = [
+  { n: 1, word: 'Jutro' },
+  { n: 2, word: 'Pojutrze' },
+  { n: 7, word: 'Za tydzień' }
+] as const
+
+/** A shortcut that points at the day shown or at a day gone by is disabled – the reason is its tooltip (D72: nothing is hidden or refused silently). */
+export function moveShortcuts(viewed: string, today: string): Array<{ date: string; label: string; disabled?: string }> {
+  return SHORTCUTS.map(({ n, word }) => {
+    const date = addDays(today, n)
+    const disabled = date === viewed ? 'To jest oglądany dzień.' : date < today ? 'Ten dzień już minął.' : undefined
+    return { date, label: `${word} (${shortDay(date, today)})`, ...(disabled ? { disabled } : {}) }
+  })
+}
 
 export function MoveDialog({ model, block, names, today, onClose }: { model: DayModel; block: PlanBlock; names: Names; today: string; onClose: () => void }) {
   const [to, setTo] = useState(addDays(model.date, 1))
@@ -49,9 +66,9 @@ export function MoveDialog({ model, block, names, today, onClose }: { model: Day
       <p className="text-[12.5px] text-muted">Blok zachowa swoją godzinę i dostanie licznik przeniesień +1 (przeniesiony {block.moves + 1}×).</p>
       <div className="flex flex-wrap items-center gap-2">
         <DateField today={today} value={to} onCommit={setTo} shellClassName="w-[130px]" aria-label="Dzień" data-testid="move-date" />
-        {[1, 2, 7].map((n) => (
-          <button key={n} type="button" className="chip" aria-pressed={to === addDays(model.date, n)} onClick={() => setTo(addDays(model.date, n))}>
-            {n === 1 ? 'jutro' : n === 2 ? 'pojutrze' : 'za tydzień'}
+        {moveShortcuts(model.date, today).map((s, i) => (
+          <button key={s.date} type="button" className="chip" aria-pressed={to === s.date} disabled={!!s.disabled} title={s.disabled} onClick={() => setTo(s.date)} data-testid={`move-shortcut-${i}`}>
+            {s.label}
           </button>
         ))}
       </div>

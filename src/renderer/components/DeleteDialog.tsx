@@ -28,7 +28,7 @@ export function DeleteDialog() {
         </>
       }
     >
-      <p className="text-[12.5px] text-muted">Enter – usuń, Esc – anuluj.</p>
+      <p className="text-[12.5px] text-muted">Enter – {ask.yes.toLowerCase()}, Esc – anuluj.</p>
     </Dialog>
   )
 }

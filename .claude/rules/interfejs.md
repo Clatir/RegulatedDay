@@ -50,7 +50,7 @@ paths:
   podpowiedź = długość miejsca z podglądu (bez `resizeNote`); podgląd = `axisMoves` dnia po zmianie (z przeciąganym). Jeden `tryUpdateRecord`; linia `template-pushed` (`UNDO_LINE_MS`, widoczna póki szablon jak po
   zmianie – `deepEqual`), „Cofnij” = `saveRecord(rel, po, przed)`. Bez `planPushed` i znacznika; dane osi w `useMemo` (memo podglądu).
   Testy okna bez DOM: `tests/web/` (projekt `tsconfig.web.json`).
-- `today/` – „Dziś”: `MorningPlan`, `LateWakeCard`, `TypeChangeDialog` (`initialTo` – typ już wybrany), `ExchangeDialog`, `MoveDialogs`, `dayActions`, pas wydarzeń nad osią.
+- `today/` – „Dziś”: menu „⋯” = `DayMenu` (`ContextMenu` pod przyciskiem: Esc, klik obok, strzałki/Enter, fokus wraca; `keep` – przycisk nie jest „obok”; zjechanie myszą go nie zamyka); „Przenieś na…” – skróty `moveShortcuts` liczone od dziś, z datą w podpisie; szerokość paneli po prawej osi – jedna `SIDE_PANEL_WIDTH` (`components/ui.tsx`); `MorningPlan`, `LateWakeCard`, `TypeChangeDialog` (`initialTo` – typ już wybrany), `ExchangeDialog`, `MoveDialogs`, `dayActions`, pas wydarzeń nad osią.
   Plan poranny – karta `EnergyOrder` (D369, D377, `energy-order`): `energyOrderCached` (T616 – `energyOrderFor` od nowa tylko przy
   zmianie `energyOrderKey`: plan, migawka, pobudki, pora snu, log, energia, „Zostaw”, miejsca w prognozie, zegar co 5 min; nazwy po
   `rd`/`routines`/`requests`; `resetEnergyOrderCache` w testach; „Ułóż” na planie już takim – dymek `PLAN_ALREADY_TEXT`, karta znika do
