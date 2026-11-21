@@ -141,8 +141,8 @@ export function isoDay(y: number, mo: number, d: number): string | null {
   return `${y}-${pad2(mo)}-${pad2(d)}`
 }
 
-/** A year with fewer than four digits (or 0000) is no year of a date: the message says it, not „Nie ma takiego dnia.”. */
-const yearRefusal = (y: number): Parsed<never> | null => (y < 1000 || y > 9999 ? refuse('Rok musi mieć cztery cyfry.') : null)
+/** A year outside 1000–9999 is no year of a date (four digits were typed or not): the message says it, not „Nie ma takiego dnia.”. */
+const yearRefusal = (y: number): Parsed<never> | null => (y < 1000 || y > 9999 ? refuse('Rok musi być między 1000 a 9999.') : null)
 
 /**
  * A date typed (spec „Czas i długość”, D565 P24 – the same in every field of a date): „21.10.2026”, with dots, dashes, slashes or

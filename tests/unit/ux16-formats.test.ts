@@ -86,8 +86,8 @@ describe('rok spoza zakresu ma własny komunikat (przegląd 2)', () => {
     const r = parseDate(t, TODAY)
     return r.ok ? null : r.message
   }
-  it('„Rok musi mieć cztery cyfry.” – w każdej postaci daty; zły dzień zostaje „Nie ma takiego dnia.”', () => {
-    for (const t of ['01.01.0500', '01010500', '0500-01-01', '1.1.0999']) expect(message(t)).toBe('Rok musi mieć cztery cyfry.')
+  it('„Rok musi być między 1000 a 9999.” – w każdej postaci daty; zły dzień zostaje „Nie ma takiego dnia.”', () => {
+    for (const t of ['01.01.0500', '01010500', '0500-01-01', '1.1.0999']) expect(message(t)).toBe('Rok musi być między 1000 a 9999.')
     expect(message('31.02.2027')).toBe('Nie ma takiego dnia.')
     expect(message('31.02')).toBe('Nie ma takiego dnia.')
   })

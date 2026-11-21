@@ -130,10 +130,9 @@ describe('okno dni: pole błędne, puste, dzień kopiowany, minione (przegląd 1
   const model = { date: '2026-11-26', ctx: { plan: [] }, dayFile: null } as unknown as DayModel
   const press = async (id: string, shift = false) => {
     const el = q(id)!
-    await act(async () => {
-      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, shiftKey: shift }))
-      el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, shiftKey: shift }))
-    })
+    // Two steps: the grid keeps the press in its state, the release reads it after it was drawn.
+    await act(async () => void el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, shiftKey: shift })))
+    await act(async () => void el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, shiftKey: shift })))
   }
 
   it('pole, które nie jest datą, wyłącza zatwierdzenie – stare zaznaczenie nie zostaje do zapisu', async () => {
@@ -195,6 +194,20 @@ describe('okno dni: pole błędne, puste, dzień kopiowany, minione (przegląd 1
     await type(q('copy-dialog-to')!, '01010500')
     expect(q('copy-dialog-to') as HTMLInputElement).toHaveProperty('value', '01010500')
     expect((q('copy-apply') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('dzień z siatki poza 1900–2999 daje czerwone pole i wyłączone zatwierdzenie – nie żywe zaznaczenie obok niego', async () => {
+    const far = { date: '2999-12-31', ctx: { plan: [] }, dayFile: null } as unknown as DayModel
+    await mount(createElement(CopyDayDialog, { model: far, today: '2026-11-21', onClose: () => undefined }))
+    await press('day-3000-01-05')
+    expect((q('copy-dialog-from') as HTMLInputElement).value).toBe('05.01.3000')
+    expect(q('copy-dialog-from')!.getAttribute('aria-invalid')).toBe('true')
+    expect((q('copy-apply') as HTMLButtonElement).disabled).toBe(true)
+    await click(q('copy-apply'))
+    expect(copied.calls).toEqual([])
+    // A day of the range again: the field is a date, the button lives.
+    await press('day-2999-12-30')
+    expect((q('copy-apply') as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('pola Od i Do pokazują zaznaczenie bez dnia kopiowanego', async () => {

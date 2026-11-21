@@ -13,7 +13,7 @@ const day = (o: Partial<HorizonDay>): HorizonDay => ({ ...unknownDay('2026-11-04
 const regen = (towardMin: number, requiredMin: number, reached = towardMin >= requiredMin) => ({ towardMin, requiredMin, reached })
 
 describe('tytuł tygodnia i nagłówki kolumn', () => {
-  it('„3–9.11.2026”; na przełomie miesięcy i lat z obiema datami', () => {
+  it('„02–08.11.2026”; na przełomie miesięcy i lat z obiema datami', () => {
     expect(weekTitle('2026-11-02')).toBe('02–08.11.2026')
     expect(weekTitle('2026-11-09')).toBe('09–15.11.2026')
     expect(weekTitle('2026-10-26')).toBe('26.10–01.11.2026')

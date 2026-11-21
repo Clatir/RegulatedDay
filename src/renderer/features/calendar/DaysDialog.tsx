@@ -142,7 +142,7 @@ export function DaysDialog({
             <button type="button" className="btn" onClick={onClose}>
               Anuluj
             </button>
-            <button type="button" className="btn btn-accent" disabled={!list.length || busy || tooLong} onClick={() => onPick(list)} data-testid={okTestId ?? `${testId}-ok`}>
+            <button type="button" className="btn btn-accent" disabled={!list.length || busy || tooLong || isBadDmy(from, today) || isBadDmy(to, today)} onClick={() => onPick(list)} data-testid={okTestId ?? `${testId}-ok`}>
               {verb}
               {list.length ? ` (${list.length})` : ''}
             </button>
