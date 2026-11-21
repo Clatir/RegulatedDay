@@ -152,10 +152,11 @@ export function setMemory(patch: Partial<ViewMemory>): void {
 
 /**
  * Where a day of „Dziś” opened now comes from (D2): the screen of periods it is opened on; from „Dziś” itself it stays what it was (the arrows
- * and „Dziś” of its heading); from any other place – nowhere. Other screens have no origin.
+ * and „Dziś” of its heading); from any other place – nowhere. Other screens have no origin. `here` false – the call is not from the screen
+ * (the search, Ctrl K): no way back is offered then.
  */
-function originOf(target: Page): DayOrigin | null {
-  if (target !== 'today') return null
+function originOf(target: Page, here: boolean): DayOrigin | null {
+  if (target !== 'today' || !here) return null
   const { page, from } = useUi.getState()
   return page === 'week' || page === 'calendar' ? page : page === 'today' ? from : null
 }
@@ -175,17 +176,17 @@ export function openRitual(): void {
 }
 
 /** The plan of a day (a click in the calendar opens it, D295); null: today. Commits the active field first. */
-export function openDay(day: string | null): void {
+export function openDay(day: string | null, here = true): void {
   commitActiveField()
   leaveBlockDrafts()
-  useUi.setState({ page: 'today', day, pick: null, from: originOf('today') })
+  useUi.setState({ page: 'today', day, pick: null, from: originOf('today', here) })
 }
 
 /** The search's Enter (T653): the screen (and the day of „Dziś”) with what to select there; a hand-made move drops it. */
-export function openPick(target: { page: Page; day?: string | null }, pick: SearchPick): void {
+export function openPick(target: { page: Page; day?: string | null }, pick: SearchPick, here = true): void {
   commitActiveField()
   leaveBlockDrafts()
-  useUi.setState({ page: target.page, ...(target.day !== undefined ? { day: target.day } : {}), pick, from: originOf(target.page) })
+  useUi.setState({ page: target.page, ...(target.day !== undefined ? { day: target.day } : {}), pick, from: originOf(target.page, here) })
 }
 
 /** The key of a record in „Historia” (`kind/id`, as the list there has it) for the file `rel`; null – not a record with a history (a folder, a log). */

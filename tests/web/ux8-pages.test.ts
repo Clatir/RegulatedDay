@@ -10,10 +10,13 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DataView } from '@shared/api'
 import { daysViewOf, weekDates, weekViewOf, type HorizonBlock, type HorizonDay } from '@shared/engine/week'
+import { CATEGORY_COLORS, rdFrom } from '@shared/model/rd'
 import { weekStart } from '@shared/time/day'
 import { WeekPage } from '@renderer/features/week/WeekPage'
 import { useDaysView, useWeekView } from '@renderer/store/horizon'
 import { useData } from '@renderer/store/data'
+import { useCalendarFilter } from '@renderer/features/calendars/calendarFilter'
+import { handleEscape } from '@renderer/lib/escape'
 import { NO_MEMORY, useUi } from '@renderer/store/ui'
 
 vi.mock('@renderer/store/horizon', () => ({ useWeekView: vi.fn(), useDaysView: vi.fn(), useGoalsView: vi.fn(() => ({ view: null, failed: false })), useMonthView: vi.fn() }))
@@ -21,7 +24,7 @@ vi.mock('@renderer/store/horizon', () => ({ useWeekView: vi.fn(), useDaysView: v
 const TODAY = '2026-11-18'
 const named = { categoryId: 'inne', variantId: null, routine: null, requests: [], note: '', origin: 'user' as const, sourceId: null }
 const block = (id: string, startMin: number, endMin: number): HorizonBlock => ({ id, named, categoryId: 'inne', startMin, endMin, state: 'planned', outsidePlan: false, background: false })
-const day = (date: string, blocks: HorizonBlock[] = []): HorizonDay => ({
+const day = (date: string, blocks: HorizonBlock[] = [], wakeMin: number | null = 7 * 60): HorizonDay => ({
   date,
   when: date < TODAY ? 'past' : date === TODAY ? 'today' : 'future',
   read: 'full',
@@ -29,7 +32,7 @@ const day = (date: string, blocks: HorizonBlock[] = []): HorizonDay => ({
   templateId: null,
   frozen: false,
   blocks,
-  wakeMin: 7 * 60,
+  wakeMin,
   bedtimeMin: null,
   boundary: null,
   extensionMin: 0,
@@ -51,12 +54,13 @@ let host: HTMLElement | null = null
 const q = (id: string) => host!.querySelector<HTMLElement>(`[data-testid="${id}"]`)
 const click = async (id: string) => act(async () => q(id)!.click())
 const press = (code: string, init: KeyboardEventInit = {}, target: EventTarget = document.body) =>
-  act(async () => void target.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true, cancelable: true, ...init })))
+  act(async () => void target.dispatchEvent(new KeyboardEvent('keydown', { code, key: code, bubbles: true, cancelable: true, ...init })))
 
 beforeEach(() => {
   localStorage.clear()
   useData.setState({ view: { today: TODAY, allDay: [], computers: [] } as unknown as DataView, allDay: [] })
   useUi.setState({ page: 'week', day: null, pick: null, toasts: [], from: null, memory: NO_MEMORY })
+  useCalendarFilter.setState({ hidden: [], revealed: null })
   vi.mocked(useWeekView).mockImplementation((date) => {
     const week = weekStart(date)
     return { view: weekViewOf(week, TODAY, weekDates(week).map((d) => day(d, blocksOf(d)))), failed: false }
@@ -94,6 +98,17 @@ describe('pamięć okresu (D2)', () => {
     await click('week-today')
     await remount()
     expect(q('week-title')!.getAttribute('data-week')).toBe('2026-11-16')
+  })
+  it('środek „3 dni” wrócony na dziś znowu jest „dzisiejszy”, nie zapamiętaną datą (po północy nie zostaje na wczoraj)', async () => {
+    await mount()
+    await click('week-mode-3days')
+    await click('three-next')
+    expect(useUi.getState().memory.anchor).toBe('2026-11-19')
+    await click('three-prev')
+    expect(useUi.getState().memory.anchor).toBeNull()
+    await click('three-prev')
+    await press('PageDown')
+    expect(useUi.getState().memory.anchor).toBeNull()
   })
   it('„3 dni”: środek i „Agenda”: początek też są pamiętane', async () => {
     await mount()
@@ -203,6 +218,43 @@ describe('Ctrl+N w „Tygodniu” i „3 dniach” (D6, P9)', () => {
     await ctrlN()
     expect(q('week-new')).toBeNull()
     expect(useUi.getState().toasts.at(-1)?.text).toContain('od dziś')
+  })
+  it('bloki ukrytych kalendarzy też zajmują miejsce (okienko nie staje na bloku, który jest)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-18T09:07:00'))
+    try {
+      await mount()
+      useData.setState({ rd: rdFrom({ schema: 1, calendars: [{ id: 'praca', name: 'Praca', color: CATEGORY_COLORS[2] }, { id: 'dom', name: 'Dom', color: CATEGORY_COLORS[4] }], categories: { inne: { calendar: 'praca' } } }) })
+      await act(async () => useCalendarFilter.setState({ hidden: ['praca'] }))
+      expect(q(`week-block-${TODAY}-a`)).toBeNull()
+      await ctrlN()
+      expect(q('week-new')!.getAttribute('data-start')).toBe(String(11 * 60 + 30))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('dzień bez policzonej pobudki: pobudka z typu dnia w ustawieniach (zwykły – 6:00), nie 8:00', async () => {
+    vi.mocked(useWeekView).mockImplementation((date) => {
+      const week = weekStart(date)
+      return { view: weekViewOf(week, TODAY, weekDates(week).map((d) => day(d, blocksOf(d), null))), failed: false }
+    })
+    await mount()
+    await click('week-next')
+    await ctrlN()
+    expect(q('week-new')!.getAttribute('data-date')).toBe('2026-11-23')
+    expect(q('week-new')!.getAttribute('data-start')).toBe(String(7 * 60))
+  })
+  it('przy otwartym okienku PgUp / PgDn / Home nie zmieniają okresu', async () => {
+    await mount()
+    await click('week-next')
+    await ctrlN()
+    expect(q('week-new')).not.toBeNull()
+    await press('PageDown')
+    await press('Home')
+    expect(q('week-title')!.getAttribute('data-week')).toBe('2026-11-23')
+    await act(async () => void handleEscape())
+    await press('PageDown')
+    expect(q('week-title')!.getAttribute('data-week')).toBe('2026-11-30')
   })
   it('„3 dni”: dziś; przytrzymany klawisz robi jedno okienko; pod oknem dialogowym nic', async () => {
     await mount()

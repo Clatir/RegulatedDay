@@ -48,7 +48,7 @@ export function WeekPage() {
   const setWeek = (w: string) => setMemory({ week: w === thisWeek ? null : w })
   // The middle day of „3 dni”: today until the arrows move it.
   const anchor = memory.anchor
-  const setAnchor = (d: string | null) => setMemory({ anchor: d })
+  const setAnchor = (d: string | null) => setMemory({ anchor: d === today ? null : d })
   const middle = anchor ?? today
   // The first day of „Agenda” (D6): today until the arrows move it; never before today – it is the list of what is to come.
   const agendaFrom = memory.agenda && memory.agenda > today ? memory.agenda : today
@@ -74,12 +74,17 @@ export function WeekPage() {
   }, [card, waiting])
   // D563 (P6): the view whose axis the page has put at its hour – once per opening of the page and per change of the view.
   const opened = useRef<string | null>(null)
+  // The small window of a new block is open in the grid (Ctrl+N or a click): the keys of the period wait (they would take the week from under it).
+  const [picking, setPicking] = useState(false)
   // PgUp / PgDn / Home (D6, P8): the period of the view shown, as its arrows and its „today”.
-  usePeriodKeys({
+  usePeriodKeys(
+    {
     prev: () => (mode === 'week' ? setWeek(addDays(week, -7)) : mode === '3days' ? setAnchor(shiftDay(middle, -1)) : setAgenda(shiftDay(agendaFrom, -AGENDA_STEP))),
     next: () => (mode === 'week' ? setWeek(addDays(week, 7)) : mode === '3days' ? setAnchor(shiftDay(middle, 1)) : setAgenda(shiftDay(agendaFrom, AGENDA_STEP))),
     today: () => (mode === 'week' ? setWeek(thisWeek) : mode === '3days' ? setAnchor(null) : setAgenda(today))
-  })
+    },
+    !picking
+  )
   const choose = (m: WeekMode) => {
     setMode(m)
     rememberWeekMode(m)
@@ -146,15 +151,15 @@ export function WeekPage() {
       <WeekPushLine />
       <GroupLine view="week" />
       <AllDayLines page="week" />
-      {mode === 'week' && <WeekBody week={week} today={today} openCard={waiting} onCardOpened={() => setCard(null)} opened={opened} />}
-      {mode === '3days' && <ThreeDaysBody middle={middle} opened={opened} />}
+      {mode === 'week' && <WeekBody week={week} today={today} openCard={waiting} onCardOpened={() => setCard(null)} opened={opened} onPicking={setPicking} />}
+      {mode === '3days' && <ThreeDaysBody middle={middle} opened={opened} onPicking={setPicking} />}
       {mode === 'agenda' && <AgendaBody from={agendaFrom} today={today} opened={opened} />}
     </div>
   )
 }
 
 /** „Tydzień”: the month's goals, then the seven columns. */
-function WeekBody({ week, today, openCard, onCardOpened, opened }: { week: string; today: string; openCard: string | null; onCardOpened: () => void; opened: MutableRefObject<string | null> }) {
+function WeekBody({ week, today, openCard, onCardOpened, opened, onPicking }: { week: string; today: string; openCard: string | null; onCardOpened: () => void; opened: MutableRefObject<string | null>; onPicking: (open: boolean) => void }) {
   const { view, failed } = useWeekView(week)
   const seen = useVisibleDays(view?.days)
   const { hiddenInRange } = useVisibleAllDayIn(week, addDays(week, 6))
@@ -167,7 +172,7 @@ function WeekBody({ week, today, openCard, onCardOpened, opened }: { week: strin
         <>
           {/* Some column shows the strip of energy (D500) – the legend of its shades stands over the columns. */}
           {view.days.some((d) => hasEnergy(d.energy)) && <EnergyStripLegend />}
-          <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} openCard={openCard} onCardOpened={onCardOpened} opened={opened} />
+          <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} openCard={openCard} onCardOpened={onCardOpened} opened={opened} onPicking={onPicking} allDays={view.days} />
         </>
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="week-loading">
@@ -180,7 +185,7 @@ function WeekBody({ week, today, openCard, onCardOpened, opened }: { week: strin
 }
 
 /** „3 dni” (D417): the day before, the day, the day after on one axis in a larger scale – the same columns as „Tydzień”. */
-function ThreeDaysBody({ middle, opened }: { middle: string; opened: MutableRefObject<string | null> }) {
+function ThreeDaysBody({ middle, opened, onPicking }: { middle: string; opened: MutableRefObject<string | null>; onPicking: (open: boolean) => void }) {
   const read = useDaysView(threeDays(middle))
   // The last days shown stay while the next are counted (an arrow does not blank the page): the grid is replaced when they come.
   const last = useRef<DaysView | null>(null)
@@ -199,7 +204,7 @@ function ThreeDaysBody({ middle, opened }: { middle: string; opened: MutableRefO
         <>
           {/* Some column shows the strip of energy (D500) – the legend of its shades stands over the columns. */}
           {view.days.some((d) => hasEnergy(d.energy)) && <EnergyStripLegend />}
-          <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} ppm={THREE_DAYS_PPM} mode="3days" openCard={null} onCardOpened={() => undefined} opened={opened} />
+          <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} ppm={THREE_DAYS_PPM} mode="3days" openCard={null} onCardOpened={() => undefined} opened={opened} onPicking={onPicking} allDays={view.days} />
         </>
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="three-loading">

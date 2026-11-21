@@ -12,8 +12,9 @@ export type PeriodKey = 'prev' | 'next' | 'today'
 const KEYS: Record<string, PeriodKey> = { PageUp: 'prev', PageDown: 'next', Home: 'today' }
 
 /** What the key means for a screen of periods; null – nothing (another key, a modifier, a field, a dialog open, the key already taken). */
-export function periodKeyOf(e: Pick<KeyboardEvent, 'code' | 'ctrlKey' | 'altKey' | 'metaKey' | 'shiftKey' | 'defaultPrevented' | 'target'>): PeriodKey | null {
-  const key = KEYS[e.code]
+export function periodKeyOf(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'altKey' | 'metaKey' | 'shiftKey' | 'defaultPrevented' | 'target'>): PeriodKey | null {
+  // By the key, not the physical place: the numeric pad without NumLock sends PageUp, PageDown and Home too.
+  const key = KEYS[e.key]
   if (!key || e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || modalOpen() || isEditable(e.target)) return null
   return key
 }

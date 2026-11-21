@@ -41,12 +41,12 @@ export const todayOf = (viewToday: string | null | undefined, now = Date.now()):
 export function choose(r: SearchRecord, today: string): void {
   switch (r.kind) {
     case 'command':
-      if (r.id === 'newBlock') openPick({ page: 'today', day: null }, { kind: 'command', id: 'newBlock' })
+      if (r.id === 'newBlock') openPick({ page: 'today', day: null }, { kind: 'command', id: 'newBlock' }, false)
       else if (r.id === 'newRequest') openPick({ page: 'requests' }, { kind: 'command', id: 'newRequest' })
       else if (r.id === 'newTask') openPick({ page: 'requests' }, { kind: 'command', id: 'newTask' })
       // The days count from a real today; without one these two do nothing (the palette gives it from the clock at least).
-      else if (r.id === 'tomorrow' && isIsoDate(today)) openDay(addDays(today, 1))
-      else if (r.id === 'yesterday' && isIsoDate(today)) openDay(addDays(today, -1))
+      else if (r.id === 'tomorrow' && isIsoDate(today)) openDay(addDays(today, 1), false)
+      else if (r.id === 'yesterday' && isIsoDate(today)) openDay(addDays(today, -1), false)
       else if (r.id === 'ritual') openRitual()
       return
     case 'screen':
@@ -60,7 +60,7 @@ export function choose(r: SearchRecord, today: string): void {
       openPick({ page: 'settings' }, { kind: 'category', id: r.id, ...(r.parent ? { parent: r.parent } : {}) })
       return
     case 'block':
-      openPick({ page: 'today', day: r.date === today ? null : r.date! }, { kind: 'block', id: r.id, date: r.date! })
+      openPick({ page: 'today', day: r.date === today ? null : r.date! }, { kind: 'block', id: r.id, date: r.date! }, false)
       return
     case 'allDay':
       openPick({ page: 'week' }, { kind: 'allDay', id: r.id })

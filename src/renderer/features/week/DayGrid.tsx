@@ -42,7 +42,7 @@ import { EnergyStrip, STRIP_WIDTH } from './EnergyStrip'
 import { costRoom, TileCost } from '../plan/TileCost'
 import { hasEnergy } from '../plan/energyDraw'
 import { NewBlockPopover } from './NewBlockPopover'
-import { freeHourStart, newBlockDay, NO_NEW_DAY_TEXT } from './weekNew'
+import { freeHourStart, newBlockDay, NO_NEW_DAY_TEXT, typeWakeMin } from './weekNew'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
 import { saveTileCosts, type CostAsk } from '../plan/costSave'
 import { copyDayBlock, moveWeekBlock } from './weekMove'
@@ -56,9 +56,6 @@ import { countDragDays, dragDayGroup, dragGoing } from '../plan/groupDrag'
 
 const AXIS_PX = 48
 const TONE_CLASS: Record<Tone, string> = { ok: 'text-sea', bad: 'text-rose', muted: 'text-muted', plain: 'text-fg' }
-
-/** The wake taken for a day that has none counted (not read). */
-const DEFAULT_WAKE_MIN = 8 * 60
 
 /** The drop of a block into a day gone by changes nothing (D417) – said when the save is refused after all (the day turned over). */
 export const PAST_DROP_TEXT = 'Dni minionych nie zmieniasz przeciąganiem.'
@@ -156,7 +153,9 @@ export function DayGrid({
   mode = 'week',
   openCard,
   onCardOpened,
-  opened
+  opened,
+  onPicking,
+  allDays
 }: {
   days: HorizonDay[]
   from: number
@@ -171,6 +170,10 @@ export function DayGrid({
    * brings (the grid is keyed by its first day). Left out – the grid never scrolls.
    */
   opened?: MutableRefObject<string | null>
+  /** Says whether the small window of a new block is open (the page's keys of the period wait while it is). */
+  onPicking?: (open: boolean) => void
+  /** The days as counted, with the blocks of the unchecked calendars too (`days` has them taken out): the free hour of Ctrl+N is looked for among all. */
+  allDays?: readonly HorizonDay[]
 }) {
   const { rd, routines, requests } = useData()
   const today = useData((s) => s.view?.today ?? '')
@@ -253,6 +256,11 @@ export function DayGrid({
     setPick({ seq: ++asks.current, dates: idx.map((i) => days[i]!.date), startMin: r.startMin, durationMin: r.endMin - r.startMin, dragged, place })
   }
   const spanHeld = held ? dayIndexes(held.from, held.to) : []
+  const picking = pick != null
+  useEffect(() => {
+    onPicking?.(picking)
+    return () => onPicking?.(false)
+  }, [picking])
   // Ctrl+N (D6, P9): the window of a new block today – or on the first day shown from today – at the nearest free hour (`weekNew.ts`); one window at a time.
   useNewShortcut(() => {
     if (pick) return
@@ -260,7 +268,9 @@ export function DayGrid({
     const i = date ? dates.indexOf(date) : -1
     const d = days[i]
     if (!d) return void toast(NO_NEW_DAY_TEXT)
-    const startMin = freeHourStart(d.blocks, { isToday: d.date === today, nowMin: logicalMinuteOf(d.date, Date.now()), wakeMin: d.wakeMin ?? DEFAULT_WAKE_MIN }, DEFAULT_NEW_BLOCK_MIN)
+    const whole = allDays?.find((x) => x.date === d.date) ?? d
+    const wakeMin = whole.wakeMin ?? typeWakeMin(settingsOn(rd.settings, d.date), d.date, whole.dayType)
+    const startMin = freeHourStart(whole.blocks, { isToday: d.date === today, nowMin: logicalMinuteOf(d.date, Date.now()), wakeMin }, DEFAULT_NEW_BLOCK_MIN)
     pickOn(i, i, { startMin, endMin: startMin + DEFAULT_NEW_BLOCK_MIN }, false)
   })
 

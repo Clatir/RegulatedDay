@@ -9,10 +9,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { freeHourStart, newBlockDay } from '@renderer/features/week/weekNew'
 import { onModal } from '@renderer/lib/escape'
 import { periodKeyOf, usePeriodKeys } from '@renderer/lib/periodKeys'
+import { choose } from '@renderer/features/search/paletteLogic'
+import type { SearchRecord } from '@shared/search'
 import { NO_MEMORY, navigate, openDay, openPick, setMemory, useUi } from '@renderer/store/ui'
 
 const ev = (code: string, init: KeyboardEventInit = {}, target: EventTarget | null = document.body): Parameters<typeof periodKeyOf>[0] => {
-  const e = new KeyboardEvent('keydown', { code, bubbles: true, cancelable: true, ...init })
+  const e = new KeyboardEvent('keydown', { code, key: code, bubbles: true, cancelable: true, ...init })
   Object.defineProperty(e, 'target', { value: target })
   return e
 }
@@ -23,6 +25,12 @@ describe('periodKeyOf', () => {
     expect(periodKeyOf(ev('PageDown'))).toBe('next')
     expect(periodKeyOf(ev('Home'))).toBe('today')
     expect(periodKeyOf(ev('ArrowLeft'))).toBeNull()
+  })
+  it('klawiatura numeryczna bez NumLock (kod Numpad9, klawisz PageUp) to też PgUp; z NumLock to cyfra', () => {
+    expect(periodKeyOf(ev('Numpad9', { key: 'PageUp' }))).toBe('prev')
+    expect(periodKeyOf(ev('Numpad3', { key: 'PageDown' }))).toBe('next')
+    expect(periodKeyOf(ev('Numpad7', { key: 'Home' }))).toBe('today')
+    expect(periodKeyOf(ev('Numpad9', { key: '9' }))).toBeNull()
   })
   it('nic w polu, z modyfikatorem ani pod otwartym oknem', () => {
     expect(periodKeyOf(ev('Home', {}, document.createElement('input')))).toBeNull()
@@ -55,7 +63,7 @@ describe('usePeriodKeys', () => {
     root = createRoot(host)
     await act(async () => root!.render(createElement(Probe, { on: true })))
     const press = (code: string) => {
-      const e = new KeyboardEvent('keydown', { code, bubbles: true, cancelable: true })
+      const e = new KeyboardEvent('keydown', { code, key: code, bubbles: true, cancelable: true })
       window.dispatchEvent(e)
       return e.defaultPrevented
     }
@@ -86,6 +94,12 @@ describe('Ctrl+N w widokach okresów: dzień i godzina okna (P9)', () => {
     expect(freeHourStart([{ startMin: 9 * 60, endMin: 10 * 60 + 30 }, { startMin: 11 * 60, endMin: 12 * 60 }], where)).toBe(12 * 60)
     expect(freeHourStart([{ startMin: 10 * 60, endMin: 14 * 60, background: true }], where)).toBe(10 * 60 + 15)
   })
+  it('bloki zaparkowane i odwołane nie zajmują miejsca (jak w prognozie „Dziś”)', () => {
+    const where = { isToday: true, nowMin: 10 * 60 + 7, wakeMin: 7 * 60 }
+    expect(freeHourStart([{ startMin: 10 * 60, endMin: 12 * 60, state: 'parked' }], where)).toBe(10 * 60 + 15)
+    expect(freeHourStart([{ startMin: 10 * 60, endMin: 12 * 60, state: 'cancelled' }], where)).toBe(10 * 60 + 15)
+    expect(freeHourStart([{ startMin: 10 * 60, endMin: 12 * 60, state: 'planned' }], where)).toBe(12 * 60)
+  })
   it('inny dzień – godzinę po pobudce; koniec doby nie wypycha bloku poza nią', () => {
     expect(freeHourStart([], { isToday: false, nowMin: 0, wakeMin: 7 * 60 })).toBe(8 * 60)
     expect(freeHourStart([{ startMin: 8 * 60, endMin: 28 * 60 }], { isToday: false, nowMin: 0, wakeMin: 7 * 60 })).toBe(28 * 60 - 60)
@@ -111,6 +125,15 @@ describe('skąd otwarty dzień „Dziś” (D2)', () => {
     useUi.setState({ page: 'history' })
     openDay('2026-11-19')
     expect(useUi.getState().from).toBeNull()
+  })
+  it('wybór w wyszukiwarce (Ctrl K) z „Tygodnia” nie zostawia „← Tydzień” (blok, „Jutro”, „Wczoraj”, „Nowy blok”)', () => {
+    const rec = (r: Partial<SearchRecord>) => r as SearchRecord
+    for (const r of [rec({ kind: 'block', id: 'a', date: '2026-11-19' }), rec({ kind: 'command', id: 'tomorrow' }), rec({ kind: 'command', id: 'yesterday' }), rec({ kind: 'command', id: 'newBlock' })]) {
+      useUi.setState({ page: 'week', from: null })
+      choose(r, '2026-11-18')
+      expect(useUi.getState().page).toBe('today')
+      expect(useUi.getState().from).toBeNull()
+    }
   })
   it('pamięć okresów: ustawia i zeruje po jednym polu', () => {
     setMemory({ week: '2026-11-23', month: '2026-12' })

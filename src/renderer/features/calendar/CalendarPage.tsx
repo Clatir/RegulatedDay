@@ -46,8 +46,7 @@ import { useNewShortcut } from '../../lib/escape'
 import { usePeriodKeys } from '../../lib/periodKeys'
 import { NewBlockPopover } from '../week/NewBlockPopover'
 import { NEW_BLOCK_WIDTH, popoverPlace } from '../week/weekLayout'
-import { freeHourStart, newBlockDay } from '../week/weekNew'
-import { NO_NEW_DAY_TEXT } from '../week/weekNew'
+import { freeHourStart, newBlockDay, NO_NEW_DAY_TEXT } from '../week/weekNew'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { logicalMinuteOf } from '@shared/time/day'
 import { setWakeOnDays } from '../today/dayActions'
@@ -81,8 +80,10 @@ export function CalendarPage() {
   const setMonth = (m: string) => setMemory({ month: m === thisMonth ? null : m })
   const [files, setFiles] = useState<Record<string, RawRecord | null>>({})
   const importing = useZjazdy((s) => s.preview != null)
+  // The small window of a new block (Ctrl+N, below): while it is open the keys of the month wait.
+  const [fresh, setFresh] = useState<{ seq: number; date: string; startMin: number; place: { left: number; top: number } } | null>(null)
   // PgUp / PgDn / Home (D6, P8): the month before, the next, the current one.
-  usePeriodKeys({ prev: () => setMonth(shiftMonth(month, -1)), next: () => setMonth(shiftMonth(month, 1)), today: () => setMonth(thisMonth) }, !importing)
+  usePeriodKeys({ prev: () => setMonth(shiftMonth(month, -1)), next: () => setMonth(shiftMonth(month, 1)), today: () => setMonth(thisMonth) }, !importing && !fresh)
   const [wake, setWake] = useState<number | null>(null)
   const dates = useMemo(() => gridDates(month), [month])
   // The selection of days (D527): kept across months (a day of another month stays selected), Ctrl+A takes the days of the month shown.
@@ -131,15 +132,15 @@ export function CalendarPage() {
   const [busy, run] = useBusy()
   // Ctrl+N (D6, P9): the small window of a new block today – or on the first day of the grid from today – at the nearest free hour, beside its cell.
   const root = useRef<HTMLDivElement>(null)
-  const [fresh, setFresh] = useState<{ seq: number; date: string; startMin: number; place: { left: number; top: number } } | null>(null)
   const freshSeq = useRef(0)
   useNewShortcut(() => {
     if (importing || fresh) return
-    const date = newBlockDay(dates, today)
+    // Only the days of the month shown: the blocks are counted for them (the days of the neighbouring months of the grid have events only).
+    const date = newBlockDay(monthDates, today)
     if (!date) return void toast(NO_NEW_DAY_TEXT)
     const own = fileOf(date)
     const wakeMin = own?.wakeMin ?? settingsOn(rd.settings, date).dayTypes[info(date).type].wakeMin
-    const startMin = freeHourStart(monthDays.get(date)?.blocks ?? [], { isToday: date === today, nowMin: logicalMinuteOf(date, Date.now()), wakeMin }, DEFAULT_NEW_BLOCK_MIN)
+    const startMin = freeHourStart(monthView?.days.find((d) => d.date === date)?.blocks ?? [], { isToday: date === today, nowMin: logicalMinuteOf(date, Date.now()), wakeMin }, DEFAULT_NEW_BLOCK_MIN)
     const box = root.current?.getBoundingClientRect()
     const at = root.current?.querySelector(`[data-testid="day-${date}"]`)?.getBoundingClientRect()
     const place = box && at ? popoverPlace({ gridWidth: box.width, colLeft: at.left - box.left, colRight: at.right - box.left, top: at.top - box.top, width: NEW_BLOCK_WIDTH }) : { left: 0, top: 0 }
