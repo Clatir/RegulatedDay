@@ -73,7 +73,15 @@ function stub(records: RawRecord[]) {
   useData.setState({ view: view(), rd: rdFrom({}), requests: state.records.map((r) => requestFrom(r)!) })
   /** What the sent edits wrote into the field `name` of the record `id` (the last write). */
   const wrote = (id: string, name: string): unknown => sent.flat().filter((e) => e.rel === rel(id)).flatMap((e) => e.edits).filter((ed) => ed.path[0] === name).map((ed) => ed.value).at(-1)
-  return { sent, wrote, record: (id: string) => state.records.find((r) => r.id === id) }
+  const publish = () => useData.setState({ view: view(), requests: state.records.map((r) => requestFrom(r)!) })
+  /** The record gone from the folder (removed on another computer); `bring` puts it back (a „Cofnij”). */
+  const take = (id: string) => {
+    const was = state.records.find((r) => r.id === id)!
+    state.records = state.records.filter((r) => r.id !== id)
+    publish()
+    return () => (state.records.push(was), publish())
+  }
+  return { sent, wrote, take, record: (id: string) => state.records.find((r) => r.id === id) }
 }
 
 const q = (id: string, el: ParentNode = document) => el.querySelector<HTMLElement>(`[data-testid="${id}"]`)
@@ -138,6 +146,20 @@ describe('wiersz sprawy w jednym wierszu (P25)', () => {
     for (const id of ['case-list', 'case-priority-choice', 'case-done', 'case-dates-open']) expect(q(id, r), id).not.toBeNull()
   })
 
+  it('rozwinięcie wiersza zostaje po przeniesieniu sprawy na inną listę (wiersz stoi wtedy w innej sekcji)', async () => {
+    stub([task('a', 1), task('b', 2)])
+    await render()
+    await click(q('case-expand', row('a'))!)
+    expect(q('case-more', row('a'))).not.toBeNull()
+    await click(q('case-menu', row('a'))!)
+    await click(q('case-menu-list')!)
+    await click(q('case-menu-list-week')!)
+    await settle()
+    expect(row('a').getAttribute('data-list')).toBe('week')
+    expect(q('case-more', row('a'))).not.toBeNull()
+    expect(q('case-more', row('b'))).toBeNull()
+  })
+
   it('„Zaplanuj…” zostaje w wierszu i otwiera formularz; klik w pola i przyciski nie zaznacza wiersza', async () => {
     stub([task('a', 1)])
     await render()
@@ -191,6 +213,19 @@ describe('menu „…” wiersza (P25)', () => {
     await click(q('case-menu-list-week')!)
     await settle()
     expect(s.wrote('a', 'list')).toBe('week')
+  })
+
+  it('„Terminy…”, „Kroki…” i „Powtarzaj…” tylko otwierają: drugi wybór nie zamyka otwartego formularza', async () => {
+    stub([task('a', 1)])
+    await render()
+    for (const [item, form] of [['case-menu-dates', 'case-dates-form'], ['case-menu-steps', 'case-steps'], ['case-menu-repeat', 'case-repeat-form']] as const) {
+      await click(q('case-menu', row('a'))!)
+      await click(q(item)!)
+      expect(q(form, row('a')), form).not.toBeNull()
+      await click(q('case-menu', row('a'))!)
+      await click(q(item)!)
+      expect(q(form, row('a')), form + ' po drugim wyborze').not.toBeNull()
+    }
   })
 
   it('„Priorytet ▸” – pięć wyborów, ✓ przy obecnym; wybór zapisuje priorytet', async () => {
@@ -247,11 +282,54 @@ describe('Macierz: klik, fokus, strzałki, prawy przycisk (F8)', () => {
     expect(document.activeElement).toBe(q('case-title', row('c')))
   })
 
-  it('klik po przeciągnięciu (ruch > 4 px) nie otwiera wiersza', async () => {
+  /** A pointer gesture on the card: the press, the moves of the window (a button held), the release, then the click the browser sends after it. */
+  const gesture = async (id: string, moves: Array<[number, number]>, click_: [number, number]) => {
+    document.elementFromPoint = () => null
+    const fire = (type: string, x: number, y: number, el: EventTarget = window) => act(async () => void el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y })))
+    await fire('pointerdown', 10, 10, card(id))
+    for (const [x, y] of moves) await fire('pointermove', x, y)
+    await fire('pointerup', moves.at(-1)?.[0] ?? 10, moves.at(-1)?.[1] ?? 10)
+    await click(card(id), { clientX: click_[0], clientY: click_[1] })
+  }
+
+  it('klik w kartę (i Enter) rozwija otwierany wiersz – widać jego notatkę i pola, nie tylko linię', async () => {
     await matrix(five())
-    await act(async () => void card('c').dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, clientX: 10, clientY: 10 })))
-    await click(card('c'), { clientX: 80, clientY: 60 })
+    await click(card('c'))
+    await settle()
+    expect(q('case-more', row('c'))).not.toBeNull()
+    expect(q('case-more', row('d'))).toBeNull()
+  })
+
+  it('menu karty znika, gdy jej sprawa znika (usunięta gdzie indziej), i nie wraca po „Cofnij”', async () => {
+    const s = await matrix(five())
+    await rightClick(card('c'))
+    expect(q('matrix-menu')).not.toBeNull()
+    let bring: () => void = () => undefined
+    await act(async () => void (bring = s.take('c')))
+    expect(q('matrix-menu')).toBeNull()
+    await act(async () => bring())
+    expect(card('c')).not.toBeNull()
+    expect(q('matrix-menu')).toBeNull()
+  })
+
+  it('karta ma nazwę z tytułu, listy, znaczka terminu i szacunku, a podpowiedź osobno (aria-describedby)', async () => {
+    await matrix([task('a', 1, { priority: 'p1', dueDate: addDays(TODAY, 2), estimateMin: 45 }), task('b', 2, { priority: 'p1' })])
+    expect(card('a').getAttribute('aria-label')).toMatch(/^zadanie a, Skrzynka, Termin za 2 dni, 45 min$/)
+    expect(card('b').getAttribute('aria-label')).toBe('zadanie b, Skrzynka, 30 min')
+    const hint = document.getElementById(card('a').getAttribute('aria-describedby')!)
+    expect(hint?.textContent).toMatch(/Enter/)
+  })
+
+  it('klik po przeciągnięciu nie otwiera wiersza – także przeciągnięcie wycofane na kartę i puszczenie tuż za progiem', async () => {
+    await matrix(five())
+    await gesture('c', [[80, 60]], [80, 60])
     expect(q('cases-matrix')).not.toBeNull()
+    // Out and back to where it was: the gesture started, so it is a drag (not a click on the card).
+    await gesture('c', [[80, 60], [10, 10]], [10, 10])
+    expect(q('cases-matrix')).not.toBeNull()
+    // A press that never moved past the threshold is a click.
+    await gesture('c', [[11, 11]], [11, 11])
+    expect(q('cases-matrix')).toBeNull()
   })
 
   it('jeden przystanek Tab (pierwsza karta), fokus karty przenosi go; Enter i spacja otwierają wiersz', async () => {

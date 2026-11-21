@@ -30,8 +30,13 @@ export interface GrabEvent {
 /** A press on something of a row or card that is its own (a button, a field) does not start a drag. */
 export const ownControl = (t: EventTarget): boolean => t instanceof Element && t.closest('button, input, select, textarea, a') != null
 
-export function usePointerDrag<T>(resolve: (x: number, y: number) => T | null, onDrop: (id: string, target: T, copy: boolean) => void): { drag: PointerDragState<T> | null; grab: (id: string, e: GrabEvent) => void } {
+/**
+ * `started` – a ref that says whether the gesture of the last press went past the threshold (a drag, whatever came of it: dropped, cancelled, brought back to
+ * where it began); the click the browser sends after the release asks it (UX17: a drag is never a click on the card).
+ */
+export function usePointerDrag<T>(resolve: (x: number, y: number) => T | null, onDrop: (id: string, target: T, copy: boolean) => void): { drag: PointerDragState<T> | null; grab: (id: string, e: GrabEvent) => void; started: { readonly current: boolean } } {
   const [drag, setDrag] = useState<PointerDragState<T> | null>(null)
+  const started = useRef(false)
   const at = useRef(resolve)
   at.current = resolve
   const drop = useRef(onDrop)
@@ -41,6 +46,7 @@ export function usePointerDrag<T>(resolve: (x: number, y: number) => T | null, o
   const grab = (id: string, e: GrabEvent) => {
     if (e.button !== 0 || ownControl(e.target)) return
     off.current?.()
+    started.current = false
     const x0 = e.clientX
     const y0 = e.clientY
     let moved = false
@@ -54,6 +60,7 @@ export function usePointerDrag<T>(resolve: (x: number, y: number) => T | null, o
       if (ev.buttons === 0) return stop()
       if (!moved && !dragStarted(ev.clientX - x0, ev.clientY - y0, 'xy')) return
       moved = true
+      started.current = true
       last = { x: ev.clientX, y: ev.clientY }
       setDrag({ id, x: ev.clientX, y: ev.clientY, target: at.current(ev.clientX, ev.clientY), copy: ev.ctrlKey })
     }
@@ -98,5 +105,5 @@ export function usePointerDrag<T>(resolve: (x: number, y: number) => T | null, o
       off.current = null
     }
   }
-  return { drag, grab }
+  return { drag, grab, started }
 }

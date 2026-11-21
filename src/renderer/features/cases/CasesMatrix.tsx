@@ -7,7 +7,7 @@
  * UX17 (F8, D565 P25): a card is not a drag alone – a click (or Enter / Space on it) opens the sprawa's row in the lists (`onOpen`), the cards take the focus
  * (one Tab stop, `matrixMove`: ↑ ↓ ← → between the cards and fields), the right button and Shift+F10 open „Priorytet ▸” (the five choices) and „Otwórz w Listach”.
  */
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { dueBadge } from '@shared/engine/caseDates'
 import { dropPatch, MATRIX_COLUMNS, MATRIX_FILTERS, MATRIX_ROWS, MATRIX_SIDES, matrixCounts, matrixMove, matrixOf, type MatrixFilter, type MatrixField, type MatrixKey } from '@shared/engine/casePriority'
 import type { CaseItem } from '@shared/engine/cases'
@@ -28,8 +28,6 @@ import { ownControl } from './usePointerDrag'
 const FILTER_LABELS: Record<MatrixFilter, string> = { inbox: CASE_LIST_NAMES.inbox, today: CASE_LIST_NAMES.today, week: CASE_LIST_NAMES.week, someday: CASE_LIST_NAMES.someday, all: 'wszystkie' }
 
 const ARROWS: readonly string[] = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']
-/** A press that moved this far is a drag, not a click (the 4 px of `dragStarted`). */
-const CLICK_SLOP = 4
 const FIELD_ORDER: readonly MatrixField[] = ['p1', 'p2', 'p3', 'p4', 'none']
 
 export function CasesMatrix({ items, today, onOpen }: { items: readonly CaseItem[]; today: string; onOpen: (id: string) => void }) {
@@ -37,24 +35,28 @@ export function CasesMatrix({ items, today, onOpen }: { items: readonly CaseItem
   // D457: the filter is remembered by the window, as the view is.
   const [filter, setFilterNow] = useState<MatrixFilter>(readMatrixFilter)
   const setFilter = (f: MatrixFilter) => (rememberMatrixFilter(f), setFilterNow(f))
-  const matrix = matrixOf(items, filter)
+  const matrix = useMemo(() => matrixOf(items, filter), [items, filter])
   const counts = matrixCounts(items)
-  const { drag, grab } = useMatrixDrag((id, field) => {
+  const { drag, grab, started } = useMatrixDrag((id, field) => {
     // One write: the new quarter (D450); a drop where the sprawa is already – nothing.
     const patch = dropPatch(items.find((x) => x.record.id === id), field)
     if (patch) void changeCase(id, patch)
   })
   const dragged = drag ? items.find((x) => x.record.id === drag.id) : undefined
 
-  // The cards by field as they stand (for the arrows), the one Tab stop (the card last focused, else the first), the press that tells a click from a drag, the menu.
+  // The cards by field as they stand (for the arrows), the one Tab stop (the card last focused, else the first), the menu.
   const root = useRef<HTMLDivElement>(null)
   const ids = useMemo(() => Object.fromEntries(FIELD_ORDER.map((f) => [f, (f === 'none' ? matrix.none : matrix.cells[f]).map((x) => x.record.id)])) as Record<MatrixField, string[]>, [matrix])
   const [last, setLast] = useState<string | null>(null)
   const first = FIELD_ORDER.flatMap((f) => ids[f])[0] ?? null
   const stop = last && FIELD_ORDER.some((f) => ids[f].includes(last)) ? last : first
-  const down = useRef<{ x: number; y: number } | null>(null)
   const [menu, setMenu] = useState<{ id: string; at: { x: number; y: number } } | null>(null)
   const menuItem = menu ? items.find((x) => x.record.id === menu.id) : undefined
+  // Its sprawa gone (removed on another computer): the menu goes with it and does not come back with a „Cofnij”.
+  useEffect(() => {
+    if (menu && !menuItem) setMenu(null)
+  }, [menu, menuItem])
+  const hintId = useId()
   const menuHandlers = (id: string) => menuBind((at) => setMenu({ id, at }))
   const focusCard = (id: string) => {
     setLast(id)
@@ -69,19 +71,18 @@ export function CasesMatrix({ items, today, onOpen }: { items: readonly CaseItem
         key={x.record.id}
         className={cx('flex cursor-grab touch-none select-none flex-col gap-0.5 rounded border border-line bg-bg px-2 py-1.5 outline-none focus:ring-1 focus:ring-lamp', drag?.id === x.record.id && 'opacity-50')}
         tabIndex={stop === x.record.id ? 0 : -1}
-        aria-label={`${title} – otwórz w Listach`}
+        aria-label={[title, CASE_LIST_NAMES[x.list], badge?.text, durationLabel(x.estimateMin)].filter(Boolean).join(', ')}
+        aria-describedby={hintId}
         title="Kliknij – otwiera sprawę w Listach. Prawy przycisk – priorytet."
         onFocus={() => setLast(x.record.id)}
         onPointerDown={(e) => {
           // Not a text selection of the card's words while it is dragged.
           if (e.button === 0 && !ownControl(e.target)) e.preventDefault()
-          down.current = { x: e.clientX, y: e.clientY }
           grab(x.record.id, e)
         }}
         onClick={(e) => {
-          // A press that moved is a drag (its drop wrote the priority), not a click.
-          const from = down.current
-          if (from && Math.hypot(e.clientX - from.x, e.clientY - from.y) > CLICK_SLOP) return
+          // A gesture that started is a drag (what it wrote, it wrote on the drop – even brought back to the card), not a click.
+          if (started.current) return
           onOpen(x.record.id)
         }}
         onContextMenu={menuHandlers(x.record.id).onContextMenu}
@@ -139,6 +140,9 @@ export function CasesMatrix({ items, today, onOpen }: { items: readonly CaseItem
 
   return (
     <div ref={root} className="flex flex-col gap-3" data-testid="cases-matrix">
+      <span id={hintId} className="sr-only">
+        Enter lub klik otwiera sprawę w Listach, strzałki przechodzą między kartami, prawy przycisk – priorytet.
+      </span>
       <div className="flex flex-wrap items-center gap-1.5" data-testid="matrix-filters">
         {MATRIX_FILTERS.map((f) => (
           <button key={f} type="button" className="chip" aria-pressed={filter === f} onClick={() => setFilter(f)} data-testid={`matrix-filter-${f}`}>

@@ -64,6 +64,16 @@ export function CasesPage() {
   const [view, setViewNow] = useState<CasesView>(readCasesView)
   const setView = (v: CasesView) => (rememberCasesView(v), setViewNow(v))
   const [chosen, setChosen] = useState<string | null>(null)
+  // The rows opened under „▸” (UX17): kept here, not in the row – a sprawa moved to another list stands in another section and its row is mounted anew.
+  const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(new Set())
+  const setExpandedOf = (id: string, on: boolean) =>
+    setExpandedIds((now) => {
+      if (now.has(id) === on) return now
+      const next = new Set(now)
+      if (on) next.add(id)
+      else next.delete(id)
+      return next
+    })
   const [bring, setBring] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const addRequest = async () => {
@@ -102,6 +112,8 @@ export function CasesPage() {
     if (!keep(x)) setFilters([])
     if (x.list === 'done' && !x.recent) setShowOlder(true)
     setChosen(x.record.id)
+    // The row found (Ctrl K, a card of the matrix) opens fully: its note and fields are what one came for.
+    setExpandedOf(x.record.id, true)
     setBring(x.record.id)
   }
   useEffect(() => {
@@ -181,7 +193,7 @@ export function CasesPage() {
             {s.items.length ? (
               <div className="flex flex-col gap-1.5" data-testid={`cases-${s.list}-list`}>
                 {s.items.map((x) => (
-                  <CaseRow key={x.record.id} x={x} today={today} marked={x.record.id === chosen} group={group} />
+                  <CaseRow key={x.record.id} x={x} today={today} marked={x.record.id === chosen} group={group} expanded={expandedIds.has(x.record.id)} onExpand={(on) => setExpandedOf(x.record.id, on)} />
                 ))}
               </div>
             ) : (
@@ -266,7 +278,7 @@ function NewTask({ onClose }: { onClose: () => void }) {
   )
 }
 
-function CaseRow({ x, today, marked, group }: { x: CaseItem; today: string; marked: boolean; group: CasesGroup }) {
+function CaseRow({ x, today, marked, group, expanded, onExpand }: { x: CaseItem; today: string; marked: boolean; group: CasesGroup; expanded: boolean; onExpand: (on: boolean) => void }) {
   const rd = useData((s) => s.rd)
   const r = x.record
   const isTask = r.kind === 'task'
@@ -296,22 +308,22 @@ function CaseRow({ x, today, marked, group }: { x: CaseItem; today: string; mark
   const done = x.list === 'done'
   // P25: the row is one line (title / person and note, estimate, the badges of the due date and the priority, „Zaplanuj…”, „…”); the rest – the note and
   // the subcategory of a task, the list, the priority, „Zrobione”, „Terminy”, „Kroki”, „Powtarzaj”, „Usuń” – under „▸” and in the menu „…” (the same states).
-  const [expanded, setExpanded] = useState(false)
   const toggleRepeat = () => (repeating && rule.current?.unsaved() ? setAsking(true) : setRepeating(!repeating))
   const menu = caseRowMenu(x, {
     list: (l) => void moveCase(r.id, l),
     priority: (v) => set({ priority: priorityFrom(v) }),
     done: () => void moveCase(r.id, 'done'),
-    dates: () => setDating(!dating),
-    steps: () => setStepsOpen(!stepsOpen),
-    repeat: toggleRepeat,
+    // The menu only opens the forms (a second pick must not close what is open and being typed in); the buttons under „▸” toggle.
+    dates: () => setDating(true),
+    steps: () => setStepsOpen(true),
+    repeat: () => setRepeating(true),
     remove: () => void remove()
   })
   return (
     <div {...deleteMark('case', r.id)} {...group.rowProps(x)} className={cx('relative flex flex-col gap-1 rounded border px-3 py-1.5', DEL_RING, marked || selected ? 'border-lamp bg-lamp-soft' : 'border-line bg-panel')} data-testid="case-row" data-case={r.id} data-kind={r.kind} data-list={x.list}>
       {!done && r.priority && <PriorityMark priority={r.priority} />}
       <div className="flex items-center gap-2" data-testid="case-line">
-        <button type="button" className="h-[24px] w-[22px] shrink-0 text-muted hover:text-fg" aria-expanded={expanded} aria-label={expanded ? 'Zwiń sprawę' : 'Rozwiń sprawę'} title={expanded ? 'Zwiń' : 'Rozwiń: notatka, lista, priorytet, terminy…'} onClick={() => setExpanded(!expanded)} data-testid="case-expand">
+        <button type="button" className="h-[24px] w-[22px] shrink-0 text-muted hover:text-fg" aria-expanded={expanded} aria-label={expanded ? 'Zwiń sprawę' : 'Rozwiń sprawę'} title={expanded ? 'Zwiń' : 'Rozwiń: notatka, lista, priorytet, terminy…'} onClick={() => onExpand(!expanded)} data-testid="case-expand">
           {expanded ? '▾' : '▸'}
         </button>
         {isTask ? (

@@ -66,12 +66,13 @@ export type MatrixKey = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight'
 /** The fields above a field, nearest first, as the matrix stands (the field „Bez priorytetu” is under all of them; from it the left column goes first). */
 const ABOVE: Record<MatrixField, readonly Priority[]> = { p1: [], p2: [], p3: ['p1'], p4: ['p2'], none: ['p3', 'p4', 'p1', 'p2'] }
 const BELOW: Record<MatrixField, readonly MatrixField[]> = { p1: ['p3', 'none'], p2: ['p4', 'none'], p3: ['none'], p4: ['none'], none: [] }
-const BESIDE: Record<MatrixField, Priority | null> = { p1: 'p2', p2: 'p1', p3: 'p4', p4: 'p3', none: null }
+const LEFT: Record<MatrixField, Priority | null> = { p1: null, p2: 'p1', p3: null, p4: 'p3', none: null }
+const RIGHT: Record<MatrixField, Priority | null> = { p1: 'p2', p2: null, p3: 'p4', p4: null, none: null }
 
 /**
  * Where an arrow takes the focus from a card of the matrix (UX17, F8): ↑ ↓ the card above / below in its field, past its end the nearest card of the fields
- * above / below in the same column (empty fields are passed over); ← → the card of the same place in the neighbouring field of its row (as low as there
- * is one). The field „Bez priorytetu” has no side. Null – nowhere to go (the focus stays).
+ * above / below in the same column (empty fields are passed over); ← → the card of the same place in the field to the left / right in its row (as low as there
+ * is one; at the edge of the row nowhere). The field „Bez priorytetu” has no side. Null – nowhere to go (the focus stays).
  */
 export function matrixMove(ids: Record<MatrixField, readonly string[]>, from: string, key: MatrixKey): string | null {
   const field = (Object.keys(ids) as MatrixField[]).find((f) => ids[f].includes(from))
@@ -87,7 +88,7 @@ export function matrixMove(ids: Record<MatrixField, readonly string[]>, from: st
     for (const f of BELOW[field]) if (ids[f].length) return ids[f][0]!
     return null
   }
-  const beside = BESIDE[field]
+  const beside = (key === 'ArrowLeft' ? LEFT : RIGHT)[field]
   return beside && ids[beside].length ? ids[beside][Math.min(i, ids[beside].length - 1)]! : null
 }
 

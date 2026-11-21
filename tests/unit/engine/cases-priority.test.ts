@@ -262,6 +262,12 @@ describe('strzałki w macierzy (UX17, F8)', () => {
     expect(matrixMove(cells({ p1: ['a'] }), 'a', 'ArrowRight')).toBeNull()
   })
 
+  it('na krawędzi wiersza strzałka nigdzie nie idzie: ← z lewego pola i → z prawego to nie skok do drugiego pola', () => {
+    expect(matrixMove(full, 'a', 'ArrowLeft')).toBeNull()
+    expect(matrixMove(full, 'c', 'ArrowRight')).toBeNull()
+    expect(matrixMove(full, 'd', 'ArrowLeft')).toBeNull()
+    expect(matrixMove(full, 'f', 'ArrowRight')).toBeNull()  })
+
   it('nieznana karta – nigdzie', () => {
     expect(matrixMove(full, 'zzz', 'ArrowDown')).toBeNull()
   })

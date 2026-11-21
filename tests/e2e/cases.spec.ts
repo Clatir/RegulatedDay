@@ -281,7 +281,8 @@ test('Sprawy: termin ustawiony przyciskiem „Jutro” – znaczek „Termin jut
       await expect(moved).toHaveCount(1)
       await expect(moved.getByTestId('case-due')).toHaveText('Termin jutro')
       // A date of doing that has gone by (D454): the note under the field, the sprawa stays on „Dziś”, nothing refused.
-      await moved.getByTestId('case-expand').click()
+      // The row moved to another list stands expanded still (its id is what keeps it open).
+      await expect(moved.getByTestId('case-more')).toBeVisible()
       await moved.getByTestId('case-dates-open').click()
       await moved.getByTestId('case-do-date').fill(plDate(addDays(today, -3)))
       await moved.getByTestId('case-do-date').press('Enter')

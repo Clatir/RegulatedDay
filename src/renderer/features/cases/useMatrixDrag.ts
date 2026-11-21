@@ -16,6 +16,6 @@ export function fieldAt(x: number, y: number): MatrixField | null {
   return f === 'none' || isPriority(f) ? f : null
 }
 
-export function useMatrixDrag(onDrop: (id: string, field: MatrixField) => void): { drag: MatrixDragState | null; grab: (id: string, e: GrabEvent) => void } {
+export function useMatrixDrag(onDrop: (id: string, field: MatrixField) => void): { drag: MatrixDragState | null; grab: (id: string, e: GrabEvent) => void; started: { readonly current: boolean } } {
   return usePointerDrag(fieldAt, onDrop)
 }
