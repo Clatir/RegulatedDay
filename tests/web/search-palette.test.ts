@@ -99,7 +99,7 @@ describe('rekordy wyszukiwarki', () => {
     const kinds = (k: string) => rs.filter((r) => r.kind === k)
     expect(kinds('screen').map((r) => r.title)).toContain('Tydzień')
     expect(kinds('screen').find((r) => r.id === 'week')!.hint).toBe('Ctrl 3')
-    expect(kinds('command').map((r) => r.title)).toEqual(['Nowy blok', 'Nowa prośba', 'Jutro', 'Wczoraj', 'Rytuał'])
+    expect(kinds('command').map((r) => r.title)).toEqual(['Nowy blok', 'Nowa prośba', 'Nowe zadanie', 'Jutro', 'Wczoraj', 'Rytuał'])
     expect(kinds('setting')).toHaveLength(SETTING_SECTIONS.length)
     expect(kinds('category').map((r) => r.title)).toContain('Analiza')
     expect(kinds('template').map((r) => r.title)).toEqual(['Dzień zwykły'])
@@ -150,11 +150,11 @@ describe('rekordy wyszukiwarki', () => {
     expect(b.hint?.startsWith('dziś · 10.11.2026')).toBe(true)
   })
 
-  it('przykłady D387 na danych okna: „zolw” trafia osobę z prośby, „lodz” – nazwę bloku, „nowe” – oba polecenia', () => {
+  it('przykłady D387 na danych okna: „zolw” trafia osobę z prośby, „lodz” – nazwę bloku, „nowe” – polecenia „Nowy …”, „Nowa …” i „Nowe …”', () => {
     const rs = searchRecords(input([{ date: '2026-02-01', id: 'l', title: 'Spotkanie w Łodzi', note: '' }]))
     expect(search(rs, 'zolw', TODAY).flatMap((g) => g.hits.map((h) => h.record.kind))).toContain('request')
     expect(search(rs, 'lodz', TODAY)[0]!.hits[0]!.record.title).toBe('Spotkanie w Łodzi')
-    expect(search(rs, 'nowe', TODAY)[0]!.hits.map((h) => h.record.id)).toEqual(['newBlock', 'newRequest'])
+    expect(search(rs, 'nowe', TODAY)[0]!.hits.map((h) => h.record.id)).toEqual(['newTask', 'newBlock', 'newRequest'])
     expect(search(rs, 'woda kroki', TODAY)).toEqual([])
     expect(search(rs, 'woda prysz', TODAY).map((g) => g.id)).toEqual(['routine'])
   })
@@ -241,12 +241,14 @@ describe('Enter na wyniku (T653)', () => {
     expect([ui().page, ui().pick]).toEqual(['stats', null])
   })
 
-  it('polecenia: Nowy blok (Ctrl N w „Dziś”), Nowa prośba, Jutro, Wczoraj, Rytuał – tylko nawigacja', () => {
+  it('polecenia: Nowy blok (Ctrl N w „Dziś”), Nowa prośba, Nowe zadanie (Ctrl N w „Sprawach”), Jutro, Wczoraj, Rytuał – tylko nawigacja', () => {
     const cmd = (id: string) => choose(COMMANDS.find((c) => c.id === id)!, TODAY)
     cmd('newBlock')
     expect([ui().page, ui().day, ui().pick]).toEqual(['today', null, { kind: 'command', id: 'newBlock' }])
     cmd('newRequest')
     expect([ui().page, ui().pick]).toEqual(['requests', { kind: 'command', id: 'newRequest' }])
+    cmd('newTask')
+    expect([ui().page, ui().pick]).toEqual(['requests', { kind: 'command', id: 'newTask' }])
     cmd('tomorrow')
     expect([ui().page, ui().day, ui().pick]).toEqual(['today', '2026-11-11', null])
     cmd('yesterday')

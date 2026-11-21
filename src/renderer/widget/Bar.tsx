@@ -1042,11 +1042,6 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
               </span>
             </BarButton>
           )}
-          {view.muted && (
-            <span className="shrink-0 text-[12px] text-muted" aria-label="dźwięk wyciszony">
-              🔇
-            </span>
-          )}
           {view.variants.marker && (
             <BarButton mode={mode} testId="bar-variants" pressed={variantsOpen} onAct={() => toggle('variants')}>
               ◆ warianty

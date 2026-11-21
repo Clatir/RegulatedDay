@@ -7,7 +7,8 @@
 
 export type Range = [number, number]
 
-export type SearchKind = 'command' | 'screen' | 'setting' | 'category' | 'block' | 'allDay' | 'template' | 'templateBlock' | 'series' | 'request' | 'routine'
+/** `history` is no record of the search: only a pick – the history of one record, left for „Historia” by a message („Historia” by a broken file, UX3, A9); id = `kind/id` of the history. */
+export type SearchKind = 'command' | 'screen' | 'setting' | 'category' | 'block' | 'allDay' | 'template' | 'templateBlock' | 'series' | 'request' | 'routine' | 'history'
 
 /** One thing that can be found. `title` and `text` are shown (and searched), `keys` only searched, `hint` only shown. */
 export interface SearchRecord {

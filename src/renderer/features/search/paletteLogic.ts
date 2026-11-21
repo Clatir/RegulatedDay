@@ -43,6 +43,7 @@ export function choose(r: SearchRecord, today: string): void {
     case 'command':
       if (r.id === 'newBlock') openPick({ page: 'today', day: null }, { kind: 'command', id: 'newBlock' })
       else if (r.id === 'newRequest') openPick({ page: 'requests' }, { kind: 'command', id: 'newRequest' })
+      else if (r.id === 'newTask') openPick({ page: 'requests' }, { kind: 'command', id: 'newTask' })
       // The days count from a real today; without one these two do nothing (the palette gives it from the clock at least).
       else if (r.id === 'tomorrow' && isIsoDate(today)) openDay(addDays(today, 1))
       else if (r.id === 'yesterday' && isIsoDate(today)) openDay(addDays(today, -1))

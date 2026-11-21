@@ -26,6 +26,7 @@ import { CalibrationSection } from '../calibration/CalibrationEntry'
 import { ComputersSection } from './ComputersSection'
 import { DataSection } from './DataSection'
 import { resetSettingsFrom } from './settingsStore'
+import { patchWizard } from '../wizard/wizardStore'
 
 const IDENTITY_LABEL: Record<AppInfo['identity'], string> = {
   production: 'zainstalowana',
@@ -218,6 +219,11 @@ export function SettingsPage() {
             <span className="min-w-0 flex-1 break-all text-[12px] text-muted" data-testid="data-folder">
               {folder ?? '—'}
             </span>
+            {!folder && (
+              <button type="button" className="btn" onClick={() => patchWizard({ open: true, asked: true })} data-testid="open-wizard">
+                Otwórz kreator
+              </button>
+            )}
             {folder && (
               <>
                 <button type="button" className="btn" onClick={() => void window.rd.openDataFolder()}>

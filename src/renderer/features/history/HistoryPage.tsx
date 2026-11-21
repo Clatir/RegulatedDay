@@ -16,7 +16,7 @@ import { EmptyState, cx } from '../../components/ui'
 import { fieldText, keyOf, valueText } from '../../lib/recordText'
 import { useBusy } from '../../lib/busy'
 import { rawRecord, reloadData, useData } from '../../store/data'
-import { toast } from '../../store/ui'
+import { takeFoundPick, toast, useUi } from '../../store/ui'
 import { blockName } from '../plan/blockView'
 import { seriesBlockOf } from '../series/seriesForm'
 
@@ -35,6 +35,13 @@ export function HistoryPage() {
   useEffect(() => {
     void window.rd.historyList().then(setRecords).catch(() => setRecords([]))
   }, [stamp])
+  // A record picked by a message („Historia” by a broken file, UX3, A9): chosen once the list is read; one without versions – said, never left waiting.
+  const pick = useUi((s) => s.pick)
+  useEffect(() => {
+    if (!records) return
+    const p = takeFoundPick((x) => x.kind === 'history', (x) => !!chosenRecord(records, x.id), 'Ten rekord nie ma jeszcze wersji w historii.')
+    if (p) setChosen(p.id)
+  }, [pick, records])
   if (!records) return <div className="p-6 text-muted">Czytam historię…</div>
   if (!records.length) return <EmptyState why="Historia jest pusta: wersje zapisują się, gdy zmieniasz albo usuwasz plan, szablon, sprawę, rutynę czy ustawienia." />
   const kinds = [...new Set(records.map((r) => r.kind))].filter((k) => KIND_NAMES[k])

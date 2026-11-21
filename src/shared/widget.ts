@@ -105,8 +105,6 @@ export interface WidgetView {
   iconColor: string
   dot: boolean
   drop: boolean
-  /** The sound was skipped (the muted sign). */
-  muted: boolean
   block: { name: string; className: string; endsAt: number | null } | null
   /** „Dalej?” has its fixed place at the start of the bar. */
   question: BarLine | null
@@ -250,7 +248,6 @@ export function noFolderView(status: 'none' | 'opening' | 'failed' = 'none'): Wi
     iconColor: iconColor('brak', 'none', false, false, tones),
     dot: false,
     drop: false,
-    muted: false,
     block: null,
     question: null,
     lines: [{ id: NO_FOLDER_LINE, text, actions: status === 'opening' ? [] : [{ id: 'open', label: 'Otwórz okno' }], dot: false }],

@@ -8,7 +8,7 @@ import type { MovedTo } from '@shared/api'
 import { formatNumber, plDate } from '@shared/format'
 import { unsyncedText } from '@shared/sync/syncLines'
 import { useData } from '../store/data'
-import { navigate, setMovedLater, toast, useUi } from '../store/ui'
+import { openPick, setMovedLater, toast, useUi } from '../store/ui'
 import { updateAction, useUpdate } from '../store/update'
 import { useWidget } from '../store/widget'
 
@@ -72,7 +72,7 @@ function BackupBanner() {
         {b.lastOk ? `Brak kopii zapasowej od ${plDate(b.lastOk)}` : 'Brak kopii zapasowej'}
         {b.failed ? ` – ostatnia próba: ${b.failed}` : ''}.
       </span>
-      <button type="button" className="btn" onClick={() => navigate('settings')}>
+      <button type="button" className="btn" onClick={() => openPick({ page: 'settings' }, { kind: 'setting', id: 'settings-data' })}>
         Ustawienia
       </button>
     </div>
