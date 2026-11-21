@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { costText } from '@shared/costText'
-import { durationLabel, logicalClock, plDate } from '@shared/format'
+import { durationLabel, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
 import { freedByEdit } from '@shared/engine/gaps'
 import { detectLateWake, lateWakeSeenId } from '@shared/engine/lateWake'
@@ -21,7 +21,6 @@ import type { StepOp } from '@shared/model/steps'
 import { DAY_TYPE_NAMES, RANGES } from '@shared/model/settings'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
-import { atOf } from '@shared/engine/grid'
 import { TimeField } from '../../components/fields'
 import { EmptyState, SIDE_PANEL_WIDTH, cx } from '../../components/ui'
 import { commitActiveField } from '../../lib/commit'
@@ -50,7 +49,7 @@ import { seriesFirst } from '../series/seriesScope'
 import { occurrenceRuleText } from '../series/seriesForm'
 import { saveTileCosts } from '../plan/costSave'
 import { blockName, type Names } from '../plan/blockView'
-import { dayAxis, daySummary } from '../plan/dayItems'
+import { dayAxis } from '../plan/dayItems'
 import { menuCtxOf, type MenuState } from '../plan/groupMenu'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { useAxisGroup, type AxisTile } from '../plan/useAxisGroup'
@@ -60,7 +59,7 @@ import { edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/ed
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
 import { Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
 import { useAxisOpening, type PlacedDay } from './axisOpening'
-import { EnergyLegend, LANES_WIDTH } from '../plan/EnergyLanes'
+import { EnergyLegendHelp, LANES_WIDTH } from '../plan/EnergyLanes'
 import { hasEnergy } from '../plan/energyDraw'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
@@ -82,6 +81,9 @@ import { useCaseDrag } from '../cases/useCaseDrag'
 import { draftTile } from './blockDraft'
 import { escapeDraft, firstSave } from './draftSave'
 import { DayMenu } from './DayMenu'
+import { DayNumbers, DaySummary } from './DayNumbers'
+import { BlockDayNotes } from './DayNotes'
+import { DayWarnings, dayWarningTexts } from './DayWarnings'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
@@ -668,7 +670,6 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
             {lateWake && lateShown && <LateWakeCard model={model} lw={lateWake} names={names} />}
             {isToday && ritualFrom && <UnclosedDays />}
             {isToday && <MorningPlan model={model} names={names} />}
-            {isToday && <RoutineCards model={model} names={names} />}
             {ritual && (
               <div ref={ritualRef} data-prompt-card="true">
                 <RitualPanel key={date} model={model} names={names} onClosed={isToday ? undefined : () => openDay(null)} />
@@ -682,10 +683,9 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
             {!model.data.complete && !model.data.unknown && <p className="text-[12px] text-rose">Nie wszystkie logi tego dnia dało się teraz odczytać – dzień może być niepełny.</p>}
             <CalendarChips hiddenCount={axisItems.hiddenCount + hiddenEvents} />
             <div className="flex items-center justify-between gap-3">
-              <span className="text-[12px] text-muted" data-testid="day-summary">
-                {daySummary(model).join(' · ')}
-              </span>
-              {hasEnergy(axis.energy) && <EnergyLegend reserve={axis.energy.reserve} />}
+              <DaySummary model={model} />
+              {/* D563 P10: the legend of the energy folded under „?”. */}
+              {hasEnergy(axis.energy) && <EnergyLegendHelp reserve={axis.energy.reserve} />}
             </div>
             <GroupLine view="today" />
             {group.line}
@@ -817,6 +817,8 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
             names={names}
             computers={view.computers}
             onChange={(patch) => changeBlock(block, patch, draft != null)}
+            // D3, D8, D563 P10: what the side panel says of the day stands in the panel of the block, which replaces it – the warnings and a routine waiting.
+            dayNotes={<BlockDayNotes model={model} names={names} today={today} onShow={closePanel} />}
             // „Zamknij” leaves a new block – saved as it stands, a bare click of the axis untouched thrown away (D461, T1045); Esc
             // throws away only an untouched one whose save has not started, any other it leaves as „Zamknij” does (T1080).
             onClose={closePanel}
@@ -827,7 +829,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
             // D430, D431, D461: „+ Blok” (Ctrl+N, a range on the axis, „Więcej” of „Tydzień”) – the cursor in „Nazwa”, Enter there
             // saves the block with the name just typed (the draft of this render does not have it yet; a name that was changed
             // is committed by the blur and has started the save already). A save running: the cursor stays in the field (T1028).
-            newBlock={draft ? { add: (name) => (firstSave.of(draft.id) ? false : void changeBlock(draft, { name }, true)) } : undefined}
+            newBlock={draft ? { add: (name) => (firstSave.of(draft.id) ? false : void changeBlock(draft, { name }, true)), discards: escapeDraft(firstSave.of(draft.id) != null, stored?.touched ?? false) === 'discard' } : undefined}
             steps={
               <StepsEditor
                 steps={routineList?.steps ?? block.steps}
@@ -873,7 +875,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
             }
           />
         ) : (
-          <SidePanel model={model} names={names} onSelect={setSelected} onMove={(b) => setDialog({ move: b })} cases={casesOn ? <CasesPanel drag={caseDrag} grab={grabCase} started={caseDragStarted} onPlan={planCaseNext} onSelected={(s) => void (panelSelected.current = s)} /> : undefined} />
+          <SidePanel model={model} names={names} routines={isToday} past={date < today} onSelect={setSelected} onMove={(b) => setDialog({ move: b })} cases={casesOn ? <CasesPanel drag={caseDrag} grab={grabCase} started={caseDragStarted} onPlan={planCaseNext} onSelected={(s) => void (panelSelected.current = s)} /> : undefined} />
         )}
       </div>
       {exchange && (
@@ -905,35 +907,16 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
 export const AXIS_HINT = 'Przeciągnij po osi, żeby dodać blok w tych godzinach, albo użyj „+ Blok” (Ctrl+N – w najbliższym wolnym miejscu).'
 
 /** Beside the plan when no block is selected: the warnings, the parked blocks, what the engine says of the day. */
-function SidePanel({ model, names, onSelect, onMove, cases }: { model: DayModel; names: Names; onSelect: (id: string) => void; onMove: (b: PlanBlock) => void; cases?: ReactNode }) {
+export function SidePanel({ model, names, routines, past, onSelect, onMove, cases }: { model: DayModel; names: Names; routines: boolean; past: boolean; onSelect: (id: string) => void; onMove: (b: PlanBlock) => void; cases?: ReactNode }) {
   const s = model.state
   const parked = model.ctx.plan.filter((b) => s.facts.blocks.get(b.id)?.parkedAt != null)
-  const lm = (idx: number) => logicalClock(logicalMinuteOf(model.date, atOf(s.grid, idx)))
   return (
     <aside className={cx('flex shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3 text-[12.5px]', SIDE_PANEL_WIDTH)} data-testid="day-side">
+      {/* D563 P10: the cards of the routines begun (they ask for ticks) – here, not over the axis. */}
+      {routines && <RoutineCards model={model} names={names} />}
       {cases}
-      <h3 className="text-[13px] font-medium">Dzień w liczbach</h3>
-      <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
-        <dt className="text-muted">Granica</dt>
-        <dd className="num" data-testid="side-boundary">
-          {s.boundary.approved != null ? `${lm(s.boundary.approved)} (zatwierdzona)` : s.boundary.proposal != null ? `${lm(s.boundary.proposal)} (propozycja)` : s.noWorkDay ? 'dzień bez pracy' : '—'}
-        </dd>
-        <dt className="text-muted">Maksimum</dt>
-        <dd className="num">{lm(s.boundary.max)}</dd>
-        <dt className="text-muted">Koniec pracy (prognoza)</dt>
-        <dd className="num">{s.forecastWorkEnd != null ? lm(s.forecastWorkEnd) : '—'}</dd>
-        <dt className="text-muted">Twardy koniec projektów</dt>
-        <dd className="num">{s.hardEnd.unreachable ? 'nie mieści się' : lm(s.hardEnd.at)}</dd>
-        <dt className="text-muted">Pora snu</dt>
-        <dd className="num">{lm(s.bedtime.forecast)}</dd>
-      </dl>
-      {s.warnings.length > 0 && (
-        <ul className="flex flex-col gap-1 rounded border border-rose/40 bg-rose-soft px-2 py-1.5" data-testid="side-warnings">
-          {s.warnings.map((w) => (
-            <li key={w}>{w}</li>
-          ))}
-        </ul>
-      )}
+      <DayNumbers model={model} />
+      <DayWarnings warnings={dayWarningTexts(model, past)} />
       {parked.length > 0 && (
         <div className="flex flex-col gap-1.5">
           <h4 className="text-[12px] text-muted">Zaparkowane</h4>

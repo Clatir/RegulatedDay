@@ -20,7 +20,7 @@ import { useOutsidePointer } from '../../lib/outside'
 import type { SaveAnswer } from '../../store/data'
 import { useScopeAsked } from '../series/scopeAsk'
 import type { CostAsk } from './costSave'
-import { POOL_COLOR, POOL_NAME } from './energyDraw'
+import { COST_SCALE_TEXT, POOL_COLOR, POOL_NAME } from './energyDraw'
 import { NO_GRID } from './gridDrag'
 
 /** What the window shows: four costs and whether they are the block's own. */
@@ -32,9 +32,9 @@ const sameShown = (a: Shown, b: Shown): boolean => a.own === b.own && sameCosts(
 /** A click of the window: a step of a pool, or „Jak podkategoria” / „Jak wariant”; `ask` – the memory of the window it was made in. */
 type Op = ({ k: 'step'; pool: Pool; by: 1 | -1 } | { k: 'reset' }) & { ask: CostAsk }
 
-/** The size the window is placed by (its width is fixed, its height a little over four rows and the button). */
+/** The size the window is first placed by: its width is fixed, its height is an estimate (the heading – the title and its sentence, which wraps to two lines –, four rows and the button); once drawn, it is placed again by the height it has. */
 const POP_W = 232
-const POP_H = 184
+const POP_H = 236
 const GAP = 4
 const MARGIN = 8
 
@@ -44,11 +44,14 @@ const MARGIN = 8
  */
 export const costRoom = (tight: boolean): string => (tight ? 'pr-[74px]' : 'pr-[108px]')
 
+/** The label's box the window is placed by. */
+type PopAnchor = { left: number; right: number; top: number; bottom: number }
+
 /** Where the window stands: under the label, its right edge at the label's, kept inside the screen; above the label when there is no room below. */
-export function popPlace(anchor: { left: number; right: number; top: number; bottom: number }, view: { width: number; height: number }): { left: number; top: number } {
+export function popPlace(anchor: PopAnchor, view: { width: number; height: number }, height = POP_H): { left: number; top: number } {
   const left = Math.max(MARGIN, Math.min(anchor.right - POP_W, view.width - POP_W - MARGIN))
   const below = anchor.bottom + GAP
-  const top = below + POP_H + MARGIN <= view.height ? below : Math.max(MARGIN, anchor.top - GAP - POP_H)
+  const top = below + height + MARGIN <= view.height ? below : Math.max(MARGIN, anchor.top - GAP - height)
   return { left, top }
 }
 
@@ -92,7 +95,8 @@ export function TileCost({
 }) {
   const editable = cost.edit && onChange != null
   const label = useRef<HTMLSpanElement>(null)
-  const [place, setPlace] = useState<{ left: number; top: number } | null>(null)
+  const [place, setPlace] = useState<({ left: number; top: number } & { anchor: PopAnchor }) | null>(null)
+  const pop = useRef<HTMLDivElement>(null)
   const open = place != null
   const close = () => setPlace(null)
   // What is saved (`base`: the tile's, or what a save just wrote) and the clicks not saved yet (`ops`, the first one on its way); the
@@ -125,6 +129,13 @@ export function TileCost({
       window.removeEventListener('resize', close)
     }
   }, [open])
+  // The window drawn: placed again by the height it really has (the heading wraps by the width of the text, not by a count), once per opening.
+  useLayoutEffect(() => {
+    const h = pop.current?.offsetHeight
+    if (!place || !h) return
+    const next = popPlace(place.anchor, { width: window.innerWidth, height: window.innerHeight }, h)
+    if (next.left !== place.left || next.top !== place.top) setPlace({ ...place, ...next })
+  }, [place?.anchor])
   // The tile became one that may not be changed (it ended, its day went by): its window goes.
   useLayoutEffect(() => {
     if (!editable) setPlace(null)
@@ -138,7 +149,8 @@ export function TileCost({
     ask.current = { scope: null }
     if (!running.current) base.current = saved(cost)
     showNow()
-    setPlace(popPlace(r, { width: window.innerWidth, height: window.innerHeight }))
+    const anchor = { left: r.left, right: r.right, top: r.top, bottom: r.bottom }
+    setPlace({ ...popPlace(anchor, { width: window.innerWidth, height: window.innerHeight }), anchor })
   }
   /** The clicks one after another, each over what is saved when its turn comes; the first one is sent at once. */
   const drain = async () => {
@@ -216,6 +228,7 @@ export function TileCost({
         !asked &&
         createPortal(
           <div
+            ref={pop}
             role="dialog"
             aria-label="Koszt bloku na godzinę"
             data-cost-of={id}
@@ -227,6 +240,11 @@ export function TileCost({
             onPointerUp={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* D7: what the numbers are – the unit and the range. */}
+            <div className="flex flex-col leading-tight" data-testid="cost-pop-head">
+              <span className="text-fg">Koszt bloku</span>
+              <span className="text-[11px] text-muted">{COST_SCALE_TEXT}</span>
+            </div>
             {POOL_ORDER.map((p) => (
               <div key={p} className="flex items-center gap-2">
                 <span className="w-[58px] shrink-0" style={{ color: POOL_COLOR[p] }}>

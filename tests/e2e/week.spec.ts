@@ -64,6 +64,8 @@ test('Tydzień (D356): siedem kolumn, strzałki tygodni, cel miesięczny z post�
       await expect(page.getByTestId('nav-week')).toHaveAttribute('title', 'Tydzień (Ctrl+3)')
       await page.getByTestId('nav-week').click()
       await expect(page.getByTestId('week')).toBeVisible()
+      // D10 (UX9): the gestures of the grid are said over it.
+      await expect(page.getByTestId('week-hint')).toContainText('Kliknij pustą godzinę')
       // Seven columns, today's among them marked; today's own block on the common axis.
       const days = page.locator('[data-testid^="week-day-"]')
       await expect(days).toHaveCount(7)
@@ -267,6 +269,7 @@ test('Tydzień (D366, D461): klik w pusty wtorek – okienko, Enter w nazwie zap
       await expect(small).toHaveAttribute('data-date', tue)
       await expect(small).toHaveAttribute('data-start', String(h1))
       await expect(small).toContainText(clockOf(h1))
+      await expect(page.getByTestId('week-new-hint')).toContainText('Esc – odrzuć')
       await expect(page.getByTestId('week')).toBeVisible()
       // The block waiting is drawn in its column; nothing is saved yet.
       await expect(page.getByTestId('week-range-waiting')).toContainText(`${clockOf(h1)}–${clockOf(h1 + 60)}`)

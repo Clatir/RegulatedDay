@@ -263,6 +263,10 @@ export function NewBlockPopover({
       <Field label="Długość" labelWidth={70}>
         <DurationField value={length} onCommit={(length) => change({ length })} aria-label="Długość" errorPlacement="below" data-testid="week-new-duration" />
       </Field>
+      {/* D10: the window saves itself – it says when. */}
+      <p className="text-[11.5px] text-muted" data-testid="week-new-hint">
+        Zapisze się po Enter w nazwie albo po kliknięciu poza okienkiem · Esc – odrzuć
+      </p>
       {warning && (
         <p className="rounded border border-rose/40 bg-rose-soft px-2 py-1.5 text-[12px]" role="status" data-testid="week-new-past">
           {warning}

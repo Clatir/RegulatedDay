@@ -94,12 +94,16 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.getByTestId('goals-skip').click()
       await page.getByTestId('checkin-skip').click()
       await expect(page.getByTestId('queue-pick')).toContainText('Mama')
-      await page.getByTestId('boundary-approve').click()
+      // D8 (UX9): „Zatwierdź” stands in the card's header – the plan is approved without scrolling its steps; the warnings are not in the card (P10).
+      await expect(page.getByTestId('morning-plan').getByTestId('day-warnings')).toHaveCount(0)
+      await page.getByTestId('morning-approve').click()
       await expect(page.getByTestId('boundary')).toContainText('Plan zatwierdzony')
+      await expect(page.getByTestId('morning-approve')).toHaveCount(0)
       await shot(page, 'e3-02-approved')
       // „Cofnij zatwierdzenie” (A6-11): the card says „do zrobienia” again and offers the approval; approved once more.
       await page.getByTestId('boundary-undo').click()
       await expect(page.getByTestId('boundary-approve')).toBeVisible()
+      await expect(page.getByTestId('morning-approve')).toBeVisible()
       await expect(page.getByTestId('morning-plan')).toContainText('do zrobienia')
       await page.getByTestId('boundary-approve').click()
       await expect(page.getByTestId('boundary')).toContainText('Plan zatwierdzony')
@@ -114,6 +118,9 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.getByTestId('day-add').click()
       await expect(page.getByTestId('block-editor')).toBeVisible()
       expect((await page.getByTestId('block-editor').boundingBox())!.width).toBe(sideWidth)
+      // D4 (UX9): the panel of a new block says it is a draft.
+      await expect(page.getByTestId('block-editor').locator('h3')).toHaveText('Nowy blok')
+      await expect(page.getByTestId('block-draft-hint')).toHaveText('Zapisze się, gdy opuścisz panel · Esc – odrzuć')
       await page.getByTestId('block-start').fill('3:30')
       // D461: the start committed saves the new block – a work block after the approval asks for the exchange at once.
       await page.getByTestId('block-start').press('Enter')
@@ -1156,6 +1163,8 @@ test('rutyny (D328): karta w „Dziś” z wersją i krokami; „Kroki ▸” w 
   try {
     await withMainLog(userData, async () => {
       await expect(page.getByTestId('routine-card')).toHaveCount(2, { timeout: 30_000 })
+      // D563 P10 (UX9): the cards of the routines stand in the side panel.
+      await expect(page.getByTestId('day-side').getByTestId('routine-card')).toHaveCount(2)
       // The card: the version „na gorsze dni” (the day's, T1108), its one step ticked – the list whole, the routine saved:
       // the card closes by itself (D474), the tick is the day's.
       const card = page.getByTestId('routine-card').first()

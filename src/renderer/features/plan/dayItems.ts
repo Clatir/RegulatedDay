@@ -197,10 +197,23 @@ function taskPriority(r: RequestRecord | undefined): { priority?: Priority } {
 
 /** The day's numbers in words (the plan's summary). */
 export function daySummary(model: DayModel): string[] {
+  return daySummaryParts(model).map((p) => p.text)
+}
+
+/** What each part of the line over the axis means (D7: a hint under the pointer). */
+export const DAY_SUMMARY_HINTS = {
+  budget: 'Praca zaplanowana i już zrobiona tego dnia wobec dziennego budżetu pracy typu dnia.',
+  minimum: 'Tyle regeneracji musi zmieścić się przed porą snu.',
+  pool: 'Ile czasu na projekty zostało: mniejsza z dwóch wartości – dzienny limit projektów pomniejszony o to, co już zrobiłeś, i czas do twardego końca bez zaplanowanej regeneracji i bloków życia.'
+} as const
+
+/** The parts of the day's summary, each with its hint. */
+export function daySummaryParts(model: DayModel): Array<{ text: string; hint: string }> {
   const s = model.state
-  const out: string[] = []
-  out.push(`budżet pracy ${durationLabel(s.budgetUsedMin + s.budget.forecastMin)} z ${durationLabel(s.budget.limitMin)}`)
-  out.push(`minimum regeneracji ${durationLabel(s.regen.requiredMin)}`)
-  if (!s.hardEnd.unreachable) out.push(`pula projektów ${durationLabel(Math.max(0, s.pool.min))}`)
+  const out: Array<{ text: string; hint: string }> = [
+    { text: `budżet pracy ${durationLabel(s.budgetUsedMin + s.budget.forecastMin)} z ${durationLabel(s.budget.limitMin)}`, hint: DAY_SUMMARY_HINTS.budget },
+    { text: `minimum regeneracji ${durationLabel(s.regen.requiredMin)}`, hint: DAY_SUMMARY_HINTS.minimum }
+  ]
+  if (!s.hardEnd.unreachable) out.push({ text: `pula projektów ${durationLabel(Math.max(0, s.pool.min))}`, hint: DAY_SUMMARY_HINTS.pool })
   return out
 }
