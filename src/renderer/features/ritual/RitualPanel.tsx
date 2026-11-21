@@ -166,12 +166,11 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
     setConfirm(false)
     try {
       const r = await window.rd.closeDay(date, 'ritual')
-      if (!r.ok && r.why) toast(r.why, 'error')
-      else {
+      if (r.ok) {
         // The same „Zamknięto … · Cofnij” as the morning's list (D563 P1, D468): the day is among the days not closed again.
-        if (r.ok) offerUndo(date, 'ritual', r.written, undoRun)
+        offerUndo(date, 'ritual', r.written, undoRun)
         onClosed?.()
-      }
+      } else toast(r.why ?? 'Dzień się nie zamknął.', 'error')
     } catch (e) {
       toast(`Dzień się nie zamknął: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
@@ -402,7 +401,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
               )}
               {stretch === r.id && stretchFrom.shown && stretchTo.shown ? (
                 <span className="inline-flex items-center gap-1.5">
-                  <DayTime date={date} value={stretchFrom.shown} onTyped={stretchFrom.onTyped} onEscape={() => setStretch(null)} label="Od" />
+                  <DayTime date={date} value={stretchFrom.shown} onTyped={stretchFrom.onTyped} onEnter={() => saveStretch(r)} onEscape={() => setStretch(null)} label="Od" />
                   –
                   <DayTime date={date} value={stretchTo.shown} onTyped={stretchTo.onTyped} onEnter={() => saveStretch(r)} onEscape={() => setStretch(null)} label="Do" />
                   <Act onClick={() => saveStretch(r)}>
