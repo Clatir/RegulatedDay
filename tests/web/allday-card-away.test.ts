@@ -6,11 +6,13 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { rdFrom } from '@shared/model/rd'
 import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
 import { AllDayCard } from '@renderer/features/allday/AllDayCard'
 import { installEscape } from '@renderer/lib/escape'
 import { askFreeDays, setFreeDays } from '@renderer/features/allday/freeDays'
 import { saveAllDay } from '@renderer/store/allDay'
+import { useData } from '@renderer/store/data'
 
 vi.mock('@renderer/store/allDay', async (orig) => ({
   ...(await orig<typeof import('@renderer/store/allDay')>()),
@@ -33,6 +35,7 @@ beforeAll(() => {
 })
 beforeEach(() => vi.clearAllMocks())
 afterEach(() => {
+  useData.setState({ rd: rdFrom(undefined) })
   document.body.removeEventListener('pointerdown', reached)
   document.body.removeEventListener('click', reached)
   act(() => root?.unmount())
@@ -212,40 +215,46 @@ describe('klik obok karty wydarzenia całodniowego (D563 P4)', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('zmiany po „Zapisz”, zamykający klik w trakcie zapisu: reszta zapisuje się po nim (względem tego, co wziął pierwszy zapis)', async () => {
+  it('w trakcie zapisu pola karty są tylko do odczytu (nic nie da się dopisać po „Zapisz”)', async () => {
+    useData.setState({ rd: rdFrom({ calendars: [{ id: 'praca', name: 'Praca', order: 1 }] }) })
     const finish = slowSave()
     await card(saved(), null)
+    const q = (id: string) => host!.querySelector<HTMLInputElement>(`[data-testid="${id}"]`)!
+    expect(q('allday-title').readOnly).toBe(false)
     await pressSave()
-    await type('Konferencja 2')
+    expect(q('allday-title').readOnly).toBe(true)
+    expect(q('allday-start').readOnly).toBe(true)
+    expect(q('allday-end').readOnly).toBe(true)
+    expect(q('allday-free').disabled).toBe(true)
+    expect(q('allday-calendar').disabled).toBe(true)
+    expect(q('allday-color-teal').disabled).toBe(true)
+    expect(host!.querySelector('[contenteditable="true"]')).toBeNull()
+    await act(async () => finish(saved()))
+    expect(q('allday-title').readOnly).toBe(false)
+  })
+
+  it('drugi klik obok w trakcie zapisu zamyka kartę i nie woła drugiego zapisu', async () => {
+    slowSave()
+    await card(saved(), null)
+    await pressSave()
     await press()
     await press()
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(saveAllDay).toHaveBeenCalledTimes(1)
-    await act(async () => finish(saved()))
-    expect(saveAllDay).toHaveBeenCalledTimes(2)
-    expect(vi.mocked(saveAllDay).mock.calls[1]).toMatchObject([{ title: 'Konferencja 2' }, { title: 'Konferencja' }])
   })
 
-  it('odmowa trwającego zapisu nie gubi wpisanego: reszta idzie jako pełny zapis względem tego, co było', async () => {
-    const finish = slowSave()
-    await card(saved(), null)
+  it('wstrzymanie zeruje się po zapisie, który skończył się od razu: następny zawieszony zapis znów wstrzymuje pierwszy klik', async () => {
+    await card(saved({ free: true }), null)
+    // The click that starts a save (it asks nothing here: no days) ends in the same tick; the card stays in this harness.
+    await press()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    slowSave()
     await pressSave()
-    await type('Konferencja 2')
+    reached.mockClear()
+    probe()
     await press()
-    await press()
-    await act(async () => finish(null))
-    expect(saveAllDay).toHaveBeenCalledTimes(2)
-    expect(vi.mocked(saveAllDay).mock.calls[1]).toMatchObject([{ title: 'Konferencja 2' }, null])
-  })
-
-  it('bez zmian po „Zapisz” zamykający klik niczego nie dokłada', async () => {
-    const finish = slowSave()
-    await card(saved(), null)
-    await pressSave()
-    await press()
-    await press()
-    await act(async () => finish(saved()))
-    expect(saveAllDay).toHaveBeenCalledTimes(1)
+    expect(reached).not.toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('klik, który sam zaczął zapis z pytaniem „Wolne”, zużywa wstrzymanie: następny klik w trakcie zapisu zamyka kartę', async () => {

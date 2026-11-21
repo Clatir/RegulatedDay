@@ -348,12 +348,13 @@ export interface ChoiceOption<T extends string> {
  * A choice from a list (a native list: the main window only – the bar never opens one, D229). `groups` – options under headers
  * (`<optgroup>`: the subcategory list of a block, D510), `options` after them without a header (there the „+ Nowa…” item).
  */
-export function Choice<T extends string>({ value, options = [], groups, onChange, className, ...rest }: {
+export function Choice<T extends string>({ value, options = [], groups, onChange, className, disabled, ...rest }: {
   value: T | null
   options?: Array<ChoiceOption<T>>
   groups?: Array<{ label: string; options: Array<ChoiceOption<T>> }>
   onChange: (v: T) => void
   className?: string
+  disabled?: boolean
   placeholder?: string
   'aria-label'?: string
   'data-testid'?: string
@@ -367,6 +368,7 @@ export function Choice<T extends string>({ value, options = [], groups, onChange
     <select
       className={cx('input pr-6', className)}
       value={value ?? ''}
+      disabled={disabled}
       aria-label={rest['aria-label']}
       data-testid={rest['data-testid']}
       onChange={(e) => onChange(e.currentTarget.value as T)}
