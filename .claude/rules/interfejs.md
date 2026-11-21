@@ -20,7 +20,7 @@ paths:
   `diffRecords`; `saveRecord`, `saveRd`, `logEvents`. Zapisy idą po kolei (T517): zmianę licz w jej kolejce funkcją
   na aktualnym rekordzie (`trySaveWith`, `updateRecord`, `saveDay` z `dayFilesNow`), nigdy od `raw` z propsów –
   dwie szybkie zmiany dawały fałszywy konflikt. „Cofnij” = odwrotność jednej operacji, toast i zdarzenia po `isSaved`.
-  Przycisk, który zapisuje: `useBusy`. `dayFiles` pomija dni nieczytelne (brak klucza ≠ brak pliku). `store/day.ts`: `useDay(date)` = `countDay` (te same funkcje co
+  Przycisk, który zapisuje: `useBusy` (także „+ Szablon” i „+ Rutyna” – `create` idzie przez `run`, więc klik i Ctrl+N w czasie zapisu nie robią drugiego rekordu; przytrzymany Ctrl+N – `repeat` pomija jeden wspólny `useNewShortcut` w `lib/escape.ts`). Dymek (`toast` w `store/ui`): identyczny dymek bez akcji (ten sam tekst i rodzaj) nie dubluje się – stoi ten sam, jego czas liczy się od nowa; dymki z akcją („Cofnij”) nigdy się nie scalają, każdy ma własny `run`. `dayFiles` pomija dni nieczytelne (brak klucza ≠ brak pliku). `store/day.ts`: `useDay(date)` = `countDay` (te same funkcje co
   prowadzący, `dayContextOf`) na faktyczną chwilę; `useDayFiles(dates)`. Zmiana oceniana na dniu (pobudka dziś, „od
   dziś”, zobaczone „Wstałeś później?”) pyta `dayUsable` (pełny albo `away` – znany przy niedostępnym folderze, czeka).
 - Edycje dnia na surowym JSON: `shared/data/dayEdits.ts` (`putBlock`, `setCancelled`, `setAsked`…) – nieznane pola

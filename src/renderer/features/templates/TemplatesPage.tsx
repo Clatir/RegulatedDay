@@ -28,6 +28,7 @@ import { UNDO_LINE_MS } from '@shared/widget'
 import { DateField, TextField } from '../../components/fields'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
 import { isSaved, saveRecord, storedAnswer, tryUpdateRecord, updateRecord, useData, type SaveAnswer, type SendState } from '../../store/data'
+import { useBusy } from '../../lib/busy'
 import { useNewShortcut } from '../../lib/escape'
 import { removeTarget, useDeleteResolver, useDeleteSelected } from '../../lib/deleteKey'
 import { takeFoundPick, useUi } from '../../store/ui'
@@ -80,13 +81,16 @@ export function TemplatesPage() {
   const [showArchivedState, setShowArchived] = useState(false)
   // A copy starts in the archive: the one selected is shown even then.
   const showArchived = showArchivedState || templates.some((t) => t.id === selected && t.archived)
-  const create = async () => {
-    const id = newId()
-    const hasDefault = templates.some((t) => t.dayType === 'zwykly' && !t.weekdays.length && !t.archived)
-    const t: Template = { id, name: 'Nowy szablon', dayType: 'zwykly', weekdays: hasDefault ? [1] : [], versions: [{ from: addDays(today, 1), blocks: [], budgetMin: null, maxMin: null }], archived: false }
-    await saveRecord(paths.record('template', id), null, templateJson(t))
-    setSelected(id)
-  }
+  const [busy, run] = useBusy()
+  const create = () =>
+    // One at a time (A5): a second click or Ctrl+N while this still saves would make a second template.
+    run(async () => {
+      const id = newId()
+      const hasDefault = templates.some((t) => t.dayType === 'zwykly' && !t.weekdays.length && !t.archived)
+      const t: Template = { id, name: 'Nowy szablon', dayType: 'zwykly', weekdays: hasDefault ? [1] : [], versions: [{ from: addDays(today, 1), blocks: [], budgetMin: null, maxMin: null }], archived: false }
+      await saveRecord(paths.record('template', id), null, templateJson(t))
+      setSelected(id)
+    })
   useNewShortcut(() => void create())
   // A template (or one of its blocks) picked in the search (Ctrl K): opened once; one that is gone is said so.
   const pick = useUi((s) => s.pick)
@@ -116,7 +120,7 @@ export function TemplatesPage() {
   return (
     <div className="flex min-h-0 flex-1" data-testid="templates">
       <div className="flex w-[260px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-line p-3">
-        <button type="button" className="btn btn-accent" onClick={() => void create()} data-testid="template-new">
+        <button type="button" className="btn btn-accent" onClick={() => void create()} disabled={busy} data-testid="template-new">
           + Szablon
         </button>
         {DAY_TYPES.map((type) => {

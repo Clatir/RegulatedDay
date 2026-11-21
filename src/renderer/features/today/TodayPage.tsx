@@ -585,8 +585,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   leaving.current = leaveDraft
   // A change of the screen or the day first leaves it (`store/ui`), then a click anywhere outside the panel does.
   useEffect(() => {
-    onLeaveBlockDraft(() => void leaving.current(true))
-    return () => onLeaveBlockDraft(null)
+    return onLeaveBlockDraft(() => void leaving.current(true))
   }, [])
   useOutsidePointer(draft != null, DRAFT_OWN, () => void leaving.current())
 

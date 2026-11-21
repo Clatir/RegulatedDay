@@ -73,14 +73,19 @@ export function dropSavedDraft(date: string, id: string): void {
 }
 
 /**
- * What leaving the screen or the day does to a new block not saved yet (D461): the plan screen hands in its save (the block is
- * written as it stands, like when you click elsewhere), the change of view calls it first – the view changes at once, the save
- * goes on with what the screen knew. Null: no plan screen is open.
+ * What leaving the screen or the day does to a new block not saved yet (D461): the screen with a new block (the plan of „Dziś”, the small
+ * window of „Tydzień”) hands in its save (the block is written as it stands, like when you click elsewhere), the change of view
+ * calls them all first – the view changes at once, the save goes on with what the screen knew. The answer takes the hand-in away.
  */
-let leaveDraft: (() => void) | null = null
+const leaveDrafts = new Set<() => void>()
 
-export function onLeaveBlockDraft(fn: (() => void) | null): void {
-  leaveDraft = fn
+export function onLeaveBlockDraft(fn: () => void): () => void {
+  leaveDrafts.add(fn)
+  return () => void leaveDrafts.delete(fn)
+}
+
+function leaveBlockDrafts(): void {
+  for (const fn of [...leaveDrafts]) fn()
 }
 
 /**
@@ -99,28 +104,28 @@ export function setMovedLater(key: string): void {
 /** Every change of view first commits the active field (spec „Zatwierdzanie przed przejściem”). */
 export function navigate(page: Page): void {
   commitActiveField()
-  leaveDraft?.()
+  leaveBlockDrafts()
   useUi.setState({ page, pick: null })
 }
 
 /** Today's ritual brought into view (the bar's „Rytuał”, D318). */
 export function openRitual(): void {
   commitActiveField()
-  leaveDraft?.()
+  leaveBlockDrafts()
   useUi.setState({ page: 'today', day: null, focus: 'ritual', pick: null })
 }
 
 /** The plan of a day (a click in the calendar opens it, D295); null: today. Commits the active field first. */
 export function openDay(day: string | null): void {
   commitActiveField()
-  leaveDraft?.()
+  leaveBlockDrafts()
   useUi.setState({ page: 'today', day, pick: null })
 }
 
 /** The search's Enter (T653): the screen (and the day of „Dziś”) with what to select there; a hand-made move drops it. */
 export function openPick(target: { page: Page; day?: string | null }, pick: SearchPick): void {
   commitActiveField()
-  leaveDraft?.()
+  leaveBlockDrafts()
   useUi.setState({ page: target.page, ...(target.day !== undefined ? { day: target.day } : {}), pick })
 }
 
@@ -153,9 +158,17 @@ export function closeToast(id: number): void {
   useUi.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }))
 }
 
+/**
+ * A message. An identical one standing (the same text and kind, F7) is not shown twice: it stays and its time starts again. One with
+ * an action („Cofnij”) is never merged – two operations with the same words each keep their own `run`.
+ */
 export function toast(text: string, kind: Toast['kind'] = 'info', ms = 5000, action?: Toast['action']): number {
-  const id = nextToast++
-  useUi.setState((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, kind, ms, action }] }))
+  const same = action ? undefined : useUi.getState().toasts.find((t) => t.text === text && t.kind === kind && !t.action)
+  const id = same?.id ?? nextToast++
+  if (same) {
+    clearTimeout(timers.get(id))
+    useUi.setState((s) => ({ toasts: s.toasts.map((t) => (t.id === id ? { ...t, ms } : t)) }))
+  } else useUi.setState((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, kind, ms, action }] }))
   timers.set(
     id,
     setTimeout(() => closeToast(id), ms)
