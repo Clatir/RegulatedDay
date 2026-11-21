@@ -301,6 +301,11 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX7.2 Inny dzień i „3 dni” – oś od godziny przed pobudką (1.34.0)
    - [ ] UX7.3 Granica i maksimum o tej samej godzinie – jeden napis (1.34.0)
    - [ ] UX7.4 „+N” w miesiącu mówi, co kryje (1.34.0)
+   - [ ] UX16.1 Daty DD.MM.RRRR i pola dat – „3.01”, osiem cyfr, „-”, „/” (1.34.0)
+   - [ ] UX16.2 Historia i Pokój – jeden zapis daty i godziny (1.34.0)
+   - [ ] UX16.3 Liczniki „x z y” i skróty „Ctrl+K” (1.34.0)
+   - [ ] UX16.4 Szablony, serie, rutyny – puste stany i „Używana w…” (1.34.0)
+   - [ ] UX16.5 „Skopiuj ten dzień do…” – okno dni z Od/Do (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3210,6 +3215,42 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** w Kalendarzu (miesiąc) dzień z wieloma sesjami albo blokami.
 - **Oczekiwany efekt:** „+2 sesje”, „+1 blok”; przy kilku rodzajach „+3 pozycje”, a po najechaniu – rozbicie.
 - **Nie przechodzi, gdy:** samo „+2”; liczba nie zgadza się z tym, czego nie widać.
+
+
+#### UX16.1 Daty DD.MM.RRRR i pola dat – „3.01”, osiem cyfr, „-”, „/”
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/ux16-formats.test.ts`, `tests/unit/date-input.test.ts`, `tests/web/ux16-screens.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** „Zastosuj do… → Wybierz dni…” w Szablonach: w „Od” wpisz `3.01`, potem `03012027`, `3-01-2027`, `3/01/2027`; w „Do” zacznij pisać datę i zatrzymaj się w połowie.
+- **Oczekiwany efekt:** każda postać daje 03.01.2027 i zaznaczony dzień w siatce; pole w połowie wpisywania jest czerwone, zaznaczenie znika, przycisk zatwierdzenia nieaktywny; siatka ma nagłówki „pn wt śr cz pt sb nd”.
+- **Nie przechodzi, gdy:** pola pokazują datę z myślnikami; „3.01” nie działa; przy czerwonym polu przycisk zatwierdza stare zaznaczenie.
+
+#### UX16.2 Historia i Pokój – jeden zapis daty i godziny
+- [ ] Odebrane
+- **Tylko Ty:** wygląd ekranów z prawdziwymi danymi.
+- **Jak sprawdzić:** otwórz Historię (lista i porównanie wersji) i Pokój („Ostatnie dni”, kaseta tygodnia); nagłówek „Tygodnia”.
+- **Oczekiwany efekt:** chwile jako „21.11.2026 14:30”, krótkie daty z zerem („26.10–01.11”, „02–08.11.2026”).
+- **Nie przechodzi, gdy:** „21 lis 2026”; „1.11” obok „01.11” na jednym ekranie.
+
+#### UX16.3 Liczniki „x z y” i skróty „Ctrl+K”
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/ux16-formats.test.ts`, `tests/web/ux16-screens.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** panel bloku z krokami, kafelek tego bloku, plan poranny z wydarzeniem kilkudniowym, menu boczne.
+- **Oczekiwany efekt:** panel „✓ 1 z 3”, kafelek dalej „✓ 1/3”, wydarzenie „(2 z 3)”; skróty zapisane „Ctrl+K”.
+- **Nie przechodzi, gdy:** panel „1/3”; menu „Ctrl K”.
+
+#### UX16.4 Szablony, serie, rutyny – puste stany i „Używana w…”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux16-screens.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** „Szablony” bez żadnej serii; edytor rutyny użytej w szablonie albo serii (także w części serii od przyszłego miesiąca).
+- **Oczekiwany efekt:** lista „Serie” widoczna z podpowiedzią o „Powtarzaj”; jedno zdanie, czym różni się szablon, seria i rutyna; rutyna mówi „Używana w szablonach … · w seriach …”, każda seria raz.
+- **Nie przechodzi, gdy:** lista serii znika; rutyna użyta tylko w przyszłej części serii jest „nieużyta”; ta sama definicja dwa razy.
+
+#### UX16.5 „Skopiuj ten dzień do…” – okno dni z Od/Do
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux16-screens.test.ts`, E2E `screens` (kopia dnia). Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” menu „⋯” → „Skopiuj ten dzień do…”; wpisz Od/Do, zaznacz też dzisiejszy dzień; spróbuj zakresu dłuższego niż rok.
+- **Oczekiwany efekt:** to samo okno co „Zastosuj do…”, z polami Od/Do; dzień kopiowany się nie liczy; licznik „(już trwały: N)” przy dniach do dziś i ostrzeżenie przy kopii; zakres dłuższy niż 366 dni – „Zakres dłuższy niż 366 dni”.
+- **Nie przechodzi, gdy:** kopia trafia na dni, których pola już nie pokazują; licznik nie zgadza się z ostrzeżeniem.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 

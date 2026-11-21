@@ -113,8 +113,10 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
       | Zadanie | Stan |
       | --- | --- |
       | UX7 | scalone 21.11 (06e60ff): T2000–T2009, odbiór UX7.1–UX7.4; przegląd high 4 rundy (karty-prośby nad osią, śledzenie treści, Agenda, zmiana doby, przewinięcia z kodu); uwagi na później: w dev śledzenie zależy od StrictMode; skurczenie treści kończy śledzenie; E2E w dzień nie sprawdza przewinięcia (tylko web) |
-      | UX10 (`ux-b`), UX16 (`ux-c`) | w przeglądzie (UX10 runda 2 xhigh na a4381be, UX16 runda 3 na 48a052b + drobne); szkic CHANGELOG i odbioru – w raportach wykonawców, wpisywane przy scaleniu |
-      | UX8, UX9, UX11–UX15, UX17–UX19 | do zrobienia |
+      | UX16 | scalone 21.11 (a0fe20d): T2200–T2207, odbiór UX16.1–UX16.5; przegląd high 3 rundy + drobne; po scaleniu UX7+UX16 `npm test` 4724/4732 (pada tylko `installer-close`); uwagi na później: „Terminy” w wierszu sprawy bez wielokropka, Banners/DataSection/ComputersSection – Intl pl-PL (część dzień.miesiąc), formaty paska i osi bez zmian |
+      | UX10 (`ux-b`) | runda 2 przeglądu xhigh (a4381be) |
+      | UX8 (`ux-a`), UX14 (`ux-d`, strumień D od 15:45 – UX14 → UX15, T2300–T2399; C zostaje UX17 → UX18) | w pracy |
+      | UX9, UX11–UX13, UX15, UX17–UX19 | do zrobienia; szkic CHANGELOG – w raportach wykonawców (scratchpad sesji), sekcja 1.34.0 na końcu |
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
