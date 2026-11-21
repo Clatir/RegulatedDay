@@ -145,7 +145,7 @@ describe('E2: od razu, od jutra i zaplanowane zmiany', () => {
     expect(q('settings-from')!.parentElement!.contains(q('settings-energy'))).toBe(true)
   })
 
-  it('lista zaplanowanych zmian: pole, wartość i data; bez przycisku „Wycofaj” (to osobne zadanie)', async () => {
+  it('lista zaplanowanych zmian: pole, wartość i data; w wierszu „Wycofaj” (zapis – settings-withdraw.test.ts)', async () => {
     await mount()
     const row = q('settings-planned-z1')!
     expect(row).not.toBeNull()
@@ -154,7 +154,8 @@ describe('E2: od razu, od jutra i zaplanowane zmiany', () => {
     expect(row.textContent).toContain('20')
     expect(row.textContent).toContain('Zwykły: budżet pracy')
     expect(row.textContent).toContain('7 h')
-    expect(row.querySelector('button')).toBeNull()
+    expect([...row.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Wycofaj'])
+    expect(q('settings-withdraw-z1')).toBe(row.querySelector('button'))
     expect(q('settings-from')!.textContent).not.toContain('Zaplanowane zmiany: od')
   })
 

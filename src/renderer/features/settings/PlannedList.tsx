@@ -1,12 +1,14 @@
 /**
  * „Zaplanowane zmiany” (UX14, E2): what waits for its date, as „co → od kiedy” – each change with the fields it changes and
- * their new values. Only a display; the slot `action` is the place of „Wycofaj” (a button per change, `PlannedChange.id` is
+ * their new values. The slot `action` draws what a row does: on the settings page „Wycofaj” (`WithdrawAction`; `PlannedChange.id` is
  * the id of the change in rd.json „settings”).
  */
 import type { ReactNode } from 'react'
 import { plDate } from '@shared/format'
+import { useBusy } from '../../lib/busy'
 import { useData } from '../../store/data'
 import { plannedChanges, type PlannedChange } from './plannedChanges'
+import { withdrawPlanned } from './plannedWithdraw'
 
 export function PlannedChanges({ action }: { action?: (change: PlannedChange) => ReactNode }) {
   const rd = useData((s) => s.rd)
@@ -35,5 +37,19 @@ export function PlannedChanges({ action }: { action?: (change: PlannedChange) =>
         ))}
       </ul>
     </div>
+  )
+}
+
+/**
+ * „Wycofaj” of a row (one save; the toast says how it went, with „Cofnij”). A change of the layer of sessions has none – the templates
+ * hold those sessions (D511) – the row says where they change.
+ */
+export function WithdrawAction({ change }: { change: PlannedChange }) {
+  const [busy, run] = useBusy()
+  if (!change.withdrawable) return <span className="text-[12px] text-muted">sesje są w szablonach – zmień je w „Szablonach”</span>
+  return (
+    <button type="button" className="btn" disabled={busy} onClick={() => void run(() => withdrawPlanned(change.id))} data-testid={`settings-withdraw-${change.id}`}>
+      Wycofaj
+    </button>
   )
 }

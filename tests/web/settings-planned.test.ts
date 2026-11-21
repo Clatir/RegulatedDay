@@ -3,6 +3,7 @@
  * zmienia; zmiana „od dziś”, z przeszłości i z dzisiejszą datą nie jest zaplanowana.
  */
 import { describe, expect, it } from 'vitest'
+import { SESSIONS_CHANGE_ID } from '@shared/model/sessionMigration'
 import type { SettingsChange } from '@shared/model/settings'
 import { plannedChanges } from '@renderer/features/settings/plannedChanges'
 
@@ -42,6 +43,19 @@ describe('plannedChanges', () => {
   it('zmiana, której pola nie znamy, i tak jest na liście (ogólny opis)', () => {
     const [c] = plannedChanges([ch('a', '2026-11-25', { przyszlePole: 3 })], '2026-11-21', names)
     expect(c!.items).toEqual([{ label: 'Inne ustawienie', value: '' }])
+  })
+
+  it('„Wycofaj” ma każda zmiana poza zmianą warstwy sesji (przeniesienie do szablonów, D511)', () => {
+    const list = plannedChanges(
+      [ch('a', '2026-11-25', { reserve: 20 }), ch(`${SESSIONS_CHANGE_ID}-2026-11-28`, '2026-11-28', { sessions: [] }), ch('s', '2026-11-29', { dayTypes: { zwykly: { sessions: ['yes', 'yes', 'yes', 'yes', 'yes', 'no', 'no'] } } })],
+      '2026-11-21',
+      names
+    )
+    expect(list.map((c) => [c.id, c.withdrawable])).toEqual([
+      ['a', true],
+      [`${SESSIONS_CHANGE_ID}-2026-11-28`, false],
+      ['s', false]
+    ])
   })
 
   it('brak zaplanowanych: pusta lista', () => {

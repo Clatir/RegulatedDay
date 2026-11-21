@@ -21,7 +21,7 @@ import { CalibrationSection } from '../calibration/CalibrationEntry'
 import { ComputersSection } from './ComputersSection'
 import { DataSection } from './DataSection'
 import { BarSection, MachineSection, NoticesSection } from './MachineSections'
-import { PlannedChanges } from './PlannedList'
+import { PlannedChanges, WithdrawAction } from './PlannedList'
 import { SettingsSearch, SettingsToc } from './SettingsNav'
 import { datedRange, settingsItems, type SettingsItem } from './settingsLayout'
 import { scrollToSetting } from './settingsScroll'
@@ -228,7 +228,7 @@ export function SettingsPage() {
             {/* One bar „od jutra” over the run of sections with a date, from the first to the last (UX14, E2); the ones at once inside it are marked. */}
             <div className="flex flex-col gap-4" data-testid="settings-dated">
               <FromBar />
-              <PlannedChanges />
+              <PlannedChanges action={(c) => <WithdrawAction change={c} />} />
               {draw(items.slice(range[0], range[1] + 1))}
             </div>
             {draw(items.slice(range[1] + 1))}

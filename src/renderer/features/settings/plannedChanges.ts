@@ -5,6 +5,7 @@
  */
 import { DAY_TYPE_NAMES, isPlain, type SettingsChange } from '@shared/model/settings'
 import { NUMBER_FIELDS, TOGGLE_FIELDS, formatField } from '@shared/model/fields'
+import { isPlannedChange, withdrawRefusal } from '@shared/model/settingsWithdraw'
 
 export interface PlannedItem {
   label: string
@@ -16,6 +17,8 @@ export interface PlannedChange {
   id: string
   from: string
   items: PlannedItem[]
+  /** „Wycofaj” takes it back (`withdrawRefusal`); false – a change of the layer of sessions, which the templates hold (D511). */
+  withdrawable: boolean
 }
 
 /** The names of the subcategories (id → name) – a plan never shows an id. */
@@ -52,7 +55,7 @@ function itemsOf(patch: Record<string, unknown>, names: PlannedNames): PlannedIt
 /** The changes from a day after `today`, the nearest first (the order they were made in within a day). */
 export function plannedChanges(settings: readonly SettingsChange[], today: string, names: PlannedNames): PlannedChange[] {
   return settings
-    .filter((c) => c.from > today && c.at == null)
+    .filter((c) => isPlannedChange(c, today))
     .sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : (a.made ?? 0) - (b.made ?? 0)))
-    .map((c) => ({ id: c.id, from: c.from, items: itemsOf(c.patch, names) }))
+    .map((c) => ({ id: c.id, from: c.from, items: itemsOf(c.patch, names), withdrawable: withdrawRefusal(c, today) == null }))
 }

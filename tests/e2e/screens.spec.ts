@@ -393,6 +393,19 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await chain.click()
       await expect(chain).toHaveAttribute('aria-checked', 'true')
       await expect.poll(() => (JSON.parse(readFileSync(join(dataDir, 'rd.json'), 'utf8')) as { settings: Array<{ patch: { awayChain?: boolean } }> }).settings.at(-1)!.patch.awayChain).toBe(true)
+      // UX14 (E2): the change waits for tomorrow in „Zaplanowane zmiany” with its field and value; „Wycofaj” takes it out of rd.json (the
+      // field shows what was before it), the toast's „Cofnij” puts it back.
+      const awayChanges = () => (JSON.parse(readFileSync(join(dataDir, 'rd.json'), 'utf8')) as { settings: Array<{ patch: { awayChain?: boolean } }> }).settings.filter((c) => c.patch.awayChain !== undefined).length
+      const chainRow = page.getByTestId('settings-planned').locator('li[data-testid^="settings-planned-"]').filter({ hasText: 'Bloki poza komputerem jednym ciągiem' })
+      await expect(chainRow).toContainText('włączone')
+      await chainRow.getByRole('button', { name: 'Wycofaj' }).click()
+      await expect(chainRow).toHaveCount(0)
+      await expect(chain).toHaveAttribute('aria-checked', 'false')
+      await expect.poll(awayChanges).toBe(0)
+      await page.getByRole('status').filter({ hasText: 'Wycofano zaplanowaną zmianę od' }).getByTestId('toast-action').click()
+      await expect(chainRow).toHaveCount(1)
+      await expect(chain).toHaveAttribute('aria-checked', 'true')
+      await expect.poll(awayChanges).toBe(1)
       // D511: no section „Sesje” – the sessions are entries of the templates (their panel in „Szablony”).
       await expect(page.getByTestId('settings-daytypes')).toBeVisible()
       await expect(page.getByTestId('settings-sessions')).toHaveCount(0)
