@@ -119,7 +119,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
       | UX8 | scalone 21.11 (25e289f, konflikt w `shortcuts.ts` – zapis „Ctrl+K”): T2010–T2015, odbiór UX8.1–UX8.4; przegląd high 4 rundy (Ctrl+N w Kalendarzu, bloki ukryte i zaparkowane, klawisze przy okienku, „← Tydzień” po Ctrl K); `npm test` 4797/4805 (tylko `installer-close`); uwagi na później: pamięć okresu tylko w oknie (restart – bieżący), `useUi.memory`/`from` do `interfejs.md`, „← Tydzień” zostaje po Ctrl K na „Dziś” także przy dniu daleko od zapamiętanego tygodnia |
       | UX17 | scalone 21.11 (3a48462): T2230–T2236, odbiór UX17.1–UX17.4; przegląd high 4 rundy; uwagi na później: menu „…” i rozwinięcie dublują akcje; przy zaznaczeniu ≥ 2 spraw menu nie sprawdza niezapisanej reguły; licznik kroków tylko w rozwinięciu; „Priorytet ▸” w grupowym menu spraw |
       | UX14 | scalone 21.11 (c805a2c): T2300–T2308, odbiór UX14.1–UX14.6; przegląd xhigh 4 rundy (folder danych – „Wycofaj”); uwagi na później: pola ustawień mogą zalewać Ctrl K przy ogólnych frazach (osobna grupa „Pola ustawień”?), „Cofnij” wycofania nie sprawdza zmian zrobionych w międzyczasie, wpis podkategorii zmieniony na innym komputerze przy „Usuń” zaplanowanej – pytanie, odpowiedź „ich” zostawia nazwę bez reguł |
-      | UX9 (`ux-a`), UX11 (`ux-b`) | w pracy (wykonawcy) |
+      | UX11 | scalone 21.11 (81a230b, konflikt: sekcja paska w `MachineSections.tsx` od UX14): T2123–T2128, odbiór UX11.1–UX11.4 (PX4 poprawione); przegląd xhigh 3 rundy; uwagi na później: po nieudanym położeniu ptaszek menu zaznaczony (zamiar), wyłączenie schowanego „×” – dwa kliknięcia |
+      | UX9 (`ux-a`, runda 4), UX18 (`ux-c`, runda 1 poprawiana), UX15 (`ux-d`) | w pracy; potem UX19 (ux-a), UX13 (ux-c), UX12 (ux-b – start po UX11) |
       | UX9, UX11–UX13, UX15, UX17–UX19 | do zrobienia; szkic CHANGELOG – w raportach wykonawców (scratchpad sesji), sekcja 1.34.0 na końcu |
 
 ## Do odbioru na Windows

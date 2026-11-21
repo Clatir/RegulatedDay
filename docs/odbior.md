@@ -274,7 +274,7 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] PX1 Panel ikony: „×” zamyka panel, aplikacja zostaje w zasobniku (1.31.0)
    - [ ] PX2 Panel ikony: „×” z Shift zamyka aplikację (1.31.0)
    - [ ] PX3 Panel ikony: kliknięcie w wolne pole otwiera okno główne (1.31.0)
-   - [ ] PX4 Pasek pulpitu: „×” chowa pasek, „Pokaż pasek pulpitu” w menu ikony go przywraca (1.32.0)
+   - [ ] PX4 Pasek pulpitu: „×” chowa pasek, „Pasek pulpitu” w menu ikony go przywraca (1.32.0; od 1.34.0 – UX11.4)
    - [ ] PX5 Pasek pulpitu: „×” z Shift zamyka aplikację (1.32.0)
    - [ ] PX6 Dwuklik ikony i panelu otwiera okno główne (1.32.0)
    - [ ] PX7 Dwuklik paska pulpitu otwiera okno główne (1.33.0)
@@ -325,6 +325,10 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX14.4 Pola paska przy wyłączonym pasku, bez duplikatów (1.34.0)
    - [ ] UX14.5 „Wycofaj” zaplanowanej zmiany (1.34.0)
    - [ ] UX14.6 Wycofanie na dwóch komputerach (1.34.0)
+   - [ ] UX11.1 Panel mówi, że pasek jest schowany (1.34.0)
+   - [ ] UX11.2 Ustawienia – „schowany” i jedno kliknięcie (1.34.0)
+   - [ ] UX11.3 Wybór miejsca paska pokazuje schowany (1.34.0)
+   - [ ] UX11.4 Menu ikony – „Pasek pulpitu” z ptaszkiem zawsze (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3041,7 +3045,8 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 
 ### PX – „×” paska pulpitu i dwuklik (1.32.0, D559)
 
-#### PX4 „×” chowa pasek pulpitu, „Pokaż pasek pulpitu” go przywraca
+#### PX4 „×” chowa pasek pulpitu, „Pasek pulpitu” w menu ikony go przywraca
+- **Od 1.34.0:** pozycja „Pokaż pasek pulpitu” zastąpiona przez „Pasek pulpitu” z ptaszkiem (UX11.4) – w krokach niżej czytaj „Pasek pulpitu”.
 - [ ] Odebrane
 - **Automatycznie:** `tests/web/bar-close.test.ts`, `tests/unit/bar-close.test.ts`, E2E „„×” paska pulpitu (D559)” w `smoke.spec.ts` (504 px, schowanie, powrót po włączeniu w ustawieniach). **Tylko Ty:** menu ikony i wygląd na pulpicie.
 - **Jak sprawdzić:** spójrz na prawy górny róg paska pulpitu, kliknij „×”. Prawy przycisk na ikonie przy zegarze → „Pokaż pasek pulpitu”.
@@ -3407,6 +3412,35 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** zmiana od jutra na A; po synchronizacji „Wycofaj” na B.
 - **Oczekiwany efekt:** po synchronizacji wiersza nie ma na A ani na B, bez pytania o konflikt.
 - **Nie przechodzi, gdy:** pytanie o konflikt; wiersz wraca; znika inna zmiana zrobiona w tym czasie na A.
+
+
+#### UX11.1 Panel mówi, że pasek jest schowany
+- [ ] Odebrane
+- **Automatycznie:** E2E `smoke`, `tests/web/bar-roles.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** „×” paska → klik ikony; potem „Odcinam się” i znowu panel.
+- **Oczekiwany efekt:** nad stopką „Pasek pulpitu schowany · Pokaż pasek”, klik pokazuje pasek; przy „Odcinam się” – „Pokaż po „Wracam””, pasek wraca po „Wracam”.
+- **Nie przechodzi, gdy:** brak linii; klik nic nie robi albo otwiera okno główne; linia zostaje przy widocznym pasku.
+
+#### UX11.2 Ustawienia – „schowany” i jedno kliknięcie
+- [ ] Odebrane
+- **Automatycznie:** E2E `smoke`, `tests/web/bar-switch.test.ts`. Ty: wygląd.
+- **Jak sprawdzić:** „×” paska → Ustawienia → Pasek pulpitu; kliknij przełącznik (osobno dwuklik) albo „Pokaż pasek”.
+- **Oczekiwany efekt:** przełącznik „schowany” bez zaznaczenia i linia pod nim; jeden klik pokazuje pasek; dwuklik nie wyłącza paska.
+- **Nie przechodzi, gdy:** dalej „włączony”; trzeba wyłączyć i włączyć; dwuklik wyłącza pasek.
+
+#### UX11.3 Wybór miejsca paska pokazuje schowany
+- [ ] Odebrane
+- **Tylko Ty:** kolejność okien sprawdza CI na Windows (`bar-windows`), Twój pulpit – Ty.
+- **Jak sprawdzić:** „×” paska → w Ustawieniach kliknij inne miejsce w makiecie monitorów.
+- **Oczekiwany efekt:** pasek wraca od razu w nowym miejscu, pod oknami innych aplikacji.
+- **Nie przechodzi, gdy:** zostaje schowany; miga w starym miejscu; leży nad oknami.
+
+#### UX11.4 Menu ikony – „Pasek pulpitu” z ptaszkiem zawsze
+- [ ] Odebrane
+- **Tylko Ty:** prawdziwe menu zasobnika.
+- **Jak sprawdzić:** prawy klik ikony przy pasku widocznym, po „×” i po wyłączeniu paska w Ustawieniach; kliknij pozycję.
+- **Oczekiwany efekt:** pozycja „Pasek pulpitu” zawsze; ptaszek przy pasku włączonym i nieschowanym; klik chowa albo pokazuje (wyłączony – włącza). Zastępuje „Pokaż pasek pulpitu” z PX4.
+- **Nie przechodzi, gdy:** pozycji brak; ptaszek niezgodny ze stanem; klik nic nie robi.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
