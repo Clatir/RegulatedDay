@@ -188,9 +188,10 @@ type PlanFileBlock = { id: string; categoryId: string; startMin: number; duratio
 const planOf = (dir: string, date: string): PlanFileBlock[] => (existsSync(dayFileOf(dir, date)) ? (JSON.parse(readFileSync(dayFileOf(dir, date), 'utf8')) as { blocks: PlanFileBlock[] }).blocks : [])
 const plusDays = (date: string, n: number): string => new Date(Date.parse(`${date}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
 
-/** „Tydzień” one week on (every day of it ahead – none gone by); the dates of its Tuesday, Wednesday and Thursday. */
+/** „Tydzień” one week on (every day of it ahead – none gone by); the dates of its Tuesday, Wednesday and Thursday. The page remembers its week (D2, UX8): it is set to this week first. */
 async function nextWeek(page: Page): Promise<{ tue: string; wed: string; thu: string }> {
   await page.getByTestId('nav-week').click()
+  if (await page.getByTestId('week-today').isEnabled()) await page.getByTestId('week-today').click()
   await page.getByTestId('week-next').click()
   const monday = (await page.getByTestId('week-title').getAttribute('data-week'))!
   await expect(page.getByTestId(`week-col-${plusDays(monday, 1)}`)).toBeVisible({ timeout: 30_000 })
@@ -1108,6 +1109,73 @@ test('Miesiąc (SNT1, D418, D422): w komórce dnia do trzech pasków stałych bl
       // The colour of the day and the selection stay: a click with Ctrl selects the day.
       await page.getByTestId(`day-${next}`).click({ modifiers: ['Control'] })
       await expect(page.getByTestId(`day-${next}`)).toHaveAttribute('aria-pressed', 'true')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Pamięć okresu i klawisze (UX8, D2, D6): następny tydzień → dzień → „← Tydzień” wraca na ten tydzień; PgDn / PgUp / Home; Ctrl+N otwiera okienko; „Dziś” wyłączony na bieżącym okresie', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-ux8-'))
+  seed(dataDir)
+  const today = logicalToday()
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      // „Dziś” on today: the button is there and off, no way back (the day was not opened from a screen of periods).
+      await expect(page.getByTestId('day-today')).toBeDisabled()
+      await expect(page.getByTestId('day-back')).toHaveCount(0)
+      await page.getByTestId('nav-week').click()
+      await expect(page.getByTestId('week-today')).toBeDisabled()
+      const week = (await page.getByTestId('week-title').getAttribute('data-week'))!
+      // PgDn / PgUp / Home move the week (the focus is not in a field).
+      await page.keyboard.press('PageDown')
+      await expect(page.getByTestId('week-title')).not.toHaveAttribute('data-week', week)
+      const next = (await page.getByTestId('week-title').getAttribute('data-week'))!
+      await page.keyboard.press('PageDown')
+      await page.keyboard.press('PageUp')
+      await expect(page.getByTestId('week-title')).toHaveAttribute('data-week', next)
+      // Ctrl+N: the window of a new block on the first day of that week, at an hour after the wake.
+      await expect(page.getByTestId(`week-day-${next}`)).toBeVisible({ timeout: 30_000 })
+      await page.keyboard.press('Control+n')
+      await expect(page.getByTestId('week-new')).toBeVisible()
+      await expect(page.getByTestId('week-new')).toHaveAttribute('data-date', next)
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('week-new')).toHaveCount(0)
+      // A day of that week opens „Dziś” with the way back: the week is the same, whatever the day's arrows did.
+      await page.getByTestId(`week-day-${next}`).click()
+      await expect(page.getByTestId('page-today')).toBeVisible()
+      await expect(page.getByTestId('day-back')).toHaveText('← Tydzień')
+      await page.getByTestId('day-next').click()
+      await expect(page.getByTestId('day-back')).toBeVisible()
+      // The day is counted (the page says „Liczę dzień…” until then and has no keys): PgUp goes a day back, Home to today.
+      await expect(page.getByTestId('day-add')).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByTestId('day-today')).toBeEnabled()
+      await page.keyboard.press('Home')
+      await expect(page.getByTestId('day-today')).toBeDisabled({ timeout: 30_000 })
+      await page.keyboard.press('PageUp')
+      await expect(page.getByTestId('day-today')).toBeEnabled({ timeout: 30_000 })
+      await page.keyboard.press('Home')
+      await expect(page.getByTestId('day-today')).toBeDisabled()
+      await page.getByTestId('day-back').click()
+      await expect(page.getByTestId('week')).toBeVisible()
+      await expect(page.getByTestId('week-title')).toHaveAttribute('data-week', next)
+      await page.keyboard.press('Home')
+      await expect(page.getByTestId('week-title')).toHaveAttribute('data-week', week)
+      // The calendar remembers its month too; a day opened from it goes back to it.
+      await page.getByTestId('nav-calendar').click()
+      await expect(page.getByTestId('month-today')).toBeDisabled()
+      await page.keyboard.press('PageDown')
+      await expect(page.getByTestId('month-today')).toBeEnabled()
+      const title = await page.getByTestId('month-title').textContent()
+      await page.getByTestId('nav-week').click()
+      await page.getByTestId('nav-calendar').click()
+      await expect(page.getByTestId('month-title')).toHaveText(title!)
+      await page.getByTestId('month-today').click()
+      await expect(page.getByTestId(`day-${today}`)).toBeVisible()
     })
     expect(errors).toEqual([])
   } finally {

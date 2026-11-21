@@ -27,6 +27,7 @@ import { menuBind } from '../../components/ContextMenu'
 import { cx } from '../../components/ui'
 import { contentTop, followAxis, scrollAxis, scrollParent } from '../../lib/axisScroll'
 import { useDeleteSelected } from '../../lib/deleteKey'
+import { useNewShortcut } from '../../lib/escape'
 import { useData, type SaveAnswer } from '../../store/data'
 import { useMachine } from '../../store/machine'
 import { openDay, openPick, setBlockDraft, toast } from '../../store/ui'
@@ -41,6 +42,7 @@ import { EnergyStrip, STRIP_WIDTH } from './EnergyStrip'
 import { costRoom, TileCost } from '../plan/TileCost'
 import { hasEnergy } from '../plan/energyDraw'
 import { NewBlockPopover } from './NewBlockPopover'
+import { freeHourStart, newBlockDay, NO_NEW_DAY_TEXT, dayWakeMin } from './weekNew'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
 import { saveTileCosts, type CostAsk } from '../plan/costSave'
 import { copyDayBlock, moveWeekBlock } from './weekMove'
@@ -151,7 +153,9 @@ export function DayGrid({
   mode = 'week',
   openCard,
   onCardOpened,
-  opened
+  opened,
+  onPicking,
+  allDays
 }: {
   days: HorizonDay[]
   from: number
@@ -166,6 +170,10 @@ export function DayGrid({
    * brings (the grid is keyed by its first day). Left out – the grid never scrolls.
    */
   opened?: MutableRefObject<string | null>
+  /** Says whether the small window of a new block is open (the page's keys of the period wait while it is). */
+  onPicking?: (open: boolean) => void
+  /** The days as counted, with the blocks of the unchecked calendars too (`days` has them taken out): the free hour of Ctrl+N is looked for among all. */
+  allDays?: readonly HorizonDay[]
 }) {
   const { rd, routines, requests } = useData()
   const today = useData((s) => s.view?.today ?? '')
@@ -248,6 +256,27 @@ export function DayGrid({
     setPick({ seq: ++asks.current, dates: idx.map((i) => days[i]!.date), startMin: r.startMin, durationMin: r.endMin - r.startMin, dragged, place })
   }
   const spanHeld = held ? dayIndexes(held.from, held.to) : []
+  const picking = pick != null
+  const onPickingRef = useRef(onPicking)
+  useLayoutEffect(() => {
+    onPickingRef.current = onPicking
+  })
+  useEffect(() => {
+    onPickingRef.current?.(picking)
+    return () => onPickingRef.current?.(false)
+  }, [picking])
+  // Ctrl+N (D6, P9): the window of a new block today – or on the first day shown from today – at the nearest free hour (`weekNew.ts`); one window at a time.
+  useNewShortcut(() => {
+    if (pick) return
+    const date = newBlockDay(dates, today)
+    const i = date ? dates.indexOf(date) : -1
+    const d = days[i]
+    if (!d) return void toast(NO_NEW_DAY_TEXT)
+    const whole = allDays?.find((x) => x.date === d.date) ?? d
+    const wakeMin = dayWakeMin(settingsOn(rd.settings, d.date), d.date, whole)
+    const startMin = freeHourStart(whole.blocks, { isToday: d.date === today, nowMin: logicalMinuteOf(d.date, Date.now()), wakeMin }, DEFAULT_NEW_BLOCK_MIN)
+    pickOn(i, i, { startMin, endMin: startMin + DEFAULT_NEW_BLOCK_MIN }, false)
+  })
 
   // A block dragged (D417): its listeners are the window's (the pointer leaves the block at once), they read what the page has now.
   const latest = useRef({ days, lo, hi, ppm, today, max: rd.general.parallelMax })

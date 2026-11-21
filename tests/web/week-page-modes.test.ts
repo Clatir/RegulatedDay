@@ -15,7 +15,7 @@ import { weekStart } from '@shared/time/day'
 import { WeekPage } from '@renderer/features/week/WeekPage'
 import { useDaysView, useWeekView } from '@renderer/store/horizon'
 import { useData } from '@renderer/store/data'
-import { useUi } from '@renderer/store/ui'
+import { NO_MEMORY, useUi } from '@renderer/store/ui'
 
 vi.mock('@renderer/store/horizon', () => ({ useWeekView: vi.fn(), useDaysView: vi.fn(), useGoalsView: vi.fn(() => ({ view: null, failed: false })), useMonthView: vi.fn() }))
 
@@ -56,7 +56,7 @@ const click = async (id: string) => act(async () => q(id)!.click())
 beforeEach(() => {
   localStorage.clear()
   useData.setState({ view: { today: TODAY, allDay: [], computers: [] } as unknown as DataView, allDay: [] })
-  useUi.setState({ page: 'week', day: null, pick: null, toasts: [] })
+  useUi.setState({ page: 'week', day: null, pick: null, toasts: [], from: null, memory: NO_MEMORY })
   vi.mocked(useWeekView).mockImplementation((date) => {
     const week = weekStart(date)
     return { view: weekViewOf(week, TODAY, weekDates(week).map((d) => day(d, blocksOf(d)))), failed: false }

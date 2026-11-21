@@ -44,9 +44,20 @@ function AgendaDayCard({ day, hidden, today, names }: { day: AgendaDay; hidden: 
             ukryte: {hidden}
           </p>
         ) : (
-          <p className="mt-1 text-[12.5px] text-muted" data-testid={`agenda-empty-${day.date}`}>
-            {AGENDA_EMPTY}
-          </p>
+          <div className="mt-1 flex items-center gap-2">
+            <p className="text-[12.5px] text-muted" data-testid={`agenda-empty-${day.date}`}>
+              {AGENDA_EMPTY}
+            </p>
+            {/* The empty day's own action (D6): its plan with a new block begun there (as Ctrl+N of the day). */}
+            <button
+              type="button"
+              className="btn h-[22px] px-2 text-[12px]"
+              onClick={() => openPick({ page: 'today', day: day.date === today ? null : day.date }, { kind: 'command', id: 'newBlock', date: day.date })}
+              data-testid={`agenda-add-${day.date}`}
+            >
+              + Blok
+            </button>
+          </div>
         )
       ) : (
         <ul className="mt-1 flex flex-col gap-0.5">

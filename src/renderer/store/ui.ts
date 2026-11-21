@@ -14,6 +14,22 @@ export type Page = 'today' | 'calendar' | 'week' | 'stats' | 'requests' | 'templ
 /** The menu's order (D362; one place: a new screen is one word here, its label and its view in `App.tsx`). */
 export const PAGES: Page[] = ['today', 'calendar', 'week', 'stats', 'requests', 'templates', 'routines', 'room', 'history', 'settings']
 
+/** The screen a day of „Dziś” was opened from (D2, D563): the button „← Tydzień” / „← Kalendarz” there goes back to it. */
+export type DayOrigin = 'week' | 'calendar'
+
+/**
+ * What the screens of periods remember for the time of the session (D2, UX8): the week of „Tydzień”, the middle day of „3 dni”, the first day of
+ * „Agenda”, the month of the calendar. `null` – the current one (it goes on with the days: „Ten tydzień” sets it back).
+ */
+export interface ViewMemory {
+  week: string | null
+  anchor: string | null
+  agenda: string | null
+  month: string | null
+}
+
+export const NO_MEMORY: ViewMemory = { week: null, anchor: null, agenda: null, month: null }
+
 /** What Enter in the search (Ctrl K) selects on the screen it opens (T653): taken once by that screen; kind command: do it there. */
 export type SearchPick = { kind: Exclude<SearchKind, 'screen'> } & Pick<SearchRecord, 'id' | 'date' | 'parent'>
 
@@ -49,9 +65,13 @@ interface UiState {
   blockDraft: { date: string; block: PlanBlock; intended: boolean; touched: boolean } | null
   /** What the search selected for the screen it opened (null: nothing waits). */
   pick: SearchPick | null
+  /** The screen of periods the day of „Dziś” was opened from (null: from the menu, the bar or the search outside them); it stays through the days of „Dziś”. */
+  from: DayOrigin | null
+  /** The periods of „Tydzień”, „3 dni”, „Agenda” and the calendar as you left them (the session's). */
+  memory: ViewMemory
 }
 
-export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null, movedLater: null, sideBClosed: null, goalsClosed: null, checkinSkipped: null, checkinAnswers: null, unclosedSkipped: null, blockDraft: null, pick: null }))
+export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null, movedLater: null, sideBClosed: null, goalsClosed: null, checkinSkipped: null, checkinAnswers: null, unclosedSkipped: null, blockDraft: null, pick: null, from: null, memory: NO_MEMORY }))
 
 export function closeSideB(date: string): void {
   useUi.setState({ sideBClosed: date })
@@ -125,32 +145,50 @@ export function setMovedLater(key: string): void {
   useUi.setState({ movedLater: key })
 }
 
+/** Remembers a period of a screen (`null` – the current one again). */
+export function setMemory(patch: Partial<ViewMemory>): void {
+  useUi.setState((s) => ({ memory: { ...s.memory, ...patch } }))
+}
+
+/**
+ * Where a day of „Dziś” opened now comes from (D2): the screen of periods it is opened on; from „Dziś” itself it stays what it was (the arrows
+ * and „Dziś” of its heading); from any other place – nowhere. Other screens have no origin. `here` false – the call is not from the screen
+ * (the search, Ctrl K): no way back is offered for a jump from another screen.
+ */
+function originOf(target: Page, here: boolean): DayOrigin | null {
+  if (target !== 'today') return null
+  const { page, from } = useUi.getState()
+  // On „Dziś” itself the way back stays whoever asks (the search too); `here` false only keeps a jump from another screen from offering one.
+  if (page === 'today') return from
+  return here && (page === 'week' || page === 'calendar') ? page : null
+}
+
 /** Every change of view first commits the active field (spec „Zatwierdzanie przed przejściem”). */
 export function navigate(page: Page): void {
   commitActiveField()
   leaveBlockDrafts()
-  useUi.setState({ page, pick: null })
+  useUi.setState({ page, pick: null, from: null })
 }
 
 /** Today's ritual brought into view (the bar's „Rytuał”, D318). */
 export function openRitual(): void {
   commitActiveField()
   leaveBlockDrafts()
-  useUi.setState({ page: 'today', day: null, focus: 'ritual', pick: null })
+  useUi.setState({ page: 'today', day: null, focus: 'ritual', pick: null, from: null })
 }
 
 /** The plan of a day (a click in the calendar opens it, D295); null: today. Commits the active field first. */
-export function openDay(day: string | null): void {
+export function openDay(day: string | null, here = true): void {
   commitActiveField()
   leaveBlockDrafts()
-  useUi.setState({ page: 'today', day, pick: null })
+  useUi.setState({ page: 'today', day, pick: null, from: originOf('today', here) })
 }
 
 /** The search's Enter (T653): the screen (and the day of „Dziś”) with what to select there; a hand-made move drops it. */
-export function openPick(target: { page: Page; day?: string | null }, pick: SearchPick): void {
+export function openPick(target: { page: Page; day?: string | null }, pick: SearchPick, here = true): void {
   commitActiveField()
   leaveBlockDrafts()
-  useUi.setState({ page: target.page, ...(target.day !== undefined ? { day: target.day } : {}), pick })
+  useUi.setState({ page: target.page, ...(target.day !== undefined ? { day: target.day } : {}), pick, from: originOf(target.page, here) })
 }
 
 /** The key of a record in „Historia” (`kind/id`, as the list there has it) for the file `rel`; null – not a record with a history (a folder, a log). */
