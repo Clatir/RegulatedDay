@@ -1,8 +1,10 @@
 /**
- * „Dane” in the settings (D321, spec „Eksport CSV”, „Kopie zapasowe”): the CSV export of a range of dates (three files,
- * D300 – by default the current month) into a folder you pick, and the folder's backups, newest first – each with
+ * „Dane” in the settings (D321, spec „Eksport CSV”, „Kopie zapasowe”; UX14, E1, E6): the data folder of this computer (with
+ * its OneDrive pin – it is shown without the folder open too), the CSV export of a range of dates (three files,
+ * D300 – by default the current month) into a folder you pick, the folder's backups, newest first – each with
  * „Wybrane rekordy…” (taken back into this folder, each your edit: the history keeps what was) and „Cały folder do
- * nowego…” (into a new, empty folder this computer then works in; the old one gets a marker for the other computers).
+ * nowego…” (into a new, empty folder this computer then works in; the old one gets a marker for the other computers) –
+ * and the extra place this computer copies the newest backup to: every thing about the data and its backups in one section.
  */
 import { useEffect, useState } from 'react'
 import type { BackupItem, BackupRecord, RestoreOutcome } from '@shared/api'
@@ -13,7 +15,9 @@ import { DateField } from '../../components/fields'
 import { Field, Section } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { useData } from '../../store/data'
+import { setMachinePrefs, useMachine } from '../../store/machine'
 import { toast } from '../../store/ui'
+import { patchWizard } from '../wizard/wizardStore'
 
 const KIND: Record<string, string> = { settings: 'Ustawienia', template: 'Szablon', series: 'Seria', schedule: 'Wykład', day: 'Plan dnia', request: 'Prośba', routine: 'Rutyna', allDay: 'Wydarzenie', attachment: 'Załącznik' }
 /** The order of kinds in the list of a backup's records. */
@@ -64,7 +68,81 @@ export function restoreText(out: readonly RestoreOutcome[]): { text: string; ton
   return { text: parts.join(' ') || 'Nic nie przywrócono.', tone: broken ? 'error' : asked || behind || waiting ? 'info' : 'success' }
 }
 
+/** „Folder danych”: where it is, opening it, pinning it in OneDrive; without a folder – the wizard picks one. */
+function FolderField() {
+  const folder = useData((s) => s.view?.folder ?? null)
+  return (
+    <Field label="Folder danych" data-testid="field-data-folder" hint={folder ? undefined : 'Nie wybrano – zrobi to kreator.'}>
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 flex-1 break-all text-[12px] text-muted" data-testid="data-folder">
+          {folder ?? '—'}
+        </span>
+        {!folder && (
+          <button type="button" className="btn" onClick={() => patchWizard({ open: true, asked: true })} data-testid="open-wizard">
+            Otwórz kreator
+          </button>
+        )}
+        {folder && (
+          <>
+            <button type="button" className="btn" onClick={() => void window.rd.openDataFolder()}>
+              Otwórz
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void window.rd.pinFolder().then((r) => (r.ok ? toast('Folder przypięty: OneDrive trzyma go na tym komputerze.', 'success') : toast(r.error ?? 'Nie udało się.', 'error', 8000)))}
+              title="Zawsze przechowuj na tym urządzeniu"
+            >
+              Przypnij w OneDrive
+            </button>
+          </>
+        )}
+      </div>
+    </Field>
+  )
+}
+
+/** „Dodatkowe miejsce kopii”: this computer's own place for the newest backup (outside OneDrive). */
+function ExtraBackupField() {
+  const backupDir = useMachine((s) => s.prefs.backupDir)
+  return (
+    <Field label="Dodatkowe miejsce kopii" data-testid="field-backup-extra" hint="Poza OneDrive: ten komputer kopiuje tam najnowszą kopię zapasową (14 ostatnich).">
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 flex-1 break-all text-[12px] text-muted">{backupDir ?? 'brak'}</span>
+        <button
+          type="button"
+          className="btn"
+          onClick={() =>
+            void window.rd.folderPick(backupDir).then((d) => {
+              if (d) void setMachinePrefs({ backupDir: d })
+            })
+          }
+        >
+          Wybierz…
+        </button>
+        {backupDir && (
+          <button type="button" className="btn" onClick={() => void setMachinePrefs({ backupDir: null })}>
+            Bez dodatkowego
+          </button>
+        )}
+      </div>
+    </Field>
+  )
+}
+
 export function DataSection() {
+  const open = useData((s) => s.view?.status === 'open')
+  return (
+    <Section title="Dane" data-testid="settings-data">
+      <FolderField />
+      {open && <ExportAndBackups />}
+      <ExtraBackupField />
+    </Section>
+  )
+}
+
+/** The CSV export and the list of the folder's backups (only with the folder open). */
+function ExportAndBackups() {
   const today = useData((s) => s.view?.today ?? '')
   const pending = useData((s) => s.view?.pendingMove ?? null)
   const [from, setFrom] = useState(`${today.slice(0, 7)}-01`)
@@ -91,8 +169,8 @@ export function DataSection() {
     }
   }
   return (
-    <Section title="Dane" data-testid="settings-data">
-      <Field label="Eksport CSV" hint="Bloki, prośby i check-iny za zakres dat – trzy pliki (średnik, polskie daty).">
+    <>
+      <Field label="Eksport CSV" data-testid="field-csv" hint="Bloki, prośby i check-iny za zakres dat – trzy pliki (średnik, polskie daty).">
         <div className="flex flex-wrap items-center gap-2">
           <DateField today={today} past value={from} onCommit={setFrom} shellClassName="w-[120px]" aria-label="Od" data-testid="csv-from" />
           –
@@ -102,7 +180,7 @@ export function DataSection() {
           </button>
         </div>
       </Field>
-      <Field label="Kopie zapasowe" hint="Kopia dzienna powstaje po 12:00; zostaje 14 dziennych i 8 tygodniowych.">
+      <Field label="Kopie zapasowe" data-testid="field-backups" hint="Kopia dzienna powstaje po 12:00; zostaje 14 dziennych i 8 tygodniowych.">
         {pending && <PendingMove to={pending.to} error={pending.error} />}
         {listError ? (
           <span className="flex flex-wrap items-center gap-2 text-[12.5px]" data-testid="backups-error">
@@ -134,7 +212,7 @@ export function DataSection() {
           <span className="text-[12.5px] text-muted">Kopii jeszcze nie ma – pierwsza powstanie dziś po 12:00.</span>
         )}
       </Field>
-    </Section>
+    </>
   )
 }
 

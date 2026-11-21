@@ -9,7 +9,6 @@ import type { SearchBlock } from '@shared/api'
 import { blockName, type Names } from '@shared/blockName'
 import { plDate, WEEKDAY_NAMES } from '@shared/format'
 import { compareAllDay, rangeText, type AllDayEvent } from '@shared/model/allDay'
-import { FIELD_GROUP_NAMES } from '@shared/model/fields'
 import { templateVersionOn, type Template } from '@shared/model/plan'
 import { groupOfCategory } from '@shared/model/categoryTree'
 import { personName, type RdFile } from '@shared/model/rd'
@@ -25,6 +24,8 @@ import { textWithSteps } from '@shared/model/steps'
 import type { SearchRecord } from '@shared/search'
 import { addDays, weekday } from '@shared/time/zone'
 import { PAGES, type Page } from '../../store/ui'
+import { SECTION_KEYS, settingRecords } from '../settings/settingsIndex'
+import { SETTINGS_SECTIONS } from '../settings/settingsLayout'
 
 /** The id of a category of the tree (D510) among the records of kind 'category' – the subcategories keep their own ids, a variant has its subcategory as `parent`. */
 export const GROUP_PICK = 'group:'
@@ -39,29 +40,8 @@ export const COMMANDS: SearchRecord[] = [
   { kind: 'command', id: 'ritual', title: 'Rytuał', hint: 'rytuał dzisiejszego dnia', keys: 'wieczór podsumowanie' }
 ]
 
-/** The sections of the settings by the test id of their box (the screen scrolls to it); words only searched. */
-export const SETTING_SECTIONS: Array<{ id: string; title: string; keys?: string }> = [
-  { id: 'settings-modules', title: 'Moduły' },
-  { id: 'settings-daytypes', title: 'Typy dni' },
-  { id: 'settings-sleep', title: FIELD_GROUP_NAMES.sleep },
-  { id: 'settings-boundary', title: FIELD_GROUP_NAMES.boundary },
-  { id: 'settings-plan', title: FIELD_GROUP_NAMES.plan, keys: 'równolegle bloki naraz' },
-  { id: 'settings-energy', title: FIELD_GROUP_NAMES.energy },
-  { id: 'settings-calendars', title: 'Kalendarze', keys: 'kalendarz wydarzenia ukryj pokaż' },
-  { id: 'settings-categories', title: 'Kategorie' },
-  { id: 'settings-lectures', title: 'Plan wykładów' },
-  { id: 'settings-reminders', title: FIELD_GROUP_NAMES.reminders },
-  { id: 'settings-timer', title: FIELD_GROUP_NAMES.timer },
-  { id: 'settings-care', title: FIELD_GROUP_NAMES.care },
-  { id: 'settings-cases', title: FIELD_GROUP_NAMES.cases, keys: 'termin terminy plan poranny ostrzegaj' },
-  { id: 'settings-calibration', title: 'Kalibracja' },
-  { id: 'settings-data', title: 'Dane', keys: 'folder kopie zapasowe' },
-  { id: 'settings-computers', title: 'Komputery' },
-  { id: 'settings-machine', title: 'Ten komputer', keys: 'autostart pasek dźwięk powiadomienia skala jasność animacje' },
-  { id: 'settings-updates', title: 'Aktualizacje' },
-  { id: 'settings-info', title: 'Informacje', keys: 'wersja' },
-  { id: 'settings-shortcuts', title: 'Skróty klawiszowe' }
-]
+/** The sections of the settings by the test id of their box (the screen scrolls to it; the layout of the page is the source, UX14); words only searched. */
+export const SETTING_SECTIONS: Array<{ id: string; title: string; keys?: string }> = SETTINGS_SECTIONS.map((s) => ({ id: s.id, title: s.title, ...(SECTION_KEYS[s.id] ? { keys: SECTION_KEYS[s.id] } : {}) }))
 
 export interface RecordsInput {
   today: string
@@ -86,7 +66,8 @@ export const dayHint = (date: string, today: string): string => `${date === toda
 export function searchRecords(i: RecordsInput): SearchRecord[] {
   const out: SearchRecord[] = [...COMMANDS]
   for (const p of PAGES) out.push({ kind: 'screen', id: p, title: i.pageLabel[p], ...(i.pageKeys(p) ? { hint: i.pageKeys(p)! } : {}) })
-  for (const s of SETTING_SECTIONS) out.push({ kind: 'setting', id: s.id, title: s.title, hint: 'w ustawieniach', ...(s.keys ? { keys: s.keys } : {}) })
+  // The sections of the settings and their fields by the labels (UX14): Enter scrolls to the field.
+  out.push(...settingRecords())
   // The tree of „Kategorie” (D510): categories, subcategories (the category in the hint) and variants – Enter opens it in the settings.
   const groupName = new Map(i.rd.categoryGroups.map((g) => [g.id, g.name]))
   for (const g of i.rd.categoryGroups) out.push({ kind: 'category', id: `${GROUP_PICK}${g.id}`, title: g.name, hint: g.archived ? 'kategoria w archiwum' : 'kategoria w ustawieniach' })

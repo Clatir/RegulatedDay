@@ -42,9 +42,8 @@ test('start: okno główne z menu bocznym, nazwą i paskiem; tożsamość testow
       await page.keyboard.press('Control+Comma')
       await expect(page.getByTestId('page-settings')).toBeVisible()
       await page.getByTestId('nav-settings').click()
-      // „Wersja aplikacji” (D344): the number of „Wersja” in the updates, then what the installation is.
+      // „Wersja” (D344, UX14): one – the number with what the installation is (no second „Wersja” in the updates).
       const version = await app.evaluate(({ app }) => app.getVersion())
-      await expect(page.getByTestId('current-version')).toHaveText(version)
       await expect(page.getByTestId('identity')).toHaveText(`${version} · testowa (Regulated Day Test)`)
       await expect(page.getByTestId('user-data')).toHaveText(userData)
       await expect(page.getByTestId('helper-state')).toHaveText('działa')

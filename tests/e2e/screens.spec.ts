@@ -393,9 +393,36 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await chain.click()
       await expect(chain).toHaveAttribute('aria-checked', 'true')
       await expect.poll(() => (JSON.parse(readFileSync(join(dataDir, 'rd.json'), 'utf8')) as { settings: Array<{ patch: { awayChain?: boolean } }> }).settings.at(-1)!.patch.awayChain).toBe(true)
+      // UX14 (E2): the change waits for tomorrow in „Zaplanowane zmiany” with its field and value; „Wycofaj” takes it out of rd.json (the
+      // field shows what was before it), the toast's „Cofnij” puts it back.
+      const awayChanges = () => (JSON.parse(readFileSync(join(dataDir, 'rd.json'), 'utf8')) as { settings: Array<{ patch: { awayChain?: boolean } }> }).settings.filter((c) => c.patch.awayChain !== undefined).length
+      const chainRow = page.getByTestId('settings-planned').locator('li[data-testid^="settings-planned-"]').filter({ hasText: 'Bloki poza komputerem jednym ciągiem' })
+      await expect(chainRow).toContainText('włączone')
+      await chainRow.getByRole('button', { name: 'Wycofaj' }).click()
+      await expect(chainRow).toHaveCount(0)
+      await expect(chain).toHaveAttribute('aria-checked', 'false')
+      await expect.poll(awayChanges).toBe(0)
+      await page.getByRole('status').filter({ hasText: 'Wycofano zaplanowaną zmianę od' }).getByTestId('toast-action').click()
+      await expect(chainRow).toHaveCount(1)
+      await expect(chain).toHaveAttribute('aria-checked', 'true')
+      await expect.poll(awayChanges).toBe(1)
       // D511: no section „Sesje” – the sessions are entries of the templates (their panel in „Szablony”).
       await expect(page.getByTestId('settings-daytypes')).toBeVisible()
       await expect(page.getByTestId('settings-sessions')).toHaveCount(0)
+      // UX14 (E1, D565 P22): the table of contents – every section one click away, in the window; the box „Szukaj w ustawieniach” takes to a field.
+      await expect(page.getByTestId('settings-toc').locator('[data-testid^="toc-group-"]')).toHaveText(['Dzień i energia', 'Kategorie i kalendarze', 'Sprawy i szablony', 'Pasek i powiadomienia', 'Dane i kopie', 'O aplikacji'])
+      for (const id of ['settings-modules', 'settings-energy', 'settings-accuracy', 'settings-categories', 'settings-cases', 'settings-bar', 'settings-data', 'settings-info']) {
+        await page.getByTestId(`toc-${id}`).click()
+        await expect(page.getByTestId(id)).toBeInViewport()
+      }
+      await page.getByTestId('settings-search').fill('rezerwa')
+      await page.getByTestId('settings-search-hit-field-reserve').click()
+      await expect(page.getByTestId('field-reserve')).toHaveAttribute('data-found', '')
+      await expect(page.getByTestId('field-reserve')).toBeInViewport()
+      // E2/E6: one bar „od jutra” over the sections with a date, none over the data; „od razu” on the sections without one.
+      await expect(page.getByTestId('settings-from')).toHaveCount(1)
+      await expect(page.getByTestId('settings-modules').getByTestId('now-tag')).toBeVisible()
+      await expect(page.getByTestId('settings-energy').getByTestId('now-tag')).toHaveCount(0)
       // D304: the bar's place on the monitors' mock-up – by default the left bottom corner of the primary one.
       await expect(page.getByTestId('bar-place-map')).toBeVisible()
       await expect(page.getByTestId('bar-place-1-bottom-left')).toHaveAttribute('aria-pressed', 'true')

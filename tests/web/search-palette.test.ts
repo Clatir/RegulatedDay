@@ -100,7 +100,9 @@ describe('rekordy wyszukiwarki', () => {
     expect(kinds('screen').map((r) => r.title)).toContain('Tydzień')
     expect(kinds('screen').find((r) => r.id === 'week')!.hint).toBe('Ctrl+3')
     expect(kinds('command').map((r) => r.title)).toEqual(['Nowy blok', 'Nowa prośba', 'Nowe zadanie', 'Jutro', 'Wczoraj', 'Rytuał'])
-    expect(kinds('setting')).toHaveLength(SETTING_SECTIONS.length)
+    // The sections of the settings and their fields by the labels (UX14): the sections are the ones whose id starts with `settings-`.
+    expect(kinds('setting').filter((r) => r.id.startsWith('settings-'))).toHaveLength(SETTING_SECTIONS.length)
+    expect(kinds('setting').some((r) => r.id === 'field-reserve' && r.title === 'Rezerwa energii')).toBe(true)
     expect(kinds('category').map((r) => r.title)).toContain('Analiza')
     expect(kinds('template').map((r) => r.title)).toEqual(['Dzień zwykły'])
     // D383, D402: the tasks and the requests, in the order of the lists; „Zrobione” older than 7 days too.

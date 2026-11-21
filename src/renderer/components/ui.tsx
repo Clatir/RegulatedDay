@@ -16,9 +16,10 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')
 }
 
-export function Field({ label, children, hint, labelWidth = 180 }: { label: ReactNode; children: ReactNode; hint?: ReactNode; labelWidth?: number }) {
+/** The row of a field; the `data-testid` of the settings' fields is the id the search of the settings and Ctrl K scroll to (UX14). */
+export function Field({ label, children, hint, labelWidth = 180, ...rest }: { label: ReactNode; children: ReactNode; hint?: ReactNode; labelWidth?: number; 'data-testid'?: string }) {
   return (
-    <div className="grid items-center gap-x-3 gap-y-0.5" style={{ gridTemplateColumns: `${labelWidth}px minmax(0,1fr)` }}>
+    <div className="grid items-center gap-x-3 gap-y-0.5" data-testid={rest['data-testid']} style={{ gridTemplateColumns: `${labelWidth}px minmax(0,1fr)` }}>
       <span className="text-[12.5px] leading-snug text-muted">{label}</span>
       <div className="min-w-0">{children}</div>
       {hint && <div className="col-start-2 text-[12px] leading-snug text-muted">{hint}</div>}
@@ -115,10 +116,22 @@ export function EmptyState({ why, action, ...rest }: { why: ReactNode; action?: 
   )
 }
 
-export function Section({ title, children, ...rest }: { title: ReactNode; children: ReactNode; 'data-testid'?: string }) {
+/** The mark of a section of the settings whose changes work at once, without a date (UX14, E2). */
+export function NowTag() {
+  return (
+    <span className="rounded border border-line px-1.5 text-[11px] font-normal text-muted" title="Zmiana działa od razu, bez daty." data-testid="now-tag">
+      od razu
+    </span>
+  )
+}
+
+export function Section({ title, tag, children, ...rest }: { title: ReactNode; tag?: ReactNode; children: ReactNode; 'data-testid'?: string }) {
   return (
     <section className="scroll-mt-[4.5rem] rounded-lg border border-line bg-panel" data-testid={rest['data-testid']}>
-      <h2 className="border-b border-line px-4 py-2.5 text-[13px] font-medium text-fg">{title}</h2>
+      <h2 className="flex items-center gap-2 border-b border-line px-4 py-2.5 text-[13px] font-medium text-fg">
+        {title}
+        {tag}
+      </h2>
       <div className="flex flex-col gap-3 px-4 py-3">{children}</div>
     </section>
   )
