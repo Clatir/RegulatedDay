@@ -191,4 +191,73 @@ describe('klik obok karty wydarzenia całodniowego (D563 P4)', () => {
     await press()
     expect(onClose).toHaveBeenCalledTimes(1)
   })
+  /** The save of the card that waits until `finish` is called (a folder that answers late). */
+  const slowSave = () => {
+    let finish!: (v: AllDayEvent | null) => void
+    vi.mocked(saveAllDay).mockImplementationOnce(() => new Promise((r) => (finish = r)))
+    return (v: AllDayEvent | null) => finish(v)
+  }
+  const pressSave = () => act(async () => host!.querySelector<HTMLElement>('[data-testid="allday-save"]')!.click())
+
+  it('zapis, który kończy się po zamknięciu karty, nie zamyka karty otwartej w międzyczasie (stare onClose po odmontowaniu)', async () => {
+    const finish = slowSave()
+    await card(saved(), null)
+    await pressSave()
+    await press()
+    await press()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    // The window now shows another card (its seq is new); the old card is gone with its pending save.
+    act(() => root!.unmount())
+    await act(async () => finish(saved()))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('zmiany po „Zapisz”, zamykający klik w trakcie zapisu: reszta zapisuje się po nim (względem tego, co wziął pierwszy zapis)', async () => {
+    const finish = slowSave()
+    await card(saved(), null)
+    await pressSave()
+    await type('Konferencja 2')
+    await press()
+    await press()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(saveAllDay).toHaveBeenCalledTimes(1)
+    await act(async () => finish(saved()))
+    expect(saveAllDay).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(saveAllDay).mock.calls[1]).toMatchObject([{ title: 'Konferencja 2' }, { title: 'Konferencja' }])
+  })
+
+  it('odmowa trwającego zapisu nie gubi wpisanego: reszta idzie jako pełny zapis względem tego, co było', async () => {
+    const finish = slowSave()
+    await card(saved(), null)
+    await pressSave()
+    await type('Konferencja 2')
+    await press()
+    await press()
+    await act(async () => finish(null))
+    expect(saveAllDay).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(saveAllDay).mock.calls[1]).toMatchObject([{ title: 'Konferencja 2' }, null])
+  })
+
+  it('bez zmian po „Zapisz” zamykający klik niczego nie dokłada', async () => {
+    const finish = slowSave()
+    await card(saved(), null)
+    await pressSave()
+    await press()
+    await press()
+    await act(async () => finish(saved()))
+    expect(saveAllDay).toHaveBeenCalledTimes(1)
+  })
+
+  it('klik, który sam zaczął zapis z pytaniem „Wolne”, zużywa wstrzymanie: następny klik w trakcie zapisu zamyka kartę', async () => {
+    reached.mockClear()
+    probe()
+    slowSave()
+    await card(saved({ free: true }), null)
+    await press()
+    expect(onClose).not.toHaveBeenCalled()
+    reached.mockClear()
+    await press()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(reached).toHaveBeenCalled()
+  })
 })
