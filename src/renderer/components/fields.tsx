@@ -37,6 +37,13 @@ interface CommitFieldProps<T> {
    * committed field saves it, also with the value the field showed already).
    */
   commitSame?: boolean
+  /**
+   * Enter: the text committed as always, then this – only when it was accepted (a refused text stays refused, nothing follows). The
+   * field of an answer waiting for „Zapisz” writes it with Enter (UX4, B8).
+   */
+  onEnter?: () => void
+  /** Esc in a field with no typed text (the first Esc already threw it away): the editor around it is cancelled (UX4, B8). A refused text's message goes first. */
+  onEscape?: () => void
   'aria-label'?: string
   'data-testid'?: string
 }
@@ -83,15 +90,19 @@ export function FieldShell({ error, errorId, className, placement = 'float', tes
 
 // The refused value's message goes away with Esc – wherever the focus is (the layer is the newest, so it is first). Only the message
 // and the frame: the value stays refused (A6-14: `onAccept` is not called, „Zapisz” of an answer still refuses).
-export function CommitField<T>({ value, onCommit, parse, format, placeholder, className, shellClassName, errorPlacement, readOnly, check, onReject, onAccept, commitSame, ...rest }: CommitFieldProps<T>) {
+export function CommitField<T>({ value, onCommit, parse, format, placeholder, className, shellClassName, errorPlacement, readOnly, check, onReject, onAccept, commitSame, onEnter, onEscape, ...rest }: CommitFieldProps<T>) {
   const [draft, setDraft] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const errorId = useId()
   useEscapeLayer(error != null, () => setError(null))
   // Esc: the blur it causes runs with this render's draft – it must not apply it.
   const cancelled = useRef(false)
+  // Enter with a typed text: the blur it causes commits, and only an accepted text goes on to `onEnter`.
+  const entered = useRef(false)
   const shown = draft ?? (value == null ? '' : format(value))
   const commit = () => {
+    const enter = entered.current
+    entered.current = false
     if (cancelled.current) {
       cancelled.current = false
       setDraft(null)
@@ -112,6 +123,7 @@ export function CommitField<T>({ value, onCommit, parse, format, placeholder, cl
     setError(null)
     onAccept?.(r.value)
     if (r.changed || commitSame) onCommit(r.value)
+    if (enter) onEnter?.()
   }
   return (
     <FieldShell error={error} errorId={errorId} className={shellClassName} placement={errorPlacement} testId={rest['data-testid']}>
@@ -133,13 +145,22 @@ export function CommitField<T>({ value, onCommit, parse, format, placeholder, cl
         }}
         onBlur={commit}
         onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Enter') {
+            // No typed text: nothing to commit – the saved value stands and `onEnter` follows at once (an edited one: after its commit).
+            if (draft == null) onEnter?.()
+            else entered.current = true
+            e.currentTarget.blur()
+          }
           if (e.key === 'Escape' && draft != null) {
             // The first Esc only cancels the edit; the next one goes to whatever is around.
             e.stopPropagation()
             e.preventDefault()
             cancelled.current = true
             e.currentTarget.blur()
+          } else if (e.key === 'Escape' && onEscape && error == null) {
+            e.stopPropagation()
+            e.preventDefault()
+            onEscape()
           }
         }}
       />

@@ -902,6 +902,11 @@ test('rytuał zamknięcia (D318): po „Koniec pracy” karta w „Dziś” i �
       await expect(page.getByTestId('bar-ritual')).toHaveCount(0)
       const log = readFileSync(join(dataDir, 'log', logicalToday().slice(0, 4), logicalToday(), `${(await page.evaluate(() => window.rd.dataView())).computer}.jsonl`), 'utf8')
       expect(log).toContain('"k":"ritual.close"')
+      // D563 P1: the close says so in a toast „Zamknięto … · Cofnij” (as the morning's list, D468); „Cofnij” opens the day again.
+      await expect(page.getByTestId('toast-action').filter({ hasText: 'Cofnij' })).toBeVisible()
+      await page.getByTestId('toast-action').filter({ hasText: 'Cofnij' }).click()
+      await expect(page.getByTestId('ritual-close')).toBeVisible({ timeout: 10_000 })
+      await expect(page.getByTestId('ritual-left')).not.toContainText('dzień zamknięty o')
     })
     expect(errors).toEqual([])
   } finally {

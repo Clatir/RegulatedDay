@@ -982,7 +982,7 @@ Wersja 1.0 zawiera wszystko, co działa jako hamulec w czasie i energii, wraz z 
   (zakończonych progiem bezczynności albo po dwóch pytaniach, D231, D238) razem z czasem do wyjaśnienia po nich w jednym
   wierszu zbiorczym (D246, np. „Bez odpowiedzi na Dalej?: 3 bloki, razem +2 h 10, w tym 1 h do wyjaśnienia · ✓
   nadgodziny jak zapisano, czas do wyjaśnienia po pracy, oglądaniu i słuchaniu odpoczynek, po projekcie projekt ·
-  skutek: granica dotrzymana zamiast bez danych · rozwiń”): ✓ zostawia minuty bloków tak, jak zapisano, a na czas do
+  skutek: granica dotrzymana zamiast bez danych · Rozwiń”): ✓ zostawia minuty bloków tak, jak zapisano, a na czas do
   wyjaśnienia odpowiada po bloku pracy (w znaczeniu z Modelu dnia, D266) „odpoczynek”, jak poranne „Koniec pracy o … ✓”
   (D249), a po projekcie „projekt” (D254); skutek ✓ dla dnia liczy ta sama funkcja oceny co zamrożenie, wobec dnia z tym
   wierszem bez odpowiedzi, a wieczorem z prognozą planu do pory snu (z dopiskiem „prognoza”), i wymienia każdą nagrodę
@@ -993,7 +993,7 @@ Wersja 1.0 zawiera wszystko, co działa jako hamulec w czasie i energii, wraz z 
   „Projekt 20:30–20:50 · do wyjaśnienia 21:40–22:30 · praca · projekt · odpoczynek · popraw”, bo odpowiedź dotyczy tylko
   czasu od powrotu; blok zapisany z końcem o planowanym końcu i bez czasu do wyjaśnienia w tym wierszu się nie
   pokazuje), zaparkowane bloki zakotwiczone do bloków, które minęły, opcjonalne oznaczenie odcinka wieczoru albo czasu w
-  „Odcinam się”, który nie był odpoczynkiem (z gotowym wierszem „Po końcu pracy · odpoczynek ✓ · zaznacz odcinek”, bez
+  „Odcinam się”, który nie był odpoczynkiem (z gotowym wierszem „Po końcu pracy · odpoczynek ✓ · Zaznacz odcinek”, bez
   liczby godzin przy komputerze i bez nowego pytania; liczby są tylko w „Stronie B tygodnia”, D197), osoby przy prośbach
   z „osoba: ?”, bloki przerwane zamknięciem aplikacji, o które nie odpowiedziałeś przy starcie („skończył się przy
   wyłączeniu”), bloki „poza komputerem” zakończone bez Twojej odpowiedzi limitem albo o porze snu („Zakupy 10:00–11:30,
@@ -1038,6 +1038,13 @@ Wersja 1.0 zawiera wszystko, co działa jako hamulec w czasie i energii, wraz z 
   „Cofnij” cofa dokładnie zdarzenia tego zamknięcia (samo zamknięcie, a po „Jak zapisano” też potwierdzony nim koniec
   pracy i zakończone nim zapauzowane bloki pracy) i dzień wraca na listę. Odmowa ze słowami: dzień już zamrożony,
   zamknięcie już cofnięte albo nieobecne w logu, dzień zamknięty też innym zamknięciem (np. na innym komputerze) (D468).
+  „Zamknij dzień” z rytuału mówi to samo: „Zamknięto piątek 13.11.2026: po rytuale · Cofnij” przez 10 s, „Cofnij” tak samo
+  cofa zdarzenia tego zamknięcia, a dzień wraca do niezamkniętych, dopóki nie jest zamrożony (D563). Przyciski rytuału i listy
+  niezamkniętych dni zaczynają się wielką literą („Zostaw”, „Usuń”, „Rozwiń”, „Anuluj”, „Otwórz jutro”). Pole godziny
+  odpowiedzi („Pracowałem do …”, „Skończył się o …”, „Projekt do …”, „Od” i „Do” odcinka) zapisuje się Enterem, jak „Zapisz”
+  (tekst odrzucony nie zapisuje się, powód zostaje pod polem); pierwszy Esc wyrzuca wpisany tekst, następny zamyka edytor bez
+  zapisu. Granicę zatwierdza jedno słowo: „Zatwierdź” – rano przy propozycji granicy i wieczorem w wierszu „Granica do
+  zatwierdzenia”.
 
 **Gra i infrastruktura**
 
