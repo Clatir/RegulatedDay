@@ -21,7 +21,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
   każdy otwiera się (7–10 plików) – E3.12; `backups\daily\2026-10-27.zip` (9 plików) – E6b.2 do sprawdzenia po
   następnym dniu z aplikacją po 12:00; `main.log` – „kreator zakończony” 27.10 (E3.1), aktualizacje 0.7.0→0.10.1 czyste
   (E6b.1–E7b.1; 0.2.0–0.6.0 przeskoczone, więc E5.1 i E6a.1 tylko „dane całe”).
-- Rejestry decyzji (D308, T535, T840, T857, T935): `docs/decyzje.md` – D; `docs/decyzje-techniczne.md` – T1100 i nowsze, `docs/decyzje-techniczne-T1000-T1099.md` – T1000–T1099 (T1967), `docs/decyzje-techniczne-T700-T999.md` – T700–T999 (T1210),
+- Rejestry decyzji (D308, T535, T840, T857, T935): `docs/decyzje.md` – D; `docs/decyzje-techniczne.md` – T1997 i nowsze, `docs/decyzje-techniczne-T1100-T1999.md` – T1100–T1996 (T1997), `docs/decyzje-techniczne-T1000-T1099.md` – T1000–T1099 (T1967), `docs/decyzje-techniczne-T700-T999.md` – T700–T999 (T1210),
   `docs/decyzje-techniczne-T1-T399.md` – T1–T399, `docs/decyzje-techniczne-T400-T499.md` – T400–T499, `docs/decyzje-techniczne-T500-T599.md` – T500–T599,
   `docs/decyzje-techniczne-T600-T699.md` – T600–T699; zastąpione w całości w `docs/archiwum/decyzje-zastapione.md`. D188
   cofnięta przez T303, ale cytowana w D150 i specyfikacji – zostaje w rejestrze.
@@ -100,25 +100,19 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
     PR #108 (plan i D561–D565) scalony 21.11, `main` scalony do `claude/ciag-ux`. Sesja przeniesiona 21.11 z chmury na komputer
     lokalny. Drzewa wykonawców zakłada główna sesja z gałęzi ciągu (T1986 – `isolation: worktree` bierze `origin/main`).
     - **Paczka 1 (UX1–UX3) – zamknięta 21.11:** T1977–T1985, T1990; szczegóły i uwagi na później – `docs/archiwum/postep-ciag-UX.md`.
-    - **Paczka 2 (UX4–UX6) – zamknięta 21.11:** T1986–T1996, wszystko w `claude/ciag-ux` (ostatni kod caf48e3). Wykonawca
-      `wykonawca-sonnet` w drzewach `ux4`–`ux6` (T1986). Przegląd high: UX4 – 2 rundy (drugi Esc po `blur`, Enter w „Od”
-      odcinka, odmowa zamknięcia bez powodu – poprawione); UX5 – 4 rundy (czwarta dozwolona po ważnych w trzeciej; „Cofnij”
-      „Dodano blok” jako odwrotność dodania – T1992, id nowego szablonu `idAfter` – T1993); UX6 – 4 rundy, po czwartej
-      uproszczenie bez kolejnej rundy: karta całodniowa tylko do odczytu w trakcie zapisu, bez zapisu dosyłanego (T1995).
-      Testy: typecheck, build, lint zielone; `npm test` – czerwone tylko `installer-close.test.ts` (środowisko, jak w paczce 1);
-      unit 4655/4663; pełne E2E 135 zielonych (przed ostatnimi poprawkami UX5/UX6), po nich E2E zmienionych obszarów (allday, series,
-      cases, template-apply, zjazdy, screens) 49 zielonych. Odbiór: UX4.1–UX6.3.
-      **Uwagi na później:** UX4 – odmowa bez powodu w `answer`, `undoRun` i `UnclosedDays` (`if (!r.ok && r.why)`) dalej
-      cicha; Enter z odrzuconym tekstem robi `blur` (drugi Esc trafia do okna); test Entera odcinka nie sprawdza wartości;
-      `installEscape` w teście bez sprzątania. UX5 – ramka zderzeń `role="status"` (klik w nią nie jest „obok”), duplikat
-      `key` przy dwóch rywalach o tej samej nazwie, „nieużywany” pomija wersje, `idAfter` widzi tylko wczytane szablony
-      (plik nieczytelny / niezsynchronizowany z większym id); „Cofnij” nie zdejmuje załącznika dodanego do świeżego bloku.
-      UX6 – klik obok, który zapisuje bez pytania „Wolne”, połyka kliknięcie (trzeba kliknąć drugi raz); Esc w oknie
-      reguły w trakcie zapisu; „+ Szablon” / Ctrl K przy niezapisanej regule – zapis szablonu przed pytaniem; prawy klik
-      zatwierdza pole (`useOutsidePointer`); strażnik `seq` w AllDayBar bez osobnego testu.
-    - **Następna: paczka 3 (UX7–UX9)** – Timeline i TodayPage wspólne, więc po kolei; odpowiedzi P6–P11 w D563.
-      Przed nowymi T wydzielić T1100–T1999 z `docs/decyzje-techniczne.md` (~190 / 200 KB) do osobnego pliku (jak T1967).
-    - Paczki 4–8 (UX10–UX19): do zrobienia, odpowiedzi w D564–D565 (P19: mm:ss zostaje).
+    - **Paczka 2 (UX4–UX6) – zamknięta 21.11:** T1986–T1996 (ostatni kod caf48e3); wpis i uwagi na później – `docs/archiwum/postep-ciag-UX.md`.
+    - **Paczki 3–8 (UX7–UX19) – w toku od 21.11, jednym ciągiem** (użytkownik: „rozpocznij paczki 3-8 jednym ciągiem” – bez pauzy
+      między paczkami; pytania P6–P29 odpowiedziane, D563–D565). Rejestr T1100–T1996 wydzielony (T1997). Trzy strumienie
+      równolegle, każdy we własnym drzewie z `claude/ciag-ux` (T1986, junction `node_modules`), zadania po kolei w strumieniu,
+      scalenie do `claude/ciag-ux` przez główną sesję po testach i `/code-review`; po scaleniu `claude/ciag-ux` wraca do drzew:
+      - **A** `.claude/worktrees/ux-a`, `claude/ux-a`: UX7 → UX8 → UX9 → UX19 (oś, widoki, „Dziś”, „Tydzień”) · `wykonawca-sonnet` · high · T2000–T2099.
+      - **B** `.claude/worktrees/ux-b`, `claude/ux-b`: UX10 → UX11 → UX12 → UX13 (pasek, panel, okna, gra, przypomnienia) · `wykonawca-opus` · xhigh · T2100–T2199.
+      - **C** `.claude/worktrees/ux-c`, `claude/ux-c`: UX16 → UX17 → UX18 → UX14 → UX15 (formaty, Sprawy, Historia, potem Ustawienia i kreator – po UX11/UX13) · `wykonawca-sonnet` (UX14 „Wycofaj” – `wykonawca-opus`) · high · T2200–T2399.
+      Na końcu: `version` 1.34.0, sekcja `CHANGELOG.md`, jeden PR z pełnym CI, wydanie (D562). Stan zadań – tabela niżej.
+
+      | Zadanie | Stan |
+      | --- | --- |
+      | UX7–UX19 | do zrobienia |
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
