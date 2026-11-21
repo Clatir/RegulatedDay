@@ -312,4 +312,15 @@ describe('niezapisane powtarzanie sprawy przy zamykaniu pola „Powtarzaj” (D5
     expect((q('series-rule', row()) as HTMLSelectElement).value).toBe('workdays')
     expect(q('case-repeat-save', row())).not.toBeNull()
   })
+  it('w trakcie zapisu przyciski okna są wyłączone (jak w „Szablonach”)', async () => {
+    await open()
+    let finish!: () => void
+    ;(window as unknown as { rd: Partial<RdApi> }).rd.edit = (entries) => new Promise((r) => (finish = () => r(entries.map(() => ({ status: 'applied' as const })))))
+    await pick('workdays')
+    await toggle()
+    await act(async () => q('rule-unsaved-save')!.click())
+    expect((q('rule-unsaved-save') as HTMLButtonElement).disabled).toBe(true)
+    expect((q('rule-unsaved-discard') as HTMLButtonElement).disabled).toBe(true)
+    await act(async () => finish())
+  })
 })

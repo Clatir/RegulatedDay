@@ -9,11 +9,17 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
 import { AllDayCard } from '@renderer/features/allday/AllDayCard'
 import { installEscape } from '@renderer/lib/escape'
+import { askFreeDays } from '@renderer/features/allday/freeDays'
 import { saveAllDay } from '@renderer/store/allDay'
 
 vi.mock('@renderer/store/allDay', async (orig) => ({
   ...(await orig<typeof import('@renderer/store/allDay')>()),
   saveAllDay: vi.fn(async (e: AllDayEvent) => e)
+}))
+
+vi.mock('@renderer/features/allday/freeDays', async (orig) => ({
+  ...(await orig<typeof import('@renderer/features/allday/freeDays')>()),
+  askFreeDays: vi.fn(async () => [] as string[])
 }))
 
 let root: Root | null = null
@@ -26,6 +32,8 @@ beforeAll(() => {
 })
 beforeEach(() => vi.clearAllMocks())
 afterEach(() => {
+  document.body.removeEventListener('pointerdown', reached)
+  document.body.removeEventListener('click', reached)
   act(() => root?.unmount())
   host?.remove()
   root = host = null
@@ -46,6 +54,19 @@ const type = (value: string) =>
     const input = host!.querySelector<HTMLInputElement>('[data-testid="allday-title"]')!
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
     input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+/** What a press and its click would start below the card (another event's bar, a cell of the strip) – a probe on the page. */
+const reached = vi.fn()
+const probe = () => {
+  document.body.addEventListener('pointerdown', reached)
+  document.body.addEventListener('click', reached)
+}
+const press = (init: { button?: number; target?: Element } = {}) =>
+  act(async () => {
+    const e = new Event('pointerdown', { bubbles: true, cancelable: true }) as Event & { button: number }
+    e.button = init.button ?? 0
+    ;(init.target ?? document.body).dispatchEvent(e)
+    ;(init.target ?? document.body).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }))
   })
 const clickAway = () => act(async () => void document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })))
 
@@ -106,5 +127,44 @@ describe('klik obok karty wydarzenia całodniowego (D563 P4)', () => {
     await act(async () => void host!.querySelector('[data-testid="allday-card"]')!.dispatchEvent(new Event('pointerdown', { bubbles: true })))
     expect(saveAllDay).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
+  })
+  it('błędne daty: klik obok jest wstrzymany – nic pod nim się nie otwiera (inaczej nowa karta odmontowałaby tę i zmiany zginęłyby)', async () => {
+    reached.mockClear()
+    probe()
+    await card(saved({ endDate: '2026-11-17' }), null)
+    await press()
+    expect(reached).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    document.body.removeEventListener('pointerdown', reached)
+    document.body.removeEventListener('click', reached)
+  })
+
+  it('zapis, który pyta o „Wolne”: klik obok wstrzymany, pytanie zostaje w karcie; następny klik obok to „Nie” i idzie dalej', async () => {
+    reached.mockClear()
+    probe()
+    vi.mocked(askFreeDays).mockResolvedValueOnce(['2026-11-19'])
+    await card(saved({ free: true }), null)
+    await press()
+    expect(saveAllDay).toHaveBeenCalledTimes(1)
+    expect(host!.querySelector('[data-testid="allday-free-ask"]')).not.toBeNull()
+    expect(reached).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    await press()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(reached).toHaveBeenCalled()
+    document.body.removeEventListener('pointerdown', reached)
+    document.body.removeEventListener('click', reached)
+  })
+
+  it('dymek (role=status) i prawy przycisk to nie „klik obok”', async () => {
+    await card(saved(), saved())
+    const toast = document.createElement('div')
+    toast.setAttribute('role', 'status')
+    document.body.append(toast)
+    await press({ target: toast })
+    await press({ button: 2 })
+    toast.remove()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(saveAllDay).not.toHaveBeenCalled()
   })
 })

@@ -269,6 +269,7 @@ function CaseRow({ x, today, marked, group }: { x: CaseItem; today: string; mark
   // D563 P5: closing „Powtarzaj” with a rule written but not saved asks first (`UnsavedRuleDialog`); the form tells the row.
   const rule = useRef<RuleGuard | null>(null)
   const [asking, setAsking] = useState(false)
+  const [askBusy, setAskBusy] = useState(false)
   // D440: a task's steps open under its row (as the note of a request is read there); the counter stays in the row.
   const [stepsOpen, setStepsOpen] = useState(false)
   const counter = isTask ? stepsCounter(r.steps) : null
@@ -338,16 +339,20 @@ function CaseRow({ x, today, marked, group }: { x: CaseItem; today: string; mark
         <div data-row-form="">
           <UnsavedRuleDialog
             title="Zapisać zmianę powtarzania?"
-            busy={false}
-            onSave={() =>
-              void (rule.current?.save() ?? Promise.resolve(false)).then((ok) => {
-                // Saved: the form closes by itself (`onSaved`); a save that did not go through stays on the form with its rule.
-                setAsking(false)
-                if (ok) setRepeating(false)
-              })
-            }
+            busy={askBusy}
+            onSave={() => {
+              setAskBusy(true)
+              void (rule.current?.save() ?? Promise.resolve(false))
+                .catch(() => false)
+                .then((ok) => {
+                  // Saved: the form closes; a save that did not go through stays on the form with its rule.
+                  setAskBusy(false)
+                  setAsking(false)
+                  if (ok) setRepeating(false)
+                })
+            }}
             onDiscard={() => (setAsking(false), setRepeating(false))}
-            onClose={() => setAsking(false)}
+            onClose={() => !askBusy && setAsking(false)}
           />
         </div>
       )}

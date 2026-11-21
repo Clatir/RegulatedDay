@@ -18,7 +18,7 @@ import { useBusy } from '../../lib/busy'
 import { commitActiveField } from '../../lib/commit'
 import { useEscapeLayer } from '../../lib/escape'
 import { removeTarget, useDeleteSelected } from '../../lib/deleteKey'
-import { IN_DIALOG } from '../../lib/outside'
+import { holdGesture, useOutsidePointer } from '../../lib/outside'
 import { allDayGone, removeAllDay, saveAllDay } from '../../store/allDay'
 import { useData } from '../../store/data'
 import { NoteEditor } from '../note/NoteEditor'
@@ -77,15 +77,10 @@ export function AllDayCard({
   }, [])
   // A click outside (D563 P4): saves what is written when the title is not empty, closes at once with nothing written otherwise
   // (the answer „Nie” on the question „Wolne”). The latest render's function – it reads the fields from the ref, never from a stale one.
-  const awayRef = useRef<() => void>(() => undefined)
-  useEffect(() => {
-    const away = (e: PointerEvent) => {
-      // A dialog over it (Del's question, D462) with its overlay is no „outside”: the card waits for the answer.
-      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target) && !(e.target instanceof Element && e.target.closest(IN_DIALOG))) awayRef.current()
-    }
-    document.addEventListener('pointerdown', away)
-    return () => document.removeEventListener('pointerdown', away)
-  }, [])
+  // Heard before what the press starts where it lands (`useOutsidePointer`: the left button only; a dialog over the card with its overlay –
+  // Del's question, D462 – and a toast are no „outside”); a press the card does not let go (`holdGesture`) reaches nothing below.
+  const awayRef = useRef<(e: PointerEvent) => void>(() => undefined)
+  useOutsidePointer(true, ref, (e) => e.button > 0 || awayRef.current(e))
   const problems = cardProblems(shown)
 
   const save = () =>
@@ -109,15 +104,18 @@ export function AllDayCard({
       if (days.length) setAsk(days)
       else onClose()
     })
-  awayRef.current = () => {
-    // The question „Wolne” is up, or a save runs: nothing more to write here.
-    if (ask || busy) return onClose()
+  awayRef.current = (press) => {
+    // The question „Wolne” is up: the click elsewhere is its „Nie”. A save runs: its click waits (the card is still needed for the question).
+    if (ask) return onClose()
+    if (busy) return holdGesture(press)
     commitActiveField()
     const e = { ...form.current, title: form.current.title.trim() }
     if (!e.title || (base && (Object.keys(e) as Array<keyof AllDayEvent>).every((k) => base[k] === e[k]))) return onClose()
-    if (cardProblems(e).dates) return setTried(true)
-    // A save that asks the question „Wolne” stays in the card until it is answered (a click elsewhere is its „Nie”).
-    if (asksFreeAfter(base, e)) return void save()
+    // Days the wrong way round: the card stays with the message, and the click goes nowhere – another card opened by it would end this one.
+    if (cardProblems(e).dates) return (setTried(true), holdGesture(press))
+    // A save that asks the question „Wolne” stays in the card until it is answered (the next click elsewhere is its „Nie”); the click that
+    // started it goes nowhere for the same reason.
+    if (asksFreeAfter(base, e)) return (holdGesture(press), void save())
     // Closed at once: the click goes on to what it hit (another event, a day of the strip), the write follows.
     onClose()
     void saveAllDay(e, base)
