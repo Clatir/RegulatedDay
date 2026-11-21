@@ -30,7 +30,10 @@ regeneracji ani typu dnia (silnik go nie czyta – T725).
 - Okienko jak `NewBlockPopover` (`popoverPlace` obok wskaźnika, pod pasem). Pola także w `ref` (kliknięcie „Zapisz” opuszcza pole przed obsługą kliknięcia).
   Notatka = `NoteEditor` pisze do pól karty, do pliku dopiero „Zapisz” (`saveAllDay(e, base)` w `useBusy`); komunikat tytułu po próbie zapisu, dat – od razu (`cardProblems`).
 - Pole „Kalendarz” (D425, T947, reguły `kalendarze.md`): tylko przy ≥ 2 kalendarzach, `calendarId` (null = „Moje”); pas dostaje wydarzenia po `useVisibleAllDay` (część B).
-- Esc, „Anuluj”, klik poza – bez zapisu. „Usuń” bez pytania → `removeAllDay` → linia „Cofnij”.
+- Esc i „Anuluj” – bez zapisu. Klik poza (D563 P4, zmienia D405; `awayRef` = funkcja ostatniego renderu, czyta pola z `form`): tytuł pusty (też same spacje)
+  albo wydarzenie bez zmian – zamknięcie bez zapisu; tytuł niepusty – zapis (`saveAllDay(e, base)`), karta zamyka się od razu (klik idzie dalej do innego
+  wydarzenia / dnia pasa), zapis za nią; daty błędne (`cardProblems`) – karta zostaje z komunikatem; zapis, który spytałby o „Wolne” (`asksFreeAfter` z pól) –
+  jak „Zapisz”, pytanie w karcie (klik gdzie indziej to jego „Nie”); w pytaniu albo w trakcie zapisu klik poza tylko zamyka. „Usuń” bez pytania → `removeAllDay` → linia „Cofnij”.
 - Pytanie „Wolne” raz (T733, `asksFreeAfter`): tylko gdy zapis włączył „To wolne” (nowe wydarzenie z nim albo false → true) albo zmienił daty
   wydarzenia „To wolne”, i gdy `askFreeDays` daje dni; poprawka tytułu nie pyta. W miejscu karty; „Tak” = `setFreeDays` (linia „Wolne” z `change`),
   dzień `duringDay` → `FreeTodayDialog` (`TypeChangeDialog` z `initialTo: 'wolne'`, bez „Cofnij”); dziś sprawdzane ponownie przy „Tak” (już „Wolne”

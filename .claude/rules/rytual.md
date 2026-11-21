@@ -69,6 +69,6 @@ paths:
   się” – czasy z użycia komputerów w oknie sesji (`used`, T500), więc wiersze licz z `ritualRows(state,
   ritualActivity(ctx, state))` – z `null` sesja dostaje godziny z planu.
 - Ekrany (0.12.0): `renderer/features/ritual/` – `RitualPanel` (karta w „Dziś”, wiersze po godzinach, `effectText`,
-  `untouched`), `UnclosedDays` (rano, `undoToast` „Zamknięto … · Cofnij” – `closedToastText`, `dayTitle`; toast jest globalny, więc przeżywa „Pomiń” i zmianę ekranu; limit 4 dymków świadomy); IPC `ritual`, `ritualAnswer`,
+  `untouched`), `UnclosedDays` (rano, `undoToast` „Zamknięto … · Cofnij” – `closedToastText`, `dayTitle`; toast jest globalny, więc przeżywa „Pomiń” i zmianę ekranu; limit 4 dymków świadomy; „Pomiń” listy = `useUi.unclosedSkipped` (dzień logiczny z `view.today`, B5 D563) – po zmianie ekranu lista nie wraca, następnego dnia tak); IPC `ritual`, `ritualAnswer`,
   `closeDay`, `undoClose`, `unclosedDays` (hub). Odczuwany koszt –
   zdarzenie `cost.felt` (`feltRows`); do propozycji kosztów wchodzi z ekranem kalibracji (T505).

@@ -4,6 +4,7 @@
  */
 import { create } from 'zustand'
 import { classify, historyKey } from '@shared/data/paths'
+import type { Answer } from '@shared/model/events'
 import type { PlanBlock } from '@shared/model/plan'
 import type { SearchKind, SearchRecord } from '@shared/search'
 import { commitActiveField } from '../lib/commit'
@@ -38,13 +39,19 @@ interface UiState {
   sideBClosed: string | null
   /** The month whose morning step „Cele” „Pomiń” closed here – at once, whatever the save does (D72, as „Strona B”, A6-15). */
   goalsClosed: string | null
+  /** The day whose first check-in „Pomiń” skipped here (B5, D563): until the day changes – it does not come back with a change of screen. */
+  checkinSkipped: string | null
+  /** The check-in's answers not saved yet, with their day (B5, D563): they survive another screen; another day starts clean, a save clears them. */
+  checkinAnswers: { date: string; answers: Answer[] } | null
+  /** The day whose morning list of days not closed „Pomiń” hid here (B5, D563): until the day changes. */
+  unclosedSkipped: string | null
   /** The new block not saved yet, with its day (D461: saved at its first committed field or when you leave it; Esc throws it away while untouched – `touched`: a field or a step changed, T1080) – it also survives going to another screen when the exchange for it is not answered (spec „Szkice”, A6-17). */
   blockDraft: { date: string; block: PlanBlock; intended: boolean; touched: boolean } | null
   /** What the search selected for the screen it opened (null: nothing waits). */
   pick: SearchPick | null
 }
 
-export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null, movedLater: null, sideBClosed: null, goalsClosed: null, blockDraft: null, pick: null }))
+export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null, movedLater: null, sideBClosed: null, goalsClosed: null, checkinSkipped: null, checkinAnswers: null, unclosedSkipped: null, blockDraft: null, pick: null }))
 
 export function closeSideB(date: string): void {
   useUi.setState({ sideBClosed: date })
@@ -52,6 +59,22 @@ export function closeSideB(date: string): void {
 
 export function closeGoals(month: string): void {
   useUi.setState({ goalsClosed: month })
+}
+
+/** „Pomiń” of the first check-in of `date` (B5, D563). */
+export function skipCheckin(date: string): void {
+  useUi.setState({ checkinSkipped: date })
+}
+
+/** The check-in's answers of `date` as they stand (null: nothing to keep – a save, or the draft of another day is replaced at the first answer). */
+export function setCheckinAnswers(date: string, answers: Answer[] | null): void {
+  if (answers) useUi.setState({ checkinAnswers: { date, answers } })
+  else if (useUi.getState().checkinAnswers?.date === date) useUi.setState({ checkinAnswers: null })
+}
+
+/** „Pomiń” of the morning list of days not closed, on `date` – the logical day it is today (B5, D563). */
+export function skipUnclosed(date: string): void {
+  useUi.setState({ unclosedSkipped: date })
 }
 
 /**

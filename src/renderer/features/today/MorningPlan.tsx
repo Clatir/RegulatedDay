@@ -29,6 +29,7 @@ import { morningAllDayLine } from './morningAllDay'
 import { CalibrationCard } from '../calibration/CalibrationEntry'
 import { SideBStep, sideBShown } from './SideBStep'
 import { GoalsStep } from './GoalsStep'
+import { checkinAnswersOf, checkinOpen } from './checkinLogic'
 import { goalsStepOpen } from './goalsStepLogic'
 import { logEvents, useData } from '../../store/data'
 import { useDayFiles, type DayModel } from '../../store/day'
@@ -38,7 +39,7 @@ import { caseTitle, isMorningChosen, morningChosen, morningDeadlines, morningPri
 import { rememberCasesView, rememberMatrixFilter } from '../cases/casesView'
 import { queueRowText } from '../cases/casesUi'
 import { DueMark } from '../cases/DueMark'
-import { navigate, toast, useUi } from '../../store/ui'
+import { navigate, setCheckinAnswers, skipCheckin, toast, useUi } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { answerSeries } from '../series/seriesActions'
 import { arrangeDayBlocks, energyOrderCached, energyOrderKey, leaveEnergyOrder, saveDay, skipDeadline, variantStarts } from './dayActions'
@@ -76,7 +77,7 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
   const [open, setOpen] = useState(!approvedByYou)
   const energyOn = names.rd.general.modules.energy
   const needCheckin = energyOn && model.energy.checkinAt == null
-  const [skipCheckin, setSkipCheckin] = useState(false)
+  const checkinSkipped = useUi((u) => u.checkinSkipped)
   // On Monday „Strona B tygodnia” comes first (spec „Plan poranny”), until „Dalej” on any computer.
   const sideBClosed = useUi((u) => u.sideBClosed)
   const sideB = sideBShown(model.date, !!model.dayFile?.asked.sideB, sideBClosed)
@@ -102,7 +103,7 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
       )}
       {open && (
         <div className="flex flex-col gap-3 border-t border-line px-4 py-3">
-          {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep key={month} month={month} /> : needCheckin && !skipCheckin ? <Checkin model={model} onSkip={() => setSkipCheckin(true)} /> : <Plan model={model} names={names} />}
+          {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep key={month} month={month} /> : checkinOpen(needCheckin, checkinSkipped, model.date) ? <Checkin model={model} onSkip={() => skipCheckin(model.date)} /> : <Plan model={model} names={names} />}
         </div>
       )}
     </section>
@@ -111,13 +112,16 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
 
 /** The first check-in: 8 questions, two per pool (D521: the body's too), no / a little / yes (spec „Pierwszy check-in”). */
 export function Checkin({ model, onSkip }: { model: DayModel; onSkip: () => void }) {
-  const [answers, setAnswers] = useState<Answer[]>([0, 0, 0, 0, 0, 0, 0, 0])
+  // In the store, per day (B5, D563): a trip to another screen and back keeps what you ticked.
+  const answers = checkinAnswersOf(useUi((u) => u.checkinAnswers), model.date)
   const byPool = Object.fromEntries(POOLS.map((p) => [p, QUESTIONS.flatMap((q, i) => (q.pool === p ? [answers[i]!] : []))])) as Record<Pool, [Answer, Answer]>
   const result = checkinStates(byPool)
   const [busy, run] = useBusy()
   const save = (fewer: boolean) =>
     run(async () => {
-      if (!(await logEvents([{ k: 'energy.checkin', day: model.date, answers: byPool }])) || !fewer) return
+      if (!(await logEvents([{ k: 'energy.checkin', day: model.date, answers: byPool }]))) return
+      setCheckinAnswers(model.date, null)
+      if (!fewer) return
       await window.rd.timer({ a: 'fewer', day: model.date }).catch((e: unknown) => toast(`Nie włączono „mniej pytań”: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000))
     })
   return (
@@ -133,7 +137,7 @@ export function Checkin({ model, onSkip }: { model: DayModel; onSkip: () => void
               { value: 1 as Answer, label: 'trochę' },
               { value: 2 as Answer, label: 'tak' }
             ]}
-            onChange={(v) => setAnswers(answers.map((a, j) => (j === i ? v : a)))}
+            onChange={(v) => setCheckinAnswers(model.date, answers.map((a, j) => (j === i ? v : a)))}
             aria-label={q.text}
             data-testid={`checkin-${i}`}
           />
