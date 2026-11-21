@@ -31,9 +31,9 @@ export const GROUP_PICK = 'group:'
 
 /** The commands (D387: they only navigate, nothing is moved): „nowe” finds both „Nowy …” (the spec's example). */
 export const COMMANDS: SearchRecord[] = [
-  { kind: 'command', id: 'newBlock', title: 'Nowy blok', hint: 'Ctrl N w „Dziś”', keys: 'nowe' },
+  { kind: 'command', id: 'newBlock', title: 'Nowy blok', hint: 'Ctrl+N w „Dziś”', keys: 'nowe' },
   { kind: 'command', id: 'newRequest', title: 'Nowa prośba', hint: 'w „Sprawach”', keys: 'nowe' },
-  { kind: 'command', id: 'newTask', title: 'Nowe zadanie', hint: 'Ctrl N w „Sprawach”', keys: 'nowe' },
+  { kind: 'command', id: 'newTask', title: 'Nowe zadanie', hint: 'Ctrl+N w „Sprawach”', keys: 'nowe' },
   { kind: 'command', id: 'tomorrow', title: 'Jutro', hint: 'plan na jutro' },
   { kind: 'command', id: 'yesterday', title: 'Wczoraj', hint: 'plan wczorajszego dnia' },
   { kind: 'command', id: 'ritual', title: 'Rytuał', hint: 'rytuał dzisiejszego dnia', keys: 'wieczór podsumowanie' }

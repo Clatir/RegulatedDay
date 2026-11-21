@@ -249,7 +249,7 @@ export function AttachmentsSection({
           }}
         />
       )}
-      {owner && list.length === 0 && !adding && <p className="text-[11.5px] text-muted">Przeciągnij tu plik albo link, wklej adres (Ctrl V) albo użyj przycisków.</p>}
+      {owner && list.length === 0 && !adding && <p className="text-[11.5px] text-muted">Przeciągnij tu plik albo link, wklej adres (Ctrl+V) albo użyj przycisków.</p>}
     </section>
   )
 }

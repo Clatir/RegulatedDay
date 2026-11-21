@@ -5,7 +5,7 @@
  */
 import type { AccuracyRow, FeltRow, MeanRow, PersonRow, StatsPeriod, StatsResult, WeekBoundaries } from '@shared/engine/stats'
 import { CORRECTION_H, FREEZE_MAX_H } from '@shared/engine/freezeWindow'
-import { countLabel, durationLabel, formatNumber, plDate, plDayMonth } from '@shared/format'
+import { countLabel, durationLabel, formatNumber, plDate, plDayMonth, WEEKDAY_SHORT } from '@shared/format'
 import { addDays } from '@shared/time/zone'
 
 export const PERIOD_OPTIONS: Array<{ value: StatsPeriod; label: string }> = [
@@ -73,7 +73,6 @@ export function stackPlaces(parts: readonly number[], max: number, height: numbe
   })
 }
 
-const WEEKDAY_SHORT = ['pon.', 'wt.', 'śr.', 'czw.', 'pt.', 'sob.', 'niedz.']
 const WEEKDAY_LONG = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
 
 export const weekdayShort = (day: number): string => WEEKDAY_SHORT[day - 1] ?? ''

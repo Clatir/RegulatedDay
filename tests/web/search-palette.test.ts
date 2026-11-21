@@ -98,7 +98,7 @@ describe('rekordy wyszukiwarki', () => {
     const rs = searchRecords(input([{ date: '2026-11-09', id: 'a', title: 'Analiza', note: 'Kowalski podał numer' }]))
     const kinds = (k: string) => rs.filter((r) => r.kind === k)
     expect(kinds('screen').map((r) => r.title)).toContain('Tydzień')
-    expect(kinds('screen').find((r) => r.id === 'week')!.hint).toBe('Ctrl 3')
+    expect(kinds('screen').find((r) => r.id === 'week')!.hint).toBe('Ctrl+3')
     expect(kinds('command').map((r) => r.title)).toEqual(['Nowy blok', 'Nowa prośba', 'Nowe zadanie', 'Jutro', 'Wczoraj', 'Rytuał'])
     expect(kinds('setting')).toHaveLength(SETTING_SECTIONS.length)
     expect(kinds('category').map((r) => r.title)).toContain('Analiza')

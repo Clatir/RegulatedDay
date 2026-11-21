@@ -6,7 +6,7 @@
 import type { Celebration, GameView, Season } from '@shared/engine/progress'
 import { DISCONNECT_WAY } from '@shared/engine/progress'
 import type { StreakStep } from '@shared/engine/game'
-import { countLabel, plDate } from '@shared/format'
+import { countLabel, plDate, plDayMonth } from '@shared/format'
 import { REGEN_CATEGORY, type Variant } from '@shared/model/categories'
 import { addDays } from '@shared/time/zone'
 
@@ -33,10 +33,9 @@ export function weekNumber(monday: string): number {
   return Math.floor((day - start) / 86_400_000 / 7) + 1
 }
 
-/** „tydz. 44 · 26.10–1.11” */
+/** „tydz. 44 · 26.10–01.11” (the short date of the app, `plDayMonth`: two digits each, as the days of the room and of the statistics). */
 export function weekLabel(monday: string): string {
-  const short = (d: string) => `${Number(d.slice(8, 10))}.${d.slice(5, 7)}`
-  return `tydz. ${weekNumber(monday)} · ${short(monday)}–${short(addDays(monday, 6))}`
+  return `tydz. ${weekNumber(monday)} · ${plDayMonth(monday)}–${plDayMonth(addDays(monday, 6))}`
 }
 
 export const SEASON_NAMES: Record<Season, string> = { winter: 'zima', spring: 'wiosna', summer: 'lato', autumn: 'jesień' }

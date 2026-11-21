@@ -359,7 +359,7 @@ test('Dziś (D405): plan poranny ma jedną linię „Dziś: …” bez pytania; 
       await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
       // The morning plan: one line, every event of today in the order of the strip, no button of its own.
       const line = page.getByTestId('morning-allday')
-      await expect(line).toHaveText(`Dziś: ${long} (2/3) · Urlop`, { timeout: 15_000 })
+      await expect(line).toHaveText(`Dziś: ${long} (2 z 3) · Urlop`, { timeout: 15_000 })
       await expect(line.locator('button')).toHaveCount(0)
 
       // The desktop bar: the first event cut with „…”, „+1” for the other, the colour dot, the block's name stays.

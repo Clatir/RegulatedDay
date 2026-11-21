@@ -1,6 +1,6 @@
 /**
  * „Przenieś na…” (a block to another day: its id stays, one move more – spec „Przeniesienie”) and „Skopiuj ten dzień
- * do…” (the plan of this day to the days you mark in the month – spec „Szablony dnia …, kopiowanie dnia”).
+ * do…” (the plan of this day to the days you mark in the window of days `DaysDialog` – the same as „Zastosuj do…” of a template; spec „Szablony dnia …, kopiowanie dnia”).
  */
 import { useState } from 'react'
 import { blockName, type Names } from '@shared/blockName'
@@ -13,7 +13,9 @@ import { DateField } from '../../components/fields'
 import type { DayModel } from '../../store/day'
 import { isSaved } from '../../store/data'
 import { useBusy } from '../../lib/busy'
-import { MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from '../calendar/MonthGrid'
+import { DaysDialog } from '../calendar/DaysDialog'
+import { monthOf } from '../calendar/MonthGrid'
+import { APPLY_DAYS_MAX } from '../templates/applyDays'
 import { tellMoved } from '../week/weekActions'
 import { copyDayTo, moveDayBlock } from './dayActions'
 
@@ -86,30 +88,37 @@ export function copyTargets(sel: ReadonlySet<string>, source: string, today: str
 }
 
 export function CopyDayDialog({ model, today, onClose }: { model: DayModel; today: string; onClose: () => void }) {
-  const [month, setMonth] = useState(monthOf(addDays(model.date, 1)))
-  const [sel, setSel] = useState<Set<string>>(new Set())
+  // The window of days of the templates (`DaysDialog`, F6): the fields „Od” and „Do”, the month; the day copied from is marked and never a target.
+  const [days, setDays] = useState<string[]>([])
   // A day that already ran among the targets: the warning waits for „Kopiuj mimo to” or „Tylko dni po dziś” (D330).
   const [warn, setWarn] = useState(false)
   const [busy, run] = useBusy()
-  const { targets, began, ahead } = copyTargets(sel, model.date, today)
+  const { targets, began, ahead } = copyTargets(new Set(days), model.date, today)
   // One copy at a time (a double click made each target twice the blocks – A6-04); open until it is saved.
   const copy = (dates: readonly string[]) =>
     run(async () => {
       if (!dates.length) return
       if (await copyDayTo({ date: model.date, plan: model.ctx.plan, dayType: model.dayFile?.dayType ?? null, wakeMin: model.dayFile?.wakeMin ?? null }, [...dates], () => null)) onClose()
     })
-  const select = (next: Set<string>) => {
-    setSel(next)
-    setWarn(false)
-  }
-  const [y, m] = month.split('-')
   return (
-    <Dialog
+    <DaysDialog
       title={`Skopiuj ${plDate(model.date)} do…`}
+      verb="Skopiuj"
+      today={today}
+      busy={busy}
       onClose={onClose}
-      wide
-      data-testid="copy-dialog"
-      actions={
+      month={monthOf(addDays(model.date, 1))}
+      skip={model.date}
+      cell={(d) => ({ tone: null, marks: d === model.date ? <span>ten dzień</span> : null })}
+      note="Plan zaznaczonych dni zostanie zastąpiony kopią (sesje i wykłady zostają z ich własnych planów)."
+      onChange={(list) => {
+        setDays(list)
+        setWarn(false)
+      }}
+      onPick={() => (began.length ? setWarn(true) : void copy(targets))}
+      testId="copy-dialog"
+      okTestId="copy-apply"
+      footer={
         warn && began.length ? (
           <>
             <span className="mr-auto text-[12px] text-rose" data-testid="copy-warning">
@@ -125,31 +134,9 @@ export function CopyDayDialog({ model, today, onClose }: { model: DayModel; toda
               Tylko dni po dziś{ahead.length ? ` (${ahead.length})` : ''}
             </button>
           </>
-        ) : (
-          <>
-            <span className="mr-auto text-[12px] text-muted">Plan zaznaczonych dni zostanie zastąpiony kopią (sesje i wykłady zostają z ich własnych planów).</span>
-            <button type="button" className="btn" onClick={onClose}>
-              Anuluj
-            </button>
-            <button type="button" className="btn btn-accent" disabled={!targets.length || busy} onClick={() => (began.length ? setWarn(true) : void copy(targets))} data-testid="copy-apply">
-              Skopiuj ({targets.length})
-            </button>
-          </>
-        )
+        ) : undefined
       }
-    >
-      <div className="flex items-center gap-2">
-        <button type="button" className="btn" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Poprzedni miesiąc">
-          ‹
-        </button>
-        <span className="w-[150px] text-center">
-          {MONTH_NAMES[Number(m) - 1]} {y}
-        </span>
-        <button type="button" className="btn" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Następny miesiąc">
-          ›
-        </button>
-      </div>
-      <MonthGrid month={month} today={today} selected={sel} onSelect={select} cell={(d) => ({ tone: null, marks: d === model.date ? <span>ten dzień</span> : null })} data-testid="copy-month" />
-    </Dialog>
+      max={APPLY_DAYS_MAX}
+    />
   )
 }

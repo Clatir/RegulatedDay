@@ -1,7 +1,7 @@
 /**
  * All-day and multi-day events (D405, HKU1): the record read leniently (a bad one is left out, unknown fields stay when
  * it is written), the events of a day and of a range in their order, the bars of a week packed into at most three rows
- * with „+N” for the rest and ‹ › where an event goes on outside the week, the dates as „18–20.11”, the day „(2/3)”, and
+ * with „+N” for the rest and ‹ › where an event goes on outside the week, the dates as „18–20.11”, the day „(2 z 3)”, and
  * the days „Wolne” is asked for – from today, not free already, not closed. Their files: allday/<id>.json, conflict copies
  * known like any record's.
  */
@@ -90,12 +90,12 @@ describe('wydarzenia dnia i zakresu', () => {
     expect(eventsInRange(list, '2026-11-19', '2026-11-19')).toEqual([])
   })
 
-  it('dzień wydarzenia „(2/3)”; jednodniowe i dzień poza nim – bez', () => {
+  it('dzień wydarzenia „(2 z 3)”; jednodniowe i dzień poza nim – bez', () => {
     const k = ev('k', '2026-11-18', '2026-11-20')
     expect(dayIndexOf(k, '2026-11-19')).toEqual({ index: 2, count: 3 })
     expect(dayIndexOf(k, '2026-11-21')).toBeNull()
-    expect(dayOfText(k, '2026-11-18')).toBe('(1/3)')
-    expect(dayOfText(k, '2026-11-20')).toBe('(3/3)')
+    expect(dayOfText(k, '2026-11-18')).toBe('(1 z 3)')
+    expect(dayOfText(k, '2026-11-20')).toBe('(3 z 3)')
     expect(dayOfText(ev('j', '2026-11-18'), '2026-11-18')).toBe('')
     expect(dayOfText(k, '2026-11-17')).toBe('')
   })

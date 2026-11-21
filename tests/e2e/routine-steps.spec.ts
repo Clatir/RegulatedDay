@@ -42,7 +42,7 @@ test('kroki rutyny w bloku (D473): kroki rutyny bez kopiowania, wersja na gorsze
       const panel = page.getByTestId('block-steps')
       const titles = () => panel.getByTestId('step-title').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value))
       await expect.poll(titles).toEqual(['Prysznic', 'Śniadanie'])
-      await expect(panel.getByTestId('steps-counter')).toHaveText('✓ 0/2')
+      await expect(panel.getByTestId('steps-counter')).toHaveText('✓ 0 z 2')
       // „Na gorsze dni” – one click: that version's list, kept by the day; „zwykła” – the usual one again.
       const version = panel.getByTestId('steps-routine-version')
       await version.getByRole('radio', { name: 'na gorsze dni' }).click()
@@ -63,7 +63,7 @@ test('kroki rutyny w bloku (D473): kroki rutyny bez kopiowania, wersja na gorsze
       await expect.poll(titles).toEqual(['Prysznic', 'Śniadanie'])
       // A tick in the panel: the day's – the card's box too; the block in the file stays without steps of its own (T786, T1100).
       await panel.getByTestId('step-tick').first().click()
-      await expect(panel.getByTestId('steps-counter')).toHaveText('✓ 1/2')
+      await expect(panel.getByTestId('steps-counter')).toHaveText('✓ 1 z 2')
       await expect(tile.getByTestId('steps-counter')).toHaveText('✓ 1/2')
       await expect(card.getByTestId('routine-card-step-a')).toBeChecked()
       await expect.poll(() => read().stepsDone?.rut).toEqual({ a: true })
@@ -73,7 +73,7 @@ test('kroki rutyny w bloku (D473): kroki rutyny bez kopiowania, wersja na gorsze
       await card.getByTestId('routine-card-step-b').click()
       const toast = page.getByRole('status').filter({ hasText: 'Skończono: Poranek' })
       await expect(toast).toBeVisible({ timeout: 15_000 })
-      await expect(panel.getByTestId('steps-counter')).toHaveText('✓ 2/2')
+      await expect(panel.getByTestId('steps-counter')).toHaveText('✓ 2 z 2')
       await expect(card).toHaveCount(0)
       await expect(tile.getByTestId('block-finished')).toBeVisible()
       await expect(tile).toHaveAttribute('data-dim', 'on')
@@ -82,7 +82,7 @@ test('kroki rutyny w bloku (D473): kroki rutyny bez kopiowania, wersja na gorsze
       await toast.getByRole('button', { name: 'Cofnij' }).click()
       await expect(page.getByTestId('bar-step-text')).toHaveText('Wszystkie kroki ✓', { timeout: 15_000 })
       await expect(tile.getByTestId('block-finished')).toHaveCount(0)
-      await expect(panel.getByTestId('steps-counter')).toHaveText('✓ 2/2')
+      await expect(panel.getByTestId('steps-counter')).toHaveText('✓ 2 z 2')
     })
     expect(errors).toEqual([])
   } finally {

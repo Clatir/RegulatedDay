@@ -38,10 +38,10 @@ test('kroki (D440): trzy kroki Enterem, ptaszek → „✓ 1/3” na kafelku, ko
       }
       const titles = () => panel.getByTestId('step-title').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value))
       await expect.poll(titles).toEqual(['Napisać testy', 'Przygotować logikę', 'Zrobić commit'])
-      await expect(panel.getByTestId('steps-counter')).toHaveText('✓ 0/3')
+      await expect(panel.getByTestId('steps-counter')).toHaveText('✓ 0 z 3')
       // A tick: „✓ 1/3” by the heading and on the tile of the axis.
       await panel.getByTestId('step-tick').first().click()
-      await expect(panel.getByTestId('steps-counter')).toHaveText('✓ 1/3')
+      await expect(panel.getByTestId('steps-counter')).toHaveText('✓ 1 z 3')
       await expect(page.getByTestId('block-late').getByTestId('steps-counter')).toHaveText('✓ 1/3')
       // Alt+↓ moves the first one a place down (the keyboard's way); the tick goes with its step.
       await panel.getByTestId('step-title').first().press('Alt+ArrowDown')

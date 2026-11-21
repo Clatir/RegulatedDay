@@ -48,7 +48,7 @@ describe('skale wykresów', () => {
 describe('teksty statystyk', () => {
   it('pory dnia co dwie godziny od 04:00, dni tygodnia, tydzień z datami', () => {
     expect([hourLabel(0), hourLabel(2), hourLabel(9), hourLabel(11)]).toEqual(['04–06', '08–10', '22–00', '02–04'])
-    expect([weekdayShort(1), weekdayShort(7)]).toEqual(['pon.', 'niedz.'])
+    expect([weekdayShort(1), weekdayShort(7)]).toEqual(['pn', 'nd'])
     expect(weekLabel('2026-10-26')).toBe('26.10–01.11')
   })
 

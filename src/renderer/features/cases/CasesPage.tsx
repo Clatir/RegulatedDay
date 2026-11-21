@@ -14,7 +14,7 @@ import { dueBadge } from '@shared/engine/caseDates'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
 import { durationLabel } from '@shared/format'
 import { personName } from '@shared/model/rd'
-import { stepsCounter } from '@shared/model/steps'
+import { stepsProgress } from '@shared/model/steps'
 import { CASE_LIST_NAMES, CASE_LISTS, ESTIMATE_RANGE, priorityFrom, TITLE_MAX, CASE_NOTE_MAX, DEFAULT_ESTIMATE_MIN, DEFAULT_TASK_CATEGORY, type CaseList } from '@shared/model/requests'
 import { settingsOn } from '@shared/model/settings'
 import { parseQuickDates } from '@shared/quickDates'
@@ -150,7 +150,7 @@ export function CasesPage() {
             + Prośba
           </button>
         )}
-        <span className="text-[12px] text-muted">Ctrl N – nowe zadanie · „!jutro” na końcu tytułu ustawia termin, „@pt” – datę wykonania</span>
+        <span className="text-[12px] text-muted">Ctrl+N – nowe zadanie · „!jutro” na końcu tytułu ustawia termin, „@pt” – datę wykonania</span>
       </div>
       {adding && <NewTask onClose={() => setAdding(false)} />}
       {view === 'lists' && <FilterBar listKey="cases" options={options} shown={shown} total={all.length} />}
@@ -272,7 +272,7 @@ function CaseRow({ x, today, marked, group }: { x: CaseItem; today: string; mark
   const [askBusy, setAskBusy] = useState(false)
   // D440: a task's steps open under its row (as the note of a request is read there); the counter stays in the row.
   const [stepsOpen, setStepsOpen] = useState(false)
-  const counter = isTask ? stepsCounter(r.steps) : null
+  const counter = isTask ? stepsProgress(r.steps) : null
   const set = (patch: Parameters<typeof changeCase>[1]) => void changeCase(r.id, patch)
   const remove = async () => {
     const res = await removeCase(r.id)
@@ -316,7 +316,7 @@ function CaseRow({ x, today, marked, group }: { x: CaseItem; today: string; mark
               Zrobione
             </button>
             <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={planning} onClick={() => setPlanning(!planning)} data-testid="case-plan-open">
-              Zaplanuj
+              Zaplanuj…
             </button>
             <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={dating} onClick={() => setDating(!dating)} data-testid="case-dates-open">
               Terminy

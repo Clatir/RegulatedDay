@@ -1,26 +1,26 @@
 /**
- * Dates typed as DD-MM-RRRR (D544): „19-11-2026”, also with dots, slashes or spaces and one-digit day or month („3.1.2027”), and eight
- * digits without separators („19112026”) – recognised and shown as „19-11-2026”. Only real dates of the calendar (no 31-11).
+ * Dates typed into the fields „Od” and „Do” of the window of days (D544, D565 P24): the same as in every field of a date (`parseDate`) –
+ * „19.11.2026”, also with dashes, slashes or spaces, one-digit day or month („3.1.2027”), eight digits without separators („19112026”)
+ * and „3.01” (the nearest such date from today on) – and shown as „19.11.2026” (`plDate`). Only real dates of the calendar (no 31.11).
  */
-import { isoDay } from './format'
+import { parseDate, plDate } from './format'
 
-/** „2026-11-19” → „19-11-2026”. */
-export const dmy = (iso: string): string => `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`
+/** „2026-11-19” → „19.11.2026” (the one format of dates, `plDate`). */
+export const dmy = plDate
 
-/** The ISO date of a typed DD-MM-RRRR (or DDMMRRRR), null – not a date. */
-export function parseDmy(text: string): string | null {
-  const t = text.trim()
-  const m = /^(\d{2})(\d{2})(\d{4})$/.exec(t) ?? /^(\d{1,2})[-./ ](\d{1,2})[-./ ](\d{4})$/.exec(t)
-  if (!m) return null
-  const [d, mo, y] = [Number(m[1]), Number(m[2]), Number(m[3])]
-  return y < 1900 || y > 2999 ? null : isoDay(y, mo, d)
+/** The ISO date of a typed date (`parseDate` from `today`; the year 1900–2999), null – not a date. */
+export function parseDmy(text: string, today: string): string | null {
+  const r = parseDate(text, today)
+  if (!r.ok) return null
+  const year = Number(r.value.slice(0, 4))
+  return year < 1900 || year > 2999 ? null : r.value
 }
 
-/** What the field shows while typing: eight digits that make a date become DD-MM-RRRR at once, anything else stays as typed. */
+/** What the field shows while typing: eight digits that make a date become DD.MM.RRRR at once, anything else stays as typed. */
 export function typedDmy(text: string): string {
   if (!/^\d{8}$/.test(text.trim())) return text
-  const iso = parseDmy(text)
-  return iso ? dmy(iso) : text
+  const r = parseDate(text, '2000-01-01')
+  return r.ok ? plDate(r.value) : text
 }
 
 /** The days from `a` to `b` (either order), both included. */

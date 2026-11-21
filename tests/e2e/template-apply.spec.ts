@@ -1,7 +1,7 @@
 /**
  * „Zastosuj do…” i „Odwołaj w…” szablonu (D540–D545): jutro z własnym blokiem na miejscu pierwszego bloku szablonu – pytanie, „Uzupełnij luki”
  * dodaje tylko drugi; kolejne „Zastosuj” na jutro nie pyta (dzień ma już bloki szablonu); „Wybierz dni…” z datą wpisaną ośmioma cyframi
- * (pole pokazuje DD-MM-RRRR) i zakresem dwóch dni → „Nadpisz plan” odwołuje własny blok, oba dni mają cały szablon; „Cofnij” w linii przywraca;
+ * (pole pokazuje DD.MM.RRRR) i zakresem dwóch dni → „Nadpisz plan” odwołuje własny blok, oba dni mają cały szablon; „Cofnij” w linii przywraca;
  * „Odwołaj w…” → „Jutro” zdejmuje bloki szablonu. Wieczór po 22:30 – po każdej sesji, nic nie zależy od godziny testu.
  * „Dziś” (D546–D548): okno godzin i minionych z domyślnymi wyborami, „Anuluj”; wg planu – bloki minione jako zrealizowane (start „według
  * planu” i koniec zrobiony w logu dnia), „Cofnij” cofa fakty i bloki; od teraz – pierwszy blok zaczyna się teraz (poza początkiem i końcem
@@ -34,7 +34,7 @@ const write = (dir: string, rel: string, value: unknown) => {
 }
 const fileOf = (dir: string, date: string) => dayFileFrom(readJson(join(dir, paths.day(date))) ?? {}, date)
 const ddmmyyyy = (iso: string) => `${iso.slice(8, 10)}${iso.slice(5, 7)}${iso.slice(0, 4)}`
-const dashed = (iso: string) => `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`
+const dotted = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`
 
 const training: Template = {
   id: 'trening',
@@ -97,12 +97,12 @@ test('szablon: Zastosuj do jutra (pytanie, luki), bez pytania drugi raz, zakres 
       await expect(page.getByText('Nic nie dodano')).toBeVisible()
       await expect(page.getByTestId('template-apply-mode')).toHaveCount(0)
 
-      // Wybierz dni: osiem cyfr → DD-MM-RRRR, zakres jutro–pojutrze; jutro ma już szablon (luki), pojutrze pyta → „Nadpisz plan”.
+      // Wybierz dni: osiem cyfr → DD.MM.RRRR, zakres jutro–pojutrze; jutro ma już szablon (luki), pojutrze pyta → „Nadpisz plan”.
       await page.getByTestId('template-apply').click()
       await page.getByTestId('template-apply-pick').click()
       const dialog = page.getByTestId('template-apply-days')
       await dialog.getByTestId('template-apply-days-from').fill(ddmmyyyy(tomorrow))
-      await expect(dialog.getByTestId('template-apply-days-from')).toHaveValue(dashed(tomorrow))
+      await expect(dialog.getByTestId('template-apply-days-from')).toHaveValue(dotted(tomorrow))
       await dialog.getByTestId('template-apply-days-to').fill(ddmmyyyy(after))
       await expect(dialog.getByTestId('template-apply-days-count')).toContainText('Wybrane: 2 dni')
       await expect(dialog.getByTestId(`day-${tomorrow}`)).toHaveAttribute('aria-pressed', 'true')

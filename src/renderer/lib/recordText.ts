@@ -4,7 +4,7 @@
  * the questions of the queue use them.
  */
 import { classify } from '@shared/data/paths'
-import { countLabel, durationLabel, logicalClock, plDate } from '@shared/format'
+import { countLabel, durationLabel, logicalClock, plDate, plDateTime } from '@shared/format'
 import { ALL_DAY_COLOR_NAMES, type AllDayColor } from '@shared/model/allDay'
 import { DEFAULT_CALENDAR_ID, DEFAULT_CALENDAR_NAME } from '@shared/model/calendars'
 import { OTHER_GROUP } from '@shared/model/categoryTree'
@@ -70,7 +70,7 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
   if (typeof v === 'number') {
     if (key === 'startMin' || key === 'waitUntilMin' || key === 'wakeMin' || key === 'maxMin' || key === 'bedtimeMin') return logicalClock(v)
     if (key && /Min$/.test(key)) return durationLabel(v)
-    if (key === 'savedAt' || key === 'createdAt' || key === 'at' || key === 'addedAt' || key === 'removedAt' || key === 'doneAt') return new Date(v).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })
+    if (key === 'savedAt' || key === 'createdAt' || key === 'at' || key === 'addedAt' || key === 'removedAt' || key === 'doneAt') return plDateTime(v)
     return String(v)
   }
   if (typeof v === 'string') {

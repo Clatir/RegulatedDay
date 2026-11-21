@@ -114,7 +114,7 @@ export function dayIndexOf(e: AllDayEvent, date: string): { index: number; count
 /** „(2/3)” – the day of a multi-day event; '' for a one-day event or a day outside it. */
 export function dayOfText(e: AllDayEvent, date: string): string {
   const d = dayIndexOf(e, date)
-  return d && d.count > 1 ? `(${d.index}/${d.count})` : ''
+  return d && d.count > 1 ? `(${d.index} z ${d.count})` : ''
 }
 
 const dayMonth = (date: string) => `${Number(date.slice(8, 10))}.${date.slice(5, 7)}`

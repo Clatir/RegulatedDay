@@ -60,7 +60,7 @@ test('Tydzień (D356): siedem kolumn, strzałki tygodni, cel miesięczny z post�
       await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
       await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
       // The menu: „Tydzień” with its shortcut (right after the calendar, D361).
-      await expect(page.getByTestId('nav-week')).toHaveAttribute('title', 'Tydzień (Ctrl 3)')
+      await expect(page.getByTestId('nav-week')).toHaveAttribute('title', 'Tydzień (Ctrl+3)')
       await page.getByTestId('nav-week').click()
       await expect(page.getByTestId('week')).toBeVisible()
       // Seven columns, today's among them marked; today's own block on the common axis.

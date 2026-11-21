@@ -3,7 +3,7 @@
  * the streak and the notes (those still open to corrections „w toku”), the next item, the statuses of the last two
  * weeks and the shelf of cassettes – each closed week's season, its favourite regeneration and the sticker.
  */
-import { plDate, WEEKDAY_SHORT } from '@shared/format'
+import { plDate, plDayMonth, WEEKDAY_SHORT } from '@shared/format'
 import { REGEN_CATEGORY } from '@shared/model/categories'
 import { settingsOn } from '@shared/model/settings'
 import { blockFill, SEASON_COLORS } from '@shared/theme'
@@ -67,7 +67,7 @@ export function RoomPage() {
             {steps.map((s) => (
               <div key={s.date} className="flex flex-col rounded border border-line px-2 py-1" data-testid={`room-day-${s.date}`}>
                 <span className="text-muted">
-                  {WEEKDAY_SHORT[weekday(s.date) - 1]} {plDate(s.date).slice(0, 5)}
+                  {WEEKDAY_SHORT[weekday(s.date) - 1]} {plDayMonth(s.date)}
                 </span>
                 <span>{stepText(s)}</span>
               </div>

@@ -51,8 +51,8 @@ test('Statystyki: strona z menu i Ctrl+4, w czystym folderze „za mało danych�
     await withMainLog(userData, async () => {
       // In the menu before the history (D306: the settings right under it); the digits follow the menu's order (D362).
       await expect(page.getByTestId('nav-stats')).toHaveText(/Statystyki/)
-      await expect(page.getByTestId('nav-stats')).toHaveAttribute('title', 'Statystyki (Ctrl 4)')
-      await expect(page.getByTestId('nav-history')).toHaveAttribute('title', 'Historia (Ctrl 9)')
+      await expect(page.getByTestId('nav-stats')).toHaveAttribute('title', 'Statystyki (Ctrl+4)')
+      await expect(page.getByTestId('nav-history')).toHaveAttribute('title', 'Historia (Ctrl+9)')
       await page.getByTestId('nav-stats').click()
       await expect(page.getByTestId('page-stats')).toBeVisible()
       await expect(page.getByTestId('stats-too-little')).toContainText('Za mało danych')
