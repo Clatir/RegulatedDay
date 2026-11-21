@@ -146,10 +146,37 @@ describe('UX1 (T1979) – „po bloku” → „o godzinie” w „Szablonach”
     expect(templateDay(DATE, [m, { ...p, anchor: null, startMin: shown }]).day.ctx.plan.find((b) => b.sourceId === 'p')!.startMin).toBe(lm('04:30'))
   })
 
-  it('bez przesunięcia pobudki i po pierwszym stałym – ta sama minuta', () => {
+  it('bez przesunięcia pobudki – ta sama minuta', () => {
     const p = tb('p', '18:00', 30, { anchor: 'm', startMin: null })
     const { day } = templateDay(SUNDAY, [tb('m', '17:00', 60), p])
     expect(templateStartAt(day, p, lm('18:00'))).toBe(lm('18:00'))
+  })
+
+  it('delta -60, blok pokazany po pierwszym stałym (sesja 07:00): ta sama minuta wraca i dzień pokazuje blok tam', () => {
+    // The London session (07:00–10:00) is the first fixed block; m and p stand after it – the wake does not move them.
+    const m = tb('m', '10:30', 60)
+    const p = tb('p', '11:30', 30, { anchor: 'm', startMin: null })
+    const { day } = templateDay(DATE, [m, p])
+    expect(firstFixedStart(day.ctx.plan)).toBe(lm('07:00'))
+    expect(day.snapshot.wakeMin - day.snapshot.templateWakeMin).toBe(-60)
+    const startMin = templateStartAt(day, p, lm('11:30'))
+    expect(startMin).toBe(lm('11:30'))
+    expect(templateDay(DATE, [m, { ...p, anchor: null, startMin }]).day.ctx.plan.find((b) => b.sourceId === 'p')!.startMin).toBe(lm('11:30'))
+  })
+
+  it('miejsce osi, którego dzień nie pokaże (tuż przed pierwszym stałym, delta -60): to samo, co robi blok upuszczony na tę minutę – start stałego, nie godzina w głąb sesji ani wcześniej', () => {
+    // m 06:00–07:00 template = 05:00–06:00 on the axis; p follows it – the axis shows p at 06:00, in the last hour before the 07:00 session,
+    // where no unanchored morning block stands (a place a morning block shows at is its template hour less 60 min, and 07:00 is the first fixed block).
+    const m = tb('m', '06:00', 60)
+    const { day } = templateDay(DATE, [m])
+    for (const [dur, at] of [[60, '06:00'], [60, '06:35'], [30, '06:55'], [5, '06:10']] as const) {
+      const p = tb('p', '06:30', dur, { anchor: 'm', startMin: null })
+      const startMin = templateStartAt(day, p, lm(at))
+      // The same start a new block of the grid gets there (D372: the first place at or after the one asked for).
+      expect(startMin).toBe(templateAdd(day, tb('x', '06:00', dur, { startMin: lm(at) })).put!.startMin)
+      expect(startMin).toBe(lm('07:00'))
+      expect(templateDay(DATE, [m, { ...p, anchor: null, startMin }]).day.ctx.plan.find((b) => b.sourceId === 'p')!.startMin).toBe(lm('07:00'))
+    }
   })
 })
 
