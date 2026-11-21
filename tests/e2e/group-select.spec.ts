@@ -141,6 +141,18 @@ test('Tydzień: Ctrl+klik dwóch bloków z różnych dni zaznacza je bez otwiera
       await page.keyboard.press('Escape')
       await expect(page.getByTestId('week-selection')).toHaveCount(0)
       await expect(first).not.toHaveAttribute('data-marked', 'true')
+      // Del with one block selected (UX17, F8): the question names the block; Esc leaves it, a second Del and „Usuń” remove it – only it.
+      await first.click({ modifiers: ['Control'] })
+      await expect(first).toHaveAttribute('data-marked', 'true')
+      await page.keyboard.press('Delete')
+      await expect(page.getByTestId('delete-ask')).toContainText('Usunąć „')
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('delete-ask')).toHaveCount(0)
+      await expect(first).toBeVisible()
+      await page.keyboard.press('Delete')
+      await page.getByTestId('delete-ask-yes').click()
+      await expect(first).toHaveCount(0)
+      await expect(second).toBeVisible()
     })
     expect(errors).toEqual([])
   } finally {

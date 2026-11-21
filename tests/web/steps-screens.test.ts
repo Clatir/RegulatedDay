@@ -505,6 +505,7 @@ describe('Sprawy: kroki zadania w wierszu', () => {
     const rows = qa('case-row')
     const taskRow = rows.find((r) => r.getAttribute('data-kind') === 'task')!
     const requestRow = rows.find((r) => r.getAttribute('data-kind') === 'request')
+    await act(async () => taskRow.querySelector<HTMLElement>('[data-testid="case-expand"]')!.click())
     expect(taskRow.querySelector('[data-testid="case-steps-toggle"]')!.textContent).toBe('Kroki ✓ 1 z 4')
     expect(taskRow.querySelector('[data-testid="case-steps"]')).toBeNull()
     expect(requestRow?.querySelector('[data-testid="case-steps-toggle"]') ?? null).toBeNull()

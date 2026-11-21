@@ -92,6 +92,8 @@ test('Sprawy: Ctrl+N dodaje zadanie do Skrzynki, lista „Dziś” z sumą; prze
       // A task: the title, 30 min, „Inne”, no note.
       await expect(row.getByTestId('case-title')).toHaveValue('Napisać raport')
       await expect(row.getByTestId('request-estimate')).toHaveValue('30 min')
+      // The row is one line (P25): the subcategory and the list stand under „▸”.
+      await row.getByTestId('case-expand').click()
       await expect(row.getByTestId('case-category')).toHaveValue('inne')
       await expect.poll(() => records(dataDir).map((r) => [r.kind, r.title, r.list, r.estimateMin, r.categoryId])).toEqual([['task', 'Napisać raport', 'inbox', 30, 'inne']])
       // A task needs its title: an empty one is refused, the saved one stays.
@@ -265,6 +267,7 @@ test('Sprawy: termin ustawiony przyciskiem „Jutro” – znaczek „Termin jut
       await expect(row.getByTestId('case-title')).toHaveValue('Zapłacić podatek')
       await expect(row.getByTestId('case-due')).toHaveCount(0)
       // „Terminy” of the row: „Jutro” sets the due date, the field shows it.
+      await row.getByTestId('case-expand').click()
       await row.getByTestId('case-dates-open').click()
       await row.getByTestId('case-due-tomorrow').click()
       await expect(row.getByTestId('case-due')).toHaveText('Termin jutro')
@@ -278,6 +281,7 @@ test('Sprawy: termin ustawiony przyciskiem „Jutro” – znaczek „Termin jut
       await expect(moved).toHaveCount(1)
       await expect(moved.getByTestId('case-due')).toHaveText('Termin jutro')
       // A date of doing that has gone by (D454): the note under the field, the sprawa stays on „Dziś”, nothing refused.
+      await moved.getByTestId('case-expand').click()
       await moved.getByTestId('case-dates-open').click()
       await moved.getByTestId('case-do-date').fill(plDate(addDays(today, -3)))
       await moved.getByTestId('case-do-date').press('Enter')
@@ -408,6 +412,7 @@ test('Sprawy: priorytet w wierszu – pasek z lewej i kolejność; przełącznik
       await expect(rows.nth(0).getByTestId('case-priority')).toHaveAttribute('data-priority', 'p2')
       await expect(rows.nth(1).getByTestId('case-title')).toHaveValue('Napisać raport')
       await expect(rows.nth(1).getByTestId('case-priority')).toHaveCount(0)
+      await rows.nth(1).getByTestId('case-expand').click()
       await expect(rows.nth(1).getByTestId('case-priority-choice')).toHaveValue('none')
       // „Ważne i pilne” chosen in the row: the stripe, the record and the place in the list (above P2).
       await rows.nth(1).getByTestId('case-priority-choice').selectOption('p1')
@@ -415,6 +420,7 @@ test('Sprawy: priorytet w wierszu – pasek z lewej i kolejność; przełącznik
       await expect(rows.nth(0).getByTestId('case-title')).toHaveValue('Napisać raport')
       await expect(rows.nth(0).getByTestId('case-priority')).toHaveAttribute('aria-label', 'Ważne i pilne')
       await expect(rows.nth(0).getByTestId('case-priority')).toHaveAttribute('data-priority', 'p1')
+      await rows.nth(2).getByTestId('case-expand').click()
       await expect(rows.nth(2).getByTestId('case-priority-choice')).toHaveValue('none')
 
       // The switch „Listy · Macierz”: the matrix in place of the lists.
@@ -631,6 +637,62 @@ test('Sprawy: „+ Prośba” i Ctrl K „Nowa prośba” w widoku „Macierz”
   }
 })
 
+test('Sprawy (UX17, P25, F8): wiersz w jednym wierszu z menu „…”; w Macierzy klik otwiera wiersz, strzałki chodzą po kartach, prawy przycisk – „Priorytet”', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-ux17-'))
+  const { today } = seedAwake(dataDir, [])
+  putRecord(dataDir, newTask('t1', Date.now(), today, { title: 'Napisać raport', priority: 'p1' })!)
+  putRecord(dataDir, newTask('t2', Date.now() - 1000, today, { title: 'Zapłacić czynsz', priority: 'p1' })!)
+  putRecord(dataDir, newTask('t3', Date.now() - 2000, today, { title: 'Posprzątać biurko' })!)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => undefined)
+      await page.getByTestId('nav-requests').click()
+      await page.getByTestId('cases-view-lists').click()
+      const row = page.locator('[data-testid="case-row"][data-case="t1"]')
+      // One line: nothing of the second line is there until „▸” opens it.
+      await expect(row.getByTestId('case-line')).toBeVisible()
+      await expect(row.getByTestId('case-priority-chip')).toHaveText('P1')
+      await expect(row.getByTestId('case-list')).toHaveCount(0)
+      await expect(row.getByTestId('case-done')).toHaveCount(0)
+      const box = await row.boundingBox()
+      expect(box!.height).toBeLessThan(48)
+      // The menu „…”: Priorytet ▸ „Ważne” – the chip and the record.
+      await row.getByTestId('case-menu').click()
+      await page.getByTestId('case-menu-priority').click()
+      await page.getByTestId('case-menu-priority-p2').click()
+      await expect(row.getByTestId('case-priority-chip')).toHaveText('P2')
+      await expect.poll(() => records(dataDir).find((r) => r.id === 't1')!.priority).toBe('p2')
+
+      // The matrix: the arrows walk the cards, Enter opens the row in the lists with the title focused.
+      await page.getByTestId('cases-view-matrix').click()
+      const cards = page.getByTestId('matrix-card')
+      await expect(cards).toHaveCount(3)
+      await page.getByTestId('matrix-p1').getByTestId('matrix-card').first().focus()
+      await page.keyboard.press('ArrowRight')
+      await expect(page.getByTestId('matrix-p2').getByTestId('matrix-card')).toBeFocused()
+      await page.keyboard.press('ArrowDown')
+      await expect(page.getByTestId('matrix-none').getByTestId('matrix-card')).toBeFocused()
+      await page.keyboard.press('Enter')
+      await expect(page.getByTestId('cases-matrix')).toHaveCount(0)
+      await expect(page.locator('[data-testid="case-row"][data-case="t3"]').getByTestId('case-title')).toBeFocused()
+
+      // A click on a card opens the row too; the right button – „Priorytet ▸” writes it in one go.
+      await page.getByTestId('cases-view-matrix').click()
+      await page.locator('[data-testid="matrix-card"][data-case="t2"]').click({ button: 'right' })
+      await page.getByTestId('matrix-menu-priority').click()
+      await page.getByTestId('case-menu-priority-p4').click()
+      await expect.poll(() => records(dataDir).find((r) => r.id === 't2')!.priority).toBe('p4')
+      await page.locator('[data-testid="matrix-card"][data-case="t2"]').click()
+      await expect(page.getByTestId('cases-matrix')).toHaveCount(0)
+      await expect(page.locator('[data-testid="case-row"][data-case="t2"]').getByTestId('case-title')).toBeFocused()
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('Sprawy: „Powtarzaj” codziennie – reguła przy zadaniu; „Zrobione” daje od razu następne z Wykonać jutro, „Cofnij” zdejmuje je i przywraca zadanie (D465)', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-repeat-'))
   const { today } = seedAwake(dataDir, [])
@@ -643,6 +705,7 @@ test('Sprawy: „Powtarzaj” codziennie – reguła przy zadaniu; „Zrobione�
       await page.getByTestId('nav-requests').click()
       const row = page.locator('[data-case="t1"]')
       await expect(row).toBeVisible()
+      await row.getByTestId('case-expand').click()
       await row.getByTestId('case-repeat-open').click()
       const form = row.getByTestId('case-repeat-form')
       await expect(form.getByTestId('series-special')).toHaveCount(0)

@@ -208,11 +208,24 @@ describe('menu prawego przycisku i Del na blokach kolumn (D528)', () => {
     expect(runs).toEqual([{ view: 'week', ids: [K(MON, 'm1'), K(MON, 'm2'), K(WED, 'w1')], action: { kind: 'park' } }])
   })
 
+  it('Del przy jednym zaznaczonym bloku (UX17, F8): pytanie z nazwą bloku, `remove` tego jednego; Esc anuluje bez zapisu', async () => {
+    await mount()
+    await click(cell(MON, 'm1'), { ctrlKey: true })
+    expect(marked()).toEqual([K(MON, 'm1')])
+    key(document.body, 'Delete')
+    expect(q('delete-ask')).not.toBeNull()
+    expect(q('delete-ask')!.textContent).toMatch(/Usunąć „[^”]+”\?/)
+    key(document.body, 'Escape')
+    await act2(() => undefined)
+    expect(runs).toEqual([])
+    key(document.body, 'Delete')
+    await click(q('delete-ask-yes')!)
+    expect(runs).toEqual([{ view: 'week', ids: [K(MON, 'm1')], action: { kind: 'remove' } }])
+  })
+
   it('Del przy zaznaczeniu ≥ 2: jedno pytanie „Usunąć N bloków?”, `remove` dla wszystkich', async () => {
     await mount()
     await click(cell(MON, 'm1'), { ctrlKey: true })
-    key(document.body, 'Delete')
-    expect(q('delete-ask')).toBeNull()
     await click(cell(TUE, 't1'), { ctrlKey: true })
     await click(cell(WED, 'w1'), { ctrlKey: true })
     key(document.body, 'Delete')

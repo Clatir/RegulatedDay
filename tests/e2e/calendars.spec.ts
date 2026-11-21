@@ -96,8 +96,10 @@ test('kalendarze: żetony nad „Dziś” i „Tygodniem”, odznaczony kalendar
       await expect(page.getByTestId('calendar-chip').filter({ hasText: 'Praca' })).toHaveAttribute('aria-pressed', 'false', { timeout: 30_000 })
       await expect(page.getByTestId('block-w1')).toHaveCount(0)
       await expect(page.getByTestId('calendar-hidden-count')).toHaveText('ukryte: 1')
-      // Checked again: the block is back in „Dziś” and in „Tydzień”.
-      await page.getByTestId('calendar-chip').filter({ hasText: 'Praca' }).click()
+      // One button brings every calendar back (UX17, F8): it says how many are unchecked; the block is back in „Dziś” and in „Tydzień”.
+      await expect(page.getByTestId('calendar-show-all')).toHaveText('Pokaż wszystkie (1)')
+      await page.getByTestId('calendar-show-all').click()
+      await expect(page.getByTestId('calendar-show-all')).toHaveCount(0)
       await expect(page.getByTestId('block-w1')).toBeVisible()
       await expect(page.getByTestId('calendar-hidden-count')).toHaveCount(0)
       await expect(page.getByTestId('day-summary')).toContainText('budżet pracy')

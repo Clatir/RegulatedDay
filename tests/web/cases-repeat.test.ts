@@ -29,6 +29,8 @@ beforeAll(() => {
 const data = useData.getState()
 let root: Root | null = null
 let host: HTMLElement | null = null
+/** The rows of „Sprawy” are one line (UX17, P25): their buttons „Terminy”, „Powtarzaj” … stand under „▸”. */
+const expandRows = () => act(async () => host!.querySelectorAll<HTMLElement>('[data-testid="case-expand"]').forEach((b) => b.click()))
 afterEach(() => {
   act(() => root?.unmount())
   host?.remove()
@@ -154,6 +156,7 @@ describe('wiersz zadania: pole „Powtarzaj” i reguła słowami (D465)', () =>
   it('przycisk „Powtarzaj” obok „Terminy”: reguły serii bez „W dni szczególne”; „Zapisz powtarzanie” wysyła regułę; przy zadaniu – „↻ codziennie”', async () => {
     const { sent, set } = stub([newTask('t2', Date.now(), TODAY, { title: 'Raz', list: 'week' })!])
     await render()
+    await expandRows()
     const row = host!.querySelector<HTMLElement>('[data-case="t2"]')!
     const button = q('case-repeat-open', row)!
     expect(button.textContent).toBe('Powtarzaj')
@@ -180,6 +183,7 @@ describe('wiersz zadania: pole „Powtarzaj” i reguła słowami (D465)', () =>
     const t = newTask('t2', Date.now(), TODAY, { title: 'Raz', list: 'week', doDate: addDays(TODAY, 3) })!
     const { sent, set } = stub([t])
     await render()
+    await expandRows()
     const row = () => host!.querySelector<HTMLElement>('[data-case="t2"]')!
     await act(async () => q('case-repeat-open', row())!.click())
     const pick = async (v: string) =>
@@ -209,6 +213,7 @@ describe('wiersz zadania: pole „Powtarzaj” i reguła słowami (D465)', () =>
     const t = newTask('t2', Date.now(), TODAY, { title: 'Raz', list: 'week', doDate: addDays(TODAY, 3) })!
     const { set } = stub([t])
     await render()
+    await expandRows()
     const row = () => host!.querySelector<HTMLElement>('[data-case="t2"]')!
     await act(async () => q('case-repeat-open', row())!.click())
     // „Wykonać” moved with the form open and untouched: its defaults count from the new date.
@@ -261,6 +266,7 @@ describe('niezapisane powtarzanie sprawy przy zamykaniu pola „Powtarzaj” (D5
   const open = async () => {
     const out = stub([newTask('t2', Date.now(), TODAY, { title: 'Raz', list: 'week' })!])
     await render()
+    await expandRows()
     await toggle()
     return out
   }
