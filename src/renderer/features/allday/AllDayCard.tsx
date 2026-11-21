@@ -41,7 +41,7 @@ export function AllDayCard({
   today,
   place,
   brightness,
-  onClose,
+  onClose: closeWindow,
   onRemoved,
   onFree
 }: {
@@ -66,8 +66,21 @@ export function AllDayCard({
     form.current = { ...form.current, ...patch }
     setShown(form.current)
   }
-  const [tried, setTried] = useState(false)
-  const [ask, setAsk] = useState<string[] | null>(null)
+  // The card gone (another one opened by a click, Esc): a save, „Tak” or „Usuń” that ends later changes nothing here and closes no other card –
+  // what they wrote stays written (`onRemoved`, `onFree` say it in the window, they do not need the card).
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => void (alive.current = false)
+  }, [])
+  const onClose = () => alive.current && closeWindow()
+  const [tried, setTriedNow] = useState(false)
+  const setTried = (v: boolean) => alive.current && setTriedNow(v)
+  const [ask, setAskNow] = useState<string[] | null>(null)
+  const setAsk = (v: string[] | null) => alive.current && setAskNow(v)
+  // The save that runs now (`save`; null while „Usuń” or „Tak” runs): what it took, and when it ends – a click outside that ends the card meanwhile
+  // still has what was written after it took its copy to save (it follows the running one).
+  const flight = useRef<{ taken: AllDayEvent | null; done: Promise<AllDayEvent | null | undefined> | null } | null>(null)
   const [busy, run] = useBusy()
   const computers = useData((s) => s.view?.computers)
   const calendars = useData((s) => s.rd.calendars)
@@ -83,37 +96,52 @@ export function AllDayCard({
   // The click held while a save runs – one per save (it starts again with the next).
   const heldOnce = useRef(false)
   useEffect(() => {
-    heldOnce.current = false
+    if (!busy) heldOnce.current = false
   }, [busy])
   useOutsidePointer(true, ref, (e) => e.button > 0 || awayRef.current(e))
   const problems = cardProblems(shown)
 
-  const save = () =>
-    run(async () => {
+  const save = () => {
+    const mine: NonNullable<typeof flight.current> = { taken: null, done: null }
+    mine.done = run(async () => {
+      flight.current = mine
       commitActiveField()
       const e = { ...form.current, title: form.current.title.trim() }
       const p = cardProblems(e)
       if (p.title || p.dates) {
         setTried(true)
-        return
+        return null
       }
+      mine.taken = e
       const saved = await saveAllDay(e, base)
       if (!saved) {
         // Removed meanwhile (the toast said so): nothing left to edit – the card ends as after „Usuń”. Any other refusal leaves it.
         if (base && allDayGone(base.id)) onClose()
-        return
+        return null
       }
       // The question once (D405): when this save turned „To wolne” on or changed the days of such an event – the days from today on
       // that are not „Wolne” and not closed. Of the event as it stands after the save (another computer's fields included).
       const days = asksFreeAfter(base, saved) ? await askFreeDays(saved, today) : []
       if (days.length) setAsk(days)
       else onClose()
+      return saved
     })
+    return mine.done
+  }
   awayRef.current = (press) => {
-    // A save runs (`yes` too): its first click waits – the card is still needed for the question – and the next closes (D72: a save that
-    // hangs never freezes the window). Then the question „Wolne”: the click elsewhere is its „Nie”.
+    // A save, „Tak” or „Usuń” runs: its first click waits – the card is still needed for the question – and the next closes (D72: one that
+    // hangs never freezes the window); what was written after the running save took its copy follows it (a refusal of it leaves that to the
+    // next save – the whole of it, against what the card opened with). Then the question „Wolne”: the click elsewhere is its „Nie”.
     if (busy) {
-      if (heldOnce.current) return onClose()
+      if (heldOnce.current) {
+        const f = flight.current
+        const e = { ...form.current, title: form.current.title.trim() }
+        const changed = f?.taken && (Object.keys(e) as Array<keyof AllDayEvent>).some((k) => f.taken![k] !== e[k])
+        onClose()
+        if (f?.done && f.taken && changed && e.title && !cardProblems(e).dates)
+          void f.done.then((saved) => saveAllDay(e, saved ? f.taken : base)).catch(() => undefined)
+        return
+      }
       heldOnce.current = true
       return holdGesture(press)
     }
@@ -124,13 +152,15 @@ export function AllDayCard({
     if (cardProblems(e).dates) return (setTried(true), holdGesture(press))
     // A save that asks the question „Wolne” stays in the card until it is answered (the next click elsewhere is its „Nie”); the click that
     // started it goes nowhere for the same reason.
-    if (asksFreeAfter(base, e)) return (holdGesture(press), void save())
+    // The held click is the one this save lets go: the next click while it runs closes the card.
+    if (asksFreeAfter(base, e)) return (holdGesture(press), (heldOnce.current = true), void save())
     // Closed at once: the click goes on to what it hit (another event, a day of the strip), the write follows.
     onClose()
     void saveAllDay(e, base)
   }
   const remove = () =>
     run(async () => {
+      flight.current = null
       if (!base) return
       const raw = await removeAllDay(base.id)
       if (!raw) {
@@ -146,6 +176,7 @@ export function AllDayCard({
   const yes = () =>
     run(async () => {
       if (!ask) return
+      flight.current = null
       const r = await setFreeDays(ask, today)
       if (r.change || r.duringDay) onFree(r)
       // Nothing written (a refused save, every day unreadable – the toast said so): the question stays for another „Tak”.
