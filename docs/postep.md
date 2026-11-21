@@ -112,7 +112,9 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 
       | Zadanie | Stan |
       | --- | --- |
-      | UX7–UX19 | do zrobienia |
+      | UX7 | kod w `claude/ux-a` (8e345f5, niewypchnięte drzewo lokalne), T2000–T2002 do wpisania; przegląd high runda 1: do poprawy (ważne) – przewinięcie „teraz” chowa karty nad osią (plan poranny, „Wstałeś później?”, rytuał) – nie przewijać ponad pierwszą kartę; Tydzień → Agenda → Tydzień bez przewinięcia (`opened` nie zerowane); pomiar raz przy montażu, karty rosnące później przesuwają „teraz” (ResizeObserver do pierwszego ruchu); uwagi: skok przy zmianie doby, scalony napis gubi `marker-maksimum`, „+N” liczy po id |
+      | UX10 (`ux-b`), UX16 (`ux-c`) | wykonawcy przerwani limitem – sprawdzić `git status` w drzewie, dokończyć |
+      | UX8, UX9, UX11–UX15, UX17–UX19 | do zrobienia |
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
