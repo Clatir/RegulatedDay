@@ -25,7 +25,7 @@ import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { weekday } from '@shared/time/zone'
 import { menuBind } from '../../components/ContextMenu'
 import { cx } from '../../components/ui'
-import { contentTop, scrollAxis, scrollParent } from '../../lib/axisScroll'
+import { contentTop, followAxis, scrollAxis, scrollParent } from '../../lib/axisScroll'
 import { useDeleteSelected } from '../../lib/deleteKey'
 import { useData, type SaveAnswer } from '../../store/data'
 import { useMachine } from '../../store/machine'
@@ -178,24 +178,33 @@ export function DayGrid({
   const { lo, hi } = axisRange(from, to)
   const height = axisHeight(lo, hi, ppm)
   const marks = hourMarks(lo, hi)
-  // D563 (P6): a range with today – „teraz” a third of the way down; any other – from an hour before the earliest wake. The sticky heading is not counted in.
+  // D563 (P6): a range with today – „teraz” a third of the way down; any other – from an hour before the earliest wake. The sticky heading is not counted in;
+  // what grows over the axis meanwhile (the strip of all-day events in the heading, the goals, the chips) is followed until you act.
+  const axisIn = useRef({ days, lo, hi, ppm })
+  axisIn.current = { days, lo, hi, ppm }
   useLayoutEffect(() => {
     if (!opened || opened.current === mode) return
     const body = bodyRef.current
     const box = body ? scrollParent(body) : null
-    if (!body || !box) return
+    const content = box?.firstElementChild
+    if (!body || !box || !(content instanceof HTMLElement)) return
     opened.current = mode
-    const top = contentTop(body, box)
-    const todayCol = days.find((d) => d.when === 'today')
-    const nowMin = todayCol ? logicalMinuteOf(todayCol.date, Date.now()) : null
-    const wakes = days.flatMap((d) => (d.wakeMin != null ? [d.wakeMin] : []))
-    scrollAxis(box, {
-      axisTop: top,
-      nowY: nowMin != null && nowMin >= lo && nowMin <= hi ? top + axisY(nowMin, lo, ppm) : null,
-      wakeY: wakes.length ? top + axisY(Math.min(...wakes), lo, ppm) : null,
-      hourPx: 60 * ppm,
-      reserved: headRef.current?.offsetHeight ?? 0
-    })
+    const apply = () => {
+      const a = axisIn.current
+      const top = contentTop(body, box)
+      const todayCol = a.days.find((d) => d.when === 'today')
+      const nowMin = todayCol ? logicalMinuteOf(todayCol.date, Date.now()) : null
+      const wakes = a.days.flatMap((d) => (d.wakeMin != null ? [d.wakeMin] : []))
+      scrollAxis(box, {
+        axisTop: top,
+        nowY: nowMin != null && nowMin >= a.lo && nowMin <= a.hi ? top + axisY(nowMin, a.lo, a.ppm) : null,
+        wakeY: wakes.length ? top + axisY(Math.min(...wakes), a.lo, a.ppm) : null,
+        hourPx: 60 * a.ppm,
+        reserved: headRef.current?.offsetHeight ?? 0
+      })
+    }
+    apply()
+    return followAxis(box, content, apply)
   }, [])
   const namesOf = useMemo(() => (date: string): Names => ({ rd, settings: settingsOn(rd.settings, date), routines, requests }), [rd, routines, requests])
   const cols = { gridTemplateColumns: `${AXIS_PX}px repeat(${days.length}, minmax(0, 1fr))` }

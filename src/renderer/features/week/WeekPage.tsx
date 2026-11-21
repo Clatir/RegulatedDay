@@ -122,7 +122,7 @@ export function WeekPage() {
       <AllDayLines page="week" />
       {mode === 'week' && <WeekBody week={week} today={today} openCard={waiting} onCardOpened={() => setCard(null)} opened={opened} />}
       {mode === '3days' && <ThreeDaysBody middle={middle} opened={opened} />}
-      {mode === 'agenda' && <AgendaBody today={today} />}
+      {mode === 'agenda' && <AgendaBody today={today} opened={opened} />}
     </div>
   )
 }
@@ -186,7 +186,11 @@ function ThreeDaysBody({ middle, opened }: { middle: string; opened: MutableRefO
 }
 
 /** „Agenda” (D418): the seven days from today – a list, no curves of energy to count (T954). */
-function AgendaBody({ today }: { today: string }) {
+function AgendaBody({ today, opened }: { today: string; opened: MutableRefObject<string | null> }) {
+  // The list has no axis: coming back to „Tydzień” or „3 dni” from it is an opening of that view again (D563, P6).
+  useEffect(() => {
+    opened.current = null
+  }, [opened])
   const dates = agendaDates(today)
   const { view, failed } = useDaysView(dates, { energy: false })
   const allDay = useData((s) => s.allDay)

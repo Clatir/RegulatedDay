@@ -89,7 +89,7 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
   // Today's all-day events: one information line under the header – no question, no step (D405).
   const allDayLine = morningAllDayLine(useData((d) => d.allDay), model.date)
   return (
-    <section className="rounded-lg border border-line bg-panel" data-testid="morning-plan">
+    <section className="rounded-lg border border-line bg-panel" data-testid="morning-plan" data-prompt-card={approvedByYou ? undefined : 'true'}>
       <button type="button" className="flex w-full items-center gap-2 px-4 py-2.5 text-left" onClick={() => setOpen(!open)}>
         <span className="text-[13px] font-medium">Plan poranny</span>
         <span className="text-[12px] text-muted">{approvedByYou ? 'zatwierdzony' : 'do zrobienia'}</span>

@@ -35,7 +35,7 @@ export function boundaryMarkers(b: { proposal: number | null; approved: number |
   const max: TimelineMarker = { at: lm(b.max), label: `maksimum ${logicalClock(lm(b.max))}`, tone: 'rose', dashed: true }
   if (at == null) return [max]
   const approved = b.approved != null
-  if (lm(at) === lm(b.max)) return [{ at: lm(at), label: `${approved ? 'granica' : 'propozycja'} · maksimum ${logicalClock(lm(at))}`, tone: 'lamp', ...(approved ? {} : { dashed: true as const }) }]
+  if (lm(at) === lm(b.max)) return [{ at: lm(at), label: `${approved ? 'granica' : 'propozycja'} · maksimum ${logicalClock(lm(at))}`, tone: 'lamp', also: 'maksimum', ...(approved ? {} : { dashed: true as const }) }]
   return [{ at: lm(at), label: `${approved ? 'granica' : 'propozycja granicy'} ${logicalClock(lm(at))}`, tone: 'lamp', ...(approved ? {} : { dashed: true as const }) }, max]
 }
 

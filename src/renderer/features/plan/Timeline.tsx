@@ -137,6 +137,8 @@ export interface TimelineMarker {
   dashed?: boolean
   /** The line „teraz” (D500: the four numbers of the energy stand at it). */
   now?: true
+  /** Another line the label stands for (two at one hour, D5): it is found by `marker-<also>` as well as by the label's first word. */
+  also?: string
 }
 
 /** The energy's curve beside the axis (the one sampling: `@shared/engine/energyTrack`). */
@@ -941,6 +943,7 @@ export function Timeline({
         {markers.map((m) => (
           <div key={`${m.label}-${m.at}`} className="pointer-events-none absolute right-0 left-0 z-10" style={{ top: y(m.at) }} data-testid={`marker-${m.label.split(' ')[0]}`}>
             <div className={cx('border-t', m.dashed && 'border-dashed')} style={{ borderColor: TONE[m.tone] }} />
+            {m.also && <span className="absolute top-0 right-0 left-0 h-0" data-testid={`marker-${m.also}`} />}
             <span className="num absolute right-1 -translate-y-full rounded-sm bg-bg/80 px-1 text-[10.5px]" style={{ color: TONE[m.tone] }}>
               {m.label}
             </span>

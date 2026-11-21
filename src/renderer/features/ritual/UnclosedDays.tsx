@@ -118,7 +118,7 @@ export function UnclosedDays() {
   }
 
   return (
-    <section className="flex flex-col gap-2 rounded-lg border border-line bg-panel px-4 py-3" data-testid="unclosed-days">
+    <section className="flex flex-col gap-2 rounded-lg border border-line bg-panel px-4 py-3" data-testid="unclosed-days" data-prompt-card="true">
       <div className="flex items-baseline gap-2">
         <h2 className="text-[13px] font-medium">Niezamknięte dni</h2>
         <span className="flex-1" />

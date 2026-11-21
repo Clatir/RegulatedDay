@@ -305,3 +305,12 @@ describe('znaczniki granicy i maksimum na osi (D5, przegląd UX)', () => {
     expect(labels({ proposal: null, approved: null, max: 19 * 60 })).toEqual(['maksimum 19:00'])
   })
 })
+
+describe('scalony znacznik zostaje do znalezienia pod obiema nazwami (UX7, przegląd)', () => {
+  it('„maksimum” jako drugi identyfikator tylko przy scalonym napisie', () => {
+    const merged = boundaryMarkers({ proposal: 19 * 60, approved: null, max: 19 * 60 }, (n) => n)
+    expect(merged[0]).toMatchObject({ label: 'propozycja · maksimum 19:00', also: 'maksimum' })
+    const apart = boundaryMarkers({ proposal: 17 * 60, approved: null, max: 19 * 60 }, (n) => n)
+    expect(apart.every((m) => m.also == null)).toBe(true)
+  })
+})

@@ -58,7 +58,7 @@ import { rememberNewBlockCategory } from '../plan/lastCategory'
 import { edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
 import { PPM as AXIS_PPM, Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
-import { contentTop, scrollAxis } from '../../lib/axisScroll'
+import { contentTop, followAxis, scrollAxis } from '../../lib/axisScroll'
 import { EnergyLegend, LANES_WIDTH } from '../plan/EnergyLanes'
 import { hasEnergy } from '../plan/energyDraw'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
@@ -350,20 +350,29 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     ritualRef.current.scrollIntoView({ block: 'start' })
     useUi.setState({ focus: null })
   }, [focus, ritual])
-  // D563 (P6): the axis opens with today's „teraz” a third of the way down, another day from an hour before its wake (again at each
-  // other day – the page is not remounted by the arrows). Only a day sets it – the clock's tick must not. The ritual's own scroll (above, a passive
-  // effect) runs after this layout one and wins.
+  // D563 (P6): the axis opens with today's „teraz” a third of the way down, another day from an hour before its wake – never past the top of
+  // a card that asks you something (the morning plan not approved, a late wake, unclosed days, the ritual: `data-prompt-card`). Again at each
+  // day chosen (the page is not remounted by the arrows), not when the logical day turns over under an open page. It follows what grows over the
+  // axis (a strip of events, a card) until you act. The ritual's own scroll (above, a passive effect) runs after this layout one and wins.
   const scrollRef = useRef<HTMLDivElement>(null)
+  const chosenDay = useUi((u) => u.day)
   useLayoutEffect(() => {
     const box = scrollRef.current
-    const axisEl = box?.querySelector<HTMLElement>('[data-testid="timeline-axis"]')
-    if (!box || !axisEl) return
-    const at = (id: string) => {
-      const el = box.querySelector<HTMLElement>(`[data-testid="marker-${id}"]`)
-      return el ? contentTop(el, box) : null
+    const content = box?.firstElementChild
+    if (!box || !(content instanceof HTMLElement)) return
+    const apply = () => {
+      const axisEl = box.querySelector<HTMLElement>('[data-testid="timeline-axis"]')
+      if (!axisEl) return
+      const at = (id: string) => {
+        const el = box.querySelector<HTMLElement>(`[data-testid="marker-${id}"]`)
+        return el ? contentTop(el, box) : null
+      }
+      const card = box.querySelector<HTMLElement>('[data-prompt-card]')
+      scrollAxis(box, { axisTop: contentTop(axisEl, box), nowY: at('teraz'), wakeY: at('pobudka'), hourPx: 60 * AXIS_PPM, maxTop: card ? contentTop(card, box) : null })
     }
-    scrollAxis(box, { axisTop: contentTop(axisEl, box), nowY: at('teraz'), wakeY: at('pobudka'), hourPx: 60 * AXIS_PPM })
-  }, [date])
+    apply()
+    return followAxis(box, content, apply)
+  }, [chosenDay])
 
   // D367: a day to come pushes blocks apart (a day gone is history).
   const pushes = date >= today
@@ -667,7 +676,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             {isToday && <MorningPlan model={model} names={names} />}
             {isToday && <RoutineCards model={model} names={names} />}
             {ritual && (
-              <div ref={ritualRef}>
+              <div ref={ritualRef} data-prompt-card="true">
                 <RitualPanel key={date} model={model} names={names} onClosed={isToday ? undefined : () => openDay(null)} />
               </div>
             )}

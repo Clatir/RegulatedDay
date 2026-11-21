@@ -223,3 +223,41 @@ describe('„Agenda” (D418)', () => {
     expect(q('agenda-unknown-2026-11-19')!.textContent).toBe('nie da się teraz odczytać')
   })
 })
+
+describe('oś przy otwarciu widoku (D563, P6)', () => {
+  /** The page in a box that scrolls; every write of its scroll position is counted. */
+  async function mountScrolling(): Promise<number[]> {
+    const writes: number[] = []
+    host = document.createElement('div')
+    host.style.overflowY = 'auto'
+    Object.defineProperty(host, 'scrollTop', { get: () => 0, set: (v: number) => void writes.push(v), configurable: true })
+    document.body.append(host)
+    root = createRoot(host)
+    // A wake on every day: the axis has something to be put by.
+    vi.mocked(useWeekView).mockImplementation((date) => {
+      const week = weekStart(date)
+      return { view: weekViewOf(week, TODAY, weekDates(week).map((d) => ({ ...day(d, blocksOf(d)), wakeMin: 8 * 60 }))), failed: false }
+    })
+    vi.mocked(useDaysView).mockImplementation((dates) => ({ view: daysViewOf(dates, TODAY, dates.map((d) => ({ ...day(d, blocksOf(d)), wakeMin: 8 * 60 }))), failed: false }))
+    await act(async () => root!.render(createElement(WeekPage)))
+    return writes
+  }
+
+  it('oś ustawia się raz na otwarcie widoku: nie przy strzałkach, ale po powrocie z Agendy i po zmianie widoku', async () => {
+    const writes = await mountScrolling()
+    expect(writes).toHaveLength(1)
+    await click('week-next')
+    await click('week-prev')
+    expect(writes).toHaveLength(1)
+    // „Agenda” has no axis; „Tydzień” again opens its axis anew.
+    await click('week-mode-agenda')
+    expect(writes).toHaveLength(1)
+    await click('week-mode-week')
+    expect(writes).toHaveLength(2)
+    // Another view with an axis: its own opening; its arrows leave it.
+    await click('week-mode-3days')
+    expect(writes).toHaveLength(3)
+    await click('three-next')
+    expect(writes).toHaveLength(3)
+  })
+})

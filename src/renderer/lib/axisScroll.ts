@@ -23,14 +23,22 @@ export interface AxisScrollInput {
   reserved: number
   /** The height of the scrolled box. */
   viewH: number
+  /** Where the first card that asks you something stands (a morning plan not approved, a late wake, a ritual…), or null – none. The page never goes past it. */
+  maxTop: number | null
 }
 
 /**
  * The scroll position the axis is put at (never above the top of the page); null – nothing to go by, the page stays as it is.
  * With „teraz” in view: it stands a third of the way down the part not covered by the heading. Otherwise the hour before the wake
  * is the first line – and an axis that begins at or after that hour changes nothing but the page's top (the cards above it stay in view).
+ * Either way the page does not go past the top of the first card that asks you something (`maxTop`): its top stays in view.
  */
 export function scrollTopFor(i: AxisScrollInput): number | null {
+  const top = wanted(i)
+  return top == null || i.maxTop == null ? top : Math.min(top, Math.max(0, Math.round(i.maxTop)))
+}
+
+function wanted(i: AxisScrollInput): number | null {
   const visible = Math.max(0, i.viewH - i.reserved)
   if (i.nowY != null) return Math.max(0, Math.round(i.nowY - i.reserved - visible * NOW_FRACTION))
   if (i.wakeY == null) return null
@@ -54,9 +62,39 @@ export const contentTop = (el: Element, box: HTMLElement): number => el.getBound
  * Sets `box` at the position `scrollTopFor` gives (at once, no animation). `at` – the positions as the caller measured them
  * (`axisTop`, `nowY`, `wakeY` from `contentTop`); `reserved` – a sticky heading over the top of the box. Returns the position set, or null.
  */
-export function scrollAxis(box: HTMLElement, at: Omit<AxisScrollInput, 'viewH' | 'reserved'> & { reserved?: number }): number | null {
-  const top = scrollTopFor({ ...at, reserved: at.reserved ?? 0, viewH: box.clientHeight })
+export function scrollAxis(box: HTMLElement, at: Omit<AxisScrollInput, 'viewH' | 'reserved' | 'maxTop'> & { reserved?: number; maxTop?: number | null }): number | null {
+  const top = scrollTopFor({ ...at, reserved: at.reserved ?? 0, maxTop: at.maxTop ?? null, viewH: box.clientHeight })
   if (top == null) return null
   box.scrollTop = top
   return top
+}
+
+/** How long after the opening the axis follows the content growing over it, at most. */
+export const FOLLOW_MS = 3000
+
+/**
+ * The page's content over the axis may still grow after the axis was put (a strip of all-day events, a card, the chips of the calendars):
+ * `apply` – the measuring and setting of the axis – runs again whenever `content` changes its size, until you act (the wheel, a press, a key)
+ * or `windowMs` have passed. Returns the stop (also for the page leaving). Without `ResizeObserver` it does nothing.
+ */
+export function followAxis(box: HTMLElement, content: HTMLElement, apply: () => void, windowMs = FOLLOW_MS): () => void {
+  if (typeof ResizeObserver === 'undefined') return () => undefined
+  let live = true
+  const doc = box.ownerDocument
+  const observer = new ResizeObserver(() => {
+    if (live) apply()
+  })
+  const stop = (): void => {
+    if (!live) return
+    live = false
+    observer.disconnect()
+    clearTimeout(timer)
+    for (const type of ['wheel', 'pointerdown', 'touchstart']) box.removeEventListener(type, stop, true)
+    doc.removeEventListener('keydown', stop, true)
+  }
+  const timer = setTimeout(stop, windowMs)
+  for (const type of ['wheel', 'pointerdown', 'touchstart']) box.addEventListener(type, stop, { capture: true, passive: true })
+  doc.addEventListener('keydown', stop, true)
+  observer.observe(content)
+  return stop
 }
