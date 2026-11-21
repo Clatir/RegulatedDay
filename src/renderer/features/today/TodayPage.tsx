@@ -112,7 +112,7 @@ export function TodayPage() {
   const date = chosen ?? today
   const model = useDay(date)
   // The day the axis was put for: DayView is mounted anew with each day (the page says „Liczę dzień…” between), this stays.
-  const placed = useRef<string | null | undefined>(undefined)
+  const placed: PlacedDay = useRef(undefined)
   if (!view || view.status !== 'open') return <EmptyState why="Folder danych nie jest jeszcze otwarty." />
   if (!model) return <div className="p-6 text-muted">Liczę dzień…</div>
   return <DayView model={model} today={today} placed={placed} />

@@ -112,18 +112,50 @@ describe('ponowny pomiar osi, gdy treść nad nią urośnie (followAxis)', () =>
     box.remove()
   })
 
-  it('klawisz kończy; bez okna czasu śledzi dowolnie długo, z oknem – do jego końca', () => {
+  it('klawisz kończy; bezpiecznik czasu: domyślnie 60 s, z własnym oknem – do jego końca', () => {
     vi.useFakeTimers()
     vi.stubGlobal('ResizeObserver', FakeObserver)
     const { box, content } = parts()
     followAxis(box, content, vi.fn())
-    vi.advanceTimersByTime(3_600_000)
+    vi.advanceTimersByTime(59_000)
     expect(observers[0]!.disconnected).toBe(false)
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown' }))
+    vi.advanceTimersByTime(2_000)
     expect(observers[0]!.disconnected).toBe(true)
+    followAxis(box, content, vi.fn())
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown' }))
+    expect(observers[1]!.disconnected).toBe(true)
     followAxis(box, content, vi.fn(), 500)
     vi.advanceTimersByTime(600)
-    expect(observers[1]!.disconnected).toBe(true)
+    expect(observers[2]!.disconnected).toBe(true)
+    box.remove()
+  })
+
+  it('przewinięcie nie przez nas (scrollIntoView po Ctrl K, rytuał) kończy śledzenie; własne przewinięcie – nie', () => {
+    vi.stubGlobal('ResizeObserver', FakeObserver)
+    const { box, content } = parts()
+    let top = 0
+    Object.defineProperty(box, 'scrollTop', { get: () => top, set: (v: number) => void (top = v), configurable: true })
+    const stop = followAxis(box, content, () => void (box.scrollTop = 500))
+    // The content changed: the axis is put again, the scroll event that comes of it is ours.
+    observers[0]!.cb()
+    box.dispatchEvent(new Event('scroll'))
+    expect(observers[0]!.disconnected).toBe(false)
+    // Something else scrolled the box.
+    top = 900
+    box.dispatchEvent(new Event('scroll'))
+    expect(observers[0]!.disconnected).toBe(true)
+    expect(stop()).toBe(false)
+    box.remove()
+  })
+
+  it('na czas śledzenia przeglądarka nie przesuwa strony sama (overflow-anchor), potem wraca', () => {
+    vi.stubGlobal('ResizeObserver', FakeObserver)
+    const { box, content } = parts()
+    box.style.overflowAnchor = 'auto'
+    const stop = followAxis(box, content, vi.fn())
+    expect(box.style.overflowAnchor).toBe('none')
+    stop()
+    expect(box.style.overflowAnchor).toBe('auto')
     box.remove()
   })
 

@@ -69,31 +69,48 @@ export function scrollAxis(box: HTMLElement, at: Omit<AxisScrollInput, 'viewH' |
   return top
 }
 
+/** How long the following of the content lasts at most – a safety, the first action of yours ends it sooner. */
+export const FOLLOW_MS = 60_000
+
 /**
  * The page's content over the axis may still change after the axis was put (a strip of all-day events, a card that asks you something
  * arriving from a slow read, the chips of the calendars): `apply` – the measuring and setting of the axis – runs again whenever `content`
- * changes its size, until you act: the wheel over `box`, a press or a key anywhere in the window (`windowMs` – an end in time too, none by
- * default). Returns the stop, which says whether it ended the following (true) or you had ended it already (false) – a page leaving
- * before you acted asks the axis to be put again at its next opening. Without `ResizeObserver` it does nothing.
+ * changes its size. It ends with the first thing that is not its own: the wheel over `box`, a press or a key anywhere in the window, any scroll of
+ * `box` it did not make (`scrollIntoView` of a card or of the ritual: the position is not the one `apply` left), or `windowMs` (`FOLLOW_MS`).
+ * While it lasts the browser does not keep the page in place by itself (`overflow-anchor`). Returns the stop, which says whether it ended the
+ * following (true) or it was ended already (false) – a page leaving before that asks the axis to be put again at its next opening.
+ * Without `ResizeObserver` it does nothing.
  */
-export function followAxis(box: HTMLElement, content: HTMLElement, apply: () => void, windowMs?: number): () => boolean {
+export function followAxis(box: HTMLElement, content: HTMLElement, apply: () => void, windowMs = FOLLOW_MS): () => boolean {
   if (typeof ResizeObserver === 'undefined') return () => false
   let live = true
   const doc = box.ownerDocument
+  const anchor = box.style.overflowAnchor
+  box.style.overflowAnchor = 'none'
+  // Where the page stands after `apply`: a scroll event that finds it elsewhere is somebody else's.
+  let expected = box.scrollTop
   const observer = new ResizeObserver(() => {
-    if (live) apply()
+    if (!live) return
+    apply()
+    expected = box.scrollTop
   })
   const stop = (): boolean => {
     if (!live) return false
     live = false
     observer.disconnect()
-    if (timer != null) clearTimeout(timer)
+    clearTimeout(timer)
+    box.style.overflowAnchor = anchor
     box.removeEventListener('wheel', stop, true)
+    box.removeEventListener('scroll', moved)
     for (const type of ['pointerdown', 'touchstart', 'keydown']) doc.removeEventListener(type, stop, true)
     return true
   }
-  const timer = windowMs != null ? setTimeout(stop, windowMs) : null
+  const moved = (): void => {
+    if (Math.abs(box.scrollTop - expected) > 1) stop()
+  }
+  const timer = setTimeout(stop, windowMs)
   box.addEventListener('wheel', stop, { capture: true, passive: true })
+  box.addEventListener('scroll', moved, { passive: true })
   for (const type of ['pointerdown', 'touchstart']) doc.addEventListener(type, stop, { capture: true, passive: true })
   doc.addEventListener('keydown', stop, true)
   observer.observe(content)

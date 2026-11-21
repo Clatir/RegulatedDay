@@ -9,8 +9,11 @@ import { useCallback, useLayoutEffect, useRef, type MutableRefObject, type RefOb
 import { contentTop, followAxis, scrollAxis } from '../../lib/axisScroll'
 import { PPM } from '../plan/Timeline'
 
-/** The day the axis was put for: the chosen date, null – today, undefined – not yet. */
-export type PlacedDay = MutableRefObject<string | null | undefined>
+/**
+ * The day the axis was put for (the chosen date, null – today) and where the page stood when its view was last taken down; undefined – not put
+ * yet, or taken down before you acted (the next view puts it anew).
+ */
+export type PlacedDay = MutableRefObject<{ chosen: string | null; top: number } | undefined>
 
 /** Puts the axis in `box` for `chosen`; returns what ends the following of the content (the ritual's scroll does). */
 export function useAxisOpening(box: RefObject<HTMLElement | null>, chosen: string | null, placed: PlacedDay): () => void {
@@ -18,8 +21,17 @@ export function useAxisOpening(box: RefObject<HTMLElement | null>, chosen: strin
   useLayoutEffect(() => {
     const el = box.current
     const content = el?.firstElementChild
-    if (!el || !(content instanceof HTMLElement) || placed.current === chosen) return
-    placed.current = chosen
+    if (!el || !(content instanceof HTMLElement)) return
+    const was = placed.current
+    if (was && was.chosen === chosen) {
+      // The same day's view mounted anew after you had acted (the logical day turned over, the folder was away and back): not an opening –
+      // the page stands where it stood.
+      el.scrollTop = was.top
+      return () => {
+        placed.current = { chosen, top: el.scrollTop }
+      }
+    }
+    placed.current = { chosen, top: 0 }
     const apply = () => {
       const axis = el.querySelector<HTMLElement>('[data-testid="timeline-axis"]')
       if (!axis) return
@@ -34,7 +46,8 @@ export function useAxisOpening(box: RefObject<HTMLElement | null>, chosen: strin
     const stop = followAxis(el, content, apply)
     following.current = stop
     return () => {
-      stop()
+      // Taken down before you acted (also the effect run twice in development): the next view opens the axis anew; else it remembers the page.
+      placed.current = stop() ? undefined : { chosen, top: el.scrollTop }
       if (following.current === stop) following.current = null
     }
   }, [box, chosen, placed])
