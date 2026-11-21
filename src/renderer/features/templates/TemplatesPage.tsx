@@ -19,7 +19,7 @@ import { durationLabel, logicalClock, plDate, WEEKDAY_SHORT } from '@shared/form
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { templateJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
-import { freeWeekday, planBlock, templateClashes, templateFrom, templateUnused, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
+import { freeWeekday, idAfter, planBlock, templateClashes, templateFrom, templateUnused, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { currentSeries } from '@shared/model/series'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn } from '@shared/model/settings'
 import { SERIES_MARK, seriesText } from '@shared/seriesText'
@@ -59,7 +59,7 @@ import { copyTemplateBlock } from '../plan/blockCopy'
 import { dragTemplateGroup, templateDragPreview } from '../plan/groupDrag'
 import { COPY_SPAN_ID } from '../today/dayPush'
 import { losesText, winsText } from './clashText'
-import { freshAfter, removeTemplate, removeTemplateBlock } from './templateActions'
+import { freshAfter, removeTemplate, removeTemplateBlock, undoAddedBlock } from './templateActions'
 
 export function TemplatesPage() {
   const templates = useData((s) => s.templates)
@@ -86,9 +86,10 @@ export function TemplatesPage() {
   const create = () =>
     // One at a time (A5): a second click or Ctrl+N while this still saves would make a second template.
     run(async () => {
-      const id = newId()
-      // D563 P3: beside the type's default it starts on the first weekday no template of the type has (never on a taken one – the smaller id
-      // would win quietly); with none free, or none to clash with, without days (the default of the type).
+      // D563 P3: a new template never takes the days of an older one: its id is never smaller than theirs (`templateFor` lets the smaller id win,
+      // quietly – that rule stays). Beside the type's default it also starts on the first weekday no template of the type has; with none free,
+      // without days (a second default of the type, which then loses until you give it days), and without a default – as the default itself.
+      const id = idAfter(templates.map((x) => x.id), newId())
       const hasDefault = templates.some((t) => t.dayType === 'zwykly' && !t.weekdays.length && !t.archived)
       const day = hasDefault ? freeWeekday(templates, 'zwykly') : null
       const t: Template = { id, name: 'Nowy szablon', dayType: 'zwykly', weekdays: day != null ? [day] : [], versions: [{ from: addDays(today, 1), blocks: [], budgetMin: null, maxMin: null }], archived: false }
@@ -246,10 +247,12 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const pushedShown = pushed != null && deepEqual(pushedMade, template)
   /**
    * A change of the axis (a block dragged, an edge, a new block) as one edit of the template, with the blocks it pushes
-   * apart; when it pushed some, „Przesunięto N bloków · Cofnij”. Saved – true. `added` (a block made on the empty axis, D366): one that pushed
-   * none says „Dodano blok · Cofnij” (D563 – the same undo as the line's: the template as it was before; one that pushed some has the line).
+   * apart; when it pushed some, „Przesunięto N bloków · Cofnij”. Saved – true. `added` (the id of a block made on the empty axis, D366): one that
+   * pushed none says „Dodano blok · Cofnij” (D563) – its undo takes that block out by id (`undoAddedBlock`), whatever was changed in the template
+   * since (the name typed in the panel); one that pushed some has the line.
    */
-  const saveChange = async (c: TemplateChange, added = false): Promise<boolean> => {
+  const saveChange = async (c: TemplateChange, added: string | null = null): Promise<boolean> => {
+    const at = from
     const made: { before: RawRecord | null; after: RawRecord | null } = { before: null, after: null }
     const out = await tryUpdateRecord(rel, (raw) => {
       const t = templateFrom(raw)
@@ -260,10 +263,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     })
     const saved = isSaved(out)
     if (saved && c.pushed > 0 && made.before && made.after) setPushed({ text: pushedText(c.pushed), before: made.before, after: made.after })
-    else if (saved && added && made.before && made.after) {
-      const { before, after } = made as { before: RawRecord; after: RawRecord }
-      undoToast('Dodano blok', () => void saveRecord(rel, after, before))
-    }
+    else if (saved && added) undoToast('Dodano blok', () => void undoAddedBlock(template.id, at, added))
     return saved
   }
   /** „Cofnij”: the template as it was before the push – what changed on another computer since stays a question. */
@@ -507,7 +507,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
             onCreate={(min, durationMin = DEFAULT_NEW_BLOCK_MIN) => {
               // D366; D367: on a taken place it pushes the flexible blocks after it apart.
               const b = planBlock({ id: newId(10), categoryId: 'inne', startMin: min, durationMin, origin: 'template' })
-              void saveChange(templateAdd(model, b), true).then((saved) => {
+              void saveChange(templateAdd(model, b), b.id).then((saved) => {
                 if (!saved) return
                 setFresh(b.id)
                 open(b.id)

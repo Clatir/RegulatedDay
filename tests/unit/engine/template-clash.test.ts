@@ -4,7 +4,7 @@
  * day a new template of a type starts on. Nothing blocks.
  */
 import { describe, expect, it } from 'vitest'
-import { freeWeekday, templateClashes, templateFor, templateUnused, type Template } from '@shared/model/plan'
+import { freeWeekday, idAfter, templateClashes, templateFor, templateUnused, type Template } from '@shared/model/plan'
 
 const t = (id: string, weekdays: number[], o: Partial<Template> = {}): Template => ({
   id,
@@ -62,5 +62,27 @@ describe('freeWeekday – dzień, od którego zaczyna nowy szablon typu', () => 
     expect(freeWeekday([t('a', [1]), t('b', [2], { archived: true })], 'zwykly')).toBe(2)
     expect(freeWeekday([t('a', [1], { dayType: 'weekend' })], 'zwykly')).toBe(1)
     expect(freeWeekday([t('a', [1, 2, 3, 4, 5, 6, 7])], 'zwykly')).toBeNull()
+  })
+})
+
+describe('idAfter – id nowego szablonu nigdy mniejsze od istniejących (wygrywa mniejsze, więc nowy nie przejmuje dni po cichu)', () => {
+  it('większe od wszystkich zostaje; inne dostaje przyrostek za największym', () => {
+    expect(idAfter(['abc', 'b00'], 'c12')).toBe('c12')
+    const id = idAfter(['abc', 'zzz'], 'c12345678')
+    expect(id > 'zzz' && id > 'abc').toBe(true)
+    expect(idAfter([], 'x')).toBe('x')
+  })
+
+  it('id nie rośnie: ta sama długość tuż nad największym, także po wielu nowych szablonach z mniejszym losowym id', () => {
+    expect(idAfter(['k3abc', 'b0000'], 'a1234')).toBe('l1234')
+    expect(idAfter(['zz9xy'], 'a1234')).toBe('zza34')
+    const ids: string[] = ['zzzzzzzzzzzzzz00']
+    for (let n = 0; n < 60; n++) {
+      const id = idAfter(ids, '0000000000000000')
+      expect(id.length).toBe(16)
+      expect(ids.every((x) => id > x)).toBe(true)
+      ids.push(id)
+    }
+    expect(idAfter(['zzz'], 'abc')).toBe('zzzabc')
   })
 })
