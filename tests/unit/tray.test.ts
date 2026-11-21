@@ -26,7 +26,7 @@ vi.mock('electron', () => ({
   Menu: { buildFromTemplate: () => ({}) }
 }))
 
-const { AppTray } = await import('../../src/main/tray')
+const { AppTray, trayMenuItems } = await import('../../src/main/tray')
 
 let root = ''
 afterEach(() => {
@@ -81,3 +81,30 @@ describe('dwuklik ikony (D559)', () => {
     expect(calls).toEqual(['click', 'double'])
   })
 })
+
+describe('menu ikony – jedna nazwa okna głównego i wyjścia (C7, D564 P13, P20)', () => {
+  const acts = () => {
+    const calls: string[] = []
+    return { calls, a: { showMain: () => void calls.push('main'), showBar: () => void calls.push('bar'), install: () => void calls.push('install'), quit: () => void calls.push('quit') } }
+  }
+  const labels = (items: ReturnType<typeof trayMenuItems>) => items.map((i) => (i.type === 'separator' ? '—' : i.label))
+
+  it('„Otwórz okno główne” na górze, „Zakończ aplikację” na dole; każda pozycja robi swoje', () => {
+    const { calls, a } = acts()
+    const items = trayMenuItems({ barClosed: false, desktopBar: true, ready: null }, a)
+    expect(labels(items)).toEqual(['Otwórz okno główne', '—', 'Zakończ aplikację'])
+    for (const i of items) (i.click as (() => void) | undefined)?.()
+    expect(calls).toEqual(['main', 'quit'])
+  })
+
+  it('pasek schowany „×” – „Pokaż pasek pulpitu”; gotowa aktualizacja – „Zainstaluj teraz (…)”', () => {
+    const { calls, a } = acts()
+    const items = trayMenuItems({ barClosed: true, desktopBar: true, ready: '1.34.0' }, a)
+    expect(labels(items)).toEqual(['Otwórz okno główne', 'Pokaż pasek pulpitu', 'Zainstaluj teraz (1.34.0)', '—', 'Zakończ aplikację'])
+    for (const i of items) (i.click as (() => void) | undefined)?.()
+    expect(calls).toEqual(['main', 'bar', 'install', 'quit'])
+    // Switched off in the settings: no „Pokaż pasek pulpitu” (as before – UX11 changes it).
+    expect(labels(trayMenuItems({ barClosed: true, desktopBar: false, ready: null }, a))).toEqual(['Otwórz okno główne', '—', 'Zakończ aplikację'])
+  })
+})
+

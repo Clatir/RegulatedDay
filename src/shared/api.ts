@@ -236,6 +236,16 @@ export type ViewKind = 'main' | 'bar' | 'panel' | 'sound' | 'quick'
 /** How the icon's panel is closed: Esc (none), its „×” – the app stays in the tray, „×” with Shift – the app ends. */
 export type PanelCloseHow = 'x' | 'quit'
 
+/**
+ * The icon's panel opened (`IconPanel.open`): the line a click opened it for (a notification), null – none; `reopened` – it
+ * was hidden and shows now (a new opening folds what stayed unfolded, C8), false – asked again while open (a notification's
+ * click, a test): nothing folds.
+ */
+export interface PanelOpening {
+  target: { line: string | null; day: string | null } | null
+  reopened: boolean
+}
+
 /** How the desktop bar is closed (D559): its „×” hides it until „Pokaż pasek pulpitu” in the icon's menu or the next start, with Shift – the app ends. */
 export type BarCloseHow = 'x' | 'quit'
 
@@ -308,15 +318,18 @@ export type WidgetAction =
   | 'extendStep'
   /** The bar's field of the quick capture (D385): its title into „Skrzynka”. */
   | 'quickAdd'
-  /** „+” of the desktop bar: the icon's panel opens with the field (T756). */
+  /** „+ Skrzynka” of the desktop bar (D564 P15): the window „Do skrzynki” as the shortcut shows it – only from the desktop bar. */
   | 'quickOpen'
   /** The tick of the bar's step line (D440): `<block>|<step>` ticked off on the bar's day. */
   | 'step'
   /** The version of a routine picked in „Kroki ▸” (D481): `<block>|<version>` – the day's version of the block at once. */
   | 'routineVersion'
 
-/** The bar's own actions: laid again („Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests). */
-export type BarActionId = 'placeBar' | 'corner' | 'openPanel'
+/**
+ * The bar's own actions: laid again („Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests), the
+ * desktop bar shown or hidden by the panel's „▣ Pasek pulpitu: pokaż / schowaj” (D564 P13).
+ */
+export type BarActionId = 'placeBar' | 'corner' | 'openPanel' | 'showBar' | 'hideBar'
 
 export type UpdateAction = 'check' | 'installNow' | 'retry' | 'download' | 'dismissNotes'
 
@@ -854,8 +867,8 @@ export interface RdApi {
   onNavigate(cb: (page: string) => void): () => void
   showMain(page?: string): void
   copyText(text: string): Promise<void>
-  /** The icon's panel: the line a click opened it for (a notification). */
-  onPanelTarget(cb: (target: { line: string | null; day: string | null; quick?: boolean } | null) => void): () => void
+  /** The icon's panel opened, or asked again while open (`PanelOpening`). */
+  onPanelTarget(cb: (opening: PanelOpening) => void): () => void
   /** The desktop bar: which way it unfolds (up, or down when it stands at the top). */
   onBarGrows(cb: (dir: 'up' | 'down') => void): () => void
   /** The main process ended the bar's drag by itself (the helper's release, T1500): the page lets go of its grip. */

@@ -5,16 +5,17 @@
  * the other questions and lines at the end, and what does not fit gathers in „⋯” with a count. Everything is chosen by a
  * click inside the bar – groups, the lengths of „Przedłuż”, the steps of „Skończył się o …” unfold within the bar itself,
  * never as a separate window (D229). A first click with a cost shows it in place of its button; the second within 10 s
- * does it. On the desktop bar the buttons act on the mouse button's release and there are no tooltips; a double click on
- * a free spot of it opens the main window (D560).
+ * does it. The second click of a double click on a button never acts again (C8). On the desktop bar the buttons act on the
+ * mouse button's release and there are no tooltips; its „↗” opens the main window with one click (D564 P12), and so does a
+ * double click on a free spot of it (D560).
  */
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, Fragment, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { WidgetAction } from '@shared/api'
 import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/requests'
 import { TITLE_MAX } from '@shared/model/requests'
 import { quickPreview } from '@shared/quickDates'
 import { barBackground, TONE_SETS } from '@shared/theme'
-import { ALL_STEPS_TEXT, barStepText, SEEN_LINE, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from '@shared/widget'
+import { ALL_STEPS_TEXT, barStepText, OPEN_MAIN_TEXT, SEEN_LINE, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
 import { useMachine } from '../store/machine'
 import { cx } from '../components/ui'
@@ -50,16 +51,49 @@ function act(action: WidgetAction, arg?: string): void {
 
 const clockOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
 
-/** A button of the bar: on the desktop bar it acts on the release of the mouse button (no activation, D229). */
-function BarButton({ mode, onAct, children, testId, pressed, accent, label }: { mode: BarMode; onAct: () => void; children: ReactNode; testId?: string; pressed?: boolean; accent?: boolean; label?: string }) {
+/** The bar's last click on a button – on the desktop bar its release too (where and when). */
+interface LastClick {
+  button: EventTarget | null
+  release: BarRelease | null
+}
+
+/**
+ * The bar's last click on a button (C8): the second click of a double click – Chromium's `detail` in the window and the
+ * panel, two releases within `BAR_DOUBLE_MS` and `BAR_DOUBLE_PX` on the desktop bar – never acts again, also on another
+ * button that came in the place of the first (the layout changed after „Dalej”, „Skończył się o…” put its −5 there). One
+ * per bar; a part of the bar drawn alone (tests) has none – every click acts.
+ */
+const ButtonClicks = createContext<{ current: LastClick } | null>(null)
+
+/**
+ * A button of the bar: on the desktop bar it acts on the release of the mouse button (no activation, D229). The second
+ * click of a double click does nothing (C8) – in the window and the panel Chromium counts it (`detail` 2 and more: the
+ * clicks of one spot; a key gives 0), on the desktop bar the releases do (its window often never hears the press, T1500).
+ * `repeat`: a step (±5 min) – a quick click counts too, when the click before it was on this very step.
+ */
+function BarButton({ mode, onAct, children, testId, pressed, accent, label, repeat }: { mode: BarMode; onAct: () => void; children: ReactNode; testId?: string; pressed?: boolean; accent?: boolean; label?: string; repeat?: boolean }) {
+  const last = useContext(ButtonClicks)
+  /** This click again on the button clicked just before (a step clicked quickly once more). */
+  const again = (button: EventTarget) => !last || last.current.button === button
   const props =
     mode === 'desktop'
       ? {
           onPointerUp: (e: React.PointerEvent) => {
-            if (e.button === 0) onAct()
+            if (e.button !== 0) return
+            if (!last) return onAct()
+            const now = { at: e.timeStamp, x: e.screenX, y: e.screenY }
+            const second = secondRelease(last.current.release, now) && !(repeat && again(e.currentTarget))
+            last.current = { button: e.currentTarget, release: now }
+            if (!second) onAct()
           }
         }
-      : { onClick: onAct }
+      : {
+          onClick: (e: React.MouseEvent) => {
+            const second = e.detail > 1 && !(repeat && again(e.currentTarget))
+            if (last) last.current = { ...last.current, button: e.currentTarget }
+            if (!second) onAct()
+          }
+        }
   return (
     <button
       type="button"
@@ -94,22 +128,24 @@ function endGrip(g: Grip, why: 'up' | 'cancel' | 'lost' | null): void {
   if (why) window.rd.barDrag('end', why)
 }
 
+const CORNER_BUTTON = 'flex h-5 w-5 items-center justify-center rounded text-[14px] leading-none text-muted hover:bg-hover hover:text-fg'
+
 /**
- * The desktop bar's „×” (D559): in its own 24 px on the right (the bar is wider by them – the content stays as before), above
- * the content; hides the bar until „Pokaż pasek pulpitu” in the icon's menu, with Shift ends the app. Like every button of
- * the desktop bar it acts on the release (the window without activation often never hears the press – no `click`, T1500).
+ * The desktop bar's own strip of 24 px on the right (D559, D564 P12; the bar is wider by it – the content stays as before),
+ * above the content: „↗” on top opens the main window with one click (C2), „×” under it hides the bar until „Pokaż pasek
+ * pulpitu” in the icon's menu, with Shift ends the app. Like every button of the desktop bar both act on the release (the
+ * window without activation often never hears the press – no `click`, T1500).
  */
-function CloseBar() {
+function BarCorner() {
   return (
-    <button
-      type="button"
-      className="absolute top-1 right-1 z-10 flex h-5 w-5 items-center justify-center rounded text-[14px] leading-none text-muted hover:bg-hover hover:text-fg"
-      aria-label="Schowaj pasek (z Shift – zakończ aplikację)"
-      onPointerUp={(e) => e.button === 0 && window.rd.barClose(e.shiftKey ? 'quit' : 'x')}
-      data-testid="bar-close"
-    >
-      ×
-    </button>
+    <div className="absolute top-1 right-1 z-10 flex flex-col gap-1" data-testid="bar-corner">
+      <button type="button" className={CORNER_BUTTON} aria-label={OPEN_MAIN_TEXT} onPointerUp={(e) => e.button === 0 && window.rd.showMain()} data-testid="bar-open-main">
+        ↗
+      </button>
+      <button type="button" className={CORNER_BUTTON} aria-label="Schowaj pasek (z Shift – zakończ aplikację)" onPointerUp={(e) => e.button === 0 && window.rd.barClose(e.shiftKey ? 'quit' : 'x')} data-testid="bar-close">
+        ×
+      </button>
+    </div>
   )
 }
 
@@ -330,13 +366,13 @@ function RequestUnfold({ view, mode, close }: { view: WidgetView; mode: BarMode;
             {m}
           </BarButton>
         ))}
-        <BarButton mode={mode} onAct={() => setEstimate((x) => Math.max(5, x - 5))}>
+        <BarButton mode={mode} repeat onAct={() => setEstimate((x) => Math.max(5, x - 5))}>
           −5
         </BarButton>
         <span className="num text-[12px]" data-testid="bar-request-estimate-value">
           {estimate} min
         </span>
-        <BarButton mode={mode} onAct={() => setEstimate((x) => Math.min(REQUEST_ESTIMATE_MAX_MIN, x + 5))}>
+        <BarButton mode={mode} repeat onAct={() => setEstimate((x) => Math.min(REQUEST_ESTIMATE_MAX_MIN, x + 5))}>
           +5
         </BarButton>
         <BarButton mode={mode} accent testId="bar-request-start" onAct={() => start('urgent', urgent.id, String(estimate))}>
@@ -371,7 +407,7 @@ function RequestUnfold({ view, mode, close }: { view: WidgetView; mode: BarMode;
 /**
  * The field of the quick capture (D385, D402): a title, Enter saves it as a task into „Skrzynka” (the main process says
  * why when it cannot), Esc folds it – in the main window's bar and in the icon's panel (the desktop bar takes no keys: its
- * „+” opens the panel with this field, T756). The words of dates at the end of the title (`!jutro`, `@pt` – D409) are told in a line
+ * „+ Skrzynka” opens the window „Do skrzynki”, D564 P15). The words of dates at the end of the title (`!jutro`, `@pt` – D409) are told in a line
  * under the field before Enter – the field is never in the desktop bar itself, so its height does not change (D229).
  */
 function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: BarMode; close: () => void; text: string; setText: (t: string) => void; takeFocus: () => boolean; input: React.RefObject<HTMLInputElement | null> }) {
@@ -420,11 +456,15 @@ function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: Ba
   )
 }
 
-/** „+” of the quick capture (D402: always – in the night's quiet, „Odcinam się”, a session and a class too). */
+/**
+ * „+ Skrzynka” of the quick capture (D402: always – in the night's quiet, „Odcinam się”, a session and a class too; D564 P15):
+ * in the window's bar and the panel the field unfolds in the bar; on the desktop bar (it takes no keys) the main process
+ * opens the window „Do skrzynki”, as its shortcut does.
+ */
 function QuickButton({ mode, open, toggle }: { mode: BarMode; open: boolean; toggle: () => void }) {
   return (
-    <BarButton mode={mode} testId="bar-quick" label="Do skrzynki" pressed={open} onAct={() => (mode === 'desktop' ? act('quickOpen') : toggle())}>
-      +
+    <BarButton mode={mode} testId="bar-quick" pressed={open} onAct={() => (mode === 'desktop' ? act('quickOpen') : toggle())}>
+      + Skrzynka
     </BarButton>
   )
 }
@@ -521,11 +561,11 @@ function Line({ line, mode, onSteps }: { line: BarLine; mode: BarMode; onSteps?:
       <span className="min-w-0 text-[12px] leading-snug text-fg">{line.text}</span>
       {pick != null ? (
         <>
-          <BarButton mode={mode} onAct={() => setPick(pick - 5 * 60_000)}>
+          <BarButton mode={mode} repeat onAct={() => setPick(pick - 5 * 60_000)}>
             −5
           </BarButton>
           <span className="num text-[12px]">{clockOf(pick)}</span>
-          <BarButton mode={mode} onAct={() => setPick(pick + 5 * 60_000)}>
+          <BarButton mode={mode} repeat onAct={() => setPick(pick + 5 * 60_000)}>
             +5
           </BarButton>
           <BarButton mode={mode} accent onAct={() => (send('endedAt', pick), setPick(null))}>
@@ -550,9 +590,11 @@ function Line({ line, mode, onSteps }: { line: BarLine; mode: BarMode; onSteps?:
 
 /**
  * The window of the desktop bar or the panel tells the main process its content's height (it sizes the window within
- * the work area) and whether something is unfolded (the panel's 60 s do not run then).
+ * the work area) and whether something is unfolded (the panel's 60 s do not run then) – at every change, and at every new
+ * opening of the icon's panel (`opening`: the main process takes a new opening for folded, but the panel of variants open
+ * in the main window stays unfolded in it).
  */
-export function useReportLayout(ref: React.RefObject<HTMLElement | null>, unfolded: boolean): void {
+export function useReportLayout(ref: React.RefObject<HTMLElement | null>, unfolded: boolean, opening = 0): void {
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
@@ -561,7 +603,7 @@ export function useReportLayout(ref: React.RefObject<HTMLElement | null>, unfold
     const ro = new ResizeObserver(report)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [ref, unfolded])
+  }, [ref, unfolded, opening])
 }
 
 /**
@@ -643,7 +685,26 @@ export function barLines(lines: readonly BarLine[], quiet: boolean): { shown: Ba
   return { shown: front.slice(0, fit), extra: [...front.slice(fit), ...lines.filter((l) => later.has(l))] }
 }
 
-export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: WidgetView; mode: BarMode; grows?: 'up' | 'down'; onUnfold?: (unfolded: boolean) => void; quickAt?: object | null }) {
+interface BarProps {
+  view: WidgetView
+  mode: BarMode
+  grows?: 'up' | 'down'
+  onUnfold?: (unfolded: boolean) => void
+  /** The icon's panel's count of its openings: each new one folds what stayed unfolded when it hid (C8). */
+  opening?: number
+}
+
+/** The bar with its own memory of the last click on a button (the second click of a double click on a button, C8). */
+export function Bar(props: BarProps) {
+  const clicks = useRef<LastClick>({ button: null, release: null })
+  return (
+    <ButtonClicks.Provider value={clicks}>
+      <BarView {...props} />
+    </ButtonClicks.Provider>
+  )
+}
+
+function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
   const now = useNow()
   const brightness = useMachine((s) => s.prefs.brightness)
   const pulse = useMachine((s) => s.prefs.barPulse)
@@ -651,7 +712,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
   const parallel = view.background.filter((b) => b.group)
   /** The field of the quick capture was just opened: its mount takes the focus (a mount after a change of layout does not). */
   const quickFocus = useRef(false)
-  // The flag of an opening lives one commit: set by a click or by `quickAt` (after this effect – declared first), spent by
+  // The flag of an opening lives one commit: set by a click (after this effect – declared first), spent by
   // the field's mount in the next commit (children's effects run first) – never kept for a later one.
   useEffect(() => {
     quickFocus.current = false
@@ -721,16 +782,17 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
     onUnfold?.(unfold != null || variantsOpen)
     if (mode === 'panel') window.rd.panelTouch()
   }, [mode, unfold, variantsOpen, onUnfold])
-  // The panel opened by the desktop bar's „+” (T756): its field unfolds with the keys – at each opening, also when it is
-  // open already (then no mount takes the focus: given here).
+  // The icon's panel opened again (C8): nothing unfolded before it hid comes back – the field of the quick capture with its
+  // text neither; the ±5 min of a line fold by its key (`opening` in it) and the group of „Zrobione automatycznie” with „⋯”.
+  const foldedFor = useRef(opening)
   useEffect(() => {
-    if (!quickAt) return
-    if (unfold === 'quick') quickInput.current?.focus()
-    else {
-      quickFocus.current = true
-      setUnfold('quick')
-    }
-  }, [quickAt])
+    if (foldedFor.current === opening) return
+    foldedFor.current = opening
+    setUnfold(null)
+    // The panel of variants is the main process's, one for every window: closed when the icon's panel opened it (the main
+    // process says who – also while „Odcinam się” hides it), never one the main window's bar has open now.
+    if (mode === 'panel' && view.variants.by === 'panel') act('variants', 'close')
+  }, [opening])
   // The title typed into the field of the quick capture: the bar's own, so it stays when the layout changes (T763) – and
   // only then: the field closed (Esc, „+”, saved), it is gone (T767).
   const [quickText, setQuickText] = useState('')
@@ -864,7 +926,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
           </div>
           <AutosList autos={view.autos} mode={mode} open={groupOpen} onToggle={(id) => setGroupOpen((x) => (x === id ? null : id))} />
           {extra.map((l) => (
-            <Line key={l.id} line={l} mode={mode} onSteps={openRoutine} />
+            <Line key={`${l.id}|${opening ?? 0}`} line={l} mode={mode} onSteps={openRoutine} />
           ))}
         </div>
       )}
@@ -933,7 +995,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
       >
         <div className={cx('relative flex flex-col gap-1.5 py-1.5 pl-3', mode === 'desktop' ? 'pr-8' : 'pr-2')}>
           {mode === 'desktop' && <DragHandle />}
-          {mode === 'desktop' && <CloseBar />}
+          {mode === 'desktop' && <BarCorner />}
           {view.lines.map((l) => (
             <div key={l.id} className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid={`bar-line-${l.id}`}>
               <span className="min-w-0 text-[12.5px] leading-snug text-fg">{l.text}</span>
@@ -993,7 +1055,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
       {grows === 'up' && unfolded}
       <div className={cx('relative flex flex-col gap-1.5 py-1.5 pl-3', mode === 'desktop' ? 'pr-8' : 'pr-2', quiet && 'gap-1 py-1')}>
         {mode === 'desktop' && <DragHandle />}
-        {mode === 'desktop' && <CloseBar />}
+        {mode === 'desktop' && <BarCorner />}
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           {view.question && (
             <div className="flex shrink-0 items-center gap-1.5" data-testid="bar-question">
@@ -1145,7 +1207,7 @@ export function Bar({ view, mode, grows = 'up', onUnfold, quickAt }: { view: Wid
           </div>
         )}
         {shownLines.map((l) => (
-          <Line key={l.id} line={l} mode={mode} onSteps={openRoutine} />
+          <Line key={`${l.id}|${opening ?? 0}`} line={l} mode={mode} onSteps={openRoutine} />
         ))}
         {view.barNote && mode !== 'desktop' && (
           <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted" data-testid="bar-note">

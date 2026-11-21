@@ -9,9 +9,12 @@
  * - no window uses Notification (only the main process does, through notify.ts);
  * - the helper's commands that answer only a request (with an id) are never sent without one – their answer would be
  *   lost (`helper.send('toastSetting')` read Windows' setting and said nothing);
- * - the window „Do skrzynki” (D385) comes over the other windows only on your shortcut: show, focus (also of its contents)
- *   and „on top” only in its private `raise`, `raise` only from the callback of the global shortcut it registers, never
- *   shown nor on top by the options it is made with, and its window never under another name.
+ * - the window „Do skrzynki” (D385, D564 P15) comes over the other windows only on your shortcut or your click of „+ Skrzynka”
+ *   on the desktop bar: show, focus (also of its contents) and „on top” only in its private `raise`, `raise` only from the
+ *   callback of the global shortcut it registers and as the one direct statement of `openFromBar`, never shown nor on top by
+ *   the options it is made with, and its window never under another name (`checkQuickWindow`);
+ * - `openFromBar` only from the widget's dependency `openQuick` in `index.ts`, `openQuick` – declared, given and called once
+ *   (in `widget.ts`, only for the desktop bar's own click), never read anywhere else in the main process (`checkQuickOpeners`).
  * `--self-test` proves each check catches its case.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
@@ -74,12 +77,15 @@ function methodBody(text, head) {
 /** What raises a window over the others (or activates it): only `setAlwaysOnTop(false)` is no raise. */
 const RAISES = /this\.win\.(?:show|showInactive|focus|moveTop|moveAbove|restore|maximize|setFullScreen|setParentWindow)\(|this\.win\.setAlwaysOnTop\((?!\s*false\s*\))|this\.win\.webContents\.focus\(/g
 
-/** The window „Do skrzynki” (D385): on top only by the shortcut – `raise` private, alone raising, called only by the shortcut. */
+/**
+ * The window „Do skrzynki” (D385, D564 P15): on top only by the shortcut or the desktop bar's „+ Skrzynka” – `raise` private,
+ * alone raising, called once by the shortcut's callback and at most once by `openFromBar`, nowhere else.
+ */
 export function checkQuickWindow(text) {
   const code = text.replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '')
   const problems = []
-  const body = methodBody(code, 'private raise(): void {')
-  if (!body) return ['okienko „Do skrzynki”: brak prywatnej metody raise() – jedynej drogi na wierzch']
+  const body = methodBody(code, 'private raise(how: string): void {')
+  if (!body) return ['okienko „Do skrzynki”: brak prywatnej metody raise(how) – jedynej drogi na wierzch']
   for (const m of code.matchAll(RAISES)) if (m.index < body.from || m.index >= body.to) problems.push(`okienko „Do skrzynki”: ${m[0]} poza raise() – na wierzch wychodzi tylko na skrót (D385)`)
   // Shown or on top from its making: before any shortcut (the options of `new BrowserWindow`).
   for (const m of code.matchAll(/new BrowserWindow\(\s*\{([\s\S]*?)\}\s*\)/g)) {
@@ -90,8 +96,43 @@ export function checkQuickWindow(text) {
   // The window under another name would escape every check above.
   if (/=\s*this\.win\s*(?:[;,)\n]|$)|\{[^}]*\bwin\b[^}]*\}\s*=\s*this\b/m.test(code)) problems.push('okienko „Do skrzynki”: this.win pod inną nazwą – zmiany okna tylko przez this.win')
   const calls = [...code.matchAll(/this\.raise\(/g)].length
-  const byShortcut = [...code.matchAll(/\.register\([^,()]+,\s*\(\)\s*=>\s*this\.raise\(\)\s*\)/g)].length
-  if (calls !== byShortcut || byShortcut !== 1) problems.push('okienko „Do skrzynki”: raise() wołane gdzie indziej niż w wywołaniu skrótu globalnego (register)')
+  const byShortcut = [...code.matchAll(/\.register\([^,()]+,\s*\(\)\s*=>\s*this\.raise\('[^']*'\)\s*\)/g)].length
+  // „+ Skrzynka” of the desktop bar (D564 P15): `openFromBar` is one direct `this.raise('…')` – no callback, no condition –
+  // and the window never calls it itself.
+  const bar = methodBody(code, 'openFromBar(): void {')
+  const byBar = bar ? [...code.slice(bar.from, bar.to).matchAll(/this\.raise\(/g)].length : 0
+  if (bar && !/^\{\s*this\.raise\('[^']*'\);?\s*\}$/.test(code.slice(bar.from, bar.to))) problems.push("okienko „Do skrzynki”: openFromBar() to tylko jedno wprost this.raise('…') – bez warunku, setTimeout ani wywołania zwrotnego")
+  if (/this\.openFromBar\(/.test(code)) problems.push('okienko „Do skrzynki”: openFromBar() wołane w samym okienku – woła je tylko proces główny na kliknięcie paska')
+  if (byShortcut !== 1 || byBar > 1 || calls !== byShortcut + byBar) problems.push('okienko „Do skrzynki”: raise() wołane gdzie indziej niż w wywołaniu skrótu globalnego (register) i raz w openFromBar()')
+  return problems
+}
+
+/** Where the dependency `openQuick` may stand (each once): declared and called in `widget.ts`, given in `index.ts`. */
+const OPEN_QUICK_ALLOWED = {
+  'src/main/widget.ts': [/\bopenQuick\?:\s*\(\)\s*=>\s*void\b/g, /if \(from === 'bar'\) this\.d\.openQuick\?\.\(\)/g],
+  'src/main/index.ts': [/\bopenQuick:\s*\(\)\s*=>\s*quick\?\.openFromBar\(\)/g]
+}
+
+/**
+ * Who brings the window „Do skrzynki” up besides its shortcut (D564 P15): `openFromBar` only from the widget's dependency
+ * `openQuick` in `index.ts`; `openQuick` itself only where `OPEN_QUICK_ALLOWED` says – once each: its declaration and its
+ * one call for the desktop bar's own click (`from === 'bar'`) in `widget.ts`, the dependency given in `index.ts`; every
+ * other mention (a call, a bare reference passed on or read) in any file of the main process is a problem.
+ * `sources`: the main process's files (path → code without comments), `quickWindow.ts` aside.
+ */
+export function checkQuickOpeners(sources) {
+  const problems = []
+  for (const path of Object.keys(OPEN_QUICK_ALLOWED)) if (!(path in sources)) problems.push(`${path}: brak pliku – sprawdzenie, kto otwiera okienko „Do skrzynki”, nie ma czego sprawdzić`)
+  for (const [path, code] of Object.entries(sources)) {
+    const calls = [...code.matchAll(/\.openFromBar\(/g)].length
+    const allowed = path === 'src/main/index.ts' ? [...code.matchAll(/\bopenQuick:\s*\(\)\s*=>\s*quick\?\.openFromBar\(\)/g)].length : 0
+    if (calls !== allowed || allowed > 1) problems.push(`${path}: openFromBar() poza zależnością openQuick paska (index.ts) – okienko „Do skrzynki” wychodzi tylko na skrót albo „+ Skrzynka” paska pulpitu`)
+    const rules = OPEN_QUICK_ALLOWED[path] ?? []
+    const counts = rules.map((re) => [...code.matchAll(re)].length)
+    const mentions = [...code.matchAll(/\bopenQuick\b/g)].length
+    if (counts.some((n) => n !== 1) || mentions !== counts.reduce((a, n) => a + n, 0))
+      problems.push(`${path}: openQuick poza jego deklaracją, jednym wywołaniem pod if (from === 'bar') (widget.ts) i zależnością (index.ts) – okienko tylko na kliknięcie paska pulpitu`)
+  }
   return problems
 }
 
@@ -136,12 +177,15 @@ function run() {
   problems.push(...checkQuickWindow(readFileSync(quickFile, 'utf8')).map((p) => `${rel(quickFile)}: ${p}`))
   for (const f of files(join(root, 'src', 'renderer', 'widget'), ['.tsx', '.ts'])) problems.push(...checkBarComponent(readFileSync(f, 'utf8')).map((p) => `${rel(f)}: ${p}`))
   for (const f of files(join(root, 'src', 'renderer'), ['.tsx', '.ts'])) problems.push(...checkRenderer(readFileSync(f, 'utf8')).map((p) => `${rel(f)}: ${p}`))
+  const openers = {}
   for (const f of files(join(root, 'src', 'main'), ['.ts'])) {
     const code = readFileSync(f, 'utf8').replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '')
+    if (f !== quickFile) openers[rel(f)] = code
     problems.push(...checkHelperCalls(code).map((p) => `${rel(f)}: ${p}`))
     if (rel(f) === 'src/main/notify.ts') continue
     if (/\bNotification\b/.test(code)) problems.push(`${rel(f)}: Notification poza notify.ts`)
   }
+  problems.push(...checkQuickOpeners(openers))
   if (problems.length) {
     console.error(problems.join('\n'))
     process.exit(1)
@@ -152,10 +196,17 @@ function run() {
 /** A window „Do skrzynki” as it must be (the self-test changes it one way at a time). */
 const QUICK_OK = `class Q {
   constructor() { this.win = new BrowserWindow({ show: false, frame: false, webPreferences: { preload } }) }
-  setShortcut(key) { ok = this.shortcuts.register(key, () => this.raise()) }
-  private raise(): void { if (x) { y() } this.win.setAlwaysOnTop(true, 'floating'); this.win.show(); this.win.focus() }
+  setShortcut(key) { ok = this.shortcuts.register(key, () => this.raise('skrótem')) }
+  openFromBar(): void { this.raise('paskiem') }
+  private raise(how: string): void { if (x) { y() } this.win.setAlwaysOnTop(true, 'floating'); this.win.show(); this.win.focus() }
   close(): void { this.win.setAlwaysOnTop(false); this.win.hide() }
 }`
+
+/** Who brings the window „Do skrzynki” up, as it must be (the self-test changes it one way at a time). */
+const OPENERS_OK = {
+  'src/main/index.ts': 'const widget = new WidgetEngine({ openQuick: () => quick?.openFromBar() })',
+  'src/main/widget.ts': "interface WidgetDeps { openQuick?: () => void } if (action === 'quickOpen') { if (from === 'bar') this.d.openQuick?.(); return }"
+}
 
 /** Each check catches what it is for (the test bar with one title must be caught). */
 function selfTest() {
@@ -178,6 +229,21 @@ function selfTest() {
     [checkQuickWindow(QUICK_OK.replace('close(): void {', 'close(): void { this.win.show()')).length === 1, 'okienko: show poza raise'],
     [checkQuickWindow(QUICK_OK.replace('close(): void {', 'close(): void { this.win.setAlwaysOnTop(true)')).length === 1, 'okienko: na wierzchu poza raise'],
     [checkQuickWindow(QUICK_OK.replace('close(): void {', 'close(): void { this.raise()')).length === 1, 'okienko: raise bez skrótu'],
+    [checkQuickWindow(QUICK_OK.replace("openFromBar(): void { this.raise('paskiem') }", '')).length === 0, 'okienko: bez openFromBar też ok'],
+    [checkQuickWindow(QUICK_OK.replace("openFromBar(): void { this.raise('paskiem') }", "openFromBar(): void { this.raise('a'); this.raise('b') }")).length >= 1, 'okienko: raise dwa razy w openFromBar'],
+    [checkQuickWindow(QUICK_OK.replace("this.raise('skrótem')", 'other()')).length === 1, 'okienko: raise bez skrótu, tylko z paska'],
+    [checkQuickWindow(QUICK_OK.replace("openFromBar(): void { this.raise('paskiem') }", "openFromBar(): void { setTimeout(() => this.raise('paskiem'), 0) }")).length === 1, 'okienko: raise w openFromBar nie wprost (setTimeout)'],
+    [checkQuickWindow(QUICK_OK.replace("openFromBar(): void { this.raise('paskiem') }", "openFromBar(): void { if (x) this.raise('paskiem') }")).length === 1, 'okienko: raise w openFromBar pod warunkiem'],
+    [checkQuickWindow(QUICK_OK.replace('close(): void {', 'close(): void { this.openFromBar()')).length === 1, 'okienko: openFromBar wołane w okienku'],
+    [checkQuickOpeners(OPENERS_OK).length === 0, 'otwierający okienko: ok'],
+    [checkQuickOpeners({ ...OPENERS_OK, 'src/main/index.ts': OPENERS_OK['src/main/index.ts'] + ' quick?.openFromBar()' }).length === 1, 'otwierający okienko: openFromBar poza openQuick'],
+    [checkQuickOpeners({ ...OPENERS_OK, 'src/main/other.ts': 'quick.openFromBar()' }).length === 1, 'otwierający okienko: openFromBar w innym pliku'],
+    [checkQuickOpeners({ ...OPENERS_OK, 'src/main/widget.ts': "if (action === 'quickOpen') { this.d.openQuick?.(); return }" }).length === 1, 'otwierający okienko: openQuick bez warunku paska'],
+    [checkQuickOpeners({ ...OPENERS_OK, 'src/main/widget.ts': OPENERS_OK['src/main/widget.ts'] + ' this.d.openQuick?.()' }).length === 1, 'otwierający okienko: openQuick drugi raz'],
+    [checkQuickOpeners({ ...OPENERS_OK, 'src/main/widget.ts': OPENERS_OK['src/main/widget.ts'] + ' const open = this.d.openQuick' }).length === 1, 'otwierający okienko: openQuick goła referencja'],
+    [checkQuickOpeners({ ...OPENERS_OK, 'src/main/other.ts': 'deps.openQuick()' }).length === 1, 'otwierający okienko: openQuick w innym pliku'],
+    [checkQuickOpeners({ 'src/main/index.ts': OPENERS_OK['src/main/index.ts'] }).length === 1, 'otwierający okienko: brak widget.ts'],
+    [checkQuickOpeners({ ...OPENERS_OK, 'src/main/index.ts': OPENERS_OK['src/main/index.ts'] + ' const q = deps.openQuick' }).length === 1, 'otwierający okienko: openQuick czytane w index.ts'],
     [checkQuickWindow(QUICK_OK.replace('private raise(', 'raise(')).length === 1, 'okienko: raise nie prywatne'],
     [checkQuickWindow(QUICK_OK.replace('show: false', 'show: true')).length === 1, 'okienko: pokazane od razu (show: true)'],
     [checkQuickWindow(QUICK_OK.replace('frame: false', 'frame: false, alwaysOnTop: true')).length === 1, 'okienko: na wierzchu od razu (alwaysOnTop: true)'],

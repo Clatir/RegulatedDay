@@ -39,6 +39,18 @@ export function barCloseOf(how: unknown, from: string): { hide: boolean; quit: b
 }
 
 /**
+ * The panel's „▣ Pasek pulpitu: pokaż / schowaj” (D564 P13): „schowaj” hides the bar as its „×” does (`closed` – until
+ * „Pokaż”, the settings, the main window going or the next start); „pokaż” shows it again – one switched off in the
+ * settings is switched on on this computer (`switchOn`). Off, there is nothing to hide: the state stays. Only from the
+ * panel's own window (`ok`), as „×” only from the bar's; another one changes nothing (and the log says so).
+ */
+export function barFromPanel(want: 'showBar' | 'hideBar', from: string, s: { closed: boolean; desktopBar: boolean }): { ok: boolean; closed: boolean; switchOn: boolean; why: string } {
+  if (from !== 'panel') return { ok: false, closed: s.closed, switchOn: false, why: `pasek pulpitu z panelu – odmowa (okno ${from})` }
+  if (want === 'hideBar') return s.desktopBar ? { ok: true, closed: true, switchOn: false, why: 'pasek pulpitu schowany z panelu ikony' } : { ok: true, closed: s.closed, switchOn: false, why: 'pasek pulpitu wyłączony w ustawieniach – nie ma czego chować' }
+  return { ok: true, closed: false, switchOn: !s.desktopBar, why: s.desktopBar ? 'pasek pulpitu pokazany z panelu ikony' : 'pasek pulpitu włączony i pokazany z panelu ikony' }
+}
+
+/**
  * The main window minimized or closed into the tray (D560): the bar hidden by its „×” comes back when „Pasek wraca z oknem
  * głównym” is on and the bar itself is on (switched on again, it shows by itself) – never while the app quits.
  */

@@ -5,7 +5,7 @@
  * within 0.5 s are one); the Windows notifications on by default (D230) – shown only by the leader, each once by its
  * stable id in the day's log.
  *
- * Until a data folder is open the widget shows one neutral line („Brak folderu danych · Otwórz okno”, D327).
+ * Until a data folder is open the widget shows one neutral line („Brak folderu danych · Otwórz okno główne”, D327).
  */
 import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult, ViewKind } from '@shared/api'
 import { blockName, nameById } from '@shared/blockName'
@@ -100,7 +100,7 @@ export interface WidgetDeps {
   backup?: () => { failed: { error: string } | null } | null
   /** The quick capture (D385, D402): a task of your own into „Skrzynka” – the field of the bar; why, when not saved. */
   quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>
-  /** „+” of the desktop bar (T756): it takes no keys – the icon's panel opens at the cursor with the field. */
+  /** „+ Skrzynka” of the desktop bar (D564 P15): it takes no keys – the window „Do skrzynki” opens as by its shortcut. */
   openQuick?: () => void
 }
 
@@ -272,7 +272,7 @@ export class WidgetEngine {
   /** The causes holding now: closing the panel closes all of them (the marker never comes back for another of them). */
   private causesNow: VariantCause[] = []
   /** The open panel of variants – one for every window (the main process owns it): its cause and its variants. */
-  private panel: { cause: VariantCause | null; variants: Variant[] } | null = null
+  private panel: { cause: VariantCause | null; variants: Variant[]; by: 'main' | 'panel' | 'bar' } | null = null
   /**
    * The lines of changes of the plan, each with its own „Cofnij” for 15 min (line `moved:<kind>`): „Przestawiono: …” after
    * a variant (D313, T502) and „Przesunięto N bloków” after blocks pushed apart in the main window (D367). A variant
@@ -301,7 +301,7 @@ export class WidgetEngine {
   /** The view now (the neutral bar until the engine has one). */
   current(): WidgetView {
     const v = this.view
-    if (!v) return noFolderView(this.d.folderStatus?.() ?? 'none')
+    if (!v) return this.withPanelBy(noFolderView(this.d.folderStatus?.() ?? 'none'))
     if (!v.pending && !v.note) return v
     // The terms (the cost waiting, the note) say what is left of them when the view is sent – each time, also for the view
     // sent again to a window that opens (the window counts them from the moment it receives it).
@@ -309,6 +309,14 @@ export class WidgetEngine {
     const pending = v.pending && this.pending && this.pending.until > mono ? { ...v.pending, left: this.pending.until - mono } : null
     const note = v.note && this.note && this.note.until > mono ? { ...v.note, left: this.note.until - mono } : null
     return { ...v, pending, note }
+  }
+
+  /**
+   * A stand-in view (no folder, a day not counted now) says who opened the panel of variants still held here – the icon's
+   * panel closes its own at its next opening also then (C8).
+   */
+  private withPanelBy(v: WidgetView): WidgetView {
+    return this.panel ? { ...v, variants: { ...v.variants, by: this.panel.by } } : v
   }
 
   start(): void {
@@ -425,7 +433,7 @@ export class WidgetEngine {
       if (!this.failing) this.d.log('warn', 'widok widgetu nie policzył się', e)
       this.failing = true
       this.model = null
-      this.view = unknownView()
+      this.view = this.withPanelBy(unknownView())
       this.awayView(folder)
     }
     // The warning steps of the view's own day (none while the widget is hidden or the day not counted).
@@ -569,7 +577,12 @@ export class WidgetEngine {
     }
     this.markerNow = markerCause(causes, { shown: this.markerShown, done: this.markerDone, quiet, lastQuiet: this.lastQuiet, now })
     if (this.markerNow) this.markerShown.add(this.markerNow.id)
-    v.variants = { marker: !!this.markerNow && !v.hidden && !v.night, open: this.panel && !v.hidden ? this.panel.variants.map((x) => ({ id: x.id, label: x.label, ...(x.details?.length ? { details: x.details } : {}) })) : null }
+    v.variants = {
+      marker: !!this.markerNow && !v.hidden && !v.night,
+      open: this.panel && !v.hidden ? this.panel.variants.map((x) => ({ id: x.id, label: x.label, ...(x.details?.length ? { details: x.details } : {}) })) : null,
+      // Who opened it – said also while the view hides it (the icon's panel closes its own at its next opening, C8).
+      ...(this.panel ? { by: this.panel.by } : {})
+    }
     for (const [kind, mv] of [...this.moved]) if (mv.until <= mono) this.moved.delete(kind)
     // The newest first; after every line of the day (`linesLast`): the bar shows one of them at most, the other waits in
     // „⋯” with its „Cofnij” (`barLines`).
@@ -627,7 +640,7 @@ export class WidgetEngine {
    * energię” before its last „Zostaw” when today's order can clearly raise the lowest energy (D369, D374, T612) – also without
    * a cause (then with „Zostaw plan”). Neither – the plan fits.
    */
-  private async openVariants(): Promise<void> {
+  private async openVariants(from: ViewKind): Promise<void> {
     const m = this.model
     const names = this.names
     if (!m || !names) return
@@ -642,7 +655,8 @@ export class WidgetEngine {
     }
     const variants = cause ? variantsFor(m.ctx, m.state, cause, nameOf) : [keepPlan(m.ctx, m.state)]
     if (order) variants.splice(variants.length - 1, 0, order)
-    this.panel = { cause, variants }
+    // The window that asked (the sound's and the quick window never do): the icon's panel closes only its own (C8).
+    this.panel = { cause, variants, by: from === 'panel' || from === 'bar' ? from : 'main' }
     return this.refresh()
   }
 
@@ -940,11 +954,15 @@ export class WidgetEngine {
     }
     // The quick capture (D385, D402): always – also without a day counted now, in the night, „Odcinam się”, a session, a class.
     if (action === 'quickAdd') return this.quickAdd(arg ?? '')
+    // „+ Skrzynka” of the desktop bar (D564 P15): the window „Do skrzynki” – only for the desktop bar's own click (the window
+    // and the panel unfold the field in their bar; nothing else may bring that window up).
     if (action === 'quickOpen') {
-      this.d.openQuick?.()
+      if (from === 'bar') this.d.openQuick?.()
       return
     }
-    if (v.day == null && action !== 'openMain') return
+    // Without a day counted now only the way to the window – and the closing of the panel of variants (the icon's panel folds
+    // its own at its next opening, C8; kept, it would come back with the day).
+    if (v.day == null && action !== 'openMain' && !(action === 'variants' && arg === 'close')) return
     const day = v.day ?? undefined
     let r: TimerResult | null = null
     let label = ''
@@ -1068,7 +1086,7 @@ export class WidgetEngine {
       }
       case 'variants': {
         const [what, which] = (arg ?? '').split('|')
-        if (what === 'open') return this.openVariants()
+        if (what === 'open') return this.openVariants(from)
         if (what === 'pick') return this.pickVariant(which)
         if (what === 'close') {
           this.panel = null

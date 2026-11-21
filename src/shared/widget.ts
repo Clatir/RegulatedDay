@@ -118,6 +118,11 @@ export interface WidgetView {
   tooltip: string
   /** Why the desktop bar is hidden although it is on (the panel, the main window and the settings say it, D270). */
   barNote: string | null
+  /**
+   * The desktop bar hidden by its „×” or the panel's „Pasek pulpitu: schowaj” (D559, D564 P13) – until shown again; the main
+   * process sets it (`widgetView`), the engine's view never knows it.
+   */
+  barClosed: boolean
   /** The bar's own buttons now. */
   buttons: BarButtons
   /** Blocks in the background with „Zakończ teraz” and „Przedłuż” (in „⋯”). */
@@ -221,12 +226,25 @@ export interface BarVariants {
    * `details` – the changes said one by one under the label (the changes of order, D374).
    */
   open: Array<{ id: string; label: string; details?: string[] }> | null
+  /**
+   * The window whose click opened the panel (while the main process holds it – also when the view hides it, „Odcinam się”);
+   * absent – no panel. The icon's panel closes only its own at its next opening (C8): one panel for every window.
+   */
+  by?: 'main' | 'panel' | 'bar'
 }
 
 export const NO_REQUESTS: BarRequests = { people: [], running: null, interrupted: null }
 export const NO_VARIANTS: BarVariants = { marker: false, open: null }
 
 export const ALL_BUTTONS: BarButtons = { next: true, pause: true, extend: true, workEnd: true, finished: false, cutOff: true, start: null }
+
+/**
+ * One name for the way to the main window (C7, D564 P13): the icon's menu, the panel's footer, the desktop bar's „↗” and the
+ * line of the bar without a data folder.
+ */
+export const OPEN_MAIN_TEXT = 'Otwórz okno główne'
+/** One name for the end of the app (D564 P13, P20): the icon's menu and the panel's footer. */
+export const QUIT_APP_TEXT = 'Zakończ aplikację'
 
 export const BAR_NOTE_HELPER = 'Pasek pulpitu ukryty: pomocnik nie działa'
 export const BAR_NOTE_FAILED = 'Paska pulpitu nie udało się położyć pod oknami (inny program trzyma okno na dole)'
@@ -250,11 +268,12 @@ export function noFolderView(status: 'none' | 'opening' | 'failed' = 'none'): Wi
     drop: false,
     block: null,
     question: null,
-    lines: [{ id: NO_FOLDER_LINE, text, actions: status === 'opening' ? [] : [{ id: 'open', label: 'Otwórz okno' }], dot: false }],
+    lines: [{ id: NO_FOLDER_LINE, text, actions: status === 'opening' ? [] : [{ id: 'open', label: OPEN_MAIN_TEXT }], dot: false }],
     session: false,
     stateLine: null,
     tooltip: status === 'none' ? 'Brak folderu danych – otwórz okno główne' : text,
     barNote: null,
+    barClosed: false,
     buttons: { ...ALL_BUTTONS, next: false, pause: false, extend: false, workEnd: false, finished: false, cutOff: false, start: null },
     background: [],
     autos: { groups: [], items: [] },
@@ -277,7 +296,7 @@ export function noFolderView(status: 'none' | 'opening' | 'failed' = 'none'): Wi
   }
 }
 
-/** The id of the line of the bar without a data folder (its „Otwórz okno” opens the main window). */
+/** The id of the line of the bar without a data folder (its „Otwórz okno główne” opens the main window). */
 export const NO_FOLDER_LINE = 'nofolder'
 
 /**

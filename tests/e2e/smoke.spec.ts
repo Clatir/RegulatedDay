@@ -508,7 +508,81 @@ test('pasek we wszystkich oknach z widoku silnika; panel ikony otwiera się i za
   }
 })
 
-test('bez folderu danych: pasek pulpitu i panel z jedną linią „Brak folderu danych · Otwórz okno” (D327)', async () => {
+test('role powierzchni (UX10, D564): „↗” paska pulpitu otwiera okno główne; panel z nagłówkiem i stopką – „Pasek pulpitu: schowaj / pokaż”, dwuklik w przycisk raz, ponowne otwarcie zwija', async () => {
+  const { app, page, userData } = await launch({ data: true })
+  try {
+    await withMainLog(userData, async () => {
+      const shown = (title: string) => app.evaluate(({ BrowserWindow }, t) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === t && w.isVisible()), title)
+      const barShown = () => shown('Regulated Day – pasek')
+      const panelShown = () => shown('Regulated Day – panel')
+      const win = await app.browserWindow(page)
+      const mainShown = () => win.evaluate((w) => w.isVisible() && !w.isMinimized())
+      await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
+      const bar = await viewPage(app, 'bar')
+      await expect(bar.getByTestId('bar-desktop')).not.toHaveAttribute('data-day', 'none', { timeout: 30_000 })
+      await expect(bar.getByTestId('bar-quick')).toHaveText('+ Skrzynka')
+      // P12, C2: the main window in the tray – one click on the bar's „↗” brings it.
+      await win.evaluate((w) => w.hide())
+      await expect.poll(mainShown).toBe(false)
+      await bar.getByTestId('bar-open-main').click()
+      await expect.poll(mainShown, { timeout: 10_000 }).toBe(true)
+
+      // P13 (variant A): the panel – a header and a footer around the same bar.
+      await page.evaluate(() => window.rd.barAction('openPanel'))
+      const panel = await viewPage(app, 'panel')
+      await expect.poll(panelShown).toBe(true)
+      await expect(panel.getByTestId('panel-head')).toContainText('Regulated Day')
+      await expect(panel.getByTestId('panel-open-main')).toHaveText('↗ Otwórz okno główne')
+      await expect(panel.getByTestId('panel-bar-toggle')).toHaveText('▣ Pasek pulpitu: schowaj')
+      await expect(panel.getByTestId('panel-quit')).toHaveText('⏻ Zakończ aplikację')
+      // C8: a double click on „Prośba ▸” – unfolded once, its second click does nothing.
+      await panel.getByTestId('bar-group-request').dblclick()
+      await expect(panel.getByTestId('bar-request-group')).toBeVisible()
+      // Hidden (Esc) and opened again: nothing unfolded from before.
+      await panel.keyboard.press('Escape')
+      await expect.poll(panelShown).toBe(false)
+      await page.evaluate(() => window.rd.barAction('openPanel'))
+      await expect.poll(panelShown).toBe(true)
+      await expect(panel.getByTestId('bar-request-group')).toHaveCount(0)
+
+      // „▣ Pasek pulpitu: schowaj” hides the bar as its „×” does; „pokaż” brings it back.
+      await panel.getByTestId('panel-bar-toggle').click()
+      await expect.poll(barShown).toBe(false)
+      await expect(panel.getByTestId('panel-bar-toggle')).toHaveText('▣ Pasek pulpitu: pokaż')
+      await panel.getByTestId('panel-bar-toggle').click()
+      await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
+      await expect(panel.getByTestId('panel-bar-toggle')).toHaveText('▣ Pasek pulpitu: schowaj')
+      // Switched off in the settings: „pokaż” switches it on on this computer.
+      await page.evaluate(() => window.rd.setPrefs({ desktopBar: false }))
+      await expect(panel.getByTestId('panel-bar-toggle')).toHaveText('▣ Pasek pulpitu: pokaż')
+      await panel.getByTestId('panel-bar-toggle').click()
+      await expect.poll(() => page.evaluate(async () => (await window.rd.prefs()).desktopBar)).toBe(true)
+      await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
+      await expect.poll(() => readFile(join(userData, 'logs', 'main.log'), 'utf8')).toContain('pasek pulpitu włączony i pokazany z panelu ikony')
+
+      // „↗ Otwórz okno główne” of the footer: the main window, the panel goes.
+      await win.evaluate((w) => w.hide())
+      await expect.poll(mainShown).toBe(false)
+      if (!(await panelShown())) await page.evaluate(() => window.rd.barAction('openPanel'))
+      await panel.getByTestId('panel-open-main').click()
+      await expect.poll(mainShown, { timeout: 10_000 }).toBe(true)
+      await expect.poll(panelShown).toBe(false)
+
+      // „⏻ Zakończ aplikację”: the app ends its own way.
+      await page.evaluate(() => window.rd.barAction('openPanel'))
+      await expect.poll(panelShown).toBe(true)
+      const closed = app.waitForEvent('close', { timeout: 30_000 })
+      await panel.getByTestId('panel-quit').click()
+      await closed
+      expect(await readFile(join(userData, 'logs', 'main.log'), 'utf8')).toContain('aplikacja zamknięta')
+    })
+  } finally {
+    // Ended by its own „Zakończ aplikację” already – or not, when a step above failed.
+    await app.close().catch(() => undefined)
+  }
+})
+
+test('bez folderu danych: pasek pulpitu i panel z jedną linią „Brak folderu danych · Otwórz okno główne” (D327, C7)', async () => {
   const { app, page, userData } = await launch()
   try {
     await withMainLog(userData, async () => {
@@ -521,7 +595,7 @@ test('bez folderu danych: pasek pulpitu i panel z jedną linią „Brak folderu 
       await expect(page.getByTestId('bar-act-nofolder-open')).toHaveCount(0)
       await page.evaluate(() => window.rd.barAction('openPanel'))
       const panel = await viewPage(app, 'panel')
-      await expect(panel.getByTestId('bar-act-nofolder-open')).toHaveText('Otwórz okno')
+      await expect(panel.getByTestId('bar-act-nofolder-open')).toHaveText('Otwórz okno główne')
     })
   } finally {
     await app.close()
