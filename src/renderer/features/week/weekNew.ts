@@ -40,7 +40,16 @@ export function freeHourStart(blocks: readonly BusySpan[], where: { isToday: boo
   return Math.min(at, DAY_END_MIN - lengthMin)
 }
 
-/** The wake the settings give a day whose own wake is not known (not read): the weekday's type (a day not read has no type of its own known). */
-export function typeWakeMin(s: { dayTypes: Record<DayTypeId, { wakeMin: number }>; weekTypes: readonly DayTypeId[] }, date: string): number {
-  return s.dayTypes[s.weekTypes[weekday(date) - 1]!].wakeMin
+/**
+ * The wake of a day for the free hour of Ctrl+N, one rule for „Tydzień”, „3 dni” and the calendar: the day's own (counted, or set in its file);
+ * else the wake of the type of the day (`dayType`, its file's); else of the type of its weekday in the settings.
+ */
+export function dayWakeMin(
+  s: { dayTypes: Record<DayTypeId, { wakeMin: number }>; weekTypes: readonly DayTypeId[] },
+  date: string,
+  known: { wakeMin: number | null; dayType: string | null }
+): number {
+  if (known.wakeMin != null) return known.wakeMin
+  const type = known.dayType != null && known.dayType in s.dayTypes ? (known.dayType as DayTypeId) : s.weekTypes[weekday(date) - 1]!
+  return s.dayTypes[type].wakeMin
 }

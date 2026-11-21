@@ -8,7 +8,7 @@
  * „Wczytaj PDF zjazdów” (D357) reads a schedule into a preview you correct; only „Zapisz” writes the days, its toast has
  * „Cofnij”.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { groupCount, groupLineText } from '@shared/groupText'
 import type { RawRecord, ZjazdSaveResult, ZjazdUndoDay } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
@@ -46,7 +46,7 @@ import { useNewShortcut } from '../../lib/escape'
 import { usePeriodKeys } from '../../lib/periodKeys'
 import { NewBlockPopover } from '../week/NewBlockPopover'
 import { NEW_BLOCK_WIDTH, popoverPlace } from '../week/weekLayout'
-import { freeHourStart, newBlockDay, NO_NEW_DAY_TEXT, type BusySpan } from '../week/weekNew'
+import { dayWakeMin, freeHourStart, newBlockDay, NO_NEW_DAY_TEXT, type BusySpan } from '../week/weekNew'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { logicalMinuteOf } from '@shared/time/day'
 import { setWakeOnDays } from '../today/dayActions'
@@ -81,9 +81,11 @@ export function CalendarPage() {
   const [files, setFiles] = useState<Record<string, RawRecord | null>>({})
   const importing = useZjazdy((s) => s.preview != null)
   // The small window of a new block (Ctrl+N, below): while it is open the keys of the month wait.
+  // The blocks of a day outside the month's view are being read for the window (Ctrl+N, below): the keys of the month wait for the answer too.
+  const [asking, setAsking] = useState(false)
   const [fresh, setFresh] = useState<{ seq: number; date: string; startMin: number; place: { left: number; top: number } } | null>(null)
   // PgUp / PgDn / Home (D6, P8): the month before, the next, the current one.
-  usePeriodKeys({ prev: () => setMonth(shiftMonth(month, -1)), next: () => setMonth(shiftMonth(month, 1)), today: () => setMonth(thisMonth) }, !importing && !fresh)
+  usePeriodKeys({ prev: () => setMonth(shiftMonth(month, -1)), next: () => setMonth(shiftMonth(month, 1)), today: () => setMonth(thisMonth) }, !importing && !fresh && !asking)
   const [wake, setWake] = useState<number | null>(null)
   const dates = useMemo(() => gridDates(month), [month])
   // The selection of days (D527): kept across months (a day of another month stays selected), Ctrl+A takes the days of the month shown.
@@ -133,15 +135,20 @@ export function CalendarPage() {
   // Ctrl+N (D6, P9): the small window of a new block today – or on the first day of the grid from today – at the nearest free hour, beside its cell.
   const root = useRef<HTMLDivElement>(null)
   const freshSeq = useRef(0)
-  const asking = useRef(false)
+  const askSeq = useRef(0)
+  // What the screen shows now – an answer that comes late looks at it (the month moved by a button, an import opened).
+  const shown = useRef({ month, importing })
+  useLayoutEffect(() => {
+    shown.current = { month, importing }
+  })
   useNewShortcut(() => {
-    if (importing || fresh || asking.current) return
+    if (importing || fresh || asking) return
     // Today when it is on the grid (also in a neighbouring month's cells); else the first day of the month shown from today (the other days of the grid have events only).
     const date = dates.includes(today) ? today : newBlockDay(monthDates, today)
     if (!date) return void toast(NO_NEW_DAY_TEXT)
     const open = (blocks: readonly BusySpan[]) => {
       const own = fileOf(date)
-      const wakeMin = own?.wakeMin ?? settingsOn(rd.settings, date).dayTypes[info(date).type].wakeMin
+      const wakeMin = dayWakeMin(settingsOn(rd.settings, date), date, { wakeMin: own?.wakeMin ?? null, dayType: own?.dayType ?? null })
       const startMin = freeHourStart(blocks, { isToday: date === today, nowMin: logicalMinuteOf(date, Date.now()), wakeMin }, DEFAULT_NEW_BLOCK_MIN)
       const box = root.current?.getBoundingClientRect()
       const at = root.current?.querySelector(`[data-testid="day-${date}"]`)?.getBoundingClientRect()
@@ -151,14 +158,18 @@ export function CalendarPage() {
     // The blocks as counted for the month (before the calendar filter); a day of another month is not in that view – its blocks are read as the week's are.
     const known = monthView?.days.find((d) => d.date === date)?.blocks
     if (known) return open(known)
-    asking.current = true
-    void window.rd
-      .daysView([date], { energy: false })
+    const seq = ++askSeq.current
+    const asked = month
+    setAsking(true)
+    // `Promise.resolve().then`: a call that throws at once is a failed read too (no blocks), never a wait that does not end.
+    void Promise.resolve()
+      .then(() => window.rd.daysView([date], { energy: false }))
       .then((v) => v.days[0]?.blocks ?? [])
-      .catch(() => [])
+      .catch((): BusySpan[] => [])
       .then((blocks) => {
-        asking.current = false
-        if (root.current) open(blocks)
+        setAsking(false)
+        // The month moved on (the button), an import opened, the page left: the day is not on the screen – no window for it.
+        if (root.current && seq === askSeq.current && shown.current.month === asked && !shown.current.importing) open(blocks)
       })
   })
   const namesOf = (d: string) => ({ rd, settings: settingsOn(rd.settings, d), routines, requests })

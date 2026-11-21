@@ -42,7 +42,7 @@ import { EnergyStrip, STRIP_WIDTH } from './EnergyStrip'
 import { costRoom, TileCost } from '../plan/TileCost'
 import { hasEnergy } from '../plan/energyDraw'
 import { NewBlockPopover } from './NewBlockPopover'
-import { freeHourStart, newBlockDay, NO_NEW_DAY_TEXT, typeWakeMin } from './weekNew'
+import { freeHourStart, newBlockDay, NO_NEW_DAY_TEXT, dayWakeMin } from './weekNew'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
 import { saveTileCosts, type CostAsk } from '../plan/costSave'
 import { copyDayBlock, moveWeekBlock } from './weekMove'
@@ -258,7 +258,9 @@ export function DayGrid({
   const spanHeld = held ? dayIndexes(held.from, held.to) : []
   const picking = pick != null
   const onPickingRef = useRef(onPicking)
-  onPickingRef.current = onPicking
+  useLayoutEffect(() => {
+    onPickingRef.current = onPicking
+  })
   useEffect(() => {
     onPickingRef.current?.(picking)
     return () => onPickingRef.current?.(false)
@@ -271,7 +273,7 @@ export function DayGrid({
     const d = days[i]
     if (!d) return void toast(NO_NEW_DAY_TEXT)
     const whole = allDays?.find((x) => x.date === d.date) ?? d
-    const wakeMin = whole.wakeMin ?? typeWakeMin(settingsOn(rd.settings, d.date), d.date)
+    const wakeMin = dayWakeMin(settingsOn(rd.settings, d.date), d.date, whole)
     const startMin = freeHourStart(whole.blocks, { isToday: d.date === today, nowMin: logicalMinuteOf(d.date, Date.now()), wakeMin }, DEFAULT_NEW_BLOCK_MIN)
     pickOn(i, i, { startMin, endMin: startMin + DEFAULT_NEW_BLOCK_MIN }, false)
   })

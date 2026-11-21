@@ -121,7 +121,11 @@ describe('Ctrl+N w „Kalendarzu” (D6, P9)', () => {
     await click('month-next')
     useData.setState({ rd: rdFrom({ schema: 1, calendars: [{ id: 'praca', name: 'Praca', color: CATEGORY_COLORS[2] }, { id: 'dom', name: 'Dom', color: CATEGORY_COLORS[4] }], categories: { inne: { calendar: 'praca' } } }) })
     await act(async () => useCalendarFilter.setState({ hidden: ['praca'] }))
+    const daysView = vi.fn(async () => ({ today: TODAY, days: [], from: 0, to: 0 }))
+    ;(window as unknown as { rd: Record<string, unknown> }).rd.daysView = daysView
     await press('KeyN', { ctrlKey: true })
+    // The day is in the month's view: its blocks are taken from there, nothing is read.
+    expect(daysView).not.toHaveBeenCalled()
     expect(q('week-new')!.getAttribute('data-date')).toBe('2026-12-01')
     expect(q('week-new')!.getAttribute('data-start')).toBe(String(9 * 60))
   })
@@ -141,6 +145,49 @@ describe('Ctrl+N w „Kalendarzu” (D6, P9)', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+  describe('dzień spoza widoku miesiąca – bloki czytane z dni (daysView)', () => {
+    const inGrid = async (daysView: (dates: string[]) => Promise<unknown>) => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-11-30T05:00:00'))
+      ;(window as unknown as { rd: Record<string, unknown> }).rd.daysView = daysView
+      useData.setState({ view: { today: '2026-11-30', allDay: [], computers: [] } as unknown as DataView })
+      await mount()
+      await click('month-next')
+    }
+    it('w trakcie odczytu klawisze okresu czekają, a odpowiedź spóźniona po zmianie miesiąca nie otwiera okienka nigdzie', async () => {
+      let answer: (v: unknown) => void = () => undefined
+      await inGrid(() => new Promise((resolve) => void (answer = resolve)))
+      try {
+        await press('KeyN', { ctrlKey: true })
+        await press('PageDown')
+        expect(title()).toBe('grudzień 2026')
+        // The button still works: the month moves on, the answer is for a day no longer on the screen.
+        await click('month-next')
+        expect(title()).toBe('styczeń 2027')
+        await act(async () => answer({ today: '2026-11-30', days: [{ date: '2026-11-30', blocks: [] }], from: 0, to: 0 }))
+        expect(q('week-new')).toBeNull()
+        // The reading is over: the keys and Ctrl+N work again.
+        await press('PageUp')
+        expect(title()).toBe('grudzień 2026')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+    it('odczyt, który rzuca od razu (wyjątek synchroniczny), nie blokuje Ctrl+N na zawsze: okienko otwiera się bez bloków', async () => {
+      await inGrid(() => {
+        throw new Error('nie ma folderu')
+      })
+      try {
+        await press('KeyN', { ctrlKey: true })
+        await act(async () => undefined)
+        expect(q('week-new')!.getAttribute('data-date')).toBe('2026-11-30')
+        // 05:00 is before the wake (06:00 of an ordinary Monday): from the wake.
+        expect(q('week-new')!.getAttribute('data-start')).toBe(String(6 * 60))
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
   it('przy otwartym okienku PgUp / PgDn / Home nie zmieniają miesiąca', async () => {
     await mount()

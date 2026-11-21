@@ -6,7 +6,8 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { freeHourStart, newBlockDay } from '@renderer/features/week/weekNew'
+import { DEFAULT_SETTINGS } from '@shared/model/settings'
+import { dayWakeMin, freeHourStart, newBlockDay } from '@renderer/features/week/weekNew'
 import { onModal } from '@renderer/lib/escape'
 import { periodKeyOf, usePeriodKeys } from '@renderer/lib/periodKeys'
 import { choose } from '@renderer/features/search/paletteLogic'
@@ -103,6 +104,18 @@ describe('Ctrl+N w widokach okresów: dzień i godzina okna (P9)', () => {
   it('inny dzień – godzinę po pobudce; koniec doby nie wypycha bloku poza nią', () => {
     expect(freeHourStart([], { isToday: false, nowMin: 0, wakeMin: 7 * 60 })).toBe(8 * 60)
     expect(freeHourStart([{ startMin: 8 * 60, endMin: 28 * 60 }], { isToday: false, nowMin: 0, wakeMin: 7 * 60 })).toBe(28 * 60 - 60)
+  })
+})
+
+describe('pobudka dnia dla okienka (Tydzień i Kalendarz – jedna funkcja)', () => {
+  const s = DEFAULT_SETTINGS
+  it('własna pobudka dnia wygrywa; bez niej typ dnia z pliku; bez typu (albo nieznany) typ dnia tygodnia', () => {
+    expect(dayWakeMin(s, '2026-11-23', { wakeMin: 400, dayType: 'wolne' })).toBe(400)
+    expect(dayWakeMin(s, '2026-11-23', { wakeMin: null, dayType: 'wolne' })).toBe(s.dayTypes.wolne.wakeMin)
+    // Monday is an ordinary day, the weekend is not.
+    expect(dayWakeMin(s, '2026-11-23', { wakeMin: null, dayType: null })).toBe(s.dayTypes[s.weekTypes[0]!].wakeMin)
+    expect(dayWakeMin(s, '2026-11-22', { wakeMin: null, dayType: null })).toBe(s.dayTypes[s.weekTypes[6]!].wakeMin)
+    expect(dayWakeMin(s, '2026-11-23', { wakeMin: null, dayType: 'nie-ma-takiego' })).toBe(s.dayTypes[s.weekTypes[0]!].wakeMin)
   })
 })
 
