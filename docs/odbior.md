@@ -334,6 +334,10 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX9.3 Panel nowego bloku jako szkic, podpisy Esc i gestów (1.34.0)
    - [ ] UX9.4 Legenda energii pod „?” i jednostka kosztu (1.34.0)
    - [ ] UX9.5 Karty rutyn w panelu bocznym, „Zakończ rutynę (N z M)” (1.34.0)
+   - [ ] UX18.1 „Historia” z panelu bloku (1.34.0)
+   - [ ] UX18.2 „Historia” sprawy, szablonu, rutyny i serii (1.34.0)
+   - [ ] UX18.3 Filtr i szukanie w Historii (1.34.0)
+   - [ ] UX18.4 Dymek błędu do zamknięcia „×” (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3482,6 +3486,35 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** rano z rutyną; zaznacz część kroków.
 - **Oczekiwany efekt:** karta rutyny w panelu bocznym (nie nad osią), przycisk „Zakończ rutynę (3 z 5)”.
 - **Nie przechodzi, gdy:** karta nad osią; przycisk bez licznika.
+
+
+#### UX18.1 „Historia” z panelu bloku
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/history-ux18.test.ts`. Ty: z prawdziwym dniem.
+- **Jak sprawdzić:** otwórz blok w „Dziś”, kliknij „Historia” w nagłówku panelu.
+- **Oczekiwany efekt:** ekran Historii z planem tego dnia wybranym i jego wersjami; nowy, niezapisany blok nie ma przycisku.
+- **Nie przechodzi, gdy:** lista pusta mimo wersji; wybrany inny rekord.
+
+#### UX18.2 „Historia” sprawy, szablonu, rutyny i serii
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/history-ux18.test.ts`, E2E `screens`, `cases`. Ty: rzut oka.
+- **Jak sprawdzić:** „…” → „Historia” przy sprawie; „Historia” w edytorze szablonu i rutyny; seria podzielona „od dziś” – „Historia” w panelu jej bloku; rekord bez wersji.
+- **Oczekiwany efekt:** właściwy rekord wybrany (w serii – edytowana część); rekord bez wersji – Historia z dymkiem „Ten rekord nie ma jeszcze wersji w historii.”.
+- **Nie przechodzi, gdy:** rekord ukryty filtrem; seria otwiera starszą część; brak przycisku.
+
+#### UX18.3 Filtr i szukanie w Historii
+- [ ] Odebrane
+- **Automatycznie:** E2E `screens`, `tests/web/history-ux18.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Historii wpisz dwa słowa nazwy (bez ogonków), potem datę dnia „2026-11-21”; przełącz rodzaje w filtrze.
+- **Oczekiwany efekt:** licznik „x z y”, liczby przy rodzajach, szukanie zawęża listę po każdym słowie; przy błędzie odczytu – „Nie udało się odczytać historii – spróbuj za chwilę.”.
+- **Nie przechodzi, gdy:** licznik nie idzie za filtrem; szukanie rozróżnia „ł” i „l”; błąd odczytu mówi „nie ma wersji”.
+
+#### UX18.4 Dymek błędu do zamknięcia „×”
+- [ ] Odebrane
+- **Tylko Ty:** prawdziwe błędy zapisu i folderu.
+- **Jak sprawdzić:** wywołaj błąd zapisu albo folderu (np. folder chwilowo niedostępny); osobno błąd pola (budżet „17h”); przy kilku błędach usuń coś (dymek „Cofnij”).
+- **Oczekiwany efekt:** błąd zapisu stoi do „×”, ten sam się nie dubluje; błąd pola znika sam po kilku sekundach; „Cofnij” nie znika przez nadmiar dymków.
+- **Nie przechodzi, gdy:** błąd zapisu znika sam; „×” zamyka szkic otwartego bloku; „Cofnij” wypchnięte przed czasem.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
