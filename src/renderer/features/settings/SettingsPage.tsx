@@ -3,14 +3,13 @@
  * the box „Szukaj w ustawieniach” (the fields by their labels). The sections follow `settingsLayout`: the shared settings with a
  * date under one bar „od jutra / od dziś / od daty” (with the changes that wait for their date), those that work at once marked
  * „od razu”, the categories, calendars and the plan of lectures, the bar, the notifications and this computer's own, the data
- * with its backups, and the updates, the information and the shortcuts.
+ * with its backups, and the updates and the information (the list of shortcuts is under F1 and „Skróty” in the menu, UX15).
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import type { AppInfo } from '@shared/api'
 import type { UpdateView } from '@shared/updateView'
 import { useData } from '../../store/data'
 import { Field, Section, Toggle } from '../../components/ui'
-import { SHORTCUTS } from '../../lib/shortcuts'
 import { phaseText, updateAction } from '../../store/update'
 import { takeFoundPick, takePick, toast, useUi } from '../../store/ui'
 import { CalendarsSection } from './CalendarsSection'
@@ -43,24 +42,6 @@ const HELPER_LABEL: Record<AppInfo['helper']['state'], string> = {
   unavailable: 'niedostępny – kilka razy przestał działać',
   missing: 'brak programu pomocnika',
   off: 'wyłączony'
-}
-
-/** The shortcuts at the bottom stay where they were (UX15 moves them). */
-function ShortcutsSection() {
-  return (
-    <Section title="Skróty klawiszowe" data-testid="settings-shortcuts">
-      <dl className="grid grid-cols-[160px_1fr] gap-x-3 gap-y-1.5" data-testid="shortcuts">
-        {SHORTCUTS.map(([k, what]) => (
-          <div key={k} className="contents">
-            <dt>
-              <span className="kbd">{k}</span>
-            </dt>
-            <dd className="text-muted">{what}</dd>
-          </div>
-        ))}
-      </dl>
-    </Section>
-  )
 }
 
 /** „Aktualizacje”: the night install and the state of the updates (the version is in „Informacje”). */
@@ -173,8 +154,6 @@ function sectionElement(id: string, info: AppInfo | null, setInfo: (i: AppInfo) 
       return <UpdatesSection info={info} setInfo={setInfo} />
     case 'settings-info':
       return <InfoSection info={info} />
-    case 'settings-shortcuts':
-      return <ShortcutsSection />
     default:
       return null
   }

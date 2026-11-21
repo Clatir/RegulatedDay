@@ -38,7 +38,7 @@ async function mount() {
 const q = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`)
 
 describe('„Szukaj” w menu bocznym (D469)', () => {
-  it('jest ostatnią pozycją menu, z napisem „Szukaj” i skrótem „Ctrl+K” jak skróty ekranów', async () => {
+  it('jest pozycją pod ekranami (przed „Skróty”), z napisem „Szukaj” i skrótem „Ctrl+K” jak skróty ekranów', async () => {
     await mount()
     const search = q('nav-search')!
     expect(search).not.toBeNull()
@@ -48,7 +48,8 @@ describe('„Szukaj” w menu bocznym (D469)', () => {
     const keysOf = (el: HTMLElement) => el.querySelector('span.num')!.className
     expect(keysOf(search)).toBe(keysOf(q('nav-today')!))
     const items = [...q('side-menu')!.querySelectorAll('button')].map((b) => b.getAttribute('data-testid'))
-    expect(items).toEqual([...PAGES.map((p) => `nav-${p}`), 'nav-search'])
+    // „Szukaj” and, under it, „Skróty” (F1, UX15) – both outside the screens.
+    expect(items).toEqual([...PAGES.map((p) => `nav-${p}`), 'nav-search', 'nav-shortcuts'])
   })
 
   it('klik otwiera paletę jak Ctrl K; pozycja nie jest „bieżącym ekranem”', async () => {

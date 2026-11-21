@@ -14,6 +14,10 @@ import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn, type DayTypeId, type Rul
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { Choice, DateField, TextField } from '../../components/fields'
+import { HelpMark } from '../../components/HelpMark'
+import { moduleToggleLabel } from '../../lib/sameWords'
+import { FIELD_HINTS } from '../../lib/fieldHints'
+import { FIELD_TERMS } from '../help/glossary'
 import { Field, NowTag, Section, Segmented, Toggle } from '../../components/ui'
 import { useData } from '../../store/data'
 import { countDay } from '../../store/day'
@@ -81,9 +85,9 @@ export function ModulesSection() {
     <Section title="Moduły" data-testid="settings-modules" tag={<NowTag />}>
       <p className="text-[12px] text-muted">Plan, timer, granica, czas wolny i rytuał działają zawsze. Włączenie albo wyłączenie modułu działa od razu, a jego nagrody z dnia zmiany nie liczą się w żadną stronę.</p>
       {MODULES.map((m) => (
-        <div key={m} data-testid={`field-module-${m}`}>
-          <Toggle checked={g.modules[m]} onChange={(v) => void setModule(m, v)} label={MODULE_NAMES[m]} data-testid={`module-${m}`} />
-        </div>
+        <Field key={m} label={MODULE_NAMES[m]} data-testid={`field-module-${m}`} labelWidth={200}>
+          <Toggle checked={g.modules[m]} onChange={(v) => void setModule(m, v)} label={moduleToggleLabel(g.modules[m])} aria-label={MODULE_NAMES[m]} data-testid={`module-${m}`} />
+        </Field>
       ))}
     </Section>
   )
@@ -106,8 +110,9 @@ export function DayTypesSection() {
       <div className="grid items-center gap-x-2 gap-y-1.5" style={{ gridTemplateColumns: `150px repeat(${DAY_TYPE_FIELDS.length}, minmax(0, 1fr))` }}>
         <span />
         {DAY_TYPE_FIELDS.map((f) => (
-          <span key={f.key} className="text-[11.5px] text-muted" data-testid={`field-daytype-${f.key}`}>
+          <span key={f.key} className="text-[11.5px] text-muted" data-testid={`field-daytype-${f.key}`} data-hint={FIELD_HINTS[`field-daytype-${f.key}`]} title={FIELD_HINTS[`field-daytype-${f.key}`]}>
             {f.label}
+            {FIELD_TERMS[`field-daytype-${f.key}`] && <HelpMark term={FIELD_TERMS[`field-daytype-${f.key}`]!} />}
           </span>
         ))}
         {DAY_TYPES.map((t) => (

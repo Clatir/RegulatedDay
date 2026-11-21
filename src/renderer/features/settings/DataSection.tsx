@@ -14,6 +14,7 @@ import { logicalDayOf } from '@shared/time/day'
 import { DateField } from '../../components/fields'
 import { Field, Section } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
+import { ONEDRIVE_PIN } from '../../lib/sameWords'
 import { useData } from '../../store/data'
 import { setMachinePrefs, useMachine } from '../../store/machine'
 import { toast } from '../../store/ui'
@@ -91,9 +92,9 @@ function FolderField() {
               type="button"
               className="btn"
               onClick={() => void window.rd.pinFolder().then((r) => (r.ok ? toast('Folder przypięty: OneDrive trzyma go na tym komputerze.', 'success') : toast(r.error ?? 'Nie udało się.', 'error', 8000)))}
-              title="Zawsze przechowuj na tym urządzeniu"
+              title={ONEDRIVE_PIN.hint}
             >
-              Przypnij w OneDrive
+              {ONEDRIVE_PIN.label}
             </button>
           </>
         )}
