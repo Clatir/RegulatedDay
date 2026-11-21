@@ -233,10 +233,10 @@ describe('przegląd UX15, runda 1', () => {
     await mount()
     expect(q('wizard-line-costs')!.textContent).toContain('wartości startowe')
     await act(async () => patchSettings({ categories: { analiza: { costs: { head: 5 } } } }))
-    expect(q('wizard-line-costs')!.textContent).toContain('zmienione: 1')
+    expect(q('wizard-line-costs')!.textContent).toContain('Podkategorie: zmienione 1')
     expect(q('wizard-line-costs')!.textContent).not.toContain('wartości startowe')
     await act(async () => patchSettings({ categories: { posilek: { place: 'passive' } } }))
-    expect(q('wizard-line-costs')!.textContent).toContain('zmienione: 2')
+    expect(q('wizard-line-costs')!.textContent).toContain('Podkategorie: zmienione 2')
   })
 
   it('w trakcie zapisu „Dalej”, „Wstecz” i linki „Zmień” są wyłączone', async () => {
@@ -247,6 +247,22 @@ describe('przegląd UX15, runda 1', () => {
     await set({ busy: false, step: 3 })
     await set({ busy: true })
     for (const id of ['wizard-back', 'wizard-next', 'wizard-finish-defaults']) expect((q(id) as HTMLButtonElement).disabled, id).toBe(true)
+  })
+
+  it('przełącznik modułu ma nazwę modułu (czytnik ekranu nie czyta samego „tak / nie”)', async () => {
+    await set({ step: 11 })
+    await mount()
+    for (const [m, name] of [['game', 'Gra'], ['requests', 'Prośby'], ['energy', 'Energia i sygnały']] as const) expect(q(`wizard-module-${m}`)!.getAttribute('aria-label'), m).toBe(name)
+  })
+
+  it('w trakcie zapisu „Później” jest wyłączone, a treść kroku nieaktywna (inert)', async () => {
+    await set({ step: 3 })
+    await mount()
+    expect((q('wizard-later') as HTMLButtonElement).disabled).toBe(false)
+    expect(q('wizard-step-body')!.hasAttribute('inert')).toBe(false)
+    await set({ busy: true })
+    expect((q('wizard-later') as HTMLButtonElement).disabled).toBe(true)
+    expect(q('wizard-step-body')!.hasAttribute('inert')).toBe(true)
   })
 
   it('moduły: te same słowa w kreatorze i w Ustawieniach – nazwa modułu i „tak / nie”', async () => {
@@ -270,5 +286,8 @@ describe('przegląd UX15, runda 1', () => {
     const line = q('first-day-today')!.closest('li')!.textContent!
     expect(line).not.toContain('objawy')
     expect(line).toContain('granicę')
+    const concepts = q('first-day-concepts')!.closest('li')!.textContent!
+    expect(concepts).not.toMatch(/energii|rezerwa/)
+    expect(concepts).toContain('twardy koniec')
   })
 })

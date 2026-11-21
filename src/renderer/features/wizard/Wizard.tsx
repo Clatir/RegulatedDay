@@ -117,7 +117,7 @@ export function Wizard() {
           {w.step + 1} z {steps.length} · {TITLES[step]}
         </span>
         <span className="flex-1" />
-        <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={() => patchWizard({ open: false })} data-testid="wizard-later">
+        <button type="button" className="text-[12px] text-muted hover:text-fg disabled:opacity-50" disabled={w.busy} onClick={() => patchWizard({ open: false })} data-testid="wizard-later">
           Później
         </button>
       </div>
@@ -128,7 +128,10 @@ export function Wizard() {
         <div className="min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex max-w-[720px] flex-col gap-4 p-5">
             <h1 className="text-[18px] font-medium">{TITLES[step]}</h1>
-            <StepView step={step} today={today} />
+            {/* While „Zakończ” writes, the step does not take answers (inert: no click, no focus, no key). */}
+            <div inert={w.busy} data-testid="wizard-step-body">
+              <StepView step={step} today={today} />
+            </div>
             {w.error && (
               <p className="rounded border border-rose/60 bg-rose-soft px-3 py-2 text-[12.5px]" data-testid="wizard-error">
                 {w.error}
@@ -609,7 +612,7 @@ function StepModules() {
       <Lead>Plan, timer, granica, czas wolny i rytuał działają zawsze. Moduły włączasz i wyłączasz sam – zmiana działa od razu; na start wszystkie są włączone.</Lead>
       {MODULES.map((m) => (
         <Field key={m} label={MODULE_NAMES[m]} labelWidth={220}>
-          <Toggle checked={g.modules[m]} onChange={(v) => patchWizard({ general: { ...g, modules: { ...g.modules, [m]: v } } })} label={moduleToggleLabel(g.modules[m])} data-testid={`wizard-module-${m}`} />
+          <Toggle checked={g.modules[m]} onChange={(v) => patchWizard({ general: { ...g, modules: { ...g.modules, [m]: v } } })} label={moduleToggleLabel(g.modules[m])} aria-label={MODULE_NAMES[m]} data-testid={`wizard-module-${m}`} />
         </Field>
       ))}
     </div>
@@ -704,6 +707,7 @@ function StepSummary() {
       </div>
     )
   const special = Object.keys(w.days).length
+  const costs = changedCostCategories(s)
   const z = s.dayTypes.zwykly
   const ways = s.categories.regeneracja!.variants.filter((v) => !v.archived).length
   return (
@@ -726,7 +730,7 @@ function StepSummary() {
         <SummaryLine step="calendar">Dni zaznaczone w kalendarzu: {special}.</SummaryLine>
         <SummaryLine step="people">Osoby: {w.people.length}.</SummaryLine>
         <SummaryLine step="regenWays">Sposoby regeneracji: {ways}.</SummaryLine>
-        <SummaryLine step="costs">Koszty podkategorii: {changedCostCategories(s) ? `zmienione: ${changedCostCategories(s)}` : 'wartości startowe'}, zajęcia stacjonarne: {m.stationaryClasses ? STATIONARY.yes : STATIONARY.no}.</SummaryLine>
+        <SummaryLine step="costs">Podkategorie: {costs ? `zmienione ${costs} (koszt, miejsce, kontakt)` : 'wartości startowe'}, zajęcia stacjonarne: {m.stationaryClasses ? STATIONARY.yes : STATIONARY.no}.</SummaryLine>
         <SummaryLine step="modules">Moduły: {MODULES.filter((x) => w.general.modules[x]).map((x) => MODULE_NAMES[x].toLowerCase()).join(', ') || 'żaden'}.</SummaryLine>
         <SummaryLine step="computer">Ten komputer: {computer}.</SummaryLine>
       </ul>

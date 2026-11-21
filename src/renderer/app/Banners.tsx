@@ -110,7 +110,7 @@ function FirstDayBanner() {
       <ul className="flex flex-col gap-1.5">
         {item('today', energy ? 'W „Dziś” odpowiedz na pytania o objawy i zatwierdź granicę w planie porannym – od tego aplikacja liczy resztę dnia.' : 'W „Dziś” zatwierdź granicę w planie porannym – od niej aplikacja liczy resztę dnia.', 'Dziś', () => navigate('today'))}
         {item('bar', 'Pasek pulpitu: sprawdź jego miejsce i, w ustawieniach paska zadań Windows, włącz ikonę Regulated Day, żeby była zawsze widoczna.', 'Ustawienia paska', () => openPick({ page: 'settings' }, { kind: 'setting', id: 'settings-bar' }))}
-        {item('concepts', 'Pule energii, rezerwa, granica, twardy koniec, nuty – znaczenie w paru zdaniach (też w Ctrl+K).', 'Jak to działa', () => void openConcepts())}
+        {item('concepts', (energy ? 'Pule energii, rezerwa, granica, twardy koniec, nuty – znaczenie w paru zdaniach (też w Ctrl+K).' : 'Granica, maksimum, pula projektów, twardy koniec, nuty – znaczenie w paru zdaniach (też w Ctrl+K).'), 'Jak to działa', () => void openConcepts())}
         {item('shortcuts', 'Lista skrótów klawiszowych jest pod F1 i „Skróty” u dołu menu.', 'Skróty', () => void toggleShortcuts())}
       </ul>
     </div>

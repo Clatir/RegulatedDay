@@ -159,6 +159,7 @@ describe('przegląd UX15, runda 1', () => {
   it('specyfikacja: Ctrl K ma grupę „Pojęcia” i polecenia „Jak to działa”, „Skróty klawiszowe”', () => {
     const spec = readFileSync('docs/specyfikacja.md', 'utf8')
     const at = spec.indexOf('**Wyszukiwarka Ctrl K (SNT6')
+    expect(at).toBeGreaterThanOrEqual(0)
     const bullet = spec.slice(at, spec.indexOf(String.fromCharCode(10), at))
     expect(bullet).toContain('„Pojęcia”')
     expect(bullet).toContain('„Jak to działa”')

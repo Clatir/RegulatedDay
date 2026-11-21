@@ -107,6 +107,9 @@ describe('E3: każde pole Ustawień ma opis', () => {
   it('moduły w Ustawieniach: przełącznik „tak / nie”, nie „włączony” przy nazwie rodzaju żeńskiego i nijakiego', async () => {
     await mount()
     for (const m of ['energy', 'requests', 'game']) expect(q(`module-${m}`)!.closest('label')!.textContent, m).toBe('tak')
+    expect(q('module-game')!.getAttribute('aria-label')).toBe('Gra')
+    expect(q('module-requests')!.getAttribute('aria-label')).toBe('Prośby')
+    expect(q('module-energy')!.getAttribute('aria-label')).toBe('Energia i sygnały')
   })
 
   it('pojęcia z przeglądu (rezerwa, bufor propozycji granicy, wyjątek granicy, koszt w tle, próg bezczynności) mają „?” w Ustawieniach', async () => {

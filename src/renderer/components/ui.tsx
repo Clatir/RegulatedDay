@@ -44,13 +44,15 @@ export function Field({ label, children, hint, labelWidth = 180, ...rest }: { la
   )
 }
 
-export function Toggle({ checked, onChange, label, disabled, ...rest }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; disabled?: boolean; 'data-testid'?: string }) {
+/** `aria-label`: the name of the switch when its visible label is only its state („tak / nie”, „włączony”). */
+export function Toggle({ checked, onChange, label, disabled, ...rest }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; disabled?: boolean; 'data-testid'?: string; 'aria-label'?: string }) {
   return (
     <label className={cx('inline-flex cursor-default items-center gap-2', disabled && 'opacity-50')}>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={rest['aria-label']}
         disabled={disabled}
         data-testid={rest['data-testid']}
         onClick={() => onChange(!checked)}
