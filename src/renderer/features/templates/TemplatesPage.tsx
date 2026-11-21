@@ -19,7 +19,7 @@ import { durationLabel, logicalClock, plDate, WEEKDAY_SHORT } from '@shared/form
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { templateJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
-import { planBlock, templateFrom, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
+import { freeWeekday, planBlock, templateClashes, templateFrom, templateUnused, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { currentSeries } from '@shared/model/series'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn } from '@shared/model/settings'
 import { SERIES_MARK, seriesText } from '@shared/seriesText'
@@ -31,7 +31,7 @@ import { isSaved, saveRecord, storedAnswer, tryUpdateRecord, updateRecord, useDa
 import { useBusy } from '../../lib/busy'
 import { useNewShortcut } from '../../lib/escape'
 import { removeTarget, useDeleteResolver, useDeleteSelected } from '../../lib/deleteKey'
-import { takeFoundPick, useUi } from '../../store/ui'
+import { takeFoundPick, undoToast, useUi } from '../../store/ui'
 import { attachTransfer } from '../attachments/attachDrop'
 import { withAttachCounts } from '../attachments/attachView'
 import { GroupLine } from '../../components/GroupLine'
@@ -58,6 +58,7 @@ import { templateAdd, templateCopy, templateDrag, templateStartAt, withTemplateC
 import { copyTemplateBlock } from '../plan/blockCopy'
 import { dragTemplateGroup, templateDragPreview } from '../plan/groupDrag'
 import { COPY_SPAN_ID } from '../today/dayPush'
+import { losesText, winsText } from './clashText'
 import { freshAfter, removeTemplate, removeTemplateBlock } from './templateActions'
 
 export function TemplatesPage() {
@@ -86,8 +87,11 @@ export function TemplatesPage() {
     // One at a time (A5): a second click or Ctrl+N while this still saves would make a second template.
     run(async () => {
       const id = newId()
+      // D563 P3: beside the type's default it starts on the first weekday no template of the type has (never on a taken one – the smaller id
+      // would win quietly); with none free, or none to clash with, without days (the default of the type).
       const hasDefault = templates.some((t) => t.dayType === 'zwykly' && !t.weekdays.length && !t.archived)
-      const t: Template = { id, name: 'Nowy szablon', dayType: 'zwykly', weekdays: hasDefault ? [1] : [], versions: [{ from: addDays(today, 1), blocks: [], budgetMin: null, maxMin: null }], archived: false }
+      const day = hasDefault ? freeWeekday(templates, 'zwykly') : null
+      const t: Template = { id, name: 'Nowy szablon', dayType: 'zwykly', weekdays: day != null ? [day] : [], versions: [{ from: addDays(today, 1), blocks: [], budgetMin: null, maxMin: null }], archived: false }
       await saveRecord(paths.record('template', id), null, templateJson(t))
       setSelected(id)
     })
@@ -139,7 +143,14 @@ export function TemplatesPage() {
                   data-testid="template-item"
                 >
                   <span>{t.name}</span>
-                  <span className="text-[11.5px] text-muted">{t.weekdays.length ? t.weekdays.map((d) => WEEKDAY_SHORT[d - 1]).join(', ') : 'domyślny dla typu'}</span>
+                  <span className="text-[11.5px] text-muted">
+                    {t.weekdays.length ? t.weekdays.map((d) => WEEKDAY_SHORT[d - 1]).join(', ') : 'domyślny dla typu'}
+                    {templateUnused(templates, t) && (
+                      <span title="Inny szablon tego typu ma te same dni i wygrywa – z tego nie powstaje żaden dzień." data-testid="template-unused">
+                        {' · nieużywany'}
+                      </span>
+                    )}
+                  </span>
                 </button>
               ))}
             </div>
@@ -191,8 +202,9 @@ export function TemplatesPage() {
 }
 
 function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved }: { template: Template; today: string; openBlock: string | null; onBlockOpened: () => void; onCopied: (id: string) => void; onRemoved: () => void }) {
-  const { rd, lectures, routines, requests } = useData()
+  const { rd, lectures, routines, requests, templates } = useData()
   const view = useData((s) => s.view)!
+  const clash = useMemo(() => templateClashes(templates, template), [templates, template])
   const tomorrow = addDays(today, 1)
   const [from, setFrom] = useState(tomorrow)
   const [selected, setSelected] = useState<string | null>(null)
@@ -234,9 +246,10 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const pushedShown = pushed != null && deepEqual(pushedMade, template)
   /**
    * A change of the axis (a block dragged, an edge, a new block) as one edit of the template, with the blocks it pushes
-   * apart; when it pushed some, „Przesunięto N bloków · Cofnij”. Saved – true.
+   * apart; when it pushed some, „Przesunięto N bloków · Cofnij”. Saved – true. `added` (a block made on the empty axis, D366): one that pushed
+   * none says „Dodano blok · Cofnij” (D563 – the same undo as the line's: the template as it was before; one that pushed some has the line).
    */
-  const saveChange = async (c: TemplateChange): Promise<boolean> => {
+  const saveChange = async (c: TemplateChange, added = false): Promise<boolean> => {
     const made: { before: RawRecord | null; after: RawRecord | null } = { before: null, after: null }
     const out = await tryUpdateRecord(rel, (raw) => {
       const t = templateFrom(raw)
@@ -247,6 +260,10 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     })
     const saved = isSaved(out)
     if (saved && c.pushed > 0 && made.before && made.after) setPushed({ text: pushedText(c.pushed), before: made.before, after: made.after })
+    else if (saved && added && made.before && made.after) {
+      const { before, after } = made as { before: RawRecord; after: RawRecord }
+      undoToast('Dodano blok', () => void saveRecord(rel, after, before))
+    }
     return saved
   }
   /** „Cofnij”: the template as it was before the push – what changed on another computer since stays a question. */
@@ -380,6 +397,20 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
               ))}
             </div>
           </Field>
+          {(clash.loses.length > 0 || clash.wins.length > 0) && (
+            <div className="flex flex-col gap-0.5 rounded border border-line-strong bg-raised px-3 py-2 text-[12.5px]" role="status" data-testid="template-clash">
+              {losesText(clash.loses).map((x) => (
+                <span key={x} data-testid="template-clash-loses">
+                  Ten sam dzień ma też inny szablon – {x}.
+                </span>
+              ))}
+              {winsText(clash.wins).map((x) => (
+                <span key={x} data-testid="template-clash-wins">
+                  {x}.
+                </span>
+              ))}
+            </div>
+          )}
           <Field label="Zmiany od" labelWidth={140} hint={`Wersje: ${template.versions.map((v) => `od ${plDate(v.from)}`).join(', ') || 'brak'}. Dni przed tą datą się nie zmieniają.`}>
             <div className="flex items-center gap-2">
               <DateField today={today} value={from} onCommit={(d) => setFrom(d < tomorrow ? tomorrow : d)} shellClassName="w-[120px]" aria-label="Zmiany od" data-testid="template-from" />
@@ -476,7 +507,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
             onCreate={(min, durationMin = DEFAULT_NEW_BLOCK_MIN) => {
               // D366; D367: on a taken place it pushes the flexible blocks after it apart.
               const b = planBlock({ id: newId(10), categoryId: 'inne', startMin: min, durationMin, origin: 'template' })
-              void saveChange(templateAdd(model, b)).then((saved) => {
+              void saveChange(templateAdd(model, b), true).then((saved) => {
                 if (!saved) return
                 setFresh(b.id)
                 open(b.id)

@@ -441,6 +441,49 @@ export function templateFor(templates: readonly Template[], dayType: DayTypeId, 
   return pick(live.filter((t) => t.weekdays.includes(weekday))) ?? pick(live.filter((t) => t.weekdays.length === 0))
 }
 
+/**
+ * A place a template stands on (D563 P3): a weekday of its type, `null` – the type's default (a template without weekdays). `other` is the
+ * rival template there. Counted like `templateFor` chooses: among the live templates of one type on one place the smaller id wins – quietly,
+ * that rule stays; this only says it. A default and a template of a weekday never meet (the weekday's own goes first by design); versions
+ * are not looked at (a template that has none yet on a date is skipped by `templateFor` there – the warning stays, it is only a warning, D72).
+ */
+export interface TemplateClash {
+  weekday: number | null
+  other: Template
+}
+
+const templateSlots = (t: Template): Array<number | null> => (t.weekdays.length ? t.weekdays : [null])
+const rivalsOn = (templates: readonly Template[], t: Template, slot: number | null): Template[] => templates.filter((x) => x.id !== t.id && !x.archived && x.dayType === t.dayType && templateSlots(x).includes(slot))
+
+/** Where `t` loses (to the one that wins there) and where it wins (over each rival); an archived template takes part nowhere. */
+export function templateClashes(templates: readonly Template[], t: Template): { loses: TemplateClash[]; wins: TemplateClash[] } {
+  const out: { loses: TemplateClash[]; wins: TemplateClash[] } = { loses: [], wins: [] }
+  if (t.archived) return out
+  for (const slot of templateSlots(t)) {
+    const rivals = rivalsOn(templates, t, slot)
+    if (!rivals.length) continue
+    const first = [...rivals].sort((a, b) => (a.id < b.id ? -1 : 1))[0]!
+    if (first.id < t.id) out.loses.push({ weekday: slot, other: first })
+    else for (const other of rivals) out.wins.push({ weekday: slot, other })
+  }
+  return out
+}
+
+/** A live template that loses on every place it stands on – no day is made from it (the mark „nieużywany” of the list). */
+export function templateUnused(templates: readonly Template[], t: Template): boolean {
+  return !t.archived && templateClashes(templates, t).loses.length === templateSlots(t).length
+}
+
+/**
+ * The first weekday no live template of `dayType` has for its own – where a new template of the type starts, so it clashes with none (the
+ * type's default does not hold a weekday); all seven taken – null (it starts without days).
+ */
+export function freeWeekday(templates: readonly Template[], dayType: DayTypeId): number | null {
+  const taken = new Set(templates.filter((x) => !x.archived && x.dayType === dayType).flatMap((x) => x.weekdays))
+  for (let d = 1; d <= 7; d++) if (!taken.has(d)) return d
+  return null
+}
+
 export function lectureFrom(v: unknown): LectureSeries | null {
   if (!isPlain(v) || typeof v.id !== 'string' || typeof v.categoryId !== 'string' || !isIsoDate(v.from) || !isIsoDate(v.to)) return null
   const weekday = intIn(v.weekday, 1, 7)

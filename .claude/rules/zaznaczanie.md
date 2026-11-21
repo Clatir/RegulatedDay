@@ -86,7 +86,7 @@ paths:
 - Liczba „Zaznaczone dni: N” zostaje tylko w pasku działań (T1586; `daysSummary` jest w `shared`, Kalendarz go nie używa). Menu „Zmień N dni” (`dayMenu.ts`, czyste): „Typ dnia”
   (podmenu z ✓/„—”, „Typ z tygodnia”), „Pobudka” (pole z Enter, `parseField` jak `TimeField`) i „Pobudka z typu”; stany ✓/„—” z plików zaznaczonych dni, także spoza siatki
   (`readDayFiles` przed otwarciem); wyłączone z powodem, gdy żaden dzień nie pasuje (typ – od jutra, pobudka – od dziś), w trakcie zapisu – „Zapisuję…”.
-- Linia `GroupLine view="calendar"` po zmianie ≥ 2 dni (jeden dzień – jak dotąd, bez linii): typ – `saveDays` zbiera `WeekPushedDay` (`movedDay`), `undoDayEdits` (`dayGroup.ts`);
+- Linia `GroupLine view="calendar"` po zmianie ≥ 2 dni (jeden dzień – bez linii, `undoToast` „Typ dnia 14.12.2026: Wolne · Cofnij” → `undoOneDay` = `undoDayEdits`, D563 B2; „Cofnij” przywraca typ i zajęcia zjazdu zdjęte zmianą typu): typ – `saveDays` zbiera `WeekPushedDay` (`movedDay`), `undoDayEdits` (`dayGroup.ts`);
   pobudka – `setDayWake(…, group)` zamiast toastu z blokami, `undoWakeGroup` (dzień z pobudką albo przesuniętym blokiem zmienionym od tego czasu zostaje cały, `keptText`). Pominięte dni
   (minione, dzisiejszy przy typie) w linii: „pominięto 2: miniony, dzisiejszy” – przy linii bez toastu o nich (toast tylko, gdy linii nie ma). Zaznaczenie po zmianie czyści się.
 - Pliki dni czytają się porcjami po 62 (`readDayFiles`, `dayFilesNow`; hub odpowiada najwyżej 62 dniami); jedno „Cofnij” zmian dni to `takeBackDays` (`store/dayUndo.ts`: „Tydzień”,

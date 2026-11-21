@@ -14,7 +14,7 @@ import { expect, test } from '@playwright/test'
 import { paths } from '../../src/shared/data/paths'
 import { templateBlockId } from '../../src/shared/engine/createDay'
 import { templateJson } from '../../src/shared/model/defaults'
-import { dayFileFrom, planBlock, type Template } from '../../src/shared/model/plan'
+import { dayFileFrom, planBlock, templateFrom, type Template } from '../../src/shared/model/plan'
 import { logicalMinuteOf } from '../../src/shared/time/day'
 import { addDays } from '../../src/shared/time/zone'
 import { launch, logicalToday, withMainLog } from './app'
@@ -243,6 +243,39 @@ test('szablon: Zastosuj do dziś – okno godzin i minionych (domyślnie wg plan
       expect(r1).toBeLessThanOrEqual(after)
       expect(starts()[id('r2')]).toBe(r1 + 15)
       expect(facts()).toHaveLength(4)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('szablon: klik w pustą oś zapisuje blok od razu i mówi „Dodano blok · Cofnij” (D563 P2) – „Cofnij” zdejmuje blok', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-template-axis-undo-'))
+  seedAwake(dataDir, [])
+  const empty: Template = { id: 'pusty', name: 'Pusty', dayType: 'zwykly', weekdays: [7], archived: false, versions: [{ from: '2026-01-01', budgetMin: null, maxMin: null, blocks: [] }] }
+  write(dataDir, paths.record('template', empty.id), templateJson(empty))
+  const blocksOf = () => {
+    const t = templateFrom(readJson(join(dataDir, paths.record('template', empty.id))))
+    return t ? t.versions.flatMap((v) => v.blocks).length : -1
+  }
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-templates').click()
+      await page.getByTestId('template-item').filter({ hasText: 'Pusty' }).click()
+      const hours = page.getByTestId('template-timeline').getByTestId('timeline-hours')
+      await hours.scrollIntoViewIfNeeded()
+      const box = (await hours.boundingBox())!
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+      await expect(page.getByTestId('block-editor')).toBeVisible({ timeout: 15_000 })
+      const toast = page.getByRole('status').filter({ hasText: 'Dodano blok' })
+      await expect(toast).toBeVisible()
+      await expect.poll(blocksOf).toBe(1)
+      await toast.getByTestId('toast-action').click()
+      await expect.poll(blocksOf).toBe(0)
     })
     expect(errors).toEqual([])
   } finally {
