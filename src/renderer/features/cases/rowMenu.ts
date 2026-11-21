@@ -1,7 +1,7 @@
 /**
  * The menus of one sprawa (UX17, D565 P25, F8) – pure lists of entries for `ContextMenu`:
  * - `caseRowMenu`: the „…” of a row of „Sprawy” – what no longer stands in the row's one line (the list, the priority, „Zrobione”, „Terminy”, „Kroki”,
- *   „Powtarzaj”, „Usuń”); a done sprawa has the list and „Usuń” only (as its expanded row);
+ *   „Powtarzaj”, „Historia”, „Usuń”); a done sprawa has the list, „Kroki”, „Historia” and „Usuń” only (as its expanded row);
  * - `priorityMenu`: „Priorytet ▸” – the five choices, a ✓ at the one the sprawa has; the right button on a card of the matrix has it (and „Otwórz w Listach”).
  * Nothing here writes: the screen hands the actions in.
  */
@@ -17,6 +17,8 @@ export interface RowMenuActs {
   dates: () => void
   steps: () => void
   repeat: () => void
+  /** „Historia” – the earlier versions of this sprawa (UX18). */
+  history: () => void
   remove: () => void
 }
 
@@ -42,6 +44,7 @@ export function caseRowMenu(x: CaseItem, a: RowMenuActs): MenuEntry[] {
   }
   if (isTask) entries.push({ label: 'Kroki…', onPick: a.steps, testId: 'case-menu-steps' })
   if (isTask && !done) entries.push({ label: 'Powtarzaj…', onPick: a.repeat, testId: 'case-menu-repeat' })
+  entries.push({ label: 'Historia', onPick: a.history, testId: 'case-menu-history' })
   entries.push({ kind: 'separator' }, { label: 'Usuń', onPick: a.remove, testId: 'case-menu-remove' })
   return entries
 }

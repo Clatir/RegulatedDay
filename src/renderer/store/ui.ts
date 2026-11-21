@@ -38,7 +38,7 @@ export interface Toast {
   text: string
   kind: 'info' | 'error' | 'success'
   action?: { label: string; run: () => void }
-  /** How long it stays (ms). */
+  /** How long it stays (ms); 0 – until it is closed (an error, UX18). */
   ms: number
 }
 
@@ -236,19 +236,24 @@ export function closeToast(id: number): void {
 
 /**
  * A message. An identical one standing (the same text and kind, F7) is not shown twice: it stays and its time starts again. One with
- * an action („Cofnij”) is never merged – two operations with the same words each keep their own `run`.
+ * an action („Cofnij”) is never merged – two operations with the same words each keep their own `run`. An error (UX18, D565 P26) has
+ * no time: it stays until „×” closes it, whatever `ms` says (the argument only keeps the callers as they are).
  */
 export function toast(text: string, kind: Toast['kind'] = 'info', ms = 5000, action?: Toast['action']): number {
   const same = action ? undefined : useUi.getState().toasts.find((t) => t.text === text && t.kind === kind && !t.action)
   const id = same?.id ?? nextToast++
+  const stays = kind === 'error'
+  const time = stays ? 0 : ms
   if (same) {
     clearTimeout(timers.get(id))
-    useUi.setState((s) => ({ toasts: s.toasts.map((t) => (t.id === id ? { ...t, ms } : t)) }))
-  } else useUi.setState((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, kind, ms, action }] }))
-  timers.set(
-    id,
-    setTimeout(() => closeToast(id), ms)
-  )
+    timers.delete(id)
+    useUi.setState((s) => ({ toasts: s.toasts.map((t) => (t.id === id ? { ...t, ms: time } : t)) }))
+  } else useUi.setState((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, kind, ms: time, action }] }))
+  if (!stays)
+    timers.set(
+      id,
+      setTimeout(() => closeToast(id), ms)
+    )
   return id
 }
 

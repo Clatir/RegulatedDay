@@ -233,7 +233,7 @@ test('zjazdy z PDF: plik, który nie jest PDF-em, daje komunikat i żadnego podg
       await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
       await page.getByTestId('nav-calendar').click()
       await page.getByTestId('calendar-zjazdy').click()
-      await expect(page.getByRole('status').filter({ hasText: 'Błąd' })).toBeVisible()
+      await expect(page.getByRole('alert').filter({ hasText: 'Błąd' })).toBeVisible()
       await expect(page.getByTestId('zjazdy-preview')).toHaveCount(0)
       await expect(page.getByTestId('month-grid')).toBeVisible()
     })

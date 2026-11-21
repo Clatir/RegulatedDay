@@ -12,6 +12,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import type { RequestCounters } from '@shared/api'
+import { paths } from '@shared/data/paths'
 import { dueBadge } from '@shared/engine/caseDates'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
 import { durationLabel } from '@shared/format'
@@ -24,6 +25,7 @@ import { logicalDayOf, logicalMinuteOf } from '@shared/time/day'
 import { FilterBar, useFilters } from '../../components/FilterBar'
 import { GroupLine } from '../../components/GroupLine'
 import { Choice, DateField, DurationField, EndField, TextField, TimeField } from '../../components/fields'
+import { HistoryButton } from '../../components/HistoryButton'
 import { EmptyState, Section, cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
 import { useNow } from '../../lib/clock'
@@ -34,7 +36,7 @@ import { addPerson, saveRd, useData } from '../../store/data'
 import { useDay } from '../../store/day'
 import { changeTaskSteps } from '../../store/steps'
 import { tickCaseStep } from '../steps/stepsFinish'
-import { takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
+import { openHistoryOf, takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
 import { groupedCategoryOptions } from '../plan/blockView'
 import { caseTitle, DATE_PRESETS, afterRequestAdded, doDateNote, filterOf, PRIORITY_CHOICES, presetDate, sectionsOf, statusParts, type PriorityChoice } from './casesLogic'
 import { CasesMatrix } from './CasesMatrix'
@@ -348,6 +350,7 @@ function CaseRow({ x, today, marked, group, expanded, onExpand }: { x: CaseItem;
     dates: () => setDating(true),
     steps: () => setStepsOpen(true),
     repeat: () => setRepeating(true),
+    history: () => openHistoryOf(paths.record('request', r.id)),
     remove: () => void remove()
   })
   return (
@@ -415,6 +418,7 @@ function CaseRow({ x, today, marked, group, expanded, onExpand }: { x: CaseItem;
                 )}
               </>
             )}
+            <HistoryButton rel={paths.record('request', r.id)} className="btn h-[24px] px-2 text-[12px]" />
             <button type="button" className="h-[24px] px-1.5 text-[12px] text-muted hover:text-rose" onClick={() => void remove()} data-testid="request-remove">
               Usuń
             </button>

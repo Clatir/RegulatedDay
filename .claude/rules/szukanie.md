@@ -22,3 +22,4 @@ paths:
   `RoutinesPage`, `SettingsPage`, `CategoriesSection`, `HistoryPage`), ręczne przejście (`navigate`, `openDay`, `openRitual`) go gubi. Ostatnio wybrane:
   `localStorage` `rd.searchRecent` (klucze rekordów, najwyżej 5). Testy: `tests/unit/search.test.ts`, `tests/web/search-*.test.ts`,
   `tests/fs/search-days.test.ts`, `tests/e2e/search.spec.ts`.
+- „Historia” przy rekordzie (UX18, E7) = `components/HistoryButton` → `openHistoryOf(rel)` (ten sam `pick` `history`): panel bloku (`blockHistoryRel` w `history/historyTarget.ts` – dzień, szablon albo seria; nie przy nowym bloku), menu „…” sprawy (`RowMenuActs.history`) i jej rozwinięcie, edytory szablonu i rutyny. `HistoryPage`: szukanie po nazwie (`fold`), `FilterBar` `history` z liczbami rodzajów, „x z y”; wybór z `pick` czyści filtr i szukanie.

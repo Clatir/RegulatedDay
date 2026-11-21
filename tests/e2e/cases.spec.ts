@@ -664,6 +664,12 @@ test('Sprawy (UX17, P25, F8): wiersz w jednym wierszu z menu „…”; w Macier
       await page.getByTestId('case-menu-priority-p2').click()
       await expect(row.getByTestId('case-priority-chip')).toHaveText('P2')
       await expect.poll(() => records(dataDir).find((r) => r.id === 't1')!.priority).toBe('p2')
+      // UX18 (E7): „Historia” in the menu „…” – the history of this sprawa, its version from before the change shown.
+      await row.getByTestId('case-menu').click()
+      await page.getByTestId('case-menu-history').click()
+      await expect(page.getByTestId('history-versions')).toBeVisible({ timeout: 15_000 })
+      await page.getByTestId('nav-requests').click()
+      await expect(row.getByTestId('case-line')).toBeVisible()
 
       // The matrix: the arrows walk the cards, Enter opens the row in the lists with the title focused.
       await page.getByTestId('cases-view-matrix').click()

@@ -12,8 +12,8 @@ import { commitActiveField } from './commit'
 export const DIALOG_BACKDROP = 'data-dialog-backdrop'
 /** A dialog over the window with the overlay it stands on (the overlay is no `role="dialog"`). */
 export const IN_DIALOG = `[role="dialog"], [${DIALOG_BACKDROP}]`
-/** What is never a click „elsewhere”: a dialog standing over the window (with its overlay) and a toast (its „Cofnij”). */
-const NEVER_OUTSIDE = `${IN_DIALOG}, [role="status"]`
+/** What is never a click „elsewhere”: a dialog standing over the window (with its overlay) and a toast (its „Cofnij”; an error’s „×” – role alert, UX18). */
+const NEVER_OUTSIDE = `${IN_DIALOG}, [role="status"], [role="alert"]`
 
 export function useOutsidePointer(active: boolean, inside: RefObject<Element | null> | string, onLeave: (e: PointerEvent) => void): void {
   const leave = useRef(onLeave)
