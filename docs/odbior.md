@@ -329,6 +329,11 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX11.2 Ustawienia – „schowany” i jedno kliknięcie (1.34.0)
    - [ ] UX11.3 Wybór miejsca paska pokazuje schowany (1.34.0)
    - [ ] UX11.4 Menu ikony – „Pasek pulpitu” z ptaszkiem zawsze (1.34.0)
+   - [ ] UX9.1 Ostrzeżenia dnia w panelu bocznym i panelu bloku, rutyna czekająca (1.34.0)
+   - [ ] UX9.2 „Zatwierdź” w nagłówku planu porannego (1.34.0)
+   - [ ] UX9.3 Panel nowego bloku jako szkic, podpisy Esc i gestów (1.34.0)
+   - [ ] UX9.4 Legenda energii pod „?” i jednostka kosztu (1.34.0)
+   - [ ] UX9.5 Karty rutyn w panelu bocznym, „Zakończ rutynę (N z M)” (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3441,6 +3446,42 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** prawy klik ikony przy pasku widocznym, po „×” i po wyłączeniu paska w Ustawieniach; kliknij pozycję.
 - **Oczekiwany efekt:** pozycja „Pasek pulpitu” zawsze; ptaszek przy pasku włączonym i nieschowanym; klik chowa albo pokazuje (wyłączony – włącza). Zastępuje „Pokaż pasek pulpitu” z PX4.
 - **Nie przechodzi, gdy:** pozycji brak; ptaszek niezgodny ze stanem; klik nic nie robi.
+
+
+#### UX9.1 Ostrzeżenia dnia w panelu bocznym i panelu bloku, rutyna czekająca
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux9-today.test.ts`. Ty: z prawdziwym planem.
+- **Jak sprawdzić:** ustaw plan dłuższy niż budżet pracy; otwórz blok, który przekracza budżet, i zmień go; zacznij rutynę i otwórz inny blok.
+- **Oczekiwany efekt:** ostrzeżenia (z godziną maksimum i liczbami budżetu) w panelu bocznym i w panelu bloku – widać je od razu po zmianie, w planie porannym ich nie ma; na minionym dniu bez rad; panel bloku mówi „Rutyna „X” czeka na kroki”, „Pokaż kartę” odsłania kartę.
+- **Nie przechodzi, gdy:** ostrzeżenie znika przy otwartym bloku; minimum regeneracji opisane błędnie; brak linii o rutynie.
+
+#### UX9.2 „Zatwierdź” w nagłówku planu porannego
+- [ ] Odebrane
+- **Automatycznie:** E2E `screens`, `tests/web/ux9-today.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** rano z propozycją granicy – kliknij „Zatwierdź” w nagłówku karty planu.
+- **Oczekiwany efekt:** plan zatwierdzony bez przewijania karty; dwuklik w oba „Zatwierdź” – jedno zatwierdzenie.
+- **Nie przechodzi, gdy:** trzeba przewinąć kartę; dwa zatwierdzenia w logu.
+
+#### UX9.3 Panel nowego bloku jako szkic, podpisy Esc i gestów
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux9-today.test.ts`, E2E `week`, `note`. Ty: rzut oka.
+- **Jak sprawdzić:** „+ Blok”, potem wpisz nazwę; okienko nowego bloku w „Tygodniu”; notatka zwykła i powiększona.
+- **Oczekiwany efekt:** nagłówek „Nowy blok”; nietknięty szkic „Zapisze się, gdy opuścisz panel · Esc – odrzuć”, ruszony – bez „Esc – odrzuć”; „Tydzień” ma linię gestów; notatka „Esc – cofnij zmiany”, w „Powiększ” „Esc – pomniejsz”.
+- **Nie przechodzi, gdy:** ruszony szkic obiecuje „Esc – odrzuć”; powiększona notatka obiecuje cofnięcie zmian.
+
+#### UX9.4 Legenda energii pod „?” i jednostka kosztu
+- [ ] Odebrane
+- **Tylko Ty:** wygląd.
+- **Jak sprawdzić:** kliknij „?” przy linii nad osią; kliknij koszt na kafelku; najedź na liczby „Dzień w liczbach”.
+- **Oczekiwany efekt:** legenda zwinięta na starcie, ma „koszt na godzinę, od −5 do 5; 1 = 3 punkty energii”; to samo zdanie w okienku kosztu, okienko nie ucięte; podpowiedzi przy liczbach.
+- **Nie przechodzi, gdy:** dwa różne sformułowania; legenda otwarta na starcie; okienko wychodzi poza okno.
+
+#### UX9.5 Karty rutyn w panelu bocznym, „Zakończ rutynę (N z M)”
+- [ ] Odebrane
+- **Automatycznie:** E2E `screens`, `routine-steps`. Ty: rzut oka.
+- **Jak sprawdzić:** rano z rutyną; zaznacz część kroków.
+- **Oczekiwany efekt:** karta rutyny w panelu bocznym (nie nad osią), przycisk „Zakończ rutynę (3 z 5)”.
+- **Nie przechodzi, gdy:** karta nad osią; przycisk bez licznika.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
