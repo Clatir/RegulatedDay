@@ -6,6 +6,9 @@
  */
 const FOUND_MS = 2200
 
+/** The timer that takes the mark off an element – one per element, so choosing the same field again keeps the mark for the full time. */
+const timers = new WeakMap<Element, number>()
+
 /** The id is the test id of a section, a group's heading or a field's row; false: it is not on the page now. */
 export function scrollToSetting(id: string): boolean {
   const el = document.querySelector(`[data-testid="${id}"]`)
@@ -13,8 +16,9 @@ export function scrollToSetting(id: string): boolean {
   const field = id.startsWith('field-')
   el.scrollIntoView({ block: field ? 'center' : 'start' })
   if (field) {
+    window.clearTimeout(timers.get(el))
     el.setAttribute('data-found', '')
-    window.setTimeout(() => el.removeAttribute('data-found'), FOUND_MS)
+    timers.set(el, window.setTimeout(() => el.removeAttribute('data-found'), FOUND_MS))
   }
   return true
 }

@@ -25,8 +25,8 @@ export function PlannedChanges({ action }: { action?: (change: PlannedChange) =>
           <li key={c.id} className="flex flex-wrap items-start gap-x-3 gap-y-1 text-[12.5px]" data-testid={`settings-planned-${c.id}`}>
             <span className="num min-w-[96px] text-fg">od {plDate(c.from)}</span>
             <ul className="min-w-0 flex-1">
-              {c.items.map((i) => (
-                <li key={i.label} className="text-muted">
+              {c.items.map((i, at) => (
+                <li key={at} className="text-muted">
                   {i.label}
                   {i.value ? `: ${i.value}` : ''}
                 </li>

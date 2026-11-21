@@ -189,6 +189,29 @@ describe('„Wycofaj” zaplanowanej zmiany', () => {
     expect(lastToast()?.text).toBe('Nie cofnięto – data zmiany (25.11.2026) już nadeszła. Ustaw ją jeszcze raz od jutra.')
   })
 
+  it('późniejsza zmiana tej samej listy (typy dni tygodnia), zrobiona po niej: nic nie wysłane, dymek każe wycofać najpierw ją', async () => {
+    const week = (sat: string) => ['zwykly', 'zwykly', 'zwykly', 'zwykly', 'zwykly', sat, 'weekend']
+    const a = { ...ch('w1', '2026-11-25', { weekTypes: week('wolne') }), made: 1 }
+    const b = { ...ch('w2', '2026-11-30', { weekTypes: ['wolne', ...week('wolne').slice(1)] }), made: 2 }
+    await mount({ schema: 1, settings: [A, a, b] })
+    await click(q('settings-withdraw-w1'))
+    expect(main.sent).toEqual([])
+    expect(lastToast()?.text).toBe('Późniejsza zmiana od 30.11.2026 zawiera tę wartość – wycofaj najpierw ją.')
+    expect(lastToast()?.action).toBeUndefined()
+    // The later one first – then the earlier one goes.
+    await click(q('settings-withdraw-w2'))
+    await click(q('settings-withdraw-w1'))
+    expect(rdFrom(main.file).settings.map((c) => c.id)).toEqual(['a'])
+  })
+
+  it('zmiana, która dodaje podkategorię: nic nie wysłane, dymek odsyła do „Kategorii” z nazwą podkategorii', async () => {
+    const add = ch('n1', '2026-11-25', { categories: { nowa: { cls: 'work', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1, body: 0 } } } })
+    await mount({ schema: 1, categories: { nowa: { name: 'Korekty', color: null, archived: false } }, settings: [A, add] })
+    await click(q('settings-withdraw-n1'))
+    expect(main.sent).toEqual([])
+    expect(lastToast()?.text).toBe('Ta zmiana dodaje podkategorię „Korekty” – usuń podkategorię w „Kategoriach”.')
+  })
+
   it('zmiana warstwy sesji (przeniesienie do szablonów): w wierszu bez „Wycofaj”, z wyjaśnieniem', async () => {
     await mount({ schema: 1, settings: [A, ch(`${SESSIONS_CHANGE_ID}-2026-11-28`, '2026-11-28', { sessions: [] }), Z] })
     const row = q(`settings-planned-${SESSIONS_CHANGE_ID}-2026-11-28`)!

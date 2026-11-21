@@ -9,7 +9,7 @@ import type { EditEntry } from '@shared/api'
 import { deepEqual, editStands, inverseEdit, valueAt } from '@shared/data/merge'
 import { plDate } from '@shared/format'
 import type { SettingsChange } from '@shared/model/settings'
-import { isPlannedChange, withdrawnRd, type WithdrawRefusal } from '@shared/model/settingsWithdraw'
+import { isPlannedChange, withdrawnRd, type WithdrawRefusal, type WithdrawRefused } from '@shared/model/settingsWithdraw'
 import { logicalDayOf } from '@shared/time/day'
 import { editOf, rawRecord, saveAnswer, trySaveWith, useData, type SendState } from '../../store/data'
 import { toast, undoToast } from '../../store/ui'
@@ -22,6 +22,26 @@ export const WITHDRAW_GONE_TEXT = 'Tej zmiany już nie ma – wycofano ją wcze�
 export const WITHDRAW_SESSIONS_TEXT = 'Tej zmiany nie da się wycofać tutaj – sesje są w szablonach, zmień je w „Szablonach”.'
 export const withdrawnText = (from: string): string => `Wycofano zaplanowaną zmianę od ${plDate(from)}.`
 export const inForceText = (from: string): string => `Tej zmiany nie da się już wycofać – obowiązuje od ${plDate(from)}. Zmień ustawienie od jutra.`
+/** A later change wrote the same list whole and holds the value (T2347). */
+export const laterText = (from: string): string => `Późniejsza zmiana od ${plDate(from)} zawiera tę wartość – wycofaj najpierw ją.`
+/** The change adds a subcategory (T2348): it goes with the subcategory. */
+export const newCategoryText = (name: string | null): string => (name ? `Ta zmiana dodaje podkategorię „${name}” – usuń podkategorię w „Kategoriach”.` : 'Ta zmiana dodaje podkategorię – usuń ją w „Kategoriach”.')
+
+/** What the toast of a refusal says. */
+function refusalText(r: WithdrawRefused): string {
+  switch (r.refused) {
+    case 'gone':
+      return WITHDRAW_GONE_TEXT
+    case 'inForce':
+      return inForceText(r.change.from)
+    case 'sessions':
+      return WITHDRAW_SESSIONS_TEXT
+    case 'later':
+      return laterText(r.later.from)
+    case 'newCategory':
+      return newCategoryText(r.name)
+  }
+}
 
 /** Today for the rule: the later of the view's day and the logical day of the clock (the view reads a new day a moment after 04:00). */
 function todayNow(): string {
@@ -32,12 +52,13 @@ function todayNow(): string {
 
 /** „Wycofaj” of the planned change `id`; the toast says how it went („Cofnij” after a withdrawal). */
 export async function withdrawPlanned(id: string): Promise<WithdrawOutcome> {
-  let problem: WithdrawRefusal | 'unreadable' | null = null
+  let problem: WithdrawRefused | 'unreadable' | null = null
   let change: SettingsChange | null = null
   let entry: EditEntry | null = null
   const state: SendState = { afterSend: false }
   const out = await trySaveWith(() => {
     problem = null
+    change = null
     entry = null
     const now = rawRecord('rd.json')
     if (!now) {
@@ -45,21 +66,25 @@ export async function withdrawPlanned(id: string): Promise<WithdrawOutcome> {
       return []
     }
     const made = withdrawnRd(now, id, todayNow())
-    change = made.change ?? null
     if ('refused' in made) {
-      problem = made.refused
+      problem = made
       return []
     }
+    change = made.change
     entry = editOf('rd.json', now, made.raw)
     return [entry]
   }, state)
+  const p = problem as WithdrawRefused | 'unreadable' | null
   const c = change as SettingsChange | null
   const sent = entry as EditEntry | null
-  if (problem === 'unreadable') toast(WITHDRAW_UNREADABLE_TEXT, 'error', 8000)
-  else if (problem === 'gone') toast(WITHDRAW_GONE_TEXT, 'info', 6000)
-  else if (problem === 'inForce' && c) toast(inForceText(c.from), 'info', 8000)
-  else if (problem === 'sessions') toast(WITHDRAW_SESSIONS_TEXT, 'info', 8000)
-  if (problem) return problem
+  if (p === 'unreadable') {
+    toast(WITHDRAW_UNREADABLE_TEXT, 'error', 8000)
+    return p
+  }
+  if (p) {
+    toast(refusalText(p), 'info', p.refused === 'gone' ? 6000 : 8000)
+    return p.refused
+  }
   if (!c || !sent) return 'failed'
   // A question (the banner asks, `send` said so), not known after the send, or refused (`send` said why): no „Wycofano”.
   const answer = saveAnswer(out, state)

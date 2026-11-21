@@ -11,7 +11,8 @@ import type { DataView, RdApi } from '@shared/api'
 import { DEFAULT_MACHINE_PREFS } from '@shared/machine'
 import { rdFrom } from '@shared/model/rd'
 import { SettingsPage } from '@renderer/features/settings/SettingsPage'
-import { SETTING_FIELDS } from '@renderer/features/settings/settingsIndex'
+import { SETTING_FIELDS, settingRecords } from '@renderer/features/settings/settingsIndex'
+import { scrollToSetting } from '@renderer/features/settings/settingsScroll'
 import { SETTINGS_GROUPS } from '@renderer/features/settings/settingsLayout'
 import { useData } from '@renderer/store/data'
 import { useMachine } from '@renderer/store/machine'
@@ -271,5 +272,77 @@ describe('Ctrl K: wybór pola prowadzi do pola', () => {
     await mount()
     const missing = SETTING_FIELDS.filter((f) => !q(f.id)).map((f) => f.id)
     expect(missing).toEqual([])
+  })
+})
+
+describe('przegląd UX14, runda 1', () => {
+  it('bez otwartego folderu pole szukania nie podpowiada pól, których strona nie ma (CSV, kopie), a każdy podpowiedziany wynik jest na stronie', async () => {
+    useData.setState({ view: view({ status: 'none', folder: null }) })
+    await mount()
+    for (const r of settingRecords(false)) expect(q(r.id), r.id).not.toBeNull()
+    expect(settingRecords(false).map((r) => r.id)).not.toContain('field-backups')
+    expect(settingRecords(false).map((r) => r.id)).not.toContain('field-csv')
+    expect(settingRecords(true).map((r) => r.id)).toContain('field-csv')
+    await type(q('settings-search'), 'kopie')
+    expect(q('settings-search-hit-field-backups')).toBeNull()
+    expect(q('settings-search-hit-field-backup-extra')).not.toBeNull()
+  })
+
+  it('wybór pola z Ctrl K bez otwartego folderu mówi, czemu nic się nie stało', async () => {
+    useData.setState({ view: view({ status: 'none', folder: null }) })
+    useUi.setState({ pick: { kind: 'setting', id: 'field-backups' } })
+    await mount()
+    expect(useUi.getState().pick).toBeNull()
+    expect(useUi.getState().toasts.map((t) => t.text)).toContain('Ta część ustawień jest dostępna po otwarciu folderu danych.')
+  })
+
+  it('pole, którego nie ma, ma komunikat o polu, a sekcja – o sekcji', async () => {
+    useUi.setState({ pick: { kind: 'setting', id: 'field-nie-ma' } })
+    await mount()
+    expect(useUi.getState().toasts.map((t) => t.text)).toContain('Tego pola ustawień nie ma.')
+    act(() => useUi.setState({ toasts: [], pick: { kind: 'setting', id: 'settings-nie-ma' } }))
+    await act(async () => undefined)
+    expect(useUi.getState().toasts.map((t) => t.text)).toContain('Tej sekcji ustawień nie ma.')
+  })
+
+  it('otwarcie folderu nie montuje od nowa sekcji, które były (pasek, Ten komputer)', async () => {
+    useData.setState({ view: view({ status: 'none', folder: null }) })
+    await mount()
+    const bar = q('settings-bar')
+    const machine = q('settings-machine')
+    expect(bar).not.toBeNull()
+    await act(async () => useData.setState({ view: view() }))
+    expect(q('settings-from')).not.toBeNull()
+    expect(q('settings-bar')).toBe(bar)
+    expect(q('settings-machine')).toBe(machine)
+  })
+
+  it('dwa wpisy o tej samej etykiecie na liście zaplanowanych nie dają ostrzeżenia o kluczach', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    useData.setState({ rd: rdFrom({ settings: [{ id: 'z2', from: '2026-11-25', at: null, made: 1, patch: { categories: { a1: { cost: 1 }, a2: { cost: 2 } } } }] }) })
+    await mount()
+    expect(q('settings-planned-z2')!.querySelectorAll('li li')).toHaveLength(2)
+    expect(spy.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('same key'))).toEqual([])
+    spy.mockRestore()
+  })
+})
+
+describe('scrollToSetting: obwódka', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('ponowny wybór tego samego pola w 2,2 s odnawia obwódkę (pierwszy czas jej nie zdejmuje)', () => {
+    vi.useFakeTimers()
+    Element.prototype.scrollIntoView = () => undefined
+    const el = document.createElement('div')
+    el.setAttribute('data-testid', 'field-x')
+    document.body.append(el)
+    expect(scrollToSetting('field-x')).toBe(true)
+    vi.advanceTimersByTime(1500)
+    scrollToSetting('field-x')
+    vi.advanceTimersByTime(1500)
+    expect(el.hasAttribute('data-found')).toBe(true)
+    vi.advanceTimersByTime(800)
+    expect(el.hasAttribute('data-found')).toBe(false)
+    el.remove()
   })
 })

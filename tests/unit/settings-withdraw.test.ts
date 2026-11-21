@@ -76,6 +76,38 @@ describe('withdrawnRd', () => {
     expect(withdrawnRd(moved, 's', TODAY)).toMatchObject({ refused: 'sessions' })
   })
 
+  it('późniejsza zmiana zrobiona po niej zapisała tę samą listę całą (typy dni tygodnia, warianty) – odmowa „później”, z tą zmianą', () => {
+    const week = (sat: string) => ['zwykly', 'zwykly', 'zwykly', 'zwykly', 'zwykly', sat, 'weekend']
+    const a = ch('a', '2026-11-25', { weekTypes: week('wolne'), reserve: 3 }, { made: 1 })
+    // Made after `a` from the settings of its date: its list holds the Saturday of `a`.
+    const b = ch('b', '2026-11-30', { weekTypes: ['wolne', ...week('wolne').slice(1)] }, { made: 2 })
+    expect(withdrawnRd({ settings: [a, b] }, 'a', TODAY)).toMatchObject({ refused: 'later', later: { id: 'b' } })
+    // The later one goes first; then `a` can go.
+    const first = withdrawnRd({ settings: [a, b] }, 'b', TODAY)
+    if (!('raw' in first)) throw new Error('odmowa')
+    expect('raw' in withdrawnRd(first.raw, 'a', TODAY)).toBe(true)
+    // Made before `a` (its list cannot hold the value of `a`): no refusal.
+    expect('raw' in withdrawnRd({ settings: [a, { ...b, made: 0 }] }, 'a', TODAY)).toBe(true)
+    // A later change of another field, or a single value of the same field: no refusal.
+    expect('raw' in withdrawnRd({ settings: [a, ch('c', '2026-11-30', { reserve: 5 }, { made: 2 })] }, 'a', TODAY)).toBe(true)
+    // The variants of a subcategory are one list too.
+    const v1 = ch('v1', '2026-11-25', { categories: { analiza: { variants: [{ id: 'x', name: 'X' }] } } }, { made: 1 })
+    const v2 = ch('v2', '2026-11-27', { categories: { analiza: { variants: [{ id: 'x', name: 'X' }, { id: 'y', name: 'Y' }] } } }, { made: 2 })
+    expect(withdrawnRd({ settings: [v1, v2] }, 'v1', TODAY)).toMatchObject({ refused: 'later', later: { id: 'v2' } })
+    expect('raw' in withdrawnRd({ settings: [v1, ch('v3', '2026-11-27', { categories: { inna: { variants: [] } } }, { made: 2 })] }, 'v1', TODAY)).toBe(true)
+  })
+
+  it('zmiana, która dodaje podkategorię (nie ma jej w ustawieniach tuż przed nią) – odmowa „podkategoria”, z nazwą', () => {
+    const add = ch('n', '2026-11-25', { categories: { nowa: { cls: 'work', kind: 'other', place: 'computer', costs: { head: 1, emotions: 1, senses: 1, body: 0 } } } })
+    const raw = { categories: { nowa: { name: 'Nowa', color: null, archived: false } }, settings: [add] }
+    expect(withdrawnRd(raw, 'n', TODAY)).toMatchObject({ refused: 'newCategory', category: 'nowa', name: 'Nowa' })
+    expect(withdrawnRd({ settings: [add] }, 'n', TODAY)).toMatchObject({ refused: 'newCategory', category: 'nowa', name: null })
+    // A later change of that subcategory's cost (it is there before it), and one of a default subcategory: no refusal.
+    const cost = ch('k', '2026-11-28', { categories: { nowa: { costs: { head: 2, emotions: 1, senses: 1, body: 0 } } } }, { made: 2 })
+    expect('raw' in withdrawnRd({ ...raw, settings: [add, cost] }, 'k', TODAY)).toBe(true)
+    expect('raw' in withdrawnRd({ settings: [ch('d', '2026-11-25', { categories: { analiza: { costs: { head: 2, emotions: 1, senses: 1, body: 0 } } } })] }, 'd', TODAY)).toBe(true)
+  })
+
   it('zapis: jedno pole `settings.#id` z bazą = zmiana; „Cofnij” (odwrotna edycja) kładzie ją z powrotem', () => {
     const out = withdrawnRd(raw, 'z', TODAY)
     if (!('raw' in out)) throw new Error('odmowa')

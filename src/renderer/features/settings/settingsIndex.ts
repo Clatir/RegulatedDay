@@ -17,6 +17,8 @@ export interface SettingField {
   section: string
   /** Words only searched. */
   keys?: string
+  /** Only with the data folder open, though its section is there without it (the CSV export, the list of backups). */
+  needsData?: boolean
 }
 
 /** Words only searched, of the sections (their titles are searched anyway). */
@@ -52,8 +54,8 @@ const LISTED: readonly SettingField[] = [
   { id: 'field-animations', title: 'Animacje', section: 'settings-machine' },
   { id: 'field-stationary', title: 'Zajęcia stacjonarne', section: 'settings-machine', keys: 'komputer na zajęciach' },
   { id: 'field-data-folder', title: 'Folder danych', section: 'settings-data', keys: 'OneDrive przypnij kreator' },
-  { id: 'field-csv', title: 'Eksport CSV', section: 'settings-data' },
-  { id: 'field-backups', title: 'Kopie zapasowe', section: 'settings-data', keys: 'przywróć kopia' },
+  { id: 'field-csv', title: 'Eksport CSV', section: 'settings-data', needsData: true },
+  { id: 'field-backups', title: 'Kopie zapasowe', section: 'settings-data', keys: 'przywróć kopia', needsData: true },
   { id: 'field-backup-extra', title: 'Dodatkowe miejsce kopii', section: 'settings-data', keys: 'kopia kopie zapasowa folder' },
   { id: 'field-night-install', title: 'Instalacja w nocy', section: 'settings-updates', keys: 'aktualizacja' },
   { id: 'field-version', title: 'Wersja', section: 'settings-info', keys: 'numer aplikacji instalacja' },
@@ -76,6 +78,6 @@ export const SETTING_FIELDS: readonly SettingField[] = [
 export function settingRecords(dataOpen = true): SearchRecord[] {
   const there = (section: string) => dataOpen || !sectionOf(section)?.needsData
   const sections = SETTINGS_SECTIONS.filter((s) => there(s.id)).map((s): SearchRecord => ({ kind: 'setting', id: s.id, title: s.title, hint: 'w ustawieniach', ...(SECTION_KEYS[s.id] ? { keys: SECTION_KEYS[s.id] } : {}) }))
-  const fields = SETTING_FIELDS.filter((f) => there(f.section)).map((f): SearchRecord => ({ kind: 'setting', id: f.id, title: f.title, hint: `w ustawieniach · ${sectionOf(f.section)?.title ?? ''}`, ...(f.keys ? { keys: f.keys } : {}) }))
+  const fields = SETTING_FIELDS.filter((f) => there(f.section) && (dataOpen || !f.needsData)).map((f): SearchRecord => ({ kind: 'setting', id: f.id, title: f.title, hint: `w ustawieniach · ${sectionOf(f.section)?.title ?? ''}`, ...(f.keys ? { keys: f.keys } : {}) }))
   return [...sections, ...fields]
 }

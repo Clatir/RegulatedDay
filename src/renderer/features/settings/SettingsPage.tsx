@@ -12,7 +12,7 @@ import { useData } from '../../store/data'
 import { Field, Section, Toggle } from '../../components/ui'
 import { SHORTCUTS } from '../../lib/shortcuts'
 import { phaseText, updateAction } from '../../store/update'
-import { takeFoundPick, takePick, useUi } from '../../store/ui'
+import { takeFoundPick, takePick, toast, useUi } from '../../store/ui'
 import { CalendarsSection } from './CalendarsSection'
 import { CategoriesSection } from './CategoriesSection'
 import { LecturesSection } from './LecturesSection'
@@ -194,8 +194,9 @@ export function SettingsPage() {
   useEffect(() => {
     if (pick?.kind !== 'setting') return
     const found = () => document.querySelector(`[data-testid="${pick.id}"]`) !== null
-    if (!dataOpen && !found()) takePick((p) => p.kind === 'setting')
-    else if (takeFoundPick((p) => p.kind === 'setting', found, 'Tej sekcji ustawień nie ma.')) scrollToSetting(pick.id)
+    if (!dataOpen && !found()) {
+      if (takePick((p) => p.kind === 'setting')) toast('Ta część ustawień jest dostępna po otwarciu folderu danych.', 'info')
+    } else if (takeFoundPick((p) => p.kind === 'setting', found, pick.id.startsWith('field-') ? 'Tego pola ustawień nie ma.' : 'Tej sekcji ustawień nie ma.')) scrollToSetting(pick.id)
   }, [pick, dataOpen])
   useEffect(() => resetSettingsFrom, [])
   useEffect(() => {
@@ -222,20 +223,17 @@ export function SettingsPage() {
         <SettingsToc items={items} />
       </aside>
       <div className="flex w-full min-w-0 max-w-[900px] flex-1 flex-col gap-4">
-        {range ? (
-          <>
-            {draw(items.slice(0, range[0]))}
-            {/* One bar „od jutra” over the run of sections with a date, from the first to the last (UX14, E2); the ones at once inside it are marked. */}
-            <div className="flex flex-col gap-4" data-testid="settings-dated">
-              <FromBar />
-              <PlannedChanges action={(c) => <WithdrawAction change={c} />} />
-              {draw(items.slice(range[0], range[1] + 1))}
-            </div>
-            {draw(items.slice(range[1] + 1))}
-          </>
-        ) : (
-          draw(items)
+        {/* Three slots that stay when the folder opens or closes, so the sections that stay are not mounted again (UX14). */}
+        {draw(range ? items.slice(0, range[0]) : [])}
+        {/* One bar „od jutra” over the run of sections with a date, from the first to the last (UX14, E2); the ones at once inside it are marked. */}
+        {range && (
+          <div className="flex flex-col gap-4" data-testid="settings-dated">
+            <FromBar />
+            <PlannedChanges action={(c) => <WithdrawAction change={c} />} />
+            {draw(items.slice(range[0], range[1] + 1))}
+          </div>
         )}
+        {draw(range ? items.slice(range[1] + 1) : items)}
       </div>
     </div>
   )
