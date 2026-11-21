@@ -297,6 +297,10 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX6.1 Check-in i „Pomiń” zostają po zmianie ekranu (1.34.0)
    - [ ] UX6.2 Karta wydarzenia całodniowego – klik obok zapisuje (1.34.0)
    - [ ] UX6.3 Niezapisana reguła serii i powtarzania – pytanie (1.34.0)
+   - [ ] UX7.1 Oś „Dziś” po otwarciu – „teraz” widać bez przewijania (1.34.0)
+   - [ ] UX7.2 Inny dzień i „3 dni” – oś od godziny przed pobudką (1.34.0)
+   - [ ] UX7.3 Granica i maksimum o tej samej godzinie – jeden napis (1.34.0)
+   - [ ] UX7.4 „+N” w miesiącu mówi, co kryje (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3177,6 +3181,35 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** w Szablonach zmień regułę serii (bez „Zapisz zmianę serii”) i wybierz inną serię albo zamknij panel. W Sprawach zmień powtarzanie i zamknij „Powtarzaj”.
 - **Oczekiwany efekt:** okno „Zapisać zmianę serii?” (albo „…powtarzania?”) z „Zapisz” i „Odrzuć”; „Zapisz” zapisuje i przechodzi dalej, „Odrzuć” porzuca zmianę.
 - **Nie przechodzi, gdy:** zmiana ginie po cichu; okno pojawia się bez żadnej zmiany; „Zapisz” nie zapisuje.
+
+
+#### UX7.1 Oś „Dziś” po otwarciu – „teraz” widać bez przewijania
+- [ ] Odebrane
+- **Tylko Ty:** `tests/web/axis-scroll.test.ts` i `tests/web/axis-opening.test.ts` liczą przewinięcie, ale wygląd o późnej godzinie widzisz tylko Ty (wieczorem, po 18:00).
+- **Jak sprawdzić:** otwórz „Dziś”, przejdź na „Tydzień” i wróć. Osobno: z otwartym planem porannym niezatwierdzonym albo kartą „Wstałeś później?” otwórz „Dziś”.
+- **Oczekiwany efekt:** linia „teraz” widoczna bez przewijania, mniej więcej na 1/3 wysokości; karta-prośba nad osią zostaje widoczna od góry (wtedy „teraz” może być niżej); po pierwszym przewinięciu albo kliknięciu oś już sama nie skacze.
+- **Nie przechodzi, gdy:** trzeba przewijać do „teraz”; karta planu porannego albo rytuału jest schowana nad widokiem; oś skacze po kliknięciu albo przewinięciu.
+
+#### UX7.2 Inny dzień i „3 dni” – oś od godziny przed pobudką
+- [ ] Odebrane
+- **Tylko Ty:** wygląd przewinięcia.
+- **Jak sprawdzić:** w „Dziś” kliknij „‹” (wczoraj); potem otwórz „3 dni” zakresu bez dziś, wróć do „Tygodnia”, przejdź na „Agendę” i z powrotem.
+- **Oczekiwany efekt:** oś zaczyna się godzinę przed pobudką; przy wczesnej pobudce karty nad osią zostają; po powrocie z „Agendy” oś znów stoi na „teraz” (tydzień z dziś); strzałki tygodni nie przewijają osi.
+- **Nie przechodzi, gdy:** oś startuje od północy; po „Agendzie” oś stoi na przypadkowej godzinie.
+
+#### UX7.3 Granica i maksimum o tej samej godzinie – jeden napis
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/day-axis.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** dzień, w którym propozycja granicy równa się maksimum (albo zatwierdź granicę o godzinie maksimum).
+- **Oczekiwany efekt:** jedna linia „propozycja · maksimum 19:00” (po zatwierdzeniu „granica · maksimum 19:00”).
+- **Nie przechodzi, gdy:** dwa napisy nachodzą na siebie; maksimum znika bez śladu w napisie.
+
+#### UX7.4 „+N” w miesiącu mówi, co kryje
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/month-cells.test.ts`, `tests/unit/engine/multi-day.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Kalendarzu (miesiąc) dzień z wieloma sesjami albo blokami.
+- **Oczekiwany efekt:** „+2 sesje”, „+1 blok”; przy kilku rodzajach „+3 pozycje”, a po najechaniu – rozbicie.
+- **Nie przechodzi, gdy:** samo „+2”; liczba nie zgadza się z tym, czego nie widać.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 

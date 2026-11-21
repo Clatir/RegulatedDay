@@ -112,8 +112,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 
       | Zadanie | Stan |
       | --- | --- |
-      | UX7 | kod w `claude/ux-a` (8e345f5, niewypchnięte drzewo lokalne), T2000–T2002 do wpisania; przegląd high runda 1: do poprawy (ważne) – przewinięcie „teraz” chowa karty nad osią (plan poranny, „Wstałeś później?”, rytuał) – nie przewijać ponad pierwszą kartę; Tydzień → Agenda → Tydzień bez przewinięcia (`opened` nie zerowane); pomiar raz przy montażu, karty rosnące później przesuwają „teraz” (ResizeObserver do pierwszego ruchu); uwagi: skok przy zmianie doby, scalony napis gubi `marker-maksimum`, „+N” liczy po id |
-      | UX10 (`ux-b`), UX16 (`ux-c`) | wykonawcy przerwani limitem – sprawdzić `git status` w drzewie, dokończyć |
+      | UX7 | scalone 21.11 (06e60ff): T2000–T2009, odbiór UX7.1–UX7.4; przegląd high 4 rundy (karty-prośby nad osią, śledzenie treści, Agenda, zmiana doby, przewinięcia z kodu); uwagi na później: w dev śledzenie zależy od StrictMode; skurczenie treści kończy śledzenie; E2E w dzień nie sprawdza przewinięcia (tylko web) |
+      | UX10 (`ux-b`), UX16 (`ux-c`) | w przeglądzie (UX10 runda 2 xhigh na a4381be, UX16 runda 3 na 48a052b + drobne); szkic CHANGELOG i odbioru – w raportach wykonawców, wpisywane przy scaleniu |
       | UX8, UX9, UX11–UX15, UX17–UX19 | do zrobienia |
 
 ## Do odbioru na Windows
