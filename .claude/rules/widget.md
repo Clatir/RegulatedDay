@@ -49,9 +49,9 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   liczą się na zegarze monotonicznym (`WidgetDeps.mono`, czytany razem z `now` na początku odświeżenia); widok niesie
   `pending.left` i `note.left` (ms) – liczone przy każdym wysłaniu w `current()` (też przy ponownym rozesłaniu widoku
   otwieranemu oknu), okno liczy je od odebrania na swoim `performance.now()` (`lib/viewTerms.ts`); koszt (`pending`) bez funkcji w widoku (idzie przez IPC); powiadomienia prowadzącego z
-  `notice.shown`. Bez folderu `noFolderView` (D327): jedna linia „Brak folderu danych · Otwórz okno”, pasek bez dnia
-  (`data-day=none`). Próby nie ma (D286); akcje paska spoza silnika – IPC `barAction` (`placeBar`, `corner`,
-  `openPanel` dla testów).
+  `notice.shown`. Bez folderu `noFolderView` (D327): jedna linia „Brak folderu danych · Otwórz okno główne”, pasek bez dnia
+  (`data-day=none`). Próby nie ma (D286); akcje paska spoza silnika – IPC `barAction` z nadawcą (`placeBar`, `corner`,
+  `openPanel` dla testów, `showBar` / `hideBar` – tylko od panelu, `barFromPanel`).
 - Komunikat rezerwy (D326): linia `reserve:<dzień>:<pula>:<at>` (= `reserveMessageId`) w `engineView`, „Zacznij” =
   `startNew` regeneracji sposobem z `suggestRegen` na 15 min, „nie dziś” = `mark`; zobaczenie przez `QUESTION_ID`
   (panel, okno, kliknięcie paska) i kliknięcie powiadomienia (`handleArgv` → `seen(…, notification)`).
@@ -103,16 +103,21 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   `listWhole` (`engine/stepsFlow.ts`, T1120), linia `stepsFinished:<blok>` „Skończono: <nazwa> · Cofnij” przez `ROUTINE_UNDO_MS` (jak
   `routineSaved`, po całym zapisie – T1114), „Cofnij” = `undoAfterSteps` (najpierw koniec; odmowa – nic więcej).
 - Panel ikony – „pilot” (D564 P13, wariant A): nagłówek `panel-head` („Regulated Day” i „×”), pasek, stopka `panel-foot` – `panel-open-main`
-  (`showMain`), `panel-bar-toggle` („▣ Pasek pulpitu: schowaj” przy `prefs.desktopBar && !view.barClosed`, inaczej „pokaż” → `barAction('hideBar' | 'showBar')`
-  → `barFromPanel` w `windows/desktopBar.ts`: `setBarClosed` albo `setPrefs({ desktopBar: true })`), `panel-quit` (`panelClose('quit')`). Jedna nazwa
+  (`showMain`), `panel-bar-toggle` („▣ Pasek pulpitu: schowaj” przy `view.barShown` – włączony, bez „×”, bez reguły ukrycia, bez `barProblem`; inaczej
+  „pokaż”) → `barAction('hideBar' | 'showBar')` → `barFromPanel(chcę, nadawca, stan)` w `windows/desktopBar.ts` (tylko od `panel`): `setBarClosed`,
+  `setPrefs({ desktopBar: true })` albo `retryBar` (jak „Pokaż pasek”); `barProblem` zmienia tylko `setBarProblem` (rozsyła widok), `setPrefs`
+  rozsyła widok przy zmianie `desktopBar`. `panel-quit` (`panelClose('quit')`). Nagłówek i stopka (`data-panel-chrome`) nie są wolnym polem. Jedna nazwa
   okna i wyjścia: `OPEN_MAIN_TEXT` / `QUIT_APP_TEXT` (`shared/widget.ts`) – menu ikony (`trayMenuItems` w `tray.ts`), stopka, „↗”, linia bez folderu.
-  Każde otwarcie wysyła `rd:panelTarget` (też `null`): `PanelApp` liczy `opening`, `Bar` zwija wtedy rozwinięcie (także pole „+ Skrzynka”), a linie
-  mają klucz z `opening` (±5 min „Skończył się o…” znika); panel warianty (`view.variants.open`) należy do procesu głównego – zostaje.
+  Każde otwarcie wysyła `rd:panelTarget` = `PanelOpening { target, reopened }` (`reopened` – panel był schowany): tylko wtedy `PanelApp` liczy
+  `opening`, a `Bar` zwija rozwinięcie (także pole „+ Skrzynka”; linie mają klucz z `opening` – ±5 min „Skończył się o…” znika) i zamyka panel
+  wariantów, który sam otworzył (`variantsHere`; otwarty w oknie głównym zostaje). Poproszony przy otwartym (powiadomienie) – tylko `target`.
 - Panel ikony (D558, T1974): „×” (`panel-close`) – `panelClose('x')`, z Shift `panelClose('quit')` → `quitApp`; Esc – `panelClose()`;
-  kliknięcie w wolne pole – `opensMain` w `PanelApp.tsx` → `showMain` (wciśnięcie i kliknięcie poza przyciskiem/polem/linkiem/etykietą, nic rozwiniętego, brak `[data-busy]`).
+  kliknięcie w wolne pole – `opensMain` w `PanelApp.tsx` → `showMain` (wciśnięcie i kliknięcie poza przyciskiem/polem/linkiem/etykietą, nic rozwiniętego, brak `[data-busy]`;
+  drugie kliknięcie dwukliku, którego pierwsze wciśnięcie było na kontrolce – nic, C8).
   Nowy stan lokalny paska, który coś rozwija bez `onUnfold`, oznacz `data-busy` – inaczej klik obok otworzy okno.
 - Dwuklik w przycisk (C8): `BarButton` pomija drugie kliknięcie dwukliku – w oknie i panelu `detail > 1` (klawisz daje 0), na pasku pulpitu
-  puszczenia `secondRelease` z ostatniego działającego (`ButtonRelease` – kontekst jednego `Bar`); `repeat` – kroki ±5 min liczą każde. Przyciski
+  puszczenia `secondRelease` z ostatniego (`ButtonClicks` – kontekst jednego `Bar`: ostatni przycisk i puszczenie); `repeat` – krok ±5 min liczy szybkie
+  kliknięcie tylko po kliknięciu w siebie (dwuklik w „Skończył się o…” nie trafia w −5, które stanęło w jego miejscu). Przyciski
   nagłówka i stopki panelu (`PanelButton`) – to samo `detail`.
 - Pasek pulpitu „↗” i „×” (D564 P12, D559, T1975): `BarCorner` (`bar-corner`) w pasie 24 px – u góry `bar-open-main` (`showMain` na puszczenie),
   pod nim „×” (`bar-close`); `BAR_BASE_WIDTH` 504, treść `pr-8` → `barClose('x'|'quit')`,

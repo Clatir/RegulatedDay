@@ -12,8 +12,6 @@ import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RdApi } from '@shared/api'
-import { DEFAULT_MACHINE_PREFS } from '@shared/machine'
-import { useMachine } from '@renderer/store/machine'
 import { useWidget } from '@renderer/store/widget'
 import { Bar, type BarMode } from '@renderer/widget/Bar'
 import { BAR_DOUBLE_MS } from '@renderer/widget/barDouble'
@@ -24,9 +22,10 @@ beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 })
 
-/** A day with the bar's own buttons (Dalej, Pauza, Przedłuż …) and one line „Skończył się o…” (its ±5 min in the line). */
+/** A day with the bar's own buttons (Dalej, Pauza, Przedłuż …), one line „Skończył się o…” (its ±5 min in the line), the desktop bar on the screen. */
 const dayView = (): WidgetView => ({
   ...noFolderView(),
+  barShown: true,
   day: '2026-11-21',
   block: null,
   buttons: { ...ALL_BUTTONS },
@@ -37,7 +36,9 @@ const dayView = (): WidgetView => ({
 const hadObserver = 'ResizeObserver' in globalThis
 let root: Root | null = null
 let host: HTMLElement | null = null
-let target: ((t: { line: string | null; day: string | null } | null) => void) | null = null
+let target: ((o: { target: { line: string | null; day: string | null } | null; reopened: boolean }) => void) | null = null
+/** The main process says an opening of the panel: `reopened` – it was hidden (a new opening), else asked again while open. */
+const opened = (reopened = true, t: { line: string | null; day: string | null } | null = null) => act(async () => target!({ target: t, reopened }))
 let rd: {
   showMain: ReturnType<typeof vi.fn<RdApi['showMain']>>
   widgetAction: ReturnType<typeof vi.fn<RdApi['widgetAction']>>
@@ -79,7 +80,6 @@ afterEach(() => {
   root = null
   host = null
   act(() => useWidget.setState({ view: null }))
-  useMachine.setState({ prefs: DEFAULT_MACHINE_PREFS })
   vi.useRealTimers()
   delete (window as unknown as { rd?: unknown }).rd
   if (!hadObserver) delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver
@@ -190,6 +190,32 @@ describe('dwuklik w przycisk paska działa raz (C8)', () => {
     expect(line.querySelector('.num')!.textContent).toBe('10:10')
   })
 
+  it('dwuklik w „Skończył się o…”: drugie kliknięcie trafia w −5, które stanęło na jego miejscu – nic (krok liczy tylko kliknięcia w siebie)', async () => {
+    await bar(dayView(), 'panel')
+    click(q('bar-act-ended-endedAt')!, 1)
+    const line = q('bar-line-ended:2026-11-21:b1')!
+    const minus = [...line.querySelectorAll('button')].find((b) => b.textContent === '−5')!
+    click(minus, 2)
+    expect(line.querySelector('.num')!.textContent).toBe('10:00')
+    click(minus, 3)
+    expect(line.querySelector('.num')!.textContent).toBe('09:55')
+  })
+
+  it('pasek pulpitu: puszczenie na −5 tuż po „Skończył się o…” w tym samym miejscu – nic; dwa szybkie na +5 – dwa kroki', async () => {
+    await bar(dayView(), 'desktop')
+    release(q('bar-act-ended-endedAt')!)
+    const line = q('bar-line-ended:2026-11-21:b1')!
+    const step = (t: string) => [...line.querySelectorAll('button')].find((b) => b.textContent === t)!
+    later(150)
+    release(step('−5'))
+    expect(line.querySelector('.num')!.textContent).toBe('10:00')
+    later(BAR_DOUBLE_MS + 1)
+    release(step('+5'))
+    later(150)
+    release(step('+5'))
+    expect(line.querySelector('.num')!.textContent).toBe('10:10')
+  })
+
   it('pasek pulpitu: dwa puszczenia w przycisk w czasie dwukliku i w jednym miejscu – jedno działanie; później albo dalej – dwa', async () => {
     await bar(dayView(), 'desktop')
     release(q('bar-next')!)
@@ -234,15 +260,60 @@ describe('panel ikony – nagłówek i stopka (P13 wariant A, C1, C7)', () => {
     expect(rd.showMain).toHaveBeenCalledTimes(1)
   })
 
-  it('pasek schowany „×” albo wyłączony w ustawieniach – „Pasek pulpitu: pokaż”', async () => {
-    act(() => useWidget.setState({ view: { ...dayView(), barClosed: true } }))
+  it('pasek nie na ekranie (schowany „×”, wyłączony, bez pomocnika, „Odcinam się”) – „Pasek pulpitu: pokaż”, nigdy „schowaj”', async () => {
+    act(() => useWidget.setState({ view: { ...dayView(), barShown: false, barClosed: true } }))
     await render(createElement(PanelApp))
     expect(q('panel-bar-toggle')!.textContent).toBe('▣ Pasek pulpitu: pokaż')
     click(q('panel-bar-toggle')!)
     expect(rd.barAction.mock.calls).toEqual([['showBar']])
+    for (const view of [
+      { ...dayView(), barShown: false, barNote: 'Pasek pulpitu ukryty: pomocnik nie działa' },
+      { ...dayView(), barShown: false, hidden: true, stateLine: 'Odcinam się od 10:00' }
+    ]) {
+      act(() => useWidget.setState({ view }))
+      expect(q('panel-bar-toggle')!.textContent).toBe('▣ Pasek pulpitu: pokaż')
+    }
     act(() => useWidget.setState({ view: dayView() }))
-    act(() => useMachine.setState({ prefs: { ...DEFAULT_MACHINE_PREFS, desktopBar: false } }))
-    expect(q('panel-bar-toggle')!.textContent).toBe('▣ Pasek pulpitu: pokaż')
+    expect(q('panel-bar-toggle')!.textContent).toBe('▣ Pasek pulpitu: schowaj')
+  })
+
+  it('tytuł nagłówka, odstępy i „·” stopki to nie wolne pole – chybienie obok przycisku nie otwiera okna głównego', async () => {
+    act(() => useWidget.setState({ view: dayView() }))
+    await render(createElement(PanelApp))
+    const at = (el: Element) =>
+      act(() => {
+        el.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+        el.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, button: 0 }))
+      })
+    for (const el of [q('panel-head')!.querySelector('span')!, q('panel-head')!, q('panel-foot')!, q('panel-foot')!.querySelector('span[aria-hidden]')!]) {
+      at(el)
+      click(el, 0)
+    }
+    expect(rd.showMain).not.toHaveBeenCalled()
+    // The bar's own free text still opens it (D558).
+    at(q('bar-block')!)
+    click(q('bar-block')!, 0)
+    expect(rd.showMain).toHaveBeenCalledTimes(1)
+  })
+
+  it('drugie kliknięcie dwukliku na przycisku, który zniknął po pierwszym, trafia w wolne pole – okno główne się nie otwiera', async () => {
+    act(() => useWidget.setState({ view: dayView() }))
+    await render(createElement(PanelApp))
+    const button = q('bar-act-ended-endedAt')!
+    const free = q('bar-block')!
+    act(() => {
+      button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, detail: 1 }))
+      // The button went away after its first click: the second press, release and click are on free text.
+      free.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+      free.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, detail: 2 }))
+      free.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, button: 0 }))
+    })
+    click(free, 2)
+    expect(rd.showMain).not.toHaveBeenCalled()
+    // A double click that began on free text too still opens it (D559).
+    act(() => void free.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, detail: 1 })))
+    act(() => void free.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, button: 0, detail: 2 })))
+    expect(rd.showMain).toHaveBeenCalledTimes(1)
   })
 
   it('dwuklik w „Pasek pulpitu: schowaj” – jedno schowanie (drugie kliknięcie nie pokazuje go znowu)', async () => {
@@ -264,7 +335,7 @@ describe('panel otwarty ponownie – nic rozwiniętego sprzed schowania (C8)', (
   it('„Prośba ▸”, „⋯”, pole „+ Skrzynka” i ±5 min „Skończył się o…” zwijają się przy otwarciu', async () => {
     act(() => useWidget.setState({ view: dayView() }))
     await render(createElement(PanelApp))
-    await act(async () => target!(null))
+    await opened()
     for (const [open, shown] of [
       ['bar-group-request', 'bar-request-group'],
       ['bar-group-more', 'bar-unfold-more'],
@@ -273,12 +344,12 @@ describe('panel otwarty ponownie – nic rozwiniętego sprzed schowania (C8)', (
       click(q(open)!)
       expect(q(shown), open).not.toBeNull()
       // Hidden and opened again (the main process says the target of each opening).
-      await act(async () => target!(null))
+      await opened()
       expect(q(shown), open).toBeNull()
     }
     click(q('bar-act-ended-endedAt')!)
     expect(q('bar-line-ended:2026-11-21:b1')!.getAttribute('data-busy')).toBe('on')
-    await act(async () => target!({ line: null, day: null }))
+    await opened(true, { line: null, day: null })
     expect(q('bar-line-ended:2026-11-21:b1')!.getAttribute('data-busy')).toBeNull()
     // Folded: a click on a free spot opens the main window again (D558).
     act(() => {
@@ -287,6 +358,49 @@ describe('panel otwarty ponownie – nic rozwiniętego sprzed schowania (C8)', (
     })
     click(q('panel')!, 0)
     expect(rd.showMain).toHaveBeenCalledTimes(1)
+  })
+
+  it('otwarty i poproszony jeszcze raz (kliknięcie powiadomienia) – nic się nie zwija, wpisany tekst zostaje; linia powiadomienia oznaczona', async () => {
+    act(() => useWidget.setState({ view: dayView() }))
+    await render(createElement(PanelApp))
+    await opened()
+    click(q('bar-group-request')!)
+    await opened(false, { line: 'ended:2026-11-21:b1', day: '2026-11-21' })
+    expect(q('bar-request-group')).not.toBeNull()
+    expect(q('panel-target')!.textContent).toContain('Blok skończył się?')
+    click(q('bar-quick')!)
+    const field = host!.querySelector<HTMLInputElement>('[data-testid="bar-quick-title"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, 'Kupić mleko')
+      field.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await opened(false)
+    expect(host!.querySelector<HTMLInputElement>('[data-testid="bar-quick-title"]')?.value).toBe('Kupić mleko')
+  })
+
+  it('panel wariantów otwarty w panelu przed schowaniem – nowe otwarcie go zamyka; poproszony przy otwartym – zostaje', async () => {
+    const withVariants = { ...dayView(), variants: { marker: true, open: [{ id: 'keep', label: 'Zostaw plan' }] } }
+    act(() => useWidget.setState({ view: { ...dayView(), variants: { marker: true, open: null } } }))
+    await render(createElement(PanelApp))
+    await opened()
+    click(q('bar-variants')!)
+    act(() => useWidget.setState({ view: withVariants }))
+    await opened(false)
+    expect(acts()).toEqual(['variants|open'])
+    await opened()
+    expect(acts()).toEqual(['variants|open', 'variants|close'])
+    // Closed already: a new opening asks nothing.
+    act(() => useWidget.setState({ view: dayView() }))
+    await opened()
+    expect(acts()).toEqual(['variants|open', 'variants|close'])
+  })
+
+  it('panel wariantów otwarty w oknie głównym – otwarcie panelu ikony go nie zamyka (jeden panel dla wszystkich okien)', async () => {
+    act(() => useWidget.setState({ view: { ...dayView(), variants: { marker: true, open: [{ id: 'keep', label: 'Zostaw plan' }] } } }))
+    await render(createElement(PanelApp))
+    await opened()
+    await opened()
+    expect(acts()).toEqual([])
   })
 
   it('pasek, który nie jest w panelu, nie zwija się bez otwarcia (zmiana widoku nic nie zwija)', async () => {

@@ -229,7 +229,16 @@ function quickAdd(title: unknown): Promise<QuickAddResult> {
 function widgetView(): WidgetView {
   const view = widget.current()
   const barNote = !prefs().desktopBar || barClosed || view.hidden ? null : barProblem === 'failed' ? BAR_NOTE_FAILED : barProblem === 'helper' ? BAR_NOTE_HELPER : null
-  return { ...view, barNote, barClosed }
+  // On the screen by its own rules (D564 P13 – the panel's „schowaj” only then): on, not hidden by „×” nor by a rule, laid.
+  const barShown = prefs().desktopBar && !barClosed && !view.hidden && barProblem == null
+  return { ...view, barNote, barClosed, barShown }
+}
+
+/** Why the bar is hidden although it is on, changed: the windows hear it at once (the note, the panel's „pokaż / schowaj”). */
+function setBarProblem(problem: 'helper' | 'failed' | null): void {
+  if (barProblem === problem) return
+  barProblem = problem
+  broadcast(CH.onWidget, widgetView())
 }
 
 /**
@@ -414,7 +423,7 @@ function layoutBar(): void {
     fullscreenNow = false
   }
   if (!barWanted()) {
-    barProblem = null
+    setBarProblem(null)
     bar.apply({ visible: false })
     helper?.send('bar.unwatch')
     return
@@ -431,13 +440,13 @@ function layoutBar(): void {
   bar.webContents?.send('rd:barGrows', r.growsUp ? 'up' : 'down')
   if (onTop) {
     // Above the windows: nothing to lay under them, no confirmation needed.
-    barProblem = null
+    setBarProblem(null)
     helper?.send('bar.unwatch')
     bar.apply({ visible: true })
     return
   }
   if (!helper?.running) {
-    barProblem = 'helper'
+    setBarProblem('helper')
     bar.apply({ visible: false })
     return
   }
@@ -773,12 +782,9 @@ function setBarClosed(closed: boolean): void {
  * The desktop bar laid again (its „Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests), shown or
  * hidden by the panel's „▣ Pasek pulpitu: pokaż / schowaj” (D564 P13).
  */
-async function barAction(action: BarActionId, arg?: string): Promise<void> {
-  if (action === 'placeBar') {
-    barProblem = null
-    helper?.send('bar.retry')
-    layoutBar()
-  } else if (action === 'corner') {
+async function barAction(action: BarActionId, arg: string | undefined, from: string): Promise<void> {
+  if (action === 'placeBar') retryBar()
+  else if (action === 'corner') {
     const all = displays()
     const current = bar?.currentBounds
     const now = (current ? displayAt(all, (d) => d.workArea, { x: current.x + current.width / 2, y: current.y + current.height / 2 }) : null) ?? primaryDisplay()
@@ -787,12 +793,22 @@ async function barAction(action: BarActionId, arg?: string): Promise<void> {
   } else if (action === 'openPanel') {
     openPanel({ line: null, day: null })
   } else if (action === 'showBar' || action === 'hideBar') {
-    const r = barFromPanel(action, { closed: barClosed, desktopBar: prefs().desktopBar })
+    const r = barFromPanel(action, from, { closed: barClosed, desktopBar: prefs().desktopBar })
     log('info', r.why)
+    if (!r.ok) return
     // Switched on in the settings: `setPrefs` shows one hidden by its „×” too (D559).
     if (r.switchOn) await setPrefs({ desktopBar: true })
-    else setBarClosed(r.closed)
+    else if (r.closed !== barClosed) setBarClosed(r.closed)
+    // On and not hidden by „×”, yet not on the screen (no helper, not laid under the windows): laid again, as its „Pokaż pasek”.
+    else if (action === 'showBar') retryBar()
   }
+}
+
+/** The desktop bar laid again (its „Pokaż pasek”, the panel's „Pasek pulpitu: pokaż”): the helper tries once more. */
+function retryBar(): void {
+  setBarProblem(null)
+  helper?.send('bar.retry')
+  layoutBar()
 }
 
 // ------------------------------------------------------------------ settings
@@ -807,10 +823,9 @@ async function setPrefs(patch: unknown): Promise<MachinePrefs> {
   // (the same keys again: one Windows refused is tried once more).
   if (touchesShortcut(patch)) quick?.setShortcut(shortcutOf(next))
   // The bar switched on again in the settings: one hidden by its „×” shows too (D559).
-  if (next.desktopBar && !before.desktopBar && barClosed) {
-    barClosed = false
-    broadcast(CH.onWidget, widgetView())
-  }
+  if (next.desktopBar && !before.desktopBar) barClosed = false
+  // Switched on or off: the windows hear it (the note, the panel's „Pasek pulpitu: pokaż / schowaj” – `barShown`).
+  if (next.desktopBar !== before.desktopBar) broadcast(CH.onWidget, widgetView())
   broadcast(CH.onPrefs, next)
   layoutBar()
   await saved.catch(() => undefined)
@@ -930,7 +945,7 @@ function registerIpc(): void {
     panel?.close('otwarcie okna głównego')
     showMainWindow(typeof page === 'string' ? page : undefined)
   })
-  handle(CH.barAction, (_e, action: BarActionId, arg?: string) => barAction(action, typeof arg === 'string' ? arg.slice(0, 40) : undefined))
+  handle(CH.barAction, (e, action: BarActionId, arg?: string) => barAction(action, typeof arg === 'string' ? arg.slice(0, 40) : undefined, viewOf(e.sender)))
   handle(CH.update, () => updates!.view())
   handle(CH.updateAction, (_e, action: UpdateAction) => updates!.action(action))
 

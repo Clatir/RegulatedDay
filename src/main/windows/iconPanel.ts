@@ -8,6 +8,7 @@
  */
 import { BrowserWindow, screen } from 'electron'
 import type { Rect } from '@shared/bounds'
+import type { PanelOpening } from '@shared/api'
 import type { PanelTarget } from '@shared/protocol'
 import { PALETTE } from '@shared/theme'
 import { keepOnPage } from './navigation'
@@ -137,6 +138,7 @@ export class IconPanel {
 
   open(target: PanelTarget | null = null): void {
     if (this.win.isDestroyed()) return
+    const reopened = !this.isOpen
     this.cursorAtOpen = screen.getCursorScreenPoint()
     const r = this.d.place(this.contentHeight, this.cursorAtOpen)
     this.win.setBounds(r)
@@ -144,8 +146,10 @@ export class IconPanel {
     this.openedAt = Date.now()
     this.touchedAt = this.openedAt
     this.unfolded = false
-    // Said at every opening (also without a line): the panel folds what stayed unfolded when it hid (C8).
-    this.win.webContents.send('rd:panelTarget', target)
+    // Said at every opening (also without a line); only one of a hidden panel folds what stayed unfolded when it hid (C8) –
+    // asked again while open (a notification's click), what you unfolded or typed now stays.
+    const opening: PanelOpening = { target, reopened }
+    this.win.webContents.send('rd:panelTarget', opening)
     // Opened by your click: shown on top with the focus (an exception of D229); Windows may refuse the focus after a
     // notification's click – the panel is there anyway, and the foreground's change still closes it. With „Zawsze na
     // wierzchu” for the panel (D291) it stays on top until you close it.

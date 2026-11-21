@@ -51,36 +51,47 @@ function act(action: WidgetAction, arg?: string): void {
 
 const clockOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
 
+/** The bar's last click on a button – on the desktop bar its release too (where and when). */
+interface LastClick {
+  button: EventTarget | null
+  release: BarRelease | null
+}
+
 /**
- * The desktop bar's last release that acted on a button (C8): the second release of a double click – within
- * `BAR_DOUBLE_MS`, at most `BAR_DOUBLE_PX` away – never acts again, also on another button that came in the place of the
- * first (the layout changed after „Dalej”). One per bar; a part of the bar drawn alone (tests) has none – every release acts.
+ * The bar's last click on a button (C8): the second click of a double click – Chromium's `detail` in the window and the
+ * panel, two releases within `BAR_DOUBLE_MS` and `BAR_DOUBLE_PX` on the desktop bar – never acts again, also on another
+ * button that came in the place of the first (the layout changed after „Dalej”, „Skończył się o…” put its −5 there). One
+ * per bar; a part of the bar drawn alone (tests) has none – every click acts.
  */
-const ButtonRelease = createContext<{ current: BarRelease | null } | null>(null)
+const ButtonClicks = createContext<{ current: LastClick } | null>(null)
 
 /**
  * A button of the bar: on the desktop bar it acts on the release of the mouse button (no activation, D229). The second
  * click of a double click does nothing (C8) – in the window and the panel Chromium counts it (`detail` 2 and more: the
  * clicks of one spot; a key gives 0), on the desktop bar the releases do (its window often never hears the press, T1500).
- * `repeat`: a step (±5 min) – each click counts, also a quick one.
+ * `repeat`: a step (±5 min) – a quick click counts too, when the click before it was on this very step.
  */
 function BarButton({ mode, onAct, children, testId, pressed, accent, label, repeat }: { mode: BarMode; onAct: () => void; children: ReactNode; testId?: string; pressed?: boolean; accent?: boolean; label?: string; repeat?: boolean }) {
-  const last = useContext(ButtonRelease)
+  const last = useContext(ButtonClicks)
+  /** This click again on the button clicked just before (a step clicked quickly once more). */
+  const again = (button: EventTarget) => !last || last.current.button === button
   const props =
     mode === 'desktop'
       ? {
           onPointerUp: (e: React.PointerEvent) => {
             if (e.button !== 0) return
-            if (repeat || !last) return onAct()
+            if (!last) return onAct()
             const now = { at: e.timeStamp, x: e.screenX, y: e.screenY }
-            const second = secondRelease(last.current, now)
-            last.current = now
+            const second = secondRelease(last.current.release, now) && !(repeat && again(e.currentTarget))
+            last.current = { button: e.currentTarget, release: now }
             if (!second) onAct()
           }
         }
       : {
           onClick: (e: React.MouseEvent) => {
-            if (repeat || e.detail <= 1) onAct()
+            const second = e.detail > 1 && !(repeat && again(e.currentTarget))
+            if (last) last.current = { ...last.current, button: e.currentTarget }
+            if (!second) onAct()
           }
         }
   return (
@@ -681,13 +692,13 @@ interface BarProps {
   opening?: number
 }
 
-/** The bar with its own memory of the last release on a button (the desktop bar's double click on a button, C8). */
+/** The bar with its own memory of the last click on a button (the second click of a double click on a button, C8). */
 export function Bar(props: BarProps) {
-  const release = useRef<BarRelease | null>(null)
+  const clicks = useRef<LastClick>({ button: null, release: null })
   return (
-    <ButtonRelease.Provider value={release}>
+    <ButtonClicks.Provider value={clicks}>
       <BarView {...props} />
-    </ButtonRelease.Provider>
+    </ButtonClicks.Provider>
   )
 }
 
@@ -732,10 +743,16 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
   const beat = usePulse(pulseClass(view.warn, pulse, mode, quiet), `${view.block?.name ?? ''}|${view.block?.endsAt ?? ''}`)
   // The panel of variants belongs to the main process (D313): one for every window, open while the view has it.
   const variantsOpen = view.variants.open != null
+  /** The panel of variants was opened by a click of this bar (the icon's panel closes it at its next opening, C8). */
+  const variantsHere = useRef(false)
+  useEffect(() => {
+    if (!variantsOpen) variantsHere.current = false
+  }, [variantsOpen])
   const toggle = (u: Exclude<Unfold, null>) => {
     // The field of the quick capture opened (not closed): it takes the keys at its mount.
     if (u === 'quick') quickFocus.current = unfold !== 'quick'
     if (u === 'variants') {
+      variantsHere.current = !variantsOpen
       act('variants', variantsOpen ? 'close' : 'open')
       setUnfold(null)
       return
@@ -776,6 +793,10 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
     if (foldedFor.current === opening) return
     foldedFor.current = opening
     setUnfold(null)
+    // The panel of variants is the main process's, one for every window: closed when this bar opened it – never one the
+    // main window's bar has open now.
+    if (variantsOpen && variantsHere.current) act('variants', 'close')
+    variantsHere.current = false
   }, [opening])
   // The title typed into the field of the quick capture: the bar's own, so it stays when the layout changes (T763) – and
   // only then: the field closed (Esc, „+”, saved), it is gone (T767).

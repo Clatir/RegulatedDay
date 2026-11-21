@@ -236,6 +236,16 @@ export type ViewKind = 'main' | 'bar' | 'panel' | 'sound' | 'quick'
 /** How the icon's panel is closed: Esc (none), its „×” – the app stays in the tray, „×” with Shift – the app ends. */
 export type PanelCloseHow = 'x' | 'quit'
 
+/**
+ * The icon's panel opened (`IconPanel.open`): the line a click opened it for (a notification), null – none; `reopened` – it
+ * was hidden and shows now (a new opening folds what stayed unfolded, C8), false – asked again while open (a notification's
+ * click, a test): nothing folds.
+ */
+export interface PanelOpening {
+  target: { line: string | null; day: string | null } | null
+  reopened: boolean
+}
+
 /** How the desktop bar is closed (D559): its „×” hides it until „Pokaż pasek pulpitu” in the icon's menu or the next start, with Shift – the app ends. */
 export type BarCloseHow = 'x' | 'quit'
 
@@ -857,8 +867,8 @@ export interface RdApi {
   onNavigate(cb: (page: string) => void): () => void
   showMain(page?: string): void
   copyText(text: string): Promise<void>
-  /** The icon's panel opened (each time): the line a click opened it for (a notification), null – none. */
-  onPanelTarget(cb: (target: { line: string | null; day: string | null } | null) => void): () => void
+  /** The icon's panel opened, or asked again while open (`PanelOpening`). */
+  onPanelTarget(cb: (opening: PanelOpening) => void): () => void
   /** The desktop bar: which way it unfolds (up, or down when it stands at the top). */
   onBarGrows(cb: (dir: 'up' | 'down') => void): () => void
   /** The main process ended the bar's drag by itself (the helper's release, T1500): the page lets go of its grip. */

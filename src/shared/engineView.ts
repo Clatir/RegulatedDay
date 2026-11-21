@@ -466,6 +466,7 @@ export function engineView(i: EngineInput): WidgetView {
     tooltip,
     barNote: null,
     barClosed: false,
+    barShown: false,
     buttons: {
       next: !!fg,
       pause: !!fg && !fixedFg && !modes.night,

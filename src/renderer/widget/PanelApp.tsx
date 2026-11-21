@@ -10,7 +10,6 @@
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
 import { OPEN_MAIN_TEXT, QUIT_APP_TEXT } from '@shared/widget'
 import { setWindowEscape } from '../lib/escape'
-import { useMachine } from '../store/machine'
 import { useWidget } from '../store/widget'
 import { Bar, useReportLayout } from './Bar'
 import { OWN } from './barDouble'
@@ -18,8 +17,11 @@ import { OWN } from './barDouble'
 /** What a click acts on by itself – never a click of the free panel (the same list as the desktop bar's free spot). */
 const OWN_CLICK = OWN
 
-/** A spot of the panel that is free: not a control, nor inside one. */
-const free = (el: EventTarget | null): boolean => el instanceof Element && !el.closest(OWN_CLICK)
+/** The panel's own header and footer (`data-panel-chrome`): a click missing a button of theirs opens nothing (UX10). */
+const CHROME = '[data-panel-chrome]'
+
+/** A spot of the panel that is free: not a control, nor inside one, nor in the header or the footer. */
+const free = (el: EventTarget | null): boolean => el instanceof Element && !el.closest(OWN_CLICK) && !el.closest(CHROME)
 
 /**
  * A click on a free spot opens the main window (D558): pressed and released on a free spot (a press slid onto a button or
@@ -52,18 +54,18 @@ const FOOT_BUTTON = 'rounded px-1 py-0.5 text-[12px] whitespace-nowrap text-mute
 
 export function PanelApp() {
   const view = useWidget((s) => s.view)
-  const desktopBar = useMachine((s) => s.prefs.desktopBar)
   const [target, setTarget] = useState<{ line: string | null; day: string | null } | null>(null)
-  // Each opening (the main process says its target every time, also none): the bar folds what stayed unfolded (C8).
+  // Each new opening of a hidden panel (the main process says it with its target, also none): the bar folds what stayed
+  // unfolded (C8); asked again while open, only the target changes.
   const [opening, setOpening] = useState(0)
   const [unfolded, setUnfolded] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useReportLayout(ref, unfolded)
   useEffect(() => {
     setWindowEscape(() => window.rd.panelClose())
-    const off = window.rd.onPanelTarget((t) => {
-      setTarget(t)
-      setOpening((n) => n + 1)
+    const off = window.rd.onPanelTarget((o) => {
+      setTarget(o.target)
+      if (o.reopened) setOpening((n) => n + 1)
     })
     const touch = () => window.rd.panelTouch()
     window.addEventListener('keydown', touch)
@@ -89,13 +91,16 @@ export function PanelApp() {
   const freeClick = (e: MouseEvent<HTMLDivElement>) => {
     const { down, up } = pressed.current
     pressed.current = { down: null, up: null }
+    // The second click of a double click whose first was on a control – one that went away after it („Tak”, „Potwierdź”):
+    // no click of the free panel (C8).
+    if (e.detail > 1 && !free(firstPress.current)) return
     if (opensMain(down, up, unfolded, e.currentTarget)) window.rd.showMain()
   }
-  // The desktop bar shown by your choice: on in this computer's settings and not hidden by its „×” (or by this footer).
-  const barShown = desktopBar && !view?.barClosed
+  // „schowaj” only for the bar on the screen now (the main process says it – `barShown`); hidden for any reason, „pokaż”.
+  const barShown = view?.barShown === true
   return (
     <div ref={ref} className="flex flex-col gap-2 border border-line-strong bg-panel p-2" data-testid="panel" onPointerDown={onPress} onPointerUp={onRelease} onClick={freeClick} onMouseDown={onMouseDown} onDoubleClick={(e) => doubleOpensMain(firstPress.current, e.target) && window.rd.showMain()}>
-      <div className="flex items-center justify-between gap-2 pl-1" data-testid="panel-head">
+      <div className="flex items-center justify-between gap-2 pl-1" data-testid="panel-head" data-panel-chrome="">
         <span className="text-[12px] font-medium text-muted">Regulated Day</span>
         <PanelButton
           testId="panel-close"
@@ -122,7 +127,7 @@ export function PanelApp() {
           })()}
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 border-t border-line pt-1.5 text-[12px] text-muted" data-testid="panel-foot">
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 border-t border-line pt-1.5 text-[12px] text-muted" data-testid="panel-foot" data-panel-chrome="">
         <PanelButton testId="panel-open-main" className={FOOT_BUTTON} onAct={() => window.rd.showMain()}>
           ↗ {OPEN_MAIN_TEXT}
         </PanelButton>
