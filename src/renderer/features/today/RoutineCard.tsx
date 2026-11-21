@@ -1,6 +1,7 @@
 /**
  * Ticking a routine off in „Dziś” (D328, spec „Rutyna”): a card for each routine of today begun and not ticked off –
- * its steps one by one with the version („zwykła” or „gorsze dni”), „✓ Wszystkie” and „Zapisz zaznaczone”. The same
+ * its steps one by one with the version („zwykła” or „gorsze dni”), „✓ Wszystkie” and „Zakończ rutynę (3 z 5)” (D8: it says that
+ * it closes the routine with the steps ticked – it was „Zapisz zaznaczone”). The same
  * click as the bar's line (`routineDone`), so a save in either place closes both; „Cofnij” takes it back.
  *
  * One state with the panel „Kroki” (D473, D479, T1108): the card shows the block's list as its day has it – the version
@@ -36,7 +37,7 @@ export function RoutineCards({ model, names }: { model: DayModel; names: Names }
   )
 }
 
-function RoutineCard({ model, due, block, name }: { model: DayModel; due: RoutineDue; block: PlanBlock; name: string }) {
+export function RoutineCard({ model, due, block, name }: { model: DayModel; due: RoutineDue; block: PlanBlock; name: string }) {
   const [busy, run] = useBusy()
   const date = model.date
   const raw = model.data.dayFile
@@ -81,7 +82,7 @@ function RoutineCard({ model, due, block, name }: { model: DayModel; due: Routin
           ✓ Wszystkie
         </button>
         <button type="button" className="btn" disabled={busy || !ticked.length} onClick={() => void save(ticked)} data-testid="routine-card-save">
-          Zapisz zaznaczone{ticked.length ? ` (${ticked.length})` : ''}
+          Zakończ rutynę ({ticked.length} z {steps.length})
         </button>
       </div>
     </section>

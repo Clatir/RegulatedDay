@@ -2,8 +2,8 @@
  * The morning plan (spec „Plan poranny”): in order „Strona B tygodnia” on Monday and „Cele na <miesiąc>” (D360), the questions about symptoms (the first check-in – D73), then the
  * plan – the day's wake (in the header), blocks moved from yesterday, the questions of the session layer and of
  * holidays, a lighter day after a stationary „zjazd”, the announcement of the session shift, requests chosen from the
- * queue, the warnings, the boundary to approve (approving it approves the plan) and
- * its exception. Every step can be skipped; nothing is blocked.
+ * queue, the boundary to approve (approving it approves the plan – also from the header, D8) and its exception. The day's warnings
+ * are not here: the side panel and the block's panel have them (D563 P10). Every step can be skipped; nothing is blocked.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { marketDay } from '@shared/calendar/holidays'
@@ -11,7 +11,7 @@ import { setAsked, setCancelled, setSessionAnswer } from '@shared/data/dayEdits'
 import { dueBadge } from '@shared/engine/caseDates'
 import { checkinStates } from '@shared/engine/energy'
 import { atOf } from '@shared/engine/grid'
-import { fromYesterday, holidayQuestions, lighterDay, morningWarnings, sessionQuestions, shiftNotice, type MorningInputs, type MorningWarning } from '@shared/engine/morning'
+import { fromYesterday, holidayQuestions, lighterDay, sessionQuestions, shiftNotice, type MorningInputs } from '@shared/engine/morning'
 import { morningCases, morningMinutes } from '@shared/engine/cases'
 import { freeStart } from '@shared/engine/planEdit'
 import { seriesQuestions } from '@shared/engine/series'
@@ -90,12 +90,7 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
   const allDayLine = morningAllDayLine(useData((d) => d.allDay), model.date)
   return (
     <section className="rounded-lg border border-line bg-panel" data-testid="morning-plan" data-prompt-card={approvedByYou ? undefined : 'true'}>
-      <button type="button" className="flex w-full items-center gap-2 px-4 py-2.5 text-left" onClick={() => setOpen(!open)}>
-        <span className="text-[13px] font-medium">Plan poranny</span>
-        <span className="text-[12px] text-muted">{approvedByYou ? 'zatwierdzony' : 'do zrobienia'}</span>
-        <span className="flex-1" />
-        <span className="text-muted">{open ? '▴' : '▾'}</span>
-      </button>
+      <MorningHeader model={model} open={open} plan={!sideB && !goals && !checkinOpen(needCheckin, checkinSkipped, model.date)} onToggle={() => setOpen(!open)} />
       {allDayLine && (
         <div className="px-4 pb-2.5 text-[12.5px] text-muted" data-testid="morning-allday">
           {allDayLine}
@@ -107,6 +102,39 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
         </div>
       )}
     </section>
+  )
+}
+
+/** The event that approves the boundary at its proposal – the plan with it (one for the header's button and the card's, D8); null – nothing to approve. */
+export function approveEvents(model: DayModel): Parameters<typeof logEvents>[0] | null {
+  const s = model.state
+  if (s.boundary.approved != null || s.boundary.proposal == null) return null
+  return [{ k: 'boundary.approve', day: model.date, boundary: atOf(s.grid, s.boundary.proposal), auto: false, plan: model.ctx.plan.map((b) => b.id) }]
+}
+
+/**
+ * The card's header (D8): its title and state, the fold on the left. `plan` – the step shown is the plan itself (not the questions
+ * before it): with the boundary proposed and not approved, „Zatwierdź” stands here, so the plan is approved without scrolling the card down
+ * to its end. It is a button of its own beside the fold's (a button in a button is none).
+ */
+export function MorningHeader({ model, open, plan, onToggle }: { model: DayModel; open: boolean; plan: boolean; onToggle: () => void }) {
+  const [busy, run] = useBusy()
+  const approvedByYou = model.state.boundary.approved != null && !model.state.boundary.auto
+  const approve = plan ? approveEvents(model) : null
+  return (
+    <div className="flex items-center gap-2 px-4 py-2.5" data-testid="morning-plan-head">
+      <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={onToggle} aria-expanded={open} data-testid="morning-toggle">
+        <span className="text-[13px] font-medium">Plan poranny</span>
+        <span className="text-[12px] text-muted">{approvedByYou ? 'zatwierdzony' : 'do zrobienia'}</span>
+        <span className="flex-1" />
+        <span className="text-muted">{open ? '▴' : '▾'}</span>
+      </button>
+      {approve && (
+        <button type="button" className="btn btn-accent" disabled={busy} onClick={() => void run(async () => void (await logEvents(approve)))} data-testid="morning-approve">
+          Zatwierdź
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -164,12 +192,6 @@ export function Checkin({ model, onSkip }: { model: DayModel; onSkip: () => void
   )
 }
 
-const WARNINGS: Record<MorningWarning, (m: DayModel, lm: (i: number) => string) => string> = {
-  max: (m, lm) => `Praca kończy się po maksimum (${lm(m.state.boundary.max)}). Możesz przenieść blok na inny dzień albo dodać wyjątek granicy – albo zostawić plan; minuty po maksimum będą przekroczeniem.`,
-  minimum: () => 'Minimum regeneracji nie mieści się przed porą snu – twardy koniec projektów wypada przed końcem pracy.',
-  budget: (m) => `Plan przekracza budżet pracy (${durationLabel(m.state.budgetUsedMin + m.state.budget.forecastMin)} z ${durationLabel(m.state.budget.limitMin)}) – to tylko ostrzeżenie.`
-}
-
 function Plan({ model, names }: { model: DayModel; names: Names }) {
   const { templates, lectures, series, seriesPlans, rd } = useData()
   const date = model.date
@@ -206,7 +228,6 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
   const { holidays, lighter, shift } = ahead
   // D382: an occurrence of a series on a „zjazd” or a day of regeneration (its field „W dni szczególne” says „pytaj”) – kept or called off for the day.
   const seriesAsk = seriesQuestions(series, model.ctx.plan, model.dayFile, currentType, date)
-  const warnings = morningWarnings(s)
   // D384: the step of requests offers the requests not done and not planned (not those of „Kiedyś / Może”) and the tasks of
   // „Dziś” (`morningCases`); the requests chosen make one block, each task its own.
   const { items: caseItems, today: caseToday } = useCases()
@@ -376,11 +397,7 @@ function Plan({ model, names }: { model: DayModel; names: Names }) {
           )}
         </div>
       )}
-      {warnings.map((w) => (
-        <p key={w} className="rounded border border-rose/40 bg-rose-soft px-3 py-2" data-testid={`warning-${w}`}>
-          {WARNINGS[w](model, lm)}
-        </p>
-      ))}
+      {/* D563 P10: the day's warnings are not here – the side panel and the block's panel have them (`DayWarnings`). */}
       <EnergyOrder model={model} names={names} />
       <Boundary model={model} lm={lm} approved={approved} proposal={proposal} />
     </div>
@@ -489,7 +506,7 @@ function Boundary({ model, lm, approved, proposal }: { model: DayModel; lm: (i: 
           <span>
             Propozycja granicy: <span className="num text-lamp">{lm(proposal)}</span> (koniec ostatniego bloku pracy + {s.settings.boundaryBufferMin} min, najpóźniej {lm(s.boundary.max)})
           </span>
-          <button type="button" className="btn btn-accent" disabled={busy} onClick={() => void log([{ k: 'boundary.approve', day: date, boundary: atOf(s.grid, proposal), auto: false, plan: model.ctx.plan.map((b) => b.id) }])} data-testid="boundary-approve">
+          <button type="button" className="btn btn-accent" disabled={busy} onClick={() => void log(approveEvents(model) ?? [])} data-testid="boundary-approve">
             Zatwierdź
           </button>
         </div>

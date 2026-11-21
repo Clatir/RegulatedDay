@@ -148,6 +148,12 @@ export function WeekPage() {
           </>
         )}
       </div>
+      {/* D10: what the gestures on the grid do (the list of „Agenda” has none). */}
+      {mode !== 'agenda' && (
+        <p className="-mt-1 text-[11.5px] text-muted" data-testid="week-hint">
+          Kliknij pustą godzinę albo przeciągnij po niej – nowy blok · przeciągnij blok – przeniesienie · z Ctrl – kopia · klik w blok – otwiera dzień
+        </p>
+      )}
       <WeekPushLine />
       <GroupLine view="week" />
       <AllDayLines page="week" />

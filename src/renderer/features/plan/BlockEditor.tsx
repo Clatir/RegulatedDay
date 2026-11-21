@@ -73,7 +73,8 @@ export function BlockEditor({
   forecastEnd,
   forecastStart,
   onEscape,
-  day
+  day,
+  warnings
 }: {
   block: PlanBlock
   plan: readonly PlanBlock[]
@@ -118,6 +119,8 @@ export function BlockEditor({
    * category. Left out – the day of `place`, else none (a template, a series: used from today on).
    */
   day?: string
+  /** The day's warnings (`DayWarnings`, D3):under the heading while this panel stands in the place of the side panel; left out – none (templates, series). */
+  warnings?: ReactNode
 }) {
   useEscapeLayer(true, onEscape ?? onClose)
   const owner = place ? ownerToAdd(block, place) : null
@@ -167,11 +170,18 @@ export function BlockEditor({
   return (
     <aside className={cx('flex shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3', SIDE_PANEL_WIDTH)} data-testid="block-editor" {...drop.bind}>
       <div className="flex items-center gap-2">
-        <h3 className="min-w-0 flex-1 truncate text-[14px] font-medium">{blockName(block, names)}</h3>
+        {/* D4: a new block not saved yet is a draft – the heading says so (it is the block's name once saved). */}
+        <h3 className="min-w-0 flex-1 truncate text-[14px] font-medium">{newBlock ? 'Nowy blok' : blockName(block, names)}</h3>
         <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={onClose} data-testid="block-editor-close">
           Zamknij
         </button>
       </div>
+      {newBlock && (
+        <p className="-mt-1 text-[11.5px] text-muted" data-testid="block-draft-hint">
+          Zapisze się, gdy opuścisz panel · Esc – odrzuć
+        </p>
+      )}
+      {warnings}
       {/* D430: its own name, as the title of an event; empty – named as before (the placeholder says how). */}
       <Field label="Nazwa" labelWidth={92}>
         <TextField

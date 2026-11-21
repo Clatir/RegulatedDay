@@ -242,7 +242,13 @@ export function NoteEditor({ value, onCommit, olderComputers, readOnly }: { valu
     >
       <div className={cx('flex min-h-0 flex-1 flex-col gap-1.5', expanded && 'mx-auto w-full max-w-[860px]')}>
         <div className="flex flex-wrap items-center gap-1">
-          <span className="mr-auto text-[12.5px] leading-snug text-muted">Notatka</span>
+          <span className={cx('text-[12.5px] leading-snug text-muted', readOnly && 'mr-auto')}>Notatka</span>
+          {/* D563 P11: Esc throws away what was not saved – the toolbar says it. */}
+          {!readOnly && (
+            <span className="mr-auto text-[11px] leading-snug text-muted" data-testid="note-esc-hint">
+              Esc – cofnij zmiany
+            </span>
+          )}
           {!readOnly && state && (
             <>
               <Tool label={<b>B</b>} title="Pogrubienie (Ctrl+B)" active={state.bold} onClick={act((c) => c.toggleBold())} testId="note-bold" />
