@@ -1,10 +1,11 @@
 /**
  * The window „Do skrzynki” (D385, D402): one small field over every window – only on your shortcut (Win+Alt+N by
- * default, changed or switched off in the settings of this computer), an exception of D229 like „Zawsze na wierzchu”
- * (D291). It never comes up by itself: the one way up is `raise`, called only by the global shortcut registered here
- * (scripts/check-code.mjs checks this file – show, focus and „on top” only in `raise`, `raise` only from the shortcut's
- * callback). Enter saves the task into „Skrzynka” and hides it, Esc hides it; losing the focus hides it too – its text
- * stays for the next time (the window's own state). Hidden, it is no longer on top. Never destroyed while the app runs.
+ * default, changed or switched off in the settings of this computer) or your click of „+ Skrzynka” on the desktop bar
+ * (D564 P15), an exception of D229 like „Zawsze na wierzchu” (D291). It never comes up by itself: the one way up is
+ * `raise`, called only by the global shortcut registered here and by `openFromBar` (scripts/check-code.mjs checks this
+ * file – show, focus and „on top” only in `raise`, `raise` only from the shortcut's callback and `openFromBar`). Enter
+ * saves the task into „Skrzynka” and hides it, Esc hides it; losing the focus hides it too – its text stays for the next
+ * time (the window's own state). Hidden, it is no longer on top. Never destroyed while the app runs.
  */
 import { BrowserWindow, globalShortcut, screen } from 'electron'
 import { CH, type QuickShortcut } from '@shared/api'
@@ -130,7 +131,7 @@ export class QuickWindow {
       let ok = false
       let error: string | null = null
       try {
-        ok = this.shortcuts.register(key, () => this.raise())
+        ok = this.shortcuts.register(key, () => this.raise('skrótem'))
       } catch (e) {
         error = `skrót ${key}: ${e instanceof Error ? e.message : String(e)}`
       }
@@ -161,11 +162,20 @@ export class QuickWindow {
   }
 
   /**
-   * Your shortcut pressed (the only caller – the global shortcut's callback): over every window with the focus, in the
-   * upper third of the monitor with the cursor, its field taking the keys. Windows lets the app that got the shortcut
-   * take the foreground.
+   * „+ Skrzynka” of the desktop bar clicked (D564 P15): the same window the shortcut shows – the desktop bar takes no keys
+   * (D229), so its field is this window. The main process calls it only for the desktop bar's own click (`WidgetEngine`:
+   * `quickOpen` from the bar's window).
    */
-  private raise(): void {
+  openFromBar(): void {
+    this.raise('przyciskiem „+ Skrzynka” paska pulpitu')
+  }
+
+  /**
+   * Your shortcut pressed or „+ Skrzynka” of the desktop bar clicked (the only callers – the global shortcut's callback and
+   * `openFromBar`): over every window with the focus, in the upper third of the monitor with the cursor, its field taking the
+   * keys. Windows lets the app that got the shortcut – or the input of your click – take the foreground.
+   */
+  private raise(how: string): void {
     if (this.win.isDestroyed()) return
     const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
     const z = this.d.zoom()
@@ -177,7 +187,7 @@ export class QuickWindow {
     this.win.show()
     this.win.focus()
     this.win.webContents.send(CH.onQuickShown)
-    this.d.log('okienko „Do skrzynki” otwarte skrótem')
+    this.d.log(`okienko „Do skrzynki” otwarte ${how}`)
   }
 
   /** Hidden – and no longer on top (Esc, saved, the focus gone). */

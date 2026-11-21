@@ -42,7 +42,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }> } = {}) {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>; openQuick?: () => void } = {}) {
   // `now` is the wall clock; setting it moves the monotonic one by the same step (time passes), `jump` moves the wall clock
   // alone (Windows sets the time back or forward – the monotonic clock goes on).
   const clock = {
@@ -109,7 +109,8 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
       mono: () => clock.mono,
       batterySaver: () => o.batterySaver ?? false,
       backup: () => (o.backupFailed ? { failed: { error: 'plik zajęty' } } : null),
-      ...(o.quickAdd ? { quickAdd: o.quickAdd } : {})
+      ...(o.quickAdd ? { quickAdd: o.quickAdd } : {}),
+      ...(o.openQuick ? { openQuick: o.openQuick } : {})
     })
   const w = build()
   return { folder, clock, w, build, shown, failLater, views, closeFolder: () => (open = false), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
@@ -1526,7 +1527,7 @@ describe('widget w procesie głównym', () => {
     }
   })
 
-  it('bez folderu danych: jedna neutralna linia „Brak folderu danych · Otwórz okno”, bez bloku i odliczania (D327)', async () => {
+  it('bez folderu danych: jedna neutralna linia „Brak folderu danych · Otwórz okno główne” (jedna nazwa – C7), bez bloku i odliczania (D327)', async () => {
     const { w, closeFolder } = await make()
     await w.refresh()
     expect(w.current().day).toBe(DAY)
@@ -1534,7 +1535,7 @@ describe('widget w procesie głównym', () => {
     await w.refresh()
     const v = w.current()
     expect(v).toMatchObject({ day: null, block: null, question: null, tone: 'brak', dot: false })
-    expect(v.lines.map((l) => [l.id, l.text, l.actions.map((a) => a.label)])).toEqual([[NO_FOLDER_LINE, 'Brak folderu danych', ['Otwórz okno']]])
+    expect(v.lines.map((l) => [l.id, l.text, l.actions.map((a) => a.label)])).toEqual([[NO_FOLDER_LINE, 'Brak folderu danych', ['Otwórz okno główne']]])
     expect(v.buttons).toMatchObject({ next: false, pause: false, extend: false, workEnd: false, cutOff: false, start: null })
     // A folder chosen but still opening, or failing: said so (the window says the same), never „Brak folderu”.
     expect(noFolderView('opening').lines[0]).toMatchObject({ text: 'Otwieram folder danych…', actions: [] })
@@ -2541,5 +2542,28 @@ describe('szybki zapis „+” – potwierdzenie w pasku (D470)', () => {
     await w.refresh()
     await w.act('quickAdd', 'Kup mleko !jutro', 'bar')
     expect(w.current().note).toMatchObject({ text: 'Dodano do Skrzynki: Tytuł z folderu', ok: true })
+  })
+})
+
+describe('„+ Skrzynka” paska pulpitu – okienko „Do skrzynki” (D564 P15)', () => {
+  it('tylko z paska pulpitu: quickOpen z okna głównego albo panelu nic nie otwiera (ich „+ Skrzynka” rozwija pole w pasku)', async () => {
+    let opened = 0
+    const { w, clock, closeFolder } = await make({ openQuick: () => void opened++ })
+    await w.refresh()
+    // Each click a second after the one before: never the second click of a double one (0.5 s).
+    for (const from of ['main', 'panel'] as const) {
+      await w.act('quickOpen', undefined, from)
+      clock.now += 1_000
+    }
+    expect(opened).toBe(0)
+    await w.act('quickOpen', undefined, 'bar')
+    expect(opened).toBe(1)
+    // Also without a day counted now (D402: always) – the folder closed.
+    clock.now += 1_000
+    closeFolder()
+    await w.refresh()
+    expect(w.current().day).toBeNull()
+    await w.act('quickOpen', undefined, 'bar')
+    expect(opened).toBe(2)
   })
 })

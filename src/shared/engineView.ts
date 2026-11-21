@@ -465,6 +465,7 @@ export function engineView(i: EngineInput): WidgetView {
     stateLine: hidden ? `Odcinam się od ${clockOf(modes.disconnect!)}` : null,
     tooltip,
     barNote: null,
+    barClosed: false,
     buttons: {
       next: !!fg,
       pause: !!fg && !fixedFg && !modes.night,

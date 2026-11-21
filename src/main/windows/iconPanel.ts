@@ -34,11 +34,8 @@ export function panelCloseOf(how: unknown, from: string): { why: string; quit: b
 }
 
 export interface PanelDeps {
-  /**
-   * The rectangle to open at for a content height (CSS px); `cursor` – where it was when the panel opened; `atCursor` –
-   * by the cursor, not by the icon (opened from the desktop bar's „+”, T756).
-   */
-  place: (height: number, cursor: { x: number; y: number }, atCursor: boolean) => Rect
+  /** The rectangle to open at for a content height (CSS px); `cursor` – where it was when the panel opened. */
+  place: (height: number, cursor: { x: number; y: number }) => Rect
   helperRunning: () => boolean
   /** Out of recordings and screen sharing (this computer's setting, on by default). */
   hideFromCapture: () => boolean
@@ -56,8 +53,6 @@ export class IconPanel {
   private contentHeight = 320
   /** The cursor when the panel opened: by it the panel keeps its place (icon under the hidden icons' arrow) as it grows. */
   private cursorAtOpen = { x: 0, y: 0 }
-  /** Opened by the cursor (the desktop bar's „+”): it keeps that place as it grows. */
-  private atCursor = false
   private idleTimer: NodeJS.Timeout | null = null
   quitting = false
   onExternalClose: (() => void) | null = null
@@ -143,13 +138,13 @@ export class IconPanel {
   open(target: PanelTarget | null = null): void {
     if (this.win.isDestroyed()) return
     this.cursorAtOpen = screen.getCursorScreenPoint()
-    this.atCursor = target?.quick === true
-    const r = this.d.place(this.contentHeight, this.cursorAtOpen, this.atCursor)
+    const r = this.d.place(this.contentHeight, this.cursorAtOpen)
     this.win.setBounds(r)
     this.win.setContentProtection(this.d.hideFromCapture())
     this.openedAt = Date.now()
     this.touchedAt = this.openedAt
     this.unfolded = false
+    // Said at every opening (also without a line): the panel folds what stayed unfolded when it hid (C8).
     this.win.webContents.send('rd:panelTarget', target)
     // Opened by your click: shown on top with the focus (an exception of D229); Windows may refuse the focus after a
     // notification's click – the panel is there anyway, and the foreground's change still closes it. With „Zawsze na
@@ -187,7 +182,7 @@ export class IconPanel {
   layout(height: number, zoom: number, unfolded: boolean): void {
     this.contentHeight = Math.ceil(height * zoom)
     this.unfolded = unfolded
-    if (this.isOpen) this.win.setBounds(this.d.place(this.contentHeight, this.cursorAtOpen, this.atCursor))
+    if (this.isOpen) this.win.setBounds(this.d.place(this.contentHeight, this.cursorAtOpen))
   }
 
   private armIdle(): void {

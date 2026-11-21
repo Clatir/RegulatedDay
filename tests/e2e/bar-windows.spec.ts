@@ -7,7 +7,9 @@
  * handle with the real mouse follows it and stays where it is let go (E4b.12). A hidden „WorkerW” at the top of the order
  * is no desktop – the bar stays under the windows (G4) – and after „failed” the helper tries again by itself (D341). A
  * line's button clicked with the real cursor (the gap's „Przesuń resztę wcześniej”, D368) writes its change and opens no
- * window, the bar staying where it lay in the order.
+ * window, the bar staying where it lay in the order. The bar's „↗” clicked for real brings the main window to the foreground
+ * with one click (D564 P12), its „+ Skrzynka” the window „Do skrzynki” on top with the focus (P15) – the bar stays under the
+ * other windows.
  */
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -16,7 +18,7 @@ import { expect, test, type ElectronApplication } from '@playwright/test'
 import { logicalMinuteOf } from '../../src/shared/time/day'
 import { launch, logicalToday, settledBarBounds, viewPage, withMainLog } from './app'
 import { seedAwake } from './seedAwake'
-import { background, click, drag, foreground, hover, placeUnder, topWindows, uncover, windowsAt, type TopWindow } from './win32'
+import { background, click, drag, foreground, hover, keys, placeUnder, topMost, topWindows, uncover, windowsAt, type TopWindow } from './win32'
 
 test.skip(process.platform !== 'win32' || process.env.RD_E2E_REAL_HELPER !== '1', 'Windows with the real helper only')
 
@@ -463,3 +465,56 @@ test('pasek pulpitu przeciągnięty za uchwyt prawdziwą myszą idzie za kursore
 test('„Zawsze na wierzchu”: pasek przeciągnięty za uchwyt prawdziwą myszą, gdy na pierwszym planie jest inne okno (E4b.12)', () => dragByHandle(true))
 
 test('pasek przeciągnięty prawdziwą myszą, gdy kursor wjeżdża na uchwyt z paska (E4b.12, T1500)', () => dragByHandle(false, true))
+
+/** The point on the screen (physical px) of a control of the desktop bar, by its test id. */
+async function barPoint(app: ElectronApplication, id: string): Promise<[number, number]> {
+  const page = await viewPage(app, 'bar')
+  const r = (await page.getByTestId(id).boundingBox())!
+  const bar = await barInfo(app)
+  const k = bar.scale
+  return [(bar.bounds.x + (r.x + r.width / 2) * bar.zoom) * k, (bar.bounds.y + (r.y + r.height / 2) * bar.zoom) * k]
+}
+
+test('„↗” i „+ Skrzynka” paska pulpitu prawdziwym kliknięciem: okno główne na pierwszym planie, okienko „Do skrzynki” na wierzchu z fokusem – pasek dalej pod oknami (D564 P12, P15)', async () => {
+  test.setTimeout(120_000)
+  const { app, page: main, userData } = await launch({ data: true })
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).day), { timeout: 30_000 }).not.toBeNull()
+      const win = await app.browserWindow(main)
+      const mainHwnd = await win.evaluate((w) => w.getNativeWindowHandle().readBigUInt64LE(0).toString())
+      // The main window into the tray: only the bar's „↗” can bring it now.
+      await win.evaluate((w) => w.hide())
+      await settledBarBounds(app)
+      const bar = await barInfo(app)
+      const covers = uncover(bar.hwnd)
+      const open = await barPoint(app, 'bar-open-main')
+      await expect.poll(() => windowsAt([open]), { message: `„↗” zasłonięty (${covers.join(', ') || 'nic nie zminimalizowano'})`, timeout: 10_000 }).toEqual([bar.hwnd])
+      click(...open)
+      await expect.poll(() => foreground(), { timeout: 10_000 }).toBe(mainHwnd)
+      let order = topWindows()
+      expect(zIndex(order, bar.hwnd)).toBeLessThan(desktopIndex(order, bar.hwnd))
+
+      // „+ Skrzynka”: the window „Do skrzynki” as by its shortcut.
+      const quickHwnd = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'Regulated Day – do skrzynki')!.getNativeWindowHandle().readBigUInt64LE(0).toString())
+      // The main window over the bar now: into the tray again, the bar's point free.
+      await win.evaluate((w) => w.hide())
+      uncover(bar.hwnd)
+      const plus = await barPoint(app, 'bar-quick')
+      await expect.poll(() => windowsAt([plus]), { timeout: 10_000 }).toEqual([bar.hwnd])
+      click(...plus)
+      await expect.poll(() => foreground(), { timeout: 10_000 }).toBe(quickHwnd)
+      expect(topMost(quickHwnd)).toBe(true)
+      expect(readFileSync(join(userData, 'logs', 'main.log'), 'utf8')).toContain('okienko „Do skrzynki” otwarte przyciskiem „+ Skrzynka” paska pulpitu')
+      keys(['1B'])
+      await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'Regulated Day – do skrzynki')!.isVisible())).toBe(false)
+      expect(topMost(quickHwnd)).toBe(false)
+      order = topWindows()
+      expect(zIndex(order, bar.hwnd)).toBeLessThan(desktopIndex(order, bar.hwnd))
+    })
+  } finally {
+    await app.close()
+  }
+})
+

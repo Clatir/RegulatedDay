@@ -74,12 +74,15 @@ function methodBody(text, head) {
 /** What raises a window over the others (or activates it): only `setAlwaysOnTop(false)` is no raise. */
 const RAISES = /this\.win\.(?:show|showInactive|focus|moveTop|moveAbove|restore|maximize|setFullScreen|setParentWindow)\(|this\.win\.setAlwaysOnTop\((?!\s*false\s*\))|this\.win\.webContents\.focus\(/g
 
-/** The window „Do skrzynki” (D385): on top only by the shortcut – `raise` private, alone raising, called only by the shortcut. */
+/**
+ * The window „Do skrzynki” (D385, D564 P15): on top only by the shortcut or the desktop bar's „+ Skrzynka” – `raise` private,
+ * alone raising, called once by the shortcut's callback and at most once by `openFromBar`, nowhere else.
+ */
 export function checkQuickWindow(text) {
   const code = text.replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '')
   const problems = []
-  const body = methodBody(code, 'private raise(): void {')
-  if (!body) return ['okienko „Do skrzynki”: brak prywatnej metody raise() – jedynej drogi na wierzch']
+  const body = methodBody(code, 'private raise(how: string): void {')
+  if (!body) return ['okienko „Do skrzynki”: brak prywatnej metody raise(how) – jedynej drogi na wierzch']
   for (const m of code.matchAll(RAISES)) if (m.index < body.from || m.index >= body.to) problems.push(`okienko „Do skrzynki”: ${m[0]} poza raise() – na wierzch wychodzi tylko na skrót (D385)`)
   // Shown or on top from its making: before any shortcut (the options of `new BrowserWindow`).
   for (const m of code.matchAll(/new BrowserWindow\(\s*\{([\s\S]*?)\}\s*\)/g)) {
@@ -90,8 +93,11 @@ export function checkQuickWindow(text) {
   // The window under another name would escape every check above.
   if (/=\s*this\.win\s*(?:[;,)\n]|$)|\{[^}]*\bwin\b[^}]*\}\s*=\s*this\b/m.test(code)) problems.push('okienko „Do skrzynki”: this.win pod inną nazwą – zmiany okna tylko przez this.win')
   const calls = [...code.matchAll(/this\.raise\(/g)].length
-  const byShortcut = [...code.matchAll(/\.register\([^,()]+,\s*\(\)\s*=>\s*this\.raise\(\)\s*\)/g)].length
-  if (calls !== byShortcut || byShortcut !== 1) problems.push('okienko „Do skrzynki”: raise() wołane gdzie indziej niż w wywołaniu skrótu globalnego (register)')
+  const byShortcut = [...code.matchAll(/\.register\([^,()]+,\s*\(\)\s*=>\s*this\.raise\('[^']*'\)\s*\)/g)].length
+  // „+ Skrzynka” of the desktop bar (D564 P15): one call inside `openFromBar`, the main process's only way for your click.
+  const bar = methodBody(code, 'openFromBar(): void {')
+  const byBar = bar ? [...code.slice(bar.from, bar.to).matchAll(/this\.raise\(/g)].length : 0
+  if (byShortcut !== 1 || byBar > 1 || calls !== byShortcut + byBar) problems.push('okienko „Do skrzynki”: raise() wołane gdzie indziej niż w wywołaniu skrótu globalnego (register) i raz w openFromBar()')
   return problems
 }
 
@@ -152,8 +158,9 @@ function run() {
 /** A window „Do skrzynki” as it must be (the self-test changes it one way at a time). */
 const QUICK_OK = `class Q {
   constructor() { this.win = new BrowserWindow({ show: false, frame: false, webPreferences: { preload } }) }
-  setShortcut(key) { ok = this.shortcuts.register(key, () => this.raise()) }
-  private raise(): void { if (x) { y() } this.win.setAlwaysOnTop(true, 'floating'); this.win.show(); this.win.focus() }
+  setShortcut(key) { ok = this.shortcuts.register(key, () => this.raise('skrótem')) }
+  openFromBar(): void { this.raise('paskiem') }
+  private raise(how: string): void { if (x) { y() } this.win.setAlwaysOnTop(true, 'floating'); this.win.show(); this.win.focus() }
   close(): void { this.win.setAlwaysOnTop(false); this.win.hide() }
 }`
 
@@ -178,6 +185,9 @@ function selfTest() {
     [checkQuickWindow(QUICK_OK.replace('close(): void {', 'close(): void { this.win.show()')).length === 1, 'okienko: show poza raise'],
     [checkQuickWindow(QUICK_OK.replace('close(): void {', 'close(): void { this.win.setAlwaysOnTop(true)')).length === 1, 'okienko: na wierzchu poza raise'],
     [checkQuickWindow(QUICK_OK.replace('close(): void {', 'close(): void { this.raise()')).length === 1, 'okienko: raise bez skrótu'],
+    [checkQuickWindow(QUICK_OK.replace("openFromBar(): void { this.raise('paskiem') }", '')).length === 0, 'okienko: bez openFromBar też ok'],
+    [checkQuickWindow(QUICK_OK.replace("openFromBar(): void { this.raise('paskiem') }", "openFromBar(): void { this.raise('a'); this.raise('b') }")).length === 1, 'okienko: raise dwa razy w openFromBar'],
+    [checkQuickWindow(QUICK_OK.replace("this.raise('skrótem')", 'other()')).length === 1, 'okienko: raise bez skrótu, tylko z paska'],
     [checkQuickWindow(QUICK_OK.replace('private raise(', 'raise(')).length === 1, 'okienko: raise nie prywatne'],
     [checkQuickWindow(QUICK_OK.replace('show: false', 'show: true')).length === 1, 'okienko: pokazane od razu (show: true)'],
     [checkQuickWindow(QUICK_OK.replace('frame: false', 'frame: false, alwaysOnTop: true')).length === 1, 'okienko: na wierzchu od razu (alwaysOnTop: true)'],

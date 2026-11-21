@@ -5,7 +5,7 @@
  * within 0.5 s are one); the Windows notifications on by default (D230) – shown only by the leader, each once by its
  * stable id in the day's log.
  *
- * Until a data folder is open the widget shows one neutral line („Brak folderu danych · Otwórz okno”, D327).
+ * Until a data folder is open the widget shows one neutral line („Brak folderu danych · Otwórz okno główne”, D327).
  */
 import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult, ViewKind } from '@shared/api'
 import { blockName, nameById } from '@shared/blockName'
@@ -100,7 +100,7 @@ export interface WidgetDeps {
   backup?: () => { failed: { error: string } | null } | null
   /** The quick capture (D385, D402): a task of your own into „Skrzynka” – the field of the bar; why, when not saved. */
   quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>
-  /** „+” of the desktop bar (T756): it takes no keys – the icon's panel opens at the cursor with the field. */
+  /** „+ Skrzynka” of the desktop bar (D564 P15): it takes no keys – the window „Do skrzynki” opens as by its shortcut. */
   openQuick?: () => void
 }
 
@@ -940,8 +940,10 @@ export class WidgetEngine {
     }
     // The quick capture (D385, D402): always – also without a day counted now, in the night, „Odcinam się”, a session, a class.
     if (action === 'quickAdd') return this.quickAdd(arg ?? '')
+    // „+ Skrzynka” of the desktop bar (D564 P15): the window „Do skrzynki” – only for the desktop bar's own click (the window
+    // and the panel unfold the field in their bar; nothing else may bring that window up).
     if (action === 'quickOpen') {
-      this.d.openQuick?.()
+      if (from === 'bar') this.d.openQuick?.()
       return
     }
     if (v.day == null && action !== 'openMain') return

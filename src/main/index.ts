@@ -48,10 +48,10 @@ import { identity } from './identity'
 import { flushLog, initLog, log } from './log'
 import { ConfigStore, computerId, presenceWindowsId, renewComputerId, windowsMachineId } from './config'
 import { Autostart, HIDDEN_ARG } from './autostart'
-import { AppTray } from './tray'
+import { AppTray, trayMenuItems } from './tray'
 import { displays, primaryDisplay } from './displays'
 import { createMainWindow, revealMainWindow } from './windows/mainWindow'
-import { DesktopBar, barBackWithMain, barCloseOf } from './windows/desktopBar'
+import { DesktopBar, barBackWithMain, barCloseOf, barFromPanel } from './windows/desktopBar'
 import { IconPanel, panelCloseOf } from './windows/iconPanel'
 import { QUICK_RETRY_MS, QuickWindow, shortcutOf, touchesShortcut } from './windows/quickWindow'
 import { HelperClient, type HelperMessage } from './helper/client'
@@ -217,8 +217,8 @@ const widget = new WidgetEngine({
   batterySaver: () => batterySaverOn && inOneDriveNow(),
   backup: () => hub?.service?.backup ?? null,
   quickAdd: (title) => quickAdd(title),
-  // „+” of the desktop bar (T756): the bar takes no keys (D229) – the icon's panel opens at the cursor with the field.
-  openQuick: () => openPanel({ line: null, day: null, quick: true })
+  // „+ Skrzynka” of the desktop bar (D564 P15): the bar takes no keys (D229) – the window „Do skrzynki”, as by its shortcut.
+  openQuick: () => quick?.openFromBar()
 })
 
 /** The quick capture (D385): a task into „Skrzynka” – the window „Do skrzynki” and the bar's field. */
@@ -229,7 +229,7 @@ function quickAdd(title: unknown): Promise<QuickAddResult> {
 function widgetView(): WidgetView {
   const view = widget.current()
   const barNote = !prefs().desktopBar || barClosed || view.hidden ? null : barProblem === 'failed' ? BAR_NOTE_FAILED : barProblem === 'helper' ? BAR_NOTE_HELPER : null
-  return { ...view, barNote }
+  return { ...view, barNote, barClosed }
 }
 
 /**
@@ -737,14 +737,10 @@ function onSystemEnd(ending: boolean): void {
 // ------------------------------------------------------------------ the tray's menu
 
 function trayMenu(): MenuItemConstructorOptions[] {
-  const ready = updates?.updater?.readyRelease
-  return [
-    { label: 'Otwórz Regulated Day', click: () => showMainWindow() },
-    ...(barClosed && prefs().desktopBar ? [{ label: 'Pokaż pasek pulpitu', click: () => showClosedBar() }] : []),
-    ...(ready ? [{ label: `Zainstaluj teraz (${ready.version})`, click: () => void updates?.action('installNow') }] : []),
-    { type: 'separator' },
-    { label: 'Zakończ', click: () => quitApp() }
-  ]
+  return trayMenuItems(
+    { barClosed, desktopBar: prefs().desktopBar, ready: updates?.updater?.readyRelease?.version ?? null },
+    { showMain: () => showMainWindow(), showBar: () => showClosedBar(), install: () => void updates?.action('installNow'), quit: () => quitApp() }
+  )
 }
 
 /** The bar hidden by its „×” shown again (D559): the icon's menu, or the bar switched on again in the settings. */
@@ -773,7 +769,10 @@ function setBarClosed(closed: boolean): void {
 
 // ------------------------------------------------------------------ the bar's actions
 
-/** The desktop bar laid again (its „Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests). */
+/**
+ * The desktop bar laid again (its „Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests), shown or
+ * hidden by the panel's „▣ Pasek pulpitu: pokaż / schowaj” (D564 P13).
+ */
 async function barAction(action: BarActionId, arg?: string): Promise<void> {
   if (action === 'placeBar') {
     barProblem = null
@@ -787,6 +786,12 @@ async function barAction(action: BarActionId, arg?: string): Promise<void> {
     await setPrefs({ barPlacement: spotPlacement(now, spot, { width: barWidth(now.workArea, prefs().zoom), height: barFolded() }) })
   } else if (action === 'openPanel') {
     openPanel({ line: null, day: null })
+  } else if (action === 'showBar' || action === 'hideBar') {
+    const r = barFromPanel(action, { closed: barClosed, desktopBar: prefs().desktopBar })
+    log('info', r.why)
+    // Switched on in the settings: `setPrefs` shows one hidden by its „×” too (D559).
+    if (r.switchOn) await setPrefs({ desktopBar: true })
+    else setBarClosed(r.closed)
   }
 }
 
@@ -1489,10 +1494,9 @@ async function main(): Promise<void> {
     layoutBar()
   })
   panel = new IconPanel(preload, loadView, {
-    place: (height, cursor, atCursor) => {
+    place: (height, cursor) => {
       const all = displays()
-      // Opened from the desktop bar's „+” (T756): by the cursor – the bar it was clicked on.
-      const icon = atCursor ? null : (tray?.bounds() ?? null)
+      const icon = tray?.bounds() ?? null
       // The display the panel opens on – the same one its rectangle is put on (an icon under the arrow: the cursor's).
       const wa = panelDisplay(icon, cursor, all).workArea
       const width = Math.floor(Math.min(480 * prefs().zoom, wa.width - 16))

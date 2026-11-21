@@ -10,7 +10,37 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:
 import { join } from 'node:path'
 import { Menu, Tray, type MenuItemConstructorOptions } from 'electron'
 import { TRAY_SIZES, renderTrayIcon, trayIconKey, type TrayIconState } from '@shared/trayIcon'
+import { OPEN_MAIN_TEXT, QUIT_APP_TEXT } from '@shared/widget'
 import { encodeIco, encodePng } from './icon/ico'
+
+/** What the icon's menu depends on: the bar hidden by its „×”, switched on in the settings, an update ready to install. */
+export interface TrayMenuState {
+  barClosed: boolean
+  desktopBar: boolean
+  /** The version ready to install now, null – none. */
+  ready: string | null
+}
+
+export interface TrayMenuActs {
+  showMain: () => void
+  showBar: () => void
+  install: () => void
+  quit: () => void
+}
+
+/**
+ * The icon's menu (right click): the main window and the end of the app by their one name each – the same words as the
+ * panel's footer (C7, D564 P13, P20); „Pokaż pasek pulpitu” only for the bar hidden by its „×” (D559).
+ */
+export function trayMenuItems(s: TrayMenuState, a: TrayMenuActs): MenuItemConstructorOptions[] {
+  return [
+    { label: OPEN_MAIN_TEXT, click: () => a.showMain() },
+    ...(s.barClosed && s.desktopBar ? [{ label: 'Pokaż pasek pulpitu', click: () => a.showBar() }] : []),
+    ...(s.ready ? [{ label: `Zainstaluj teraz (${s.ready})`, click: () => a.install() }] : []),
+    { type: 'separator' },
+    { label: QUIT_APP_TEXT, click: () => a.quit() }
+  ]
+}
 
 export interface TrayDeps {
   title: string
