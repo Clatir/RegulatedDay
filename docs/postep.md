@@ -95,8 +95,16 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 15. **Ciąg UX – poprawki użytkowe (D561):** przegląd użytkowy 1.33.0 (20.11; ustalenia z dowodami –
     `docs/przeglad-ux-20.11.md`), 21.11 użytkownik: wdrożyć wszystkie poprawki. Plan – `docs/plan.md`, „Ciąg UX”:
     19 zadań (UX1–UX19) w 8 paczkach, 66–90 h; jedno CI i jedno wydanie 1.34.0 na końcu (D562) – zadania scalane bez CI do
-    gałęzi sesji `claude/dazzling-dijkstra-qat23f`; pytania P1–P29 odpowiedziane 21.11 (D563–D565, rekomendacje poza P19).
-    „Dalej” dane 21.11 – ciąg w toku od paczki 1 (UX1–UX3); stan paczek – tabela niżej.
+    gałęzi `claude/ciag-ux`; pytania P1–P29 odpowiedziane 21.11 (D563–D565, rekomendacje poza P19).
+    „Dalej” dane 21.11. **Gałąź ciągu: `claude/ciag-ux`** (bez PR – CI nie rusza; PR i pełne CI raz na końcu, D562).
+    PR #108 (`claude/dazzling-dijkstra-qat23f`, sam plan i D561–D565) – CI Linux zielone, Windows w toku 21.11 10:10; scalić,
+    gdy zielone (D285), potem `git merge origin/main` do `claude/ciag-ux`. Sesja przeniesiona 21.11 z chmury na komputer lokalny.
+    - **Paczka 1 (UX1–UX3):** kod scalony w `claude/ciag-ux` (commity 7ad1159, c3047f2, aac1fca; T1977–T1985). Testy lokalne
+      w chmurze: typecheck, build, lint zielone; `npm test` 4550 zielonych, 1 czerwony `tests/unit/config.test.ts` (tylko jako root –
+      na Windows powinien przejść); E2E powiązanych plików zielone u wykonawców. **Zostało:** `/code-review` high na zakresie
+      `26e6726..7ad1159`, `26e6726..c3047f2`, `26e6726..aac1fca` (łącznie `git diff 26e6726 a3d9c55`), poprawki, punkty
+      odbioru UX1.1… w `docs/odbior.md` (wersja 1.34.0), wpis paczki tutaj.
+    - Paczki 2–8 (UX4–UX19): do zrobienia, odpowiedzi w D563–D565 (P19: mm:ss zostaje).
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
