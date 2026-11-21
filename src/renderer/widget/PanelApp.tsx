@@ -1,7 +1,8 @@
 /**
  * The icon's panel – the remote of the app (D564 P13, variant A): a header „Regulated Day” with „×”, the bar as on the desktop
  * and in the window, and a footer „↗ Otwórz okno główne · ▣ Pasek pulpitu: pokaż / schowaj · ⏻ Zakończ aplikację” (C1, C7).
- * While the widget is hidden the bar is only its state line and the question waiting (spec „Widget”). Esc closes it (after
+ * While the widget is hidden the bar is only its state line and the question waiting (spec „Widget”) – and, for a desktop bar hidden
+ * by its „×”, the line „Pasek pulpitu schowany · Pokaż po „Wracam”” (D564 P16; otherwise „· Pokaż pasek”). Esc closes it (after
  * whatever Esc closes first); a line a notification's click opened it for is marked. „×” closes it (the app goes on in the
  * tray), „×” with Shift ends the app; a click on a free spot opens the main window (D558): pressed and released on a free
  * spot, nothing unfolded or waiting (`data-busy`); a double click opens it always (D559) – anywhere but on a control, also

@@ -74,6 +74,12 @@ describe('„Pasek pulpitu” w menu ikony (D564 P16) – ta sama reguła co sto
     expect(barFromPanel('showBar', 'panel', { closed: false, desktopBar: true }).why).toBe('pasek pulpitu już pokazany (z panelu ikony)')
   })
 
+  it('przy „Odcinam się” „×” zdjęty, pasek wróci po „Wracam”; chciany, ale nie na ekranie – bez „już pokazany”', () => {
+    expect(barWant('showBar', { closed: true, desktopBar: true, hidden: true }, 'z panelu ikony')).toEqual({ closed: false, switchOn: false, why: '„×” zdjęty z panelu ikony – pasek wróci po „Wracam”' })
+    expect(barWant('showBar', { closed: false, desktopBar: true, onScreen: false }, 'z menu ikony')).toEqual({ closed: false, switchOn: false, why: 'pasek pulpitu bez „×” (z menu ikony) – teraz go nie widać (pomocnik, pełny ekran albo reguła)' })
+    expect(barWant('showBar', { closed: false, desktopBar: true, onScreen: true }, 'z menu ikony').why).toBe('pasek pulpitu już pokazany (z menu ikony)')
+  })
+
   it('panel mówi w logu „z panelu ikony” jak przed P16', () => {
     expect(barFromPanel('showBar', 'panel', { closed: false, desktopBar: false }).why).toBe('pasek pulpitu włączony i pokazany z panelu ikony')
     expect(barFromPanel('hideBar', 'panel', { closed: false, desktopBar: true }).why).toBe('pasek pulpitu schowany z panelu ikony')

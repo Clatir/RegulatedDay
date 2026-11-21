@@ -752,11 +752,21 @@ function trayMenu(): MenuItemConstructorOptions[] {
     { barClosed, desktopBar: prefs().desktopBar, ready: updates?.updater?.readyRelease?.version ?? null },
     {
       showMain: () => showMainWindow(),
-      bar: (want) => void setBarWant(barWant(want, { closed: barClosed, desktopBar: prefs().desktopBar }, 'z menu ikony')),
+      bar: (want) => void setBarWant(barWant(want, barState(), 'z menu ikony')),
       install: () => void updates?.action('installNow'),
       quit: () => quitApp()
     }
   )
+}
+
+/** What „pokaż / schowaj” goes by (`barWant`): the „×”, the switch, the widget hidden („Odcinam się”), the bar on the screen now. */
+const barState = () => ({ closed: barClosed, desktopBar: prefs().desktopBar, hidden: widgetView().hidden, onScreen: !!bar?.isVisible })
+
+/** A place chosen (the settings' mock-up, the wizard's corner) shows the bar hidden by its „×” – at its new place (D564 P16). */
+function showClosedAt(where: string): void {
+  if (!barClosed || !prefs().desktopBar) return
+  log('info', `pasek pulpitu pokazany ponownie po „×” – miejsce wybrane ${where}`)
+  setBarClosed(false)
 }
 
 /**
@@ -803,10 +813,11 @@ async function barAction(action: BarActionId, arg: string | undefined, from: str
     const now = (current ? displayAt(all, (d) => d.workArea, { x: current.x + current.width / 2, y: current.y + current.height / 2 }) : null) ?? primaryDisplay()
     const spot = BAR_SPOTS.includes(arg as BarSpot) ? (arg as BarSpot) : 'bottom-left'
     await setPrefs({ barPlacement: spotPlacement(now, spot, { width: barWidth(now.workArea, prefs().zoom), height: barFolded() }) })
+    showClosedAt('w kreatorze')
   } else if (action === 'openPanel') {
     openPanel({ line: null, day: null })
   } else if (action === 'showBar' || action === 'hideBar') {
-    const r = barFromPanel(action, from, { closed: barClosed, desktopBar: prefs().desktopBar })
+    const r = barFromPanel(action, from, barState())
     if (r.ok) await setBarWant(r)
     else log('info', r.why)
   }
@@ -829,8 +840,7 @@ async function setPrefs(patch: unknown, by: 'settings' | 'app' = 'app'): Promise
   const shown = unclosesBar({ closed: barClosed, before: before.desktopBar, after: next.desktopBar }, patch, by)
   if (shown) {
     barClosed = false
-    // Off → on says its own line (the panel, the menu); on already – only the settings' switch and „Pokaż pasek” do this.
-    if (before.desktopBar) log('info', 'pasek pulpitu pokazany ponownie po „×” – włączony w ustawieniach')
+    log('info', `pasek pulpitu pokazany ponownie po „×” – włączony${by === 'settings' ? ' w ustawieniach' : ''}`)
   }
   // Switched on or off, or shown again: the windows hear it at once (the note – `barNote`, the line of the bar hidden by its „×”;
   // the panel reads the switch from the settings).
@@ -934,11 +944,8 @@ function registerIpc(): void {
     const d = displays().find((x) => x.id === id)
     if (!d || !BAR_SPOTS.includes(spot as BarSpot)) return barScreens()
     await setPrefs({ barPlacement: spotPlacement(d, spot as BarSpot, { width: barWidth(d.workArea, prefs().zoom), height: barFolded() }) })
-    // A place chosen in the settings shows the bar hidden by its „×” – at its new place (D564 P16); one switched off stays off.
-    if (barClosed && prefs().desktopBar) {
-      log('info', 'pasek pulpitu pokazany ponownie po „×” – miejsce wybrane w ustawieniach')
-      setBarClosed(false)
-    }
+    // One switched off stays off.
+    showClosedAt('w ustawieniach')
     return barScreens()
   })
   ipcMain.on(CH.panelTouch, (_e, unfolded?: boolean) => panel?.touch(typeof unfolded === 'boolean' ? unfolded : undefined))

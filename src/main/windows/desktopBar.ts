@@ -45,22 +45,31 @@ export type BarWant = 'showBar' | 'hideBar'
  * „Schowaj” hides the bar as its „×” does (`closed` – until „pokaż”, the settings, the main window going or the next start);
  * „pokaż” shows it again – one switched off in the settings is switched on on this computer (`switchOn`). Off, there is
  * nothing to hide: the state stays. One rule for the panel's footer and the icon's menu (`by` – where, for the log); a word that
- * changes nothing (a menu popped up before the state changed elsewhere) says „już” in the log.
+ * changes nothing (a menu popped up before the state changed elsewhere) says „już” in the log – only when the bar is on the
+ * screen (`onScreen`, by default yes): wanted but kept away (the helper, a full screen, a rule) it says so. With the widget hidden
+ * (`hidden` – „Odcinam się”) the „×” goes, the bar comes back after „Wracam”.
  */
-export function barWant(want: BarWant, s: { closed: boolean; desktopBar: boolean }, by: string): { closed: boolean; switchOn: boolean; why: string } {
+export function barWant(want: BarWant, s: { closed: boolean; desktopBar: boolean; hidden?: boolean; onScreen?: boolean }, by: string): { closed: boolean; switchOn: boolean; why: string } {
   if (want === 'hideBar') {
     if (!s.desktopBar) return { closed: s.closed, switchOn: false, why: 'pasek pulpitu wyłączony w ustawieniach – nie ma czego chować' }
     return { closed: true, switchOn: false, why: s.closed ? `pasek pulpitu już schowany (${by})` : `pasek pulpitu schowany ${by}` }
   }
   if (!s.desktopBar) return { closed: false, switchOn: true, why: `pasek pulpitu włączony i pokazany ${by}` }
-  return { closed: false, switchOn: false, why: s.closed ? `pasek pulpitu pokazany ${by}` : `pasek pulpitu już pokazany (${by})` }
+  const why = s.closed
+    ? s.hidden
+      ? `„×” zdjęty ${by} – pasek wróci po „Wracam”`
+      : `pasek pulpitu pokazany ${by}`
+    : s.onScreen === false
+      ? `pasek pulpitu bez „×” (${by}) – teraz go nie widać (pomocnik, pełny ekran albo reguła)`
+      : `pasek pulpitu już pokazany (${by})`
+  return { closed: false, switchOn: false, why }
 }
 
 /**
  * The panel's „▣ Pasek pulpitu: pokaż / schowaj” and its line „Pasek pulpitu schowany · Pokaż pasek” (D564 P13, P16) – `barWant`
  * only from the panel's own window (`ok`), as „×” only from the bar's; another one changes nothing (and the log says so).
  */
-export function barFromPanel(want: BarWant, from: string, s: { closed: boolean; desktopBar: boolean }): { ok: boolean; closed: boolean; switchOn: boolean; why: string } {
+export function barFromPanel(want: BarWant, from: string, s: { closed: boolean; desktopBar: boolean; hidden?: boolean; onScreen?: boolean }): { ok: boolean; closed: boolean; switchOn: boolean; why: string } {
   if (from !== 'panel') return { ok: false, closed: s.closed, switchOn: false, why: `pasek pulpitu z panelu – odmowa (okno ${from})` }
   return { ok: true, ...barWant(want, s, 'z panelu ikony') }
 }

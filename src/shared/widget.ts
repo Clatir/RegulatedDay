@@ -252,6 +252,8 @@ export const BAR_NOTE_FAILED = 'Paska pulpitu nie udało się położyć pod okn
 export const SHOW_BAR_TEXT = 'Pokaż pasek'
 /** The line of the bar hidden by its „×” (D564 P16): in the icon's panel and in the settings, with „Pokaż pasek”. */
 export const BAR_CLOSED_TEXT = 'Pasek pulpitu schowany'
+/** Its button while the widget is hidden („Odcinam się”): the „×” goes at once, the bar comes back after „Wracam”. */
+export const SHOW_BAR_AFTER_BACK_TEXT = 'Pokaż po „Wracam”'
 /** The item of the icon's menu (P16): always there, ticked by your choice (`barChosen`). */
 export const BAR_MENU_TEXT = 'Pasek pulpitu'
 

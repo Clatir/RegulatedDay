@@ -1,8 +1,10 @@
 /**
  * „Pasek pulpitu” of this computer's settings (D564 P16, C3): the switch by your choice, as the panel's footer and the icon's menu
  * (`barChosen`) – the bar hidden by its „×” is „schowany”, not „włączony”, and under the switch stands the line „Pasek pulpitu
- * schowany · Pokaż pasek”. Both switch the bar on: the main process shows one hidden by its „×” at once (also when it was on
- * already – `switchesBarOn`), so one click brings it back. Its place chosen in the mock-up shows it too (`placeBar`).
+ * schowany · Pokaż pasek”. Both switch the bar on through `CH.setPrefs` (`by: 'settings'`): the main process shows one hidden by
+ * its „×” at once, also when it was on already (`unclosesBar` – the wizard's prefs never do), so one click brings it back; the switch
+ * is `Toggle once` – a double click acts once (shown, the switch ticks; the second click would switch it off). Its place chosen in
+ * the mock-up shows it too (`placeBar`).
  */
 import { BAR_CLOSED_TEXT, SHOW_BAR_TEXT, barChosen } from '@shared/widget'
 import { Toggle } from '../../components/ui'

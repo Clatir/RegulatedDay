@@ -368,13 +368,13 @@ describe('pasek schowany „×” – linia „Pasek pulpitu schowany · Pokaż 
     expect(html(dayView(), 'panel')).not.toContain('data-testid="bar-closed"')
   })
 
-  it('także przy widgecie ukrytym („Odcinam się”) – w panelu, pod linią stanu; okno główne i tu jej nie ma', async () => {
+  it('także przy widgecie ukrytym („Odcinam się”) – w panelu, pod linią stanu, z „Pokaż po „Wracam”” (pasek wróci dopiero po nim); okno główne i tu jej nie ma', async () => {
     const view = { ...dayView(), barClosed: true, hidden: true, stateLine: 'Odcinam się od 10:00' }
     expect(html(view, 'main')).not.toContain('data-testid="bar-closed"')
     act(() => useWidget.setState({ view }))
     await render(createElement(PanelApp))
     expect(q('bar-state')!.textContent).toBe('Odcinam się od 10:00')
-    expect(q('bar-closed')!.textContent).toBe('Pasek pulpitu schowanyPokaż pasek')
+    expect(q('bar-closed')!.textContent).toBe('Pasek pulpitu schowanyPokaż po „Wracam”')
     click(q('bar-closed-show')!)
     expect(rd.barAction.mock.calls).toEqual([['showBar']])
     expect(rd.showMain).not.toHaveBeenCalled()

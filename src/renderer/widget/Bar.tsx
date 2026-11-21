@@ -15,7 +15,7 @@ import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/r
 import { TITLE_MAX } from '@shared/model/requests'
 import { quickPreview } from '@shared/quickDates'
 import { barBackground, TONE_SETS } from '@shared/theme'
-import { ALL_STEPS_TEXT, BAR_CLOSED_TEXT, barStepText, OPEN_MAIN_TEXT, SEEN_LINE, SHOW_BAR_TEXT, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from '@shared/widget'
+import { ALL_STEPS_TEXT, BAR_CLOSED_TEXT, barStepText, OPEN_MAIN_TEXT, SEEN_LINE, SHOW_BAR_AFTER_BACK_TEXT, SHOW_BAR_TEXT, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
 import { useMachine } from '../store/machine'
 import { cx } from '../components/ui'
@@ -115,8 +115,9 @@ function BarButton({ mode, onAct, children, testId, pressed, accent, label, repe
 /**
  * Why the desktop bar is not on the screen – in the window and the panel, never on the bar itself: hidden although on
  * (`barNote`, D270 – „Pokaż pasek” lays it again) or, in the panel only, hidden by its „×” (D564 P16 – „Pasek pulpitu schowany
- * · Pokaż pasek” takes the „×” off; also with the widget hidden, „Odcinam się”). The two never stand together: the main process
- * gives no note to a bar hidden by „×”. `className` – its place in the row of the hidden widget.
+ * · Pokaż pasek” takes the „×” off; also with the widget hidden, „Odcinam się” – then „Pokaż po „Wracam””: the bar comes back
+ * after it). The two never stand together: the main process gives no note to a bar hidden by „×”. `className` – its place in the
+ * row of the hidden widget.
  */
 function BarNote({ view, mode, className }: { view: WidgetView; mode: BarMode; className?: string }) {
   if (mode === 'desktop') return null
@@ -134,7 +135,7 @@ function BarNote({ view, mode, className }: { view: WidgetView; mode: BarMode; c
     <div className={cx('flex flex-wrap items-center gap-1.5 text-[12px] text-muted', className)} data-testid="bar-closed">
       {BAR_CLOSED_TEXT}
       <BarButton mode={mode} testId="bar-closed-show" onAct={() => void window.rd.barAction('showBar')}>
-        {SHOW_BAR_TEXT}
+        {view.hidden ? SHOW_BAR_AFTER_BACK_TEXT : SHOW_BAR_TEXT}
       </BarButton>
     </div>
   )
