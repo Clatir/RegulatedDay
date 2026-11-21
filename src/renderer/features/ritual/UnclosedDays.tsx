@@ -5,7 +5,8 @@
  * has one click „Koniec pracy o … ✓”, with „Pracowałem do …” (after a block counted as a project „Projekt do …”) when
  * time to explain follows it. A day without your presence, left unanswered, freezes as free. Yesterday closed, with
  * what came after its close, has one line of information with „Popraw”. A close from here says so in a toast with
- * „Cofnij” (D468): the events of that close undone, the day is back on the list.
+ * „Cofnij” (D468): the events of that close undone, the day is back on the list. The ritual's own „Zamknij dzień” says the
+ * same (D563 P1, `offerUndo`).
  */
 import { useEffect, useState } from 'react'
 import type { UnclosedDay } from '@shared/api'
@@ -25,13 +26,21 @@ const WEEKDAYS = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 's
 /** How the morning closes a day (the evening ritual is the card in „Dziś”). */
 export type MorningClose = Exclude<CloseHow, 'ritual'>
 
-const CLOSED_AS: Record<MorningClose, string> = { asWritten: 'jak zapisano', free: 'wolny', unknown: 'bez danych' }
+const CLOSED_AS: Record<CloseHow, string> = { asWritten: 'jak zapisano', free: 'wolny', unknown: 'bez danych', ritual: 'po rytuale' }
 
 /** A day of the list as its row names it: „piątek 13.11.2026”. */
 export const dayTitle = (date: string): string => `${WEEKDAYS[weekday(date) - 1]} ${plDate(date)}`
 
-/** The toast after a close from the list (D468): „Zamknięto piątek 13.11.2026: wolny”. */
-export const closedToastText = (date: string, how: MorningClose): string => `Zamknięto ${dayTitle(date)}: ${CLOSED_AS[how]}`
+/** The toast after a close from the list (D468) or the ritual (D563): „Zamknięto piątek 13.11.2026: wolny”. */
+export const closedToastText = (date: string, how: CloseHow): string => `Zamknięto ${dayTitle(date)}: ${CLOSED_AS[how]}`
+
+/**
+ * The toast with „Cofnij” after a close (D468, D563 P1) – one for the list and the ritual: „Cofnij” undoes the events of that close
+ * (`written`, T1081) through `run`, which says a refusal and reads the day again. Nothing written – no toast.
+ */
+export function offerUndo(date: string, how: CloseHow, written: readonly string[], run: (what: () => Promise<{ ok: boolean; why: string | null }>) => unknown): void {
+  if (written.length) undoToast(closedToastText(date, how), () => void run(() => window.rd.undoClose(date, [...written])))
+}
 
 export function UnclosedDays() {
   const stamp = useData((s) => s.stamp)
@@ -76,30 +85,27 @@ export function UnclosedDays() {
     run(async () => {
       const r = await window.rd.closeDay(date, how)
       // „Cofnij” (D468) undoes the events of this close (their ids, T1081); a refusal is said as the others are.
-      if (r.ok && r.written.length) undoToast(closedToastText(date, how), () => void run(() => window.rd.undoClose(date, r.written)))
+      if (r.ok) offerUndo(date, how, r.written, run)
       return r
     })
   const answer = (date: string, row: string, choice: string, value: number | null = null) => run(() => window.rd.ritualAnswer(date, row, choice, value))
   const clockOf = (date: string, idx: number) => logicalClock(logicalMinuteOf(date, atOf(gridOf(date), idx)))
 
   /** „Pracowałem do …” / „Projekt do …”: the time set in the field, written by „Zapisz”. */
-  const until = (d: UnclosedDay, row: RitualRow, choice: string, label: string, at: number) =>
-    editing?.date === d.date && editing.choice === choice ? (
+  const until = (d: UnclosedDay, row: RitualRow, choice: string, label: string, at: number) => {
+    // Never the field's start after a refused text (A6-14); a skipped hour is refused, a doubled one chosen (A8-09).
+    const save = () => {
+      const typed = time.take(d.date)
+      if (typed != null) void answer(d.date, row.id, choice, typed)
+    }
+    return editing?.date === d.date && editing.choice === choice ? (
       <span className="inline-flex items-center gap-1.5">
-        {time.shown && <DayTime date={d.date} value={time.shown} onTyped={time.onTyped} label={label} />}
-        <button
-          type="button"
-          className="btn h-[24px] px-2 text-[12px]"
-          onClick={() => {
-            // Never the field's start after a refused text (A6-14); a skipped hour is refused, a doubled one chosen (A8-09).
-            const at = time.take(d.date)
-            if (at != null) void answer(d.date, row.id, choice, at)
-          }}
-        >
+        {time.shown && <DayTime date={d.date} value={time.shown} onTyped={time.onTyped} onEnter={save} onEscape={() => setEditing(null)} label={label} />}
+        <button type="button" className="btn h-[24px] px-2 text-[12px]" onClick={save}>
           Zapisz
         </button>
         <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={() => setEditing(null)}>
-          anuluj
+          Anuluj
         </button>
       </span>
     ) : (
@@ -107,6 +113,7 @@ export function UnclosedDays() {
         {label}
       </button>
     )
+  }
 
   return (
     <section className="flex flex-col gap-2 rounded-lg border border-line bg-panel px-4 py-3" data-testid="unclosed-days">

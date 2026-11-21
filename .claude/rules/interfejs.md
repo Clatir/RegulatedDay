@@ -93,7 +93,7 @@ paths:
   do kolejnej zmiany pola albo Esc (warstwa Esc – czyści też gdy pole nie ma fokusu), plus toast w rogu i czerwona ramka. Układ
   pola (szerokość, `flex-1`, `min-w-0`) idzie w `shellClassName` (powłoka `.field-shell`), `className` to wygląd inputu; miejsce komunikatu to jawny `errorPlacement` pola (`float` domyślnie – nic nie rusza, nie zabiera kliknięć; `below` w formularzach i przy `w-full` w siatce); kolor `text-rose` jest w `contrastPairs`.
 - Pola zapisują się przy opuszczeniu albo Enter (`CommitField`, `TextField`); Esc cofa, kolejny Esc zamyka warstwę
-  (`useEscapeLayer`). Natywny `<select>` (`Choice`) tylko w oknie głównym – pasek go nie ma (check-code).
+  (`useEscapeLayer`; pole odpowiedzi: `onEnter` zapisuje, `onEscape` zamyka edytor). Natywny `<select>` (`Choice`) tylko w oknie głównym – pasek go nie ma (check-code).
 - Notatka bloku (D388, T660–T673) – `features/note/`: `NoteEditor` (TipTap w polu: zapis przy opuszczeniu / Ctrl S / `commitActiveField`
   – blur też contenteditable; `dirty` tylko po zmianie tekstu, `setEditable` i podobne ogłaszają `update` bez niej, więc samo otwarcie
   niczego nie zapisuje; klik w pole wyboru – zapis od razu; „Powiększ” = ta sama klasa `fixed inset-0`, bez przenoszenia DOM;
