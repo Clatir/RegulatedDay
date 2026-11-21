@@ -127,6 +127,26 @@ describe('ostrzeżenia dnia (D3, P10)', () => {
     expect(texts.join(' | ')).toContain('Minimum regeneracji nie mieści się przed porą snu')
   })
 
+  it('minimum regeneracji: dwa przypadki – dwa zdania (nieosiągalne vs twardy koniec przed końcem pracy)', () => {
+    const { state, model } = proposed()
+    const max = state.boundary.max
+    const with_ = (hardEnd: { unreachable: boolean; at: number }) => ({ ...model, energy: { warnings: [] }, state: { ...state, forecastWorkEnd: max - 10, hardEnd } }) as unknown as DayModel
+    const unreachable = dayWarningTexts(with_({ unreachable: true, at: 0 }))
+    expect(unreachable).toEqual(['Minimum regeneracji nie mieści się przed porą snu.'])
+    const early = dayWarningTexts(with_({ unreachable: false, at: max - 20 }))
+    expect(early).toEqual(['Twardy koniec projektów wypada przed końcem pracy.'])
+  })
+
+  it('dzień miniony: bez rady „co zrobić” (neutralnie), liczby zostają', () => {
+    const { model } = overloaded()
+    const now = dayWarningTexts(model)
+    const past = dayWarningTexts(model, true)
+    expect(now.join(' ')).toContain('Możesz przenieść blok')
+    expect(past.join(' ')).not.toContain('Możesz przenieść blok')
+    expect(past[0]).toMatch(/^Praca kończy się po maksimum \(\d\d?:\d\d\)\.$/)
+    expect(past).toHaveLength(now.length)
+  })
+
   it('ostrzeżenie energii (rezerwa) też – po tekstach dnia, z wielką literą', () => {
     const { model } = overloaded()
     const withEnergy = { ...model, energy: { warnings: ['prognoza energii na poziomie rezerwy'] } } as unknown as DayModel
@@ -363,8 +383,10 @@ describe('układ nad osią „Dziś” (P10) – w kodzie strony', () => {
     expect(day).toContain('<DayWarnings')
     const morning = readFileSync('src/renderer/features/today/MorningPlan.tsx', 'utf8')
     expect(morning).not.toContain('morningWarnings(')
-    expect(side).toContain('dayWarningTexts(model)')
-    expect(day).toContain('dayWarningTexts(model)')
+    expect(side).toContain('dayWarningTexts(model, past)')
+    expect(day).toContain('dayWarningTexts(model, date < today)')
+    // The routine of the block whose panel is open is not „waiting”: the panel has its steps.
+    expect(day).toContain('.filter((r) => r.block !== block.id)')
     expect(morning).not.toContain('warning-')
   })
 

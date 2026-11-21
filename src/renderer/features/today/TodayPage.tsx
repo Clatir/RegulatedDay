@@ -820,8 +820,8 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
             // D3, D8, D563 P10: what the side panel says of the day stands in the panel of the block, which replaces it – the warnings and a routine waiting.
             dayNotes={
               <>
-                <DayWarnings warnings={dayWarningTexts(model)} />
-                {isToday && <RoutinesWaiting due={routinesDue(model.ctx, model.state, routines, model.dayFile)} model={model} names={names} onShow={closePanel} />}
+                <DayWarnings warnings={dayWarningTexts(model, date < today)} />
+                {isToday && <RoutinesWaiting due={routinesDue(model.ctx, model.state, routines, model.dayFile).filter((r) => r.block !== block.id)} model={model} names={names} onShow={closePanel} />}
               </>
             }
             // „Zamknij” leaves a new block – saved as it stands, a bare click of the axis untouched thrown away (D461, T1045); Esc
@@ -880,7 +880,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
             }
           />
         ) : (
-          <SidePanel model={model} names={names} routines={isToday} onSelect={setSelected} onMove={(b) => setDialog({ move: b })} cases={casesOn ? <CasesPanel drag={caseDrag} grab={grabCase} onPlan={planCaseNext} onSelected={(s) => void (panelSelected.current = s)} /> : undefined} />
+          <SidePanel model={model} names={names} routines={isToday} past={date < today} onSelect={setSelected} onMove={(b) => setDialog({ move: b })} cases={casesOn ? <CasesPanel drag={caseDrag} grab={grabCase} onPlan={planCaseNext} onSelected={(s) => void (panelSelected.current = s)} /> : undefined} />
         )}
       </div>
       {exchange && (
@@ -912,7 +912,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
 export const AXIS_HINT = 'Przeciągnij po osi, żeby dodać blok w tych godzinach, albo użyj „+ Blok” (Ctrl+N – w najbliższym wolnym miejscu).'
 
 /** Beside the plan when no block is selected: the warnings, the parked blocks, what the engine says of the day. */
-function SidePanel({ model, names, routines, onSelect, onMove, cases }: { model: DayModel; names: Names; routines: boolean; onSelect: (id: string) => void; onMove: (b: PlanBlock) => void; cases?: ReactNode }) {
+function SidePanel({ model, names, routines, past, onSelect, onMove, cases }: { model: DayModel; names: Names; routines: boolean; past: boolean; onSelect: (id: string) => void; onMove: (b: PlanBlock) => void; cases?: ReactNode }) {
   const s = model.state
   const parked = model.ctx.plan.filter((b) => s.facts.blocks.get(b.id)?.parkedAt != null)
   return (
@@ -921,7 +921,7 @@ function SidePanel({ model, names, routines, onSelect, onMove, cases }: { model:
       {routines && <RoutineCards model={model} names={names} />}
       {cases}
       <DayNumbers model={model} />
-      <DayWarnings warnings={dayWarningTexts(model)} />
+      <DayWarnings warnings={dayWarningTexts(model, past)} />
       {parked.length > 0 && (
         <div className="flex flex-col gap-1.5">
           <h4 className="text-[12px] text-muted">Zaparkowane</h4>

@@ -32,9 +32,9 @@ const sameShown = (a: Shown, b: Shown): boolean => a.own === b.own && sameCosts(
 /** A click of the window: a step of a pool, or „Jak podkategoria” / „Jak wariant”; `ask` – the memory of the window it was made in. */
 type Op = ({ k: 'step'; pool: Pool; by: 1 | -1 } | { k: 'reset' }) & { ask: CostAsk }
 
-/** The size the window is placed by (its width is fixed, its height a little over the heading, four rows and the button). */
+/** The size the window is placed by (its width is fixed, its height: the heading – the title and its sentence, which wraps to two lines –, four rows and the button). */
 const POP_W = 232
-const POP_H = 232
+const POP_H = 236
 const GAP = 4
 const MARGIN = 8
 
