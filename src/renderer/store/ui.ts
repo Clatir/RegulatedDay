@@ -3,6 +3,7 @@
  * The main window's route and its messages (toasts). A deletion's message has „Cofnij” for 10 s (spec „Usuwanie”).
  */
 import { create } from 'zustand'
+import { classify, historyKey } from '@shared/data/paths'
 import type { PlanBlock } from '@shared/model/plan'
 import type { SearchKind, SearchRecord } from '@shared/search'
 import { commitActiveField } from '../lib/commit'
@@ -127,6 +128,20 @@ export function openPick(target: { page: Page; day?: string | null }, pick: Sear
   commitActiveField()
   leaveBlockDrafts()
   useUi.setState({ page: target.page, ...(target.day !== undefined ? { day: target.day } : {}), pick })
+}
+
+/** The key of a record in „Historia” (`kind/id`, as the list there has it) for the file `rel`; null – not a record with a history (a folder, a log). */
+export function historyKeyOfRel(rel: string): string | null {
+  const c = classify(rel)
+  if (!c || c.conflict || c.kind === 'log' || c.kind === 'presence' || c.kind === 'grades') return null
+  const k = historyKey(c)
+  return `${k.kind}/${k.id}`
+}
+
+/** „Historia” of one record (the file `rel`): the screen with that record chosen – used once, as a pick of the search (UX3, A9). */
+export function openHistoryOf(rel: string): void {
+  const id = historyKeyOfRel(rel)
+  if (id) openPick({ page: 'history' }, { kind: 'history', id })
 }
 
 /** The waiting pick if accept takes it – and it is gone then, so it is used once. */

@@ -135,6 +135,11 @@ export function classify(rel: string): Classified | null {
   return null
 }
 
+/** The history's key of a record: its kind and id (a day by its date, rd.json as „rd”). */
+export function historyKey(c: Classified): { kind: string; id: string } {
+  return { kind: c.kind, id: c.id ?? c.date ?? c.computer ?? 'rd' }
+}
+
 /** Reject absolute paths and traversal; a normalised posix relative path or null. */
 export function sanitizeRelPath(rel: string): string | null {
   const p = toPosix(rel).replace(/^\.\/+/, '')

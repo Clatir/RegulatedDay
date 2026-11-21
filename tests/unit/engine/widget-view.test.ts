@@ -12,6 +12,7 @@ import { fewerAt } from '@shared/engine/modes'
 import { engineView, HARD_END_TEXT, warnDeadlines } from '@shared/engineView'
 import { stepDelay, toneOnChange } from '../../../src/main/widget'
 import { planBlockFrom } from '@shared/model/plan'
+import { noFolderView } from '@shared/widget'
 import { block, lm, Scenario } from './dsl'
 
 const DATE = '2026-10-28'
@@ -39,6 +40,12 @@ function leader(s: Scenario, time: string) {
 }
 
 describe('widok paska z silnika', () => {
+  it('bez pola „muted” (UX3, A8): znaczek 🔇 nigdy się nie pokazywał – nic go nie ustawiało, więc widoku nie ma w ogóle', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 })] }).observe('07:00', null)
+    expect(Object.keys(view(s, '07:50'))).not.toContain('muted')
+    expect(Object.keys(noFolderView())).not.toContain('muted')
+  })
+
   it('kolor klasy bloku, kroki 15 · 5 · 0 min przed końcem, Start następnego bloku bez bloku', () => {
     const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'm', cat: 'posilek', at: '13:00', min: 30 })] }).observe('07:00', null)
     expect(view(s, '07:50')).toMatchObject({ tone: 'brak', block: null, buttons: { start: 'Start: Inne obowiązki', next: false } })

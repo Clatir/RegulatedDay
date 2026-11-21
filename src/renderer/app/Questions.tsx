@@ -12,7 +12,7 @@ import { Dialog } from '../components/Dialog'
 import { useBusy } from '../lib/busy'
 import { fieldText, keyOf, valueText } from '../lib/recordText'
 import { reloadData, useData } from '../store/data'
-import { toast } from '../store/ui'
+import { historyKeyOfRel, openHistoryOf, toast } from '../store/ui'
 
 /** One empty list: a selector must answer the same value for the same state (a new [] each time loops React). */
 const NONE: EditQuestion[] = []
@@ -21,12 +21,20 @@ const NO_PROBLEMS: string[] = []
 /** Records that cannot be read now or are broken (never written over): named, so a change that waits is not a surprise. */
 export function ProblemsBanner() {
   const problems = useData((s) => s.view?.problems ?? NO_PROBLEMS)
+  const requests = useData((s) => s.requests)
   if (!problems.length) return null
+  // „Historia” by each record that has one (a folder that cannot be listed has none): with its name when there are several.
+  const rels = [...new Set(problems.map((p) => p.slice(0, p.indexOf(':'))))].filter((rel) => historyKeyOfRel(rel))
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-rose/40 bg-rose-soft px-4 py-1.5 text-[12px]" data-testid="banner-problems">
       <span>
         Nie mogę teraz odczytać: {[...new Set(problems.map((p) => recordTitle(p.slice(0, p.indexOf(':')))))].join(', ')}. Zmiany tych zapisów poczekają; uszkodzony plik przywrócisz z historii.
       </span>
+      {rels.map((rel) => (
+        <button key={rel} type="button" className="btn" onClick={() => openHistoryOf(rel)} data-testid="problems-history">
+          {rels.length > 1 ? `Historia: ${recordTitle(rel, requests)}` : 'Historia'}
+        </button>
+      ))}
     </div>
   )
 }
@@ -99,6 +107,21 @@ function QuestionsDialog({ questions, onClose }: { questions: EditQuestion[]; on
           {q.kind === 'removed' && <span>Ten rekord usunięto na innym komputerze, a tutaj go zmieniłeś.</span>}
           {q.kind === 'changed' && <span>Ten rekord usunąłeś tutaj, a na innym komputerze go w tym czasie zmieniono.</span>}
           {q.kind === 'broken' && <span>Plik jest uszkodzony – przywróć go z historii; Twoja zmiana czeka.</span>}
+          {q.kind === 'broken' && historyKeyOfRel(q.rel) && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  onClose()
+                  openHistoryOf(q.rel)
+                }}
+                data-testid="question-history"
+              >
+                Historia
+              </button>
+            </div>
+          )}
           {(q.kind === 'conflict' || q.kind === 'changed') &&
             q.fields.map((f) => (
               <div key={f.path.join('.')} className="grid grid-cols-[1fr_1fr_1fr] gap-2">

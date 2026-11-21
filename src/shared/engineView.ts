@@ -458,7 +458,6 @@ export function engineView(i: EngineInput): WidgetView {
     iconColor: iconColor(tone, warn, modes.quiet, hidden),
     dot,
     drop: !hidden && water.due,
-    muted: false,
     block: hidden ? null : block,
     question: hidden ? null : question,
     lines,

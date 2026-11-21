@@ -7,7 +7,7 @@
  * (E3 asks, „Przyjmij nowsze” answers many at once). Fields this version does not know stay in the file.
  */
 import { join } from 'node:path'
-import { classify, paths, type Classified } from '@shared/data/paths'
+import { classify, historyKey, paths } from '@shared/data/paths'
 import { deepEqual, merge3, type MergeConflict } from '@shared/data/merge'
 import { earlierOnce } from '@shared/model/rd'
 import { isRootGone, type DataFs } from './fsio'
@@ -35,10 +35,7 @@ export class BrokenRecordError extends Error {
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 
-/** The history's key of a record: its kind and id (a day by its date, rd.json as „rd”). */
-export function historyKey(c: Classified): { kind: string; id: string } {
-  return { kind: c.kind, id: c.id ?? c.date ?? c.computer ?? 'rd' }
-}
+export { historyKey }
 
 export class RecordStore {
   readonly problems = new Map<string, string>()

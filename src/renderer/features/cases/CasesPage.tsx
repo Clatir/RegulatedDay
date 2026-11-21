@@ -72,13 +72,19 @@ export function CasesPage() {
     setBring(next.bring)
   }
   useNewShortcut(() => setAdding(true))
-  // What the search (Ctrl K) left here: the command „Nowa prośba”, or a sprawa – its filters cleared when they hide it, „Zrobione”
+  // What the search (Ctrl K) left here: the command „Nowa prośba” or „Nowe zadanie”, or a sprawa – its filters cleared when they hide it, „Zrobione”
   // opened to it when it is older, its row marked and its first field focused (the row is edited in place).
   const pick = useUi((s) => s.pick)
   useEffect(() => {
     if (pick?.kind === 'command' && pick.id === 'newRequest') {
       takePick((p) => p.kind === 'command' && p.id === 'newRequest')
       if (requestsOn) void addRequest()
+      return
+    }
+    // „Nowe zadanie”: the same as Ctrl N here – the field of a new task.
+    if (pick?.kind === 'command' && pick.id === 'newTask') {
+      takePick((p) => p.kind === 'command' && p.id === 'newTask')
+      setAdding(true)
       return
     }
     const p = takeFoundPick((x) => x.kind === 'request', (x) => all.some((r) => r.record.id === x.id), 'Tej sprawy nie ma już.')

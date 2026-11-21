@@ -117,7 +117,7 @@ export function EmptyState({ why, action, ...rest }: { why: ReactNode; action?: 
 
 export function Section({ title, children, ...rest }: { title: ReactNode; children: ReactNode; 'data-testid'?: string }) {
   return (
-    <section className="rounded-lg border border-line bg-panel" data-testid={rest['data-testid']}>
+    <section className="scroll-mt-[4.5rem] rounded-lg border border-line bg-panel" data-testid={rest['data-testid']}>
       <h2 className="border-b border-line px-4 py-2.5 text-[13px] font-medium text-fg">{title}</h2>
       <div className="flex flex-col gap-3 px-4 py-3">{children}</div>
     </section>

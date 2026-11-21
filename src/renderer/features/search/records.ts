@@ -33,6 +33,7 @@ export const GROUP_PICK = 'group:'
 export const COMMANDS: SearchRecord[] = [
   { kind: 'command', id: 'newBlock', title: 'Nowy blok', hint: 'Ctrl N w „Dziś”', keys: 'nowe' },
   { kind: 'command', id: 'newRequest', title: 'Nowa prośba', hint: 'w „Sprawach”', keys: 'nowe' },
+  { kind: 'command', id: 'newTask', title: 'Nowe zadanie', hint: 'Ctrl N w „Sprawach”', keys: 'nowe' },
   { kind: 'command', id: 'tomorrow', title: 'Jutro', hint: 'plan na jutro' },
   { kind: 'command', id: 'yesterday', title: 'Wczoraj', hint: 'plan wczorajszego dnia' },
   { kind: 'command', id: 'ritual', title: 'Rytuał', hint: 'rytuał dzisiejszego dnia', keys: 'wieczór podsumowanie' }
@@ -44,7 +45,9 @@ export const SETTING_SECTIONS: Array<{ id: string; title: string; keys?: string 
   { id: 'settings-daytypes', title: 'Typy dni' },
   { id: 'settings-sleep', title: FIELD_GROUP_NAMES.sleep },
   { id: 'settings-boundary', title: FIELD_GROUP_NAMES.boundary },
+  { id: 'settings-plan', title: FIELD_GROUP_NAMES.plan, keys: 'równolegle bloki naraz' },
   { id: 'settings-energy', title: FIELD_GROUP_NAMES.energy },
+  { id: 'settings-calendars', title: 'Kalendarze', keys: 'kalendarz wydarzenia ukryj pokaż' },
   { id: 'settings-categories', title: 'Kategorie' },
   { id: 'settings-lectures', title: 'Plan wykładów' },
   { id: 'settings-reminders', title: FIELD_GROUP_NAMES.reminders },
