@@ -486,10 +486,11 @@ export function freeWeekday(templates: readonly Template[], dayType: DayTypeId):
 
 /**
  * `id` for a new template that is never smaller than the id of any of `ids` (`templateFor` lets the smaller id win, quietly): `id` itself
- * when it is greater than all of them, else an id of the same length just above the greatest of them: its first character below „z”
- * one step up, the characters before it kept and `id`'s own after it (base-36 order is the order of the strings). An id never grows
- * (it names the record's file – a path in the data folder); only when the greatest is all „z” does it get `id`'s first four characters
- * after it. A new template never takes the days of an older one (D563 P3) – the rule of choosing stays as it is.
+ * when it is greater than all of them, else the greatest of them with its first character below „z” one step up (base-36 order is the order of
+ * the strings), the characters before it kept and `id`'s own after it – at least `MIN_TAIL` of them (a bump far into the id leaves fewer: the
+ * first characters of `id` are added, so the id grows by as many). An id otherwise keeps its length (it names the record's file – a path in the
+ * data folder); the greatest all „z” gets `MIN_TAIL` characters of `id` after it. A new template never takes the days of an older one
+ * (D563 P3) – the rule of choosing stays as it is.
  */
 export function idAfter(ids: Iterable<string>, id: string): string {
   let max = ''
@@ -497,11 +498,16 @@ export function idAfter(ids: Iterable<string>, id: string): string {
   if (id > max) return id
   for (let i = 0; i < Math.min(max.length, id.length); i++) {
     const k = ID_CHARS.indexOf(max[i]!)
-    if (k >= 0 && k < ID_CHARS.length - 1) return `${max.slice(0, i)}${ID_CHARS[k + 1]}${id.slice(i + 1)}`
+    if (k >= 0 && k < ID_CHARS.length - 1) {
+      const tail = id.slice(i + 1)
+      return `${max.slice(0, i)}${ID_CHARS[k + 1]}${tail.length >= MIN_TAIL ? tail : tail + id.slice(0, MIN_TAIL - tail.length)}`
+    }
   }
-  return `${max}${id.slice(0, 4)}`
+  return `${max}${id.slice(0, MIN_TAIL)}`
 }
 
+/** The random characters of a new template's id kept after the place `idAfter` raised – so two new ids of one folder are not likely to meet. */
+const MIN_TAIL = 8
 const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz'
 
 export function lectureFrom(v: unknown): LectureSeries | null {

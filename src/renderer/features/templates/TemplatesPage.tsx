@@ -263,7 +263,11 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     })
     const saved = isSaved(out)
     if (saved && c.pushed > 0 && made.before && made.after) setPushed({ text: pushedText(c.pushed), before: made.before, after: made.after })
-    else if (saved && added) undoToast('Dodano blok', () => void undoAddedBlock(template.id, at, added))
+    // Only when the add changed the template (`made`): a record gone or unreadable answers with nothing to write – nothing was added to take back.
+    else if (saved && added && made.before && made.after) {
+      const done = { before: made.before, after: made.after }
+      undoToast('Dodano blok', () => void undoAddedBlock(template.id, at, added, done))
+    }
     return saved
   }
   /** „Cofnij”: the template as it was before the push – what changed on another computer since stays a question. */
@@ -330,7 +334,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   }
 
   const copy = async () => {
-    const id = newId()
+    // As a new template: its id is never smaller than an older one's, so the copy never takes its days quietly (D563 P3).
+    const id = idAfter(templates.map((x) => x.id), newId())
     const c = copiedTemplate(template, id, `Kopia: ${template.name}`.slice(0, 80))
     await saveRecord(paths.record('template', id), null, templateJson(c))
     onCopied(id)

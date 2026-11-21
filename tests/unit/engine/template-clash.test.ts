@@ -73,16 +73,26 @@ describe('idAfter – id nowego szablonu nigdy mniejsze od istniejących (wygryw
     expect(idAfter([], 'x')).toBe('x')
   })
 
-  it('id nie rośnie: ta sama długość tuż nad największym, także po wielu nowych szablonach z mniejszym losowym id', () => {
-    expect(idAfter(['k3abc', 'b0000'], 'a1234')).toBe('l1234')
-    expect(idAfter(['zz9xy'], 'a1234')).toBe('zza34')
+  it('id nie rośnie przy podbiciu wysoko; przy podbiciu głębokim (po wielu nowych) rośnie wolno', () => {
+    expect(idAfter(['k3abc00000000000', 'b000000000000000'], 'a123456789abcdef')).toBe('l123456789abcdef')
     const ids: string[] = ['zzzzzzzzzzzzzz00']
     for (let n = 0; n < 60; n++) {
       const id = idAfter(ids, '0000000000000000')
-      expect(id.length).toBe(16)
+      // Bumped at the 15th place with 8 characters of its own after it: 22, a character more only now and then (after dozens of new ones).
+      expect(id.length).toBeLessThanOrEqual(26)
       expect(ids.every((x) => id > x)).toBe(true)
       ids.push(id)
     }
-    expect(idAfter(['zzz'], 'abc')).toBe('zzzabc')
+  })
+
+  it('co najmniej 8 znaków id za podbitą pozycją: gdy podbita jest głęboko, brakujące dopisane z id (id dłuższe); same „z” – 8 znaków za nim', () => {
+    // Bumped at the 14th place: 2 characters of its own after it – 6 more are added, none of the 16 characters of the base is lost below 8.
+    const deep = idAfter(['zzzzzzzzzzzzz0zz'], 'abcdefghijklmnop')
+    expect(deep.startsWith('zzzzzzzzzzzzz1')).toBe(true)
+    expect(deep.length - 14).toBeGreaterThanOrEqual(8)
+    expect(deep > 'zzzzzzzzzzzzz0zz').toBe(true)
+    expect(idAfter(['zzz'], 'abcdefghijklmnop')).toBe('zzzabcdefgh')
+    // A bump high up keeps the whole tail of the id: no growth.
+    expect(idAfter(['b000000000000000'], '0123456789abcdef')).toBe('c123456789abcdef')
   })
 })

@@ -17,7 +17,8 @@ import { dayFileFrom, templateFor, templateFrom, withTemplateVersion, type PlanB
 import { settingsOn, type SettingsChange } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
-import { editOf, isSaved, rawRecord, tryUpdateRecord, trySaveWith, useData, withOwner } from '../../store/data'
+import { deepEqual } from '@shared/data/merge'
+import { editNotice, editOf, isSaved, rawRecord, saveAnswer, tryUpdateRecord, trySaveWith, useData, withOwner, type SendState } from '../../store/data'
 import { toast, undoToast } from '../../store/ui'
 
 /** The first day a template still makes (today is made from it already). */
@@ -171,18 +172,46 @@ export function freshAfter(fresh: string | null, selected: string | null, shown:
 }
 
 /**
- * „Cofnij” of „Dodano blok” (D563 P2): the block just made on the axis out of the version from `from`, by its id, from the template as it is
- * now – the inverse of the add only, so what was changed since (its name typed in the panel, another field) stays and never meets a question
- * of its own. A block that is gone already says there is nothing to take back; a write that did not go through says so.
+ * „Cofnij” of „Dodano blok” (D563 P2) – the inverse of the add (`made`: the template's record before it and right after it, as the page made it).
+ * The template as it still stands as the add left it: written back as it was before. Changed since (the name typed in the panel, another
+ * field): the block out by its id from every version from `from` that has it (also the ones copied later) and nothing else – what was changed
+ * since stays and meets no question of its own – and the version the add made, when it is no more than the one in force before it (or empty, when
+ * nothing was in force): never left behind as a version that would take the days with an empty plan. A block gone already says there is
+ * nothing to take back, a record that cannot be read – that; a question (the queue's notice) or a refusal that the save said itself – nothing more.
  */
-export async function undoAddedBlock(templateId: string, from: string, blockId: string): Promise<void> {
+export async function undoAddedBlock(templateId: string, from: string, blockId: string, made: { before: RawRecord; after: RawRecord }): Promise<void> {
+  const rel = paths.record('template', templateId)
+  const state: SendState = { afterSend: false }
+  let read = false
   let found = false
-  const out = await tryUpdateRecord(paths.record('template', templateId), (raw) => {
-    const t = templateFrom(raw)
-    if (!t?.versions.some((v) => v.from === from && v.blocks.some((b) => b.id === blockId))) return raw
-    found = true
-    return templateJson(withTemplateVersion(t, from, (v) => ({ blocks: v.blocks.filter((b) => b.id !== blockId) })), raw)
-  })
-  if (!found) toast('Tego bloku już nie ma w szablonie – nie ma czego cofać.', 'info', 6000)
-  else if (!isSaved(out)) toast('Nie cofnięto – zapis się nie udał.', 'error', 8000)
+  const out = await tryUpdateRecord(
+    rel,
+    (raw) => {
+      read = true
+      if (deepEqual(raw, made.after)) {
+        found = true
+        return made.before
+      }
+      const t = templateFrom(raw)
+      if (!t) return raw
+      const had = templateFrom(made.before)?.versions.some((v) => v.from === from) ?? false
+      if (!t.versions.some((v) => v.from >= from && v.blocks.some((b) => b.id === blockId))) return raw
+      found = true
+      let versions = t.versions.map((v) => (v.from >= from ? { ...v, blocks: v.blocks.filter((b) => b.id !== blockId) } : v))
+      if (!had) {
+        const at = versions.findIndex((v) => v.from === from)
+        const own = versions[at]
+        const before = at > 0 ? versions[at - 1] : undefined
+        // The version of the add is what was in force before it (its blocks, budget, limit) – or empty when nothing was – so it is not needed.
+        const same = own && (before ? deepEqual({ ...own, from: '' }, { ...before, from: '' }) : !own.blocks.length && own.budgetMin == null && own.maxMin == null)
+        if (same) versions = versions.filter((_, i) => i !== at)
+      }
+      return templateJson({ ...t, versions }, raw)
+    },
+    state
+  )
+  if (!read) return void toast('Nie cofnięto – szablonu nie da się teraz odczytać (może go już nie ma).', 'error', 8000)
+  if (!found) return void toast('Tego bloku już nie ma w szablonie – nie ma czego cofać.', 'info', 6000)
+  // A question is the queue's (its notice, the banner); nothing sent was said by the save itself; the rest of a refusal says so here.
+  if (saveAnswer(out, state) === false && out != null && !editNotice(out)) toast('Nie cofnięto – zapis się nie udał.', 'error', 8000)
 }
