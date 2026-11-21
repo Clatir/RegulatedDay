@@ -493,6 +493,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           sessions={settings.sessions}
           place={attachPlace}
           focusName={fresh === block.id}
+          // A2: „o godzinie” after „po bloku” starts where the axis of the sample day puts the block (its forecast).
+          forecastStart={items.find((i) => i.id === block.id)?.startMin}
           // D511: a block given a category of sessions becomes a session (and stops being one with another category).
           onChange={(patch) => patchBlock(block.id, templateBlockPatch(block, patch, settings.categories, version.blocks))}
           session={<SessionFields block={block} blocks={version.blocks} kind={settings.categories[block.categoryId]?.kind} weekdays={template.weekdays} onChange={(patch) => void patchBlock(block.id, patch)} />}

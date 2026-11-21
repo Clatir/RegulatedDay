@@ -208,7 +208,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           text: r.confirmed ? `Koniec pracy o ${t(r.end)} – potwierdzony` : `Koniec pracy o ${t(r.end)}`,
           acts: r.confirmed ? null : (
             <>
-              <Act onClick={() => void answer(r, 'ok')} testId="ritual-workEnd-ok">
+              <Act onClick={() => void answer(r, 'ok')} testId="ritual-workEnd-ok" label={OK_LABEL}>
                 ✓
               </Act>
               {timeEditor(r, 'workedUntil', 'Pracowałem do …', instant(r.explain ? r.explain.from : r.end))}
@@ -231,7 +231,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           acts: (
             <>
               {!r.answered && (
-                <Act onClick={() => void answer(r, 'ok')} testId="ritual-silent-ok">
+                <Act onClick={() => void answer(r, 'ok')} testId="ritual-silent-ok" label={OK_LABEL}>
                   ✓
                 </Act>
               )}
@@ -270,7 +270,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           acts: (
             <>
               {!r.answered && (
-                <Act onClick={() => void answer(r, 'ok')} testId="ritual-absence-ok">
+                <Act onClick={() => void answer(r, 'ok')} testId="ritual-absence-ok" label={OK_LABEL}>
                   ✓
                 </Act>
               )}
@@ -298,7 +298,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           acts: (
             <>
               {!r.answered && (
-                <Act onClick={() => void answer(r, 'ok')} testId="ritual-away-ok">
+                <Act onClick={() => void answer(r, 'ok')} testId="ritual-away-ok" label={OK_LABEL}>
                   ✓
                 </Act>
               )}
@@ -313,7 +313,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           acts: (
             <>
               {!r.answered && (
-                <Act onClick={() => void answer(r, 'ok')} testId="ritual-shutdown-ok">
+                <Act onClick={() => void answer(r, 'ok')} testId="ritual-shutdown-ok" label={OK_LABEL}>
                   ✓
                 </Act>
               )}
@@ -327,7 +327,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           acts: (
             <>
               {!r.answered && (
-                <Act onClick={() => void answer(r, 'ok')} testId="ritual-fixedMinutes-ok">
+                <Act onClick={() => void answer(r, 'ok')} testId="ritual-fixedMinutes-ok" label={OK_LABEL}>
                   ✓
                 </Act>
               )}
@@ -373,7 +373,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           acts: (
             <>
               {!r.answered && (
-                <Act onClick={() => void answer(r, 'ok')} testId="ritual-rest-ok">
+                <Act onClick={() => void answer(r, 'ok')} testId="ritual-rest-ok" label={OK_LABEL}>
                   ✓
                 </Act>
               )}
@@ -504,9 +504,12 @@ function toggled(s: Set<string>, id: string): Set<string> {
   return n
 }
 
-function Act({ onClick, children, testId, pressed }: { onClick: () => void; children: React.ReactNode; testId?: string; pressed?: boolean }) {
+/** What the „✓” of a row says (F5): the row stays as it is written – nothing changes in it. */
+const OK_LABEL = 'Zgadza się'
+
+function Act({ onClick, children, testId, pressed, label }: { onClick: () => void; children: React.ReactNode; testId?: string; pressed?: boolean; label?: string }) {
   return (
-    <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={pressed} onClick={onClick} data-testid={testId}>
+    <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={pressed} aria-label={label} title={label} onClick={onClick} data-testid={testId}>
       {children}
     </button>
   )

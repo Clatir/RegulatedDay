@@ -23,7 +23,7 @@ import { logicalMinuteOf } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
 import { atOf } from '@shared/engine/grid'
 import { TimeField } from '../../components/fields'
-import { EmptyState, cx } from '../../components/ui'
+import { EmptyState, SIDE_PANEL_WIDTH, cx } from '../../components/ui'
 import { commitActiveField } from '../../lib/commit'
 import { useOutsidePointer } from '../../lib/outside'
 import { useNow } from '../../lib/clock'
@@ -79,6 +79,7 @@ import { planOnAxis } from '../cases/planOnAxis'
 import { useCaseDrag } from '../cases/useCaseDrag'
 import { draftTile } from './blockDraft'
 import { escapeDraft, firstSave } from './draftSave'
+import { DayMenu } from './DayMenu'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
@@ -160,7 +161,6 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   // The exchange asked for a block of another day is no longer asked.
   useEffect(() => setExchange(null), [date])
   const [dialog, setDialog] = useState<null | 'type' | 'copy' | { move: PlanBlock } | 'addType'>(null)
-  const [menu, setMenu] = useState(false)
   // D365: the bottom edge of a running block dropped past the boundary – its cost waits for „Potwierdź” or „Anuluj” for 10 s,
   // nothing is written meanwhile; the confirmation is the same click again (`confirm`) to the same instant.
   const [pending, setPending] = useState<{ id: string; to: number; endMin: number; text: string; seq: number } | null>(null)
@@ -635,23 +635,14 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
         <button type="button" className="btn h-[26px]" onClick={newHere} data-testid="day-add">
           + Blok
         </button>
-        <div className="relative">
-          <button type="button" className="btn h-[26px] px-2" onClick={() => setMenu(!menu)} aria-label="Więcej" data-testid="day-menu">
-            ⋯
-          </button>
-          {menu && (
-            <div className="absolute right-0 z-30 mt-1 flex w-[220px] flex-col rounded border border-line-strong bg-raised py-1 text-[12.5px]" onMouseLeave={() => setMenu(false)}>
-              <button type="button" className="px-3 py-1.5 text-left hover:bg-hover" onClick={() => (setMenu(false), setDialog('copy'))} data-testid="day-copy">
-                Skopiuj ten dzień do…
-              </button>
-              {isToday && model.state.facts.snapshots.some((s) => s.reason === 'type') && (
-                <button type="button" className="px-3 py-1.5 text-left hover:bg-hover" onClick={() => (setMenu(false), setDialog('addType'))}>
-                  Dodaj bloki typu {DAY_TYPE_NAMES[currentType].toLowerCase()}…
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <DayMenu
+          items={[
+            { label: 'Skopiuj ten dzień do…', onPick: () => setDialog('copy'), testId: 'day-copy' },
+            ...(isToday && model.state.facts.snapshots.some((s) => s.reason === 'type')
+              ? [{ label: `Dodaj bloki typu ${DAY_TYPE_NAMES[currentType].toLowerCase()}…`, onPick: () => setDialog('addType'), testId: 'day-add-type' }]
+              : [])
+          ]}
+        />
       </div>
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto">
@@ -814,6 +805,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             onClose={closePanel}
             onEscape={draft ? () => (escapeDraft(firstSave.of(draft.id) != null, touchedNow(draft.id)) === 'discard' ? setDraft(null) : closePanel()) : undefined}
             forecastEnd={axis.items.find((i) => i.id === block.id)?.endMin}
+            forecastStart={axis.items.find((i) => i.id === block.id)?.startMin}
             inSeries={!draft && block.origin === 'series'}
             // D430, D431, D461: „+ Blok” (Ctrl+N, a range on the axis, „Więcej” of „Tydzień”) – the cursor in „Nazwa”, Enter there
             // saves the block with the name just typed (the draft of this render does not have it yet; a name that was changed
@@ -901,7 +893,7 @@ function SidePanel({ model, names, onSelect, onMove, cases }: { model: DayModel;
   const parked = model.ctx.plan.filter((b) => s.facts.blocks.get(b.id)?.parkedAt != null)
   const lm = (idx: number) => logicalClock(logicalMinuteOf(model.date, atOf(s.grid, idx)))
   return (
-    <aside className="flex w-[300px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3 text-[12.5px]" data-testid="day-side">
+    <aside className={cx('flex shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3 text-[12.5px]', SIDE_PANEL_WIDTH)} data-testid="day-side">
       {cases}
       <h3 className="text-[13px] font-medium">Dzień w liczbach</h3>
       <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">

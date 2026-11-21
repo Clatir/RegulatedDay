@@ -6,6 +6,12 @@
 import type { ReactNode } from 'react'
 import { ofLabel } from '@shared/format'
 
+/**
+ * The width of the panel at the right of the axis (D9): „Dziś” beside the plan (the side panel and the block's panel) and „Szablony”
+ * (the block's panel) – one width, so the axis does not jump when a block is opened. A whole class: Tailwind reads it here.
+ */
+export const SIDE_PANEL_WIDTH = 'w-[320px]'
+
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')
 }

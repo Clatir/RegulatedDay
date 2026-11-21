@@ -111,13 +111,31 @@ const swallow = (e: { stopPropagation: () => void }): void => e.stopPropagation(
 const usable = (e: MenuEntry): boolean => e.kind !== 'separator' && !e.disabled
 const MENU = '[data-context-menu]'
 
-export function ContextMenu({ title, at, items, onClose, testId = 'context-menu' }: { title: string; at: { x: number; y: number }; items: readonly MenuEntry[]; onClose: () => void; testId?: string }) {
+export function ContextMenu({
+  title,
+  at,
+  items,
+  onClose,
+  testId = 'context-menu',
+  keep,
+  label
+}: {
+  title: string
+  at: { x: number; y: number }
+  items: readonly MenuEntry[]
+  onClose: () => void
+  testId?: string
+  /** A selector of the opener (the „⋯” button): a press on it is no „outside” – the opener closes the menu itself (a press would close it and its click open it again). */
+  keep?: string
+  /** The menu's name for a screen reader when it shows no `title` (a menu of a button). */
+  label?: string
+}) {
   // Where the focus was when the menu opened (read in the first render, before the menu takes the focus).
   const [origin] = useState(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null))
   const closing = useRef(onClose)
   closing.current = onClose
   useEscapeLayer(true, onClose)
-  useOutsidePointer(true, MENU, onClose)
+  useOutsidePointer(true, keep ? `${MENU}, ${keep}` : MENU, onClose)
   useEffect(() => {
     const modal = onModal()
     const away = (e: Event) => {
@@ -135,7 +153,7 @@ export function ContextMenu({ title, at, items, onClose, testId = 'context-menu'
       if (origin?.isConnected && (!now || now === document.body)) origin.focus()
     }
   }, [origin])
-  return createPortal(<MenuList label={title} title={title} entries={items} anchor={{ at }} closeAll={onClose} focusFirst testId={testId} />, document.body)
+  return createPortal(<MenuList label={label ?? title} title={title} entries={items} anchor={{ at }} closeAll={onClose} focusFirst testId={testId} />, document.body)
 }
 
 type Anchor = { at: { x: number; y: number } } | { rect: { left: number; right: number; top: number } }

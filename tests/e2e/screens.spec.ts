@@ -96,8 +96,15 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await expect(page.getByTestId('boundary')).toContainText('Plan zatwierdzony')
       await expect(page.getByTestId('morning-plan')).toContainText('zatwierdzony')
       // A work block added after the approval, beyond the boundary: the exchange, „Dodaj bez wymiany”.
+      // UX1 (A3): the „⋯” menu closes with Esc; (D9) the side panel and the block's panel are one width.
+      await page.getByTestId('day-menu').click()
+      await expect(page.getByTestId('day-copy')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('day-copy')).toHaveCount(0)
+      const sideWidth = (await page.getByTestId('day-side').boundingBox())!.width
       await page.getByTestId('day-add').click()
       await expect(page.getByTestId('block-editor')).toBeVisible()
+      expect((await page.getByTestId('block-editor').boundingBox())!.width).toBe(sideWidth)
       await page.getByTestId('block-start').fill('3:30')
       // D461: the start committed saves the new block – a work block after the approval asks for the exchange at once.
       await page.getByTestId('block-start').press('Enter')
