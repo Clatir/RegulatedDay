@@ -486,11 +486,12 @@ export function freeWeekday(templates: readonly Template[], dayType: DayTypeId):
 
 /**
  * `id` for a new template that is never smaller than the id of any of `ids` (`templateFor` lets the smaller id win, quietly): `id` itself
- * when it is greater than all of them, else the greatest of them with its first character below „z” one step up (base-36 order is the order of
- * the strings), the characters before it kept (the places of the whole greatest id are looked at – one with „z” on all the places of `id` is raised after them, so ids do not grow with every new template) and `id`'s own after it – at least `MIN_TAIL` of them (a bump far into the id leaves fewer: the
- * first characters of `id` are added, so the id grows by as many). An id otherwise keeps its length (it names the record's file – a path in the
- * data folder); the greatest all „z” gets `MIN_TAIL` characters of `id` after it. A new template never takes the days of an older one
- * (D563 P3) – the rule of choosing stays as it is.
+ * when it is greater than all of them, else the greatest of them with its first character below „z” (the places of the whole greatest id are
+ * looked at) one step up (base-36 order is the order of the strings), the characters before it kept and `id`'s own after it – at least `MIN_TAIL`
+ * of them (when the bump falls so far into the id that fewer are left, the first characters of `id` are added). So an id keeps its length when the
+ * bump falls within it; when it falls beyond the length of `id` (the greatest has „z” on all the places of `id`, or is longer) the new id is
+ * longer by a character or more – now and then, never with every new template. The id names the record's file (a path in the data folder).
+ * A new template never takes the days of an older one (D563 P3) – the rule of choosing stays as it is.
  */
 export function idAfter(ids: Iterable<string>, id: string): string {
   let max = ''

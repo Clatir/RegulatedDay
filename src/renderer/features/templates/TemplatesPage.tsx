@@ -275,7 +275,6 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
    * since (the name typed in the panel); one that pushed some has the line.
    */
   const saveChange = async (c: TemplateChange, added: string | null = null): Promise<boolean> => {
-    const at = from
     const made: { before: RawRecord | null; after: RawRecord | null } = { before: null, after: null }
     const out = await tryUpdateRecord(rel, (raw) => {
       const t = templateFrom(raw)
@@ -289,7 +288,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     // Only when the add changed the template (`made`): a record gone or unreadable answers with nothing to write – nothing was added to take back.
     else if (saved && added && made.before && made.after) {
       const done = { before: made.before, after: made.after }
-      undoToast('Dodano blok', () => void undoAddedBlock(template.id, at, added, done))
+      undoToast('Dodano blok', () => void undoAddedBlock(template.id, added, done))
     }
     return saved
   }
