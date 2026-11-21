@@ -94,8 +94,9 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 
 15. **Ciąg UX – poprawki użytkowe (D561):** przegląd użytkowy 1.33.0 (20.11; ustalenia z dowodami –
     `docs/przeglad-ux-20.11.md`), 21.11 użytkownik: wdrożyć wszystkie poprawki. Plan – `docs/plan.md`, „Ciąg UX”:
-    19 zadań (UX1–UX19) w 8 paczkach 1.34.0–1.41.0, 67–91 h; pytania P1–P29 z rekomendacjami (klikalne przed paczką).
-    **Następny krok:** po „dalej” – „Przed etapem UX” (paczka 1 = UX1–UX3, bez pytań), gałąź `claude/paczka-ux1`.
+    19 zadań (UX1–UX19) w 8 paczkach, 66–90 h; jedno CI i jedno wydanie 1.34.0 na końcu (D562) – zadania scalane bez CI do
+    `claude/ciag-ux`; pytania P1–P29 z rekomendacjami (klikalne przed paczką).
+    **Następny krok:** po „dalej” – „Przed etapem UX” (paczka 1 = UX1–UX3, bez pytań), gałąź ciągu `claude/ciag-ux`.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
