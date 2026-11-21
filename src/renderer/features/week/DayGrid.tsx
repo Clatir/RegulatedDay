@@ -9,12 +9,13 @@
  * of two and more drags the whole group (D531): every selected block by the same difference of days and minutes, each shown at its new place
  * while it is held (`week-group-drop`), Esc ends it, the drop is `dragDayGroup` (with Ctrl – the group's copy).
  */
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent } from 'react'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import type { Costs } from '@shared/model/categories'
 import { logicalClock } from '@shared/format'
 import type { DragKey } from '@shared/engine/groupDrag'
 import type { GroupDay } from '@shared/engine/groupEdit'
+import { logicalMinuteOf } from '@shared/time/day'
 import { daysBetween } from '@shared/time/zone'
 import { attachmentsOfBlock, type BlockPlace } from '@shared/model/attachment'
 import { settingsOn, DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
@@ -24,6 +25,7 @@ import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { weekday } from '@shared/time/zone'
 import { menuBind } from '../../components/ContextMenu'
 import { cx } from '../../components/ui'
+import { contentTop, followAxis, scrollAxis, scrollParent } from '../../lib/axisScroll'
 import { useDeleteSelected } from '../../lib/deleteKey'
 import { useData, type SaveAnswer } from '../../store/data'
 import { useMachine } from '../../store/machine'
@@ -148,7 +150,8 @@ export function DayGrid({
   ppm = WEEK_PPM,
   mode = 'week',
   openCard,
-  onCardOpened
+  onCardOpened,
+  opened
 }: {
   days: HorizonDay[]
   from: number
@@ -158,10 +161,16 @@ export function DayGrid({
   mode?: 'week' | '3days'
   openCard: string | null
   onCardOpened: () => void
+  /**
+   * The view the page has already put at its hour (D563, P6): the grid does it once per opening of a view – not at each week or day an arrow
+   * brings (the grid is keyed by its first day). Left out – the grid never scrolls.
+   */
+  opened?: MutableRefObject<string | null>
 }) {
   const { rd, routines, requests } = useData()
   const today = useData((s) => s.view?.today ?? '')
   const bodyRef = useRef<HTMLDivElement>(null)
+  const headRef = useRef<HTMLDivElement>(null)
   const asks = useRef(0)
   const [pick, setPick] = useState<NewPick | null>(null)
   const [held, setHeld] = useState<Held | null>(null)
@@ -169,6 +178,38 @@ export function DayGrid({
   const { lo, hi } = axisRange(from, to)
   const height = axisHeight(lo, hi, ppm)
   const marks = hourMarks(lo, hi)
+  // D563 (P6): a range with today – „teraz” a third of the way down; any other – from an hour before the earliest wake. The sticky heading is not counted in;
+  // what grows over the axis meanwhile (the strip of all-day events in the heading, the goals, the chips) is followed until you act.
+  const axisIn = useRef({ days, lo, hi, ppm })
+  axisIn.current = { days, lo, hi, ppm }
+  useLayoutEffect(() => {
+    if (!opened || opened.current === mode) return
+    const body = bodyRef.current
+    const box = body ? scrollParent(body) : null
+    const content = box?.firstElementChild
+    if (!body || !box || !(content instanceof HTMLElement)) return
+    opened.current = mode
+    const apply = () => {
+      const a = axisIn.current
+      const top = contentTop(body, box)
+      const todayCol = a.days.find((d) => d.when === 'today')
+      const nowMin = todayCol ? logicalMinuteOf(todayCol.date, Date.now()) : null
+      const wakes = a.days.flatMap((d) => (d.wakeMin != null ? [d.wakeMin] : []))
+      scrollAxis(box, {
+        axisTop: top,
+        nowY: nowMin != null && nowMin >= a.lo && nowMin <= a.hi ? top + axisY(nowMin, a.lo, a.ppm) : null,
+        wakeY: wakes.length ? top + axisY(Math.min(...wakes), a.lo, a.ppm) : null,
+        hourPx: 60 * a.ppm,
+        reserved: headRef.current?.offsetHeight ?? 0
+      })
+    }
+    apply()
+    const stop = followAxis(box, content, apply)
+    // Taken down before you acted (the effect run twice in development, a view replaced at once): the next one puts the axis again.
+    return () => {
+      if (stop()) opened.current = null
+    }
+  }, [])
   const namesOf = useMemo(() => (date: string): Names => ({ rd, settings: settingsOn(rd.settings, date), routines, requests }), [rd, routines, requests])
   const cols = { gridTemplateColumns: `${AXIS_PX}px repeat(${days.length}, minmax(0, 1fr))` }
   const dates = useMemo(() => days.map((d) => d.date), [days])
@@ -468,7 +509,7 @@ export function DayGrid({
       )}
       {/* The headings stay in view while the axis scrolls. */}
       {/* The strip of all-day events (D405) stays with them, in the same columns. */}
-      <div className="sticky top-0 z-10 border-b border-line bg-bg pb-1">
+      <div className="sticky top-0 z-10 border-b border-line bg-bg pb-1" ref={headRef} data-testid="week-head">
         <div className="grid gap-x-1" style={cols}>
           <span />
           {days.map((d) => (

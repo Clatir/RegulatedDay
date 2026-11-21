@@ -74,6 +74,15 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       // Dziś: the morning plan – the check-in skipped, the boundary approved.
       await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
       await expect(page.getByTestId('morning-plan')).toBeVisible()
+      // D563 (P6, przegląd): the axis put at „teraz” never goes past a card that asks you something – the top of the morning plan not approved stays in view.
+      await expect(page.getByTestId('morning-plan')).toHaveAttribute('data-prompt-card', 'true')
+      await expect
+        .poll(async () => {
+          const box = await page.getByTestId('day-scroll').boundingBox()
+          const plan = await page.getByTestId('morning-plan').boundingBox()
+          return box != null && plan != null && plan.y >= box.y - 1 && plan.y < box.y + box.height
+        })
+        .toBe(true)
       await shot(page, 'e3-01-today')
       // On Monday „Strona B tygodnia” comes first (spec „Plan poranny”): its table, then „Dalej”.
       if (new Date(`${logicalToday()}T12:00:00Z`).getUTCDay() === 1) {
@@ -244,6 +253,18 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await expect(page.getByTestId('type-past')).toBeVisible()
       await page.keyboard.press('Escape')
       await page.getByTestId('day-today').click()
+
+      // D563 (P6): „Dziś” opened again (another page and back) has „teraz” in the visible part of the axis, whatever the hour.
+      await page.getByTestId('nav-calendar').click()
+      await page.getByTestId('nav-today').click()
+      await expect(page.getByTestId('marker-teraz')).toHaveCount(1)
+      await expect
+        .poll(async () => {
+          const box = await page.getByTestId('day-scroll').boundingBox()
+          const line = await page.getByTestId('marker-teraz').boundingBox()
+          return box != null && line != null && line.y >= box.y && line.y < box.y + box.height
+        })
+        .toBe(true)
 
       // Kalendarz: today keeps its type here – it changes in „Dziś” (A7-03).
       await page.getByTestId('nav-calendar').click()

@@ -1,0 +1,176 @@
+/**
+ * Where the axes stand when their page opens (D563, P6): today – „teraz” a third of the way down the visible part; another day –
+ * from an hour before the wake; nothing known – the page stays.
+ */
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { followAxis, scrollTopFor, type AxisScrollInput } from '@renderer/lib/axisScroll'
+
+const base: AxisScrollInput = { axisTop: 200, nowY: null, wakeY: null, hourPx: 66, reserved: 0, viewH: 600, maxTop: null }
+
+describe('przewinięcie osi przy otwarciu (D563, P6)', () => {
+  it('dziś: „teraz” stoi na 1/3 wysokości widocznej części', () => {
+    // 23:18 on an axis from 04:00: the line is far down – the page goes there, the line at 200 px of 600.
+    expect(scrollTopFor({ ...base, nowY: 1500 })).toBe(1300)
+  })
+
+  it('dziś rano: „teraz” blisko góry – strona zostaje u góry, nigdy ujemne przewinięcie', () => {
+    expect(scrollTopFor({ ...base, nowY: 260 })).toBe(60)
+    expect(scrollTopFor({ ...base, nowY: 230 })).toBe(30)
+    expect(scrollTopFor({ ...base, nowY: 100 })).toBe(0)
+  })
+
+  it('przyklejony nagłówek nie zasłania: 1/3 liczone z części pod nim', () => {
+    // 600 − 100 covered = 500 visible; the line a third of it below the heading: 1500 − 100 − 166.67 → 1233.
+    expect(scrollTopFor({ ...base, nowY: 1500, reserved: 100 })).toBe(1233)
+  })
+
+  it('inny dzień: od godziny przed pobudką', () => {
+    // Wake at 450 px, an hour = 66 px: the axis starts at 384 px (under the heading's 100 px: 284).
+    expect(scrollTopFor({ ...base, wakeY: 450 })).toBe(384)
+    expect(scrollTopFor({ ...base, wakeY: 450, reserved: 100 })).toBe(284)
+  })
+
+  it('inny dzień: oś zaczyna się o tej godzinie albo później – strona od góry, karty nad osią zostają', () => {
+    expect(scrollTopFor({ ...base, wakeY: 266 })).toBe(0)
+    expect(scrollTopFor({ ...base, wakeY: 230 })).toBe(0)
+  })
+
+  it('„teraz” ma pierwszeństwo przed pobudką', () => {
+    expect(scrollTopFor({ ...base, nowY: 1500, wakeY: 450 })).toBe(1300)
+  })
+
+  it('nic nie wiadomo (brak „teraz” i pobudki): null – strona zostaje', () => {
+    expect(scrollTopFor(base)).toBeNull()
+  })
+
+  it('karta-prośba nad osią: przewinięcie nie wychodzi ponad jej górę (jej górę widać)', () => {
+    // „teraz” would take the page to 1300; a card whose top is at 120 stops it there.
+    expect(scrollTopFor({ ...base, nowY: 1500, maxTop: 120 })).toBe(120)
+    // The hour before the wake too.
+    expect(scrollTopFor({ ...base, wakeY: 450, maxTop: 90 })).toBe(90)
+    // A card above the target of a page that stays at the top: nothing changes.
+    expect(scrollTopFor({ ...base, nowY: 100, maxTop: 120 })).toBe(0)
+    // A card lower than the target: the target stands.
+    expect(scrollTopFor({ ...base, nowY: 1500, maxTop: 5000 })).toBe(1300)
+  })
+})
+
+describe('ponowny pomiar osi, gdy treść nad nią urośnie (followAxis)', () => {
+  type Callback = () => void
+  const observers: Array<{ cb: Callback; disconnected: boolean }> = []
+  class FakeObserver {
+    rec: { cb: Callback; disconnected: boolean }
+    constructor(cb: Callback) {
+      this.rec = { cb, disconnected: false }
+      observers.push(this.rec)
+    }
+    observe(): void {}
+    disconnect(): void {
+      this.rec.disconnected = true
+    }
+  }
+  afterEach(() => {
+    observers.length = 0
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  const parts = () => {
+    const box = document.createElement('div')
+    const content = document.createElement('div')
+    box.append(content)
+    document.body.append(box)
+    return { box, content }
+  }
+
+  it('zmiana wysokości treści liczy oś od nowa; kółko nad pudłem kończy', () => {
+    vi.stubGlobal('ResizeObserver', FakeObserver)
+    const { box, content } = parts()
+    const apply = vi.fn()
+    const stop = followAxis(box, content, apply)
+    observers[0]!.cb()
+    expect(apply).toHaveBeenCalledTimes(1)
+    box.dispatchEvent(new Event('wheel'))
+    expect(observers[0]!.disconnected).toBe(true)
+    observers[0]!.cb()
+    expect(apply).toHaveBeenCalledTimes(1)
+    // Ended by you already: the stop says it did nothing.
+    expect(stop()).toBe(false)
+    box.remove()
+  })
+
+  it.each(['pointerdown', 'touchstart'])('%s poza pudłem (panel bloku, nagłówek, menu) też kończy', (type) => {
+    vi.stubGlobal('ResizeObserver', FakeObserver)
+    const { box, content } = parts()
+    followAxis(box, content, vi.fn())
+    const elsewhere = document.createElement('button')
+    document.body.append(elsewhere)
+    elsewhere.dispatchEvent(new Event(type, { bubbles: true }))
+    expect(observers[0]!.disconnected).toBe(true)
+    elsewhere.remove()
+    box.remove()
+  })
+
+  it('klawisz kończy; bezpiecznik czasu: domyślnie 60 s, z własnym oknem – do jego końca', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('ResizeObserver', FakeObserver)
+    const { box, content } = parts()
+    followAxis(box, content, vi.fn())
+    vi.advanceTimersByTime(59_000)
+    expect(observers[0]!.disconnected).toBe(false)
+    vi.advanceTimersByTime(2_000)
+    expect(observers[0]!.disconnected).toBe(true)
+    followAxis(box, content, vi.fn())
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown' }))
+    expect(observers[1]!.disconnected).toBe(true)
+    followAxis(box, content, vi.fn(), 500)
+    vi.advanceTimersByTime(600)
+    expect(observers[2]!.disconnected).toBe(true)
+    box.remove()
+  })
+
+  it('przewinięcie nie przez nas (scrollIntoView po Ctrl K, rytuał) kończy śledzenie; własne przewinięcie – nie', () => {
+    vi.stubGlobal('ResizeObserver', FakeObserver)
+    const { box, content } = parts()
+    let top = 0
+    Object.defineProperty(box, 'scrollTop', { get: () => top, set: (v: number) => void (top = v), configurable: true })
+    const stop = followAxis(box, content, () => void (box.scrollTop = 500))
+    // The content changed: the axis is put again, the scroll event that comes of it is ours.
+    observers[0]!.cb()
+    box.dispatchEvent(new Event('scroll'))
+    expect(observers[0]!.disconnected).toBe(false)
+    // Something else scrolled the box.
+    top = 900
+    box.dispatchEvent(new Event('scroll'))
+    expect(observers[0]!.disconnected).toBe(true)
+    expect(stop()).toBe(false)
+    box.remove()
+  })
+
+  it('na czas śledzenia przeglądarka nie przesuwa strony sama (overflow-anchor), potem wraca', () => {
+    vi.stubGlobal('ResizeObserver', FakeObserver)
+    const { box, content } = parts()
+    box.style.overflowAnchor = 'auto'
+    const stop = followAxis(box, content, vi.fn())
+    expect(box.style.overflowAnchor).toBe('none')
+    stop()
+    expect(box.style.overflowAnchor).toBe('auto')
+    box.remove()
+  })
+
+  it('stop przed działaniem użytkownika mówi, że zatrzymał śledzenie (true), drugi raz – nie (false)', () => {
+    vi.stubGlobal('ResizeObserver', FakeObserver)
+    const { box, content } = parts()
+    const stop = followAxis(box, content, vi.fn())
+    expect(stop()).toBe(true)
+    expect(stop()).toBe(false)
+    box.remove()
+  })
+
+  it('bez ResizeObserver: nic nie robi i nie pada', () => {
+    vi.stubGlobal('ResizeObserver', undefined)
+    const box = document.createElement('div')
+    expect(followAxis(box, box, vi.fn())()).toBe(false)
+  })
+})

@@ -58,6 +58,7 @@ import { rememberNewBlockCategory } from '../plan/lastCategory'
 import { edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
 import { Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
+import { useAxisOpening, type PlacedDay } from './axisOpening'
 import { EnergyLegend, LANES_WIDTH } from '../plan/EnergyLanes'
 import { hasEnergy } from '../plan/energyDraw'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
@@ -110,12 +111,14 @@ export function TodayPage() {
   const today = view?.today ?? ''
   const date = chosen ?? today
   const model = useDay(date)
+  // The day the axis was put for: DayView is mounted anew with each day (the page says „Liczę dzień…” between), this stays.
+  const placed: PlacedDay = useRef(undefined)
   if (!view || view.status !== 'open') return <EmptyState why="Folder danych nie jest jeszcze otwarty." />
   if (!model) return <div className="p-6 text-muted">Liczę dzień…</div>
-  return <DayView model={model} today={today} />
+  return <DayView model={model} today={today} placed={placed} />
 }
 
-function DayView({ model, today }: { model: DayModel; today: string }) {
+function DayView({ model, today, placed }: { model: DayModel; today: string; placed: PlacedDay }) {
   const { rd, routines, requests, series } = useData()
   const view = useData((s) => s.view)!
   const brightness = useMachine((s) => s.prefs.brightness)
@@ -338,6 +341,9 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     window.addEventListener('focus', report)
     return () => window.removeEventListener('focus', report)
   }, [lateSeenId])
+  // D563 (P6): the axis put at its hour (`axisOpening.ts`); the ritual's own scroll below ends its following of the content.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const stopFollowing = useAxisOpening(scrollRef, useUi((u) => u.day), placed)
   // The ritual (D318): today after the end of work (a day without work: any time), a day before from the ritual's first
   // day while it is not frozen (the morning's „Popraw” opens it, D320).
   const ritualFrom = rd.ritualFrom
@@ -346,6 +352,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const ritualRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (focus !== 'ritual' || !ritualRef.current) return
+    // The scroll to the ritual is the last word: the axis does not follow the content back over it.
+    stopFollowing()
     ritualRef.current.scrollIntoView({ block: 'start' })
     useUi.setState({ focus: null })
   }, [focus, ritual])
@@ -644,7 +652,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
         />
       </div>
       <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto">
+        <div className="min-w-0 flex-1 overflow-y-auto" ref={scrollRef} data-testid="day-scroll">
           <div className="flex flex-col gap-3 p-4">
             <AllDayLines page="today" />
             {lateWake && lateShown && <LateWakeCard model={model} lw={lateWake} names={names} />}
@@ -652,7 +660,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             {isToday && <MorningPlan model={model} names={names} />}
             {isToday && <RoutineCards model={model} names={names} />}
             {ritual && (
-              <div ref={ritualRef}>
+              <div ref={ritualRef} data-prompt-card="true">
                 <RitualPanel key={date} model={model} names={names} onClosed={isToday ? undefined : () => openDay(null)} />
               </div>
             )}

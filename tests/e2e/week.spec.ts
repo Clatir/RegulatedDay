@@ -15,6 +15,7 @@ import { DEFAULT_GENERAL, rdFrom } from '../../src/shared/model/rd'
 import { DEFAULT_SETTINGS } from '../../src/shared/model/settings'
 import { defaultTemplates, firstComputerRecords } from '../../src/shared/model/defaults'
 import { previousMonth } from '../../src/shared/model/goals'
+import { logicalMinuteOf } from '../../src/shared/time/day'
 import { launch, logicalToday, withMainLog } from './app'
 
 const shots = process.env.RD_E2E_SHOTS
@@ -70,6 +71,17 @@ test('Tydzień (D356): siedem kolumn, strzałki tygodni, cel miesięczny z post�
       await expect(page.getByTestId(`week-day-${today}`)).toHaveAttribute('aria-current', 'date')
       await expect(page.getByTestId(`week-block-${today}-w1`)).toBeVisible({ timeout: 30_000 })
       await expect(page.getByTestId(`week-regen-${today}`)).toContainText('min')
+      // D563 (P6): the page opens with the current hour on the axis in view, under the sticky heading.
+      const hourNow = Math.floor(logicalMinuteOf(today, Date.now()) / 60) * 60
+      if ((await page.getByTestId(`week-hour-${hourNow}`).count()) > 0) {
+        await expect
+          .poll(async () => {
+            const head = await page.getByTestId('week-head').boundingBox()
+            const label = await page.getByTestId(`week-hour-${hourNow}`).boundingBox()
+            return head != null && label != null && label.y >= head.y + head.height - 8 && label.y < (page.viewportSize()?.height ?? 860)
+          })
+          .toBe(true)
+      }
       await shot(page, 'e10-01-week')
       // The arrows: a week on, the day-of-today gone from the columns, „Ten tydzień” back.
       const week = (await page.getByTestId('week-title').getAttribute('data-week'))!
@@ -1087,7 +1099,7 @@ test('Miesiąc (SNT1, D418, D422): w komórce dnia do trzech pasków stałych bl
       await expect(bars.nth(0)).toHaveAttribute('title', /06:30–07:30/)
       await expect(bars.nth(2)).toHaveAttribute('title', /08:30–09:30/)
       // Everything else the day holds – the two flexible blocks and whatever its template brings – is „+N”.
-      await expect(page.getByTestId(`month-more-${next}`)).toHaveText(/^\+([2-9]|\d{2,})$/)
+      await expect(page.getByTestId(`month-more-${next}`)).toHaveText(/^\+([2-9]|\d{2,}) (bloki|bloków|pozycje|pozycji|sesje|sesji)$/)
       // The dot of the load: a level and the sentence about the work and the budget.
       const dot = page.getByTestId(`month-load-${next}`)
       await expect(dot).toHaveAttribute('data-level', /^(low|mid|high)$/)

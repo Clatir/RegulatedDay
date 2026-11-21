@@ -56,3 +56,19 @@ describe('goły klik osi (D496)', () => {
     expect(AXIS_HINT).toContain('Ctrl+N')
   })
 })
+
+describe('znaczniki na osi (D5, UX7)', () => {
+  it('scalony napis „propozycja · maksimum” ma oba identyfikatory: marker-propozycja i marker-maksimum, na tej samej wysokości', async () => {
+    host = document.createElement('div')
+    document.body.appendChild(host)
+    root = createRoot(host)
+    const markers = [{ at: 19 * 60, label: 'propozycja · maksimum 19:00', tone: 'lamp' as const, dashed: true, also: 'maksimum' }]
+    await act(async () => root!.render(createElement(Timeline, { items: [], markers, selected: null, onSelect: () => undefined, from: 6 * 60, to: 22 * 60 })))
+    const first = host.querySelector<HTMLElement>('[data-testid="marker-propozycja"]')
+    const second = host.querySelector<HTMLElement>('[data-testid="marker-maksimum"]')
+    expect(first).not.toBeNull()
+    expect(second).not.toBeNull()
+    expect(first!.contains(second)).toBe(true)
+    expect(host.querySelectorAll('[data-testid="marker-maksimum"]')).toHaveLength(1)
+  })
+})

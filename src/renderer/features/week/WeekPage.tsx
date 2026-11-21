@@ -12,7 +12,7 @@
  * all-day events of the checked calendars only (`useVisibleDays` for the days' blocks, `useVisibleAllDayIn` for the events and their
  * count – it also keeps the event Ctrl K opened, `revealedId`, D427).
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { agendaOf } from '@shared/engine/calendarViews'
 import { eventsOn } from '@shared/model/allDay'
 import { threeDays, agendaDates, type DaysView } from '@shared/engine/week'
@@ -63,6 +63,8 @@ export function WeekPage() {
   useEffect(() => {
     if (card != null && waiting == null) setCard(null)
   }, [card, waiting])
+  // D563 (P6): the view whose axis the page has put at its hour – once per opening of the page and per change of the view.
+  const opened = useRef<string | null>(null)
   const choose = (m: WeekMode) => {
     setMode(m)
     rememberWeekMode(m)
@@ -118,15 +120,15 @@ export function WeekPage() {
       <WeekPushLine />
       <GroupLine view="week" />
       <AllDayLines page="week" />
-      {mode === 'week' && <WeekBody week={week} today={today} openCard={waiting} onCardOpened={() => setCard(null)} />}
-      {mode === '3days' && <ThreeDaysBody middle={middle} />}
-      {mode === 'agenda' && <AgendaBody today={today} />}
+      {mode === 'week' && <WeekBody week={week} today={today} openCard={waiting} onCardOpened={() => setCard(null)} opened={opened} />}
+      {mode === '3days' && <ThreeDaysBody middle={middle} opened={opened} />}
+      {mode === 'agenda' && <AgendaBody today={today} opened={opened} />}
     </div>
   )
 }
 
 /** „Tydzień”: the month's goals, then the seven columns. */
-function WeekBody({ week, today, openCard, onCardOpened }: { week: string; today: string; openCard: string | null; onCardOpened: () => void }) {
+function WeekBody({ week, today, openCard, onCardOpened, opened }: { week: string; today: string; openCard: string | null; onCardOpened: () => void; opened: MutableRefObject<string | null> }) {
   const { view, failed } = useWeekView(week)
   const seen = useVisibleDays(view?.days)
   const { hiddenInRange } = useVisibleAllDayIn(week, addDays(week, 6))
@@ -139,7 +141,7 @@ function WeekBody({ week, today, openCard, onCardOpened }: { week: string; today
         <>
           {/* Some column shows the strip of energy (D500) – the legend of its shades stands over the columns. */}
           {view.days.some((d) => hasEnergy(d.energy)) && <EnergyStripLegend />}
-          <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} openCard={openCard} onCardOpened={onCardOpened} />
+          <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} openCard={openCard} onCardOpened={onCardOpened} opened={opened} />
         </>
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="week-loading">
@@ -152,7 +154,7 @@ function WeekBody({ week, today, openCard, onCardOpened }: { week: string; today
 }
 
 /** „3 dni” (D417): the day before, the day, the day after on one axis in a larger scale – the same columns as „Tydzień”. */
-function ThreeDaysBody({ middle }: { middle: string }) {
+function ThreeDaysBody({ middle, opened }: { middle: string; opened: MutableRefObject<string | null> }) {
   const read = useDaysView(threeDays(middle))
   // The last days shown stay while the next are counted (an arrow does not blank the page): the grid is replaced when they come.
   const last = useRef<DaysView | null>(null)
@@ -171,7 +173,7 @@ function ThreeDaysBody({ middle }: { middle: string }) {
         <>
           {/* Some column shows the strip of energy (D500) – the legend of its shades stands over the columns. */}
           {view.days.some((d) => hasEnergy(d.energy)) && <EnergyStripLegend />}
-          <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} ppm={THREE_DAYS_PPM} mode="3days" openCard={null} onCardOpened={() => undefined} />
+          <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} ppm={THREE_DAYS_PPM} mode="3days" openCard={null} onCardOpened={() => undefined} opened={opened} />
         </>
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="three-loading">
@@ -184,7 +186,11 @@ function ThreeDaysBody({ middle }: { middle: string }) {
 }
 
 /** „Agenda” (D418): the seven days from today – a list, no curves of energy to count (T954). */
-function AgendaBody({ today }: { today: string }) {
+function AgendaBody({ today, opened }: { today: string; opened: MutableRefObject<string | null> }) {
+  // The list has no axis: coming back to „Tydzień” or „3 dni” from it is an opening of that view again (D563, P6).
+  useEffect(() => {
+    opened.current = null
+  }, [opened])
   const dates = agendaDates(today)
   const { view, failed } = useDaysView(dates, { energy: false })
   const allDay = useData((s) => s.allDay)

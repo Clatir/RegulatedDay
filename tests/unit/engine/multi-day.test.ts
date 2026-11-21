@@ -478,6 +478,8 @@ describe('D418 – komórka dnia w miesiącu', () => {
     expect(c.items.map((i) => (i.kind === 'allDay' ? i.event.id : i.block.id))).toEqual(['e2', 'e1', 'meet'])
     // 2 events + 5 blocks on the day, 3 bars: the rest – „w”, the session and the two flexible ones.
     expect(c.more).toBe(4)
+    // …and what the rest is made of (P7): the session, two flexible blocks and „w”; the events were all barred.
+    expect(c.moreOf).toEqual({ events: 0, sessions: 1, blocks: 3 })
     // Two flexible blocks: both get a bar (D429), no „+N”.
     expect(monthCell(monthDayOf(day({ blocks: [hb('f1', '11:00', 60), hb('f2', '13:00', 60)] })), [])).toMatchObject({ items: [{ kind: 'block' }, { kind: 'block' }], more: 0 })
     // Only sessions: no bar, every one „+N”.

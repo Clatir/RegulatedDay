@@ -33,7 +33,7 @@ export function LateWakeCard({ model, lw, names }: { model: DayModel; lw: LateWa
       if (r.kept.length) toast(`Nie cofnięto startu: ${r.kept.map((b) => blockName(b, names)).join(', ')} – ${r.why ?? ''}`, 'error', 8000)
     })
   return (
-    <section className="flex flex-col gap-2 rounded-lg border border-lamp/50 bg-lamp-soft px-4 py-3 text-[12.5px]" data-testid="late-wake">
+    <section className="flex flex-col gap-2 rounded-lg border border-lamp/50 bg-lamp-soft px-4 py-3 text-[12.5px]" data-testid="late-wake" data-prompt-card="true">
       {stage === 'ask' ? (
         <div className="flex flex-wrap items-center gap-2">
           <span className="flex-1">

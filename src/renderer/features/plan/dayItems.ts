@@ -26,6 +26,19 @@ import type { DayModel } from '../../store/day'
 import { blockColor, blockKind, blockMarks, blockName, type Names } from './blockView'
 import type { EnergyTrack, TimelineItem, TimelineMarker } from './Timeline'
 
+/**
+ * The lines of the boundary (approved – solid; else the proposal – dashed) and of the maximum. At the same hour they are one line with one
+ * label – „propozycja · maksimum 19:00” – instead of two labels over each other (D5 of the UX review). `lm`: the engine's minute on the axis.
+ */
+export function boundaryMarkers(b: { proposal: number | null; approved: number | null; max: number }, lm: (n: number) => number): TimelineMarker[] {
+  const at = b.approved ?? b.proposal
+  const max: TimelineMarker = { at: lm(b.max), label: `maksimum ${logicalClock(lm(b.max))}`, tone: 'rose', dashed: true }
+  if (at == null) return [max]
+  const approved = b.approved != null
+  if (lm(at) === lm(b.max)) return [{ at: lm(at), label: `${approved ? 'granica' : 'propozycja'} · maksimum ${logicalClock(lm(at))}`, tone: 'lamp', also: 'maksimum', ...(approved ? {} : { dashed: true as const }) }]
+  return [{ at: lm(at), label: `${approved ? 'granica' : 'propozycja granicy'} ${logicalClock(lm(at))}`, tone: 'lamp', ...(approved ? {} : { dashed: true as const }) }, max]
+}
+
 export interface DayAxis {
   items: TimelineItem[]
   markers: TimelineMarker[]
@@ -160,10 +173,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
   }
   const markers: TimelineMarker[] = []
   markers.push({ at: lm(state.wake), label: `pobudka ${logicalClock(lm(state.wake))}`, tone: 'muted' })
-  const b = state.boundary
-  if (b.approved != null) markers.push({ at: lm(b.approved), label: `granica ${logicalClock(lm(b.approved))}`, tone: 'lamp' })
-  else if (b.proposal != null) markers.push({ at: lm(b.proposal), label: `propozycja granicy ${logicalClock(lm(b.proposal))}`, tone: 'lamp', dashed: true })
-  markers.push({ at: lm(b.max), label: `maksimum ${logicalClock(lm(b.max))}`, tone: 'rose', dashed: true })
+  markers.push(...boundaryMarkers(state.boundary, lm))
   if (!state.hardEnd.unreachable && state.hardEnd.at < state.bedtime.forecast) markers.push({ at: lm(state.hardEnd.at), label: `twardy koniec ${logicalClock(lm(state.hardEnd.at))}`, tone: 'sea', dashed: true })
   markers.push({ at: lm(state.bedtime.forecast), label: `pora snu ${logicalClock(lm(state.bedtime.forecast))}`, tone: 'muted' })
   if (nowIdx != null && nowIdx >= 0 && nowIdx <= g.length) markers.push({ at: lm(nowIdx), label: `teraz ${logicalClock(lm(nowIdx))}`, tone: 'fg', now: true })

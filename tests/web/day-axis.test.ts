@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { computeDay } from '@shared/engine/day'
 import { computeEnergy } from '@shared/engine/energy'
 import { rdFrom } from '@shared/model/rd'
-import { dayAxis } from '@renderer/features/plan/dayItems'
+import { boundaryMarkers, dayAxis } from '@renderer/features/plan/dayItems'
 import { edgePatch, edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '@renderer/features/plan/edgeEdit'
 import { draggedEnd, draggedStart, draggedTopStart, dropSettled, holdEnds, staysPut, type TimelineItem } from '@renderer/features/plan/Timeline'
 import { DRAG_STEP_MIN, planBlock, planBlockFrom } from '@shared/model/plan'
@@ -279,5 +279,38 @@ describe('oś dnia w dobie 25-godzinnej (przegląd J3)', () => {
     // From the first 02:00 90 min on – to the second 02:30: on the clock 02:00–02:30; the next one at 03:00.
     expect([noc.startMin, noc.endMin]).toEqual([26 * 60, 26 * 60 + 30])
     expect(noc.endMin).toBeLessThanOrEqual(potem.startMin)
+  })
+})
+
+describe('znaczniki granicy i maksimum na osi (D5, przegląd UX)', () => {
+  const lm = (n: number) => n
+  const labels = (b: { proposal: number | null; approved: number | null; max: number }) => boundaryMarkers(b, lm).map((m) => m.label)
+
+  it('granica różna od maksimum: dwa napisy jak dotąd', () => {
+    expect(labels({ proposal: 17 * 60, approved: null, max: 19 * 60 })).toEqual(['propozycja granicy 17:00', 'maksimum 19:00'])
+    expect(labels({ proposal: null, approved: 17 * 60, max: 19 * 60 })).toEqual(['granica 17:00', 'maksimum 19:00'])
+  })
+
+  it('propozycja na godzinie maksimum: jeden napis, linia przerywana', () => {
+    const m = boundaryMarkers({ proposal: 19 * 60, approved: null, max: 19 * 60 }, lm)
+    expect(m.map((x) => x.label)).toEqual(['propozycja · maksimum 19:00'])
+    expect(m[0]).toMatchObject({ at: 19 * 60, dashed: true })
+  })
+
+  it('zatwierdzona granica na godzinie maksimum: jeden napis „granica · maksimum”', () => {
+    expect(labels({ proposal: 19 * 60, approved: 19 * 60, max: 19 * 60 })).toEqual(['granica · maksimum 19:00'])
+  })
+
+  it('brak granicy: samo maksimum', () => {
+    expect(labels({ proposal: null, approved: null, max: 19 * 60 })).toEqual(['maksimum 19:00'])
+  })
+})
+
+describe('scalony znacznik zostaje do znalezienia pod obiema nazwami (UX7, przegląd)', () => {
+  it('„maksimum” jako drugi identyfikator tylko przy scalonym napisie', () => {
+    const merged = boundaryMarkers({ proposal: 19 * 60, approved: null, max: 19 * 60 }, (n) => n)
+    expect(merged[0]).toMatchObject({ label: 'propozycja · maksimum 19:00', also: 'maksimum' })
+    const apart = boundaryMarkers({ proposal: 17 * 60, approved: null, max: 19 * 60 }, (n) => n)
+    expect(apart.every((m) => m.also == null)).toBe(true)
   })
 })
