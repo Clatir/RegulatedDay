@@ -306,6 +306,11 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX16.3 Liczniki „x z y” i skróty „Ctrl+K” (1.34.0)
    - [ ] UX16.4 Szablony, serie, rutyny – puste stany i „Używana w…” (1.34.0)
    - [ ] UX16.5 „Skopiuj ten dzień do…” – okno dni z Od/Do (1.34.0)
+   - [ ] UX10.1 „↗” na pasku pulpitu otwiera okno główne jednym kliknięciem (1.34.0)
+   - [ ] UX10.2 Panel ikony – nagłówek i stopka (1.34.0)
+   - [ ] UX10.3 „Pasek pulpitu: schowaj / pokaż” w stopce panelu (1.34.0)
+   - [ ] UX10.4 „+ Skrzynka” na pasku pulpitu – okienko „Do skrzynki” (1.34.0)
+   - [ ] UX10.5 Dwuklik w przycisk paska działa raz, panel otwiera się zwinięty (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3251,6 +3256,42 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** w „Dziś” menu „⋯” → „Skopiuj ten dzień do…”; wpisz Od/Do, zaznacz też dzisiejszy dzień; spróbuj zakresu dłuższego niż rok.
 - **Oczekiwany efekt:** to samo okno co „Zastosuj do…”, z polami Od/Do; dzień kopiowany się nie liczy; licznik „(już trwały: N)” przy dniach do dziś i ostrzeżenie przy kopii; zakres dłuższy niż 366 dni – „Zakres dłuższy niż 366 dni”.
 - **Nie przechodzi, gdy:** kopia trafia na dni, których pola już nie pokazują; licznik nie zgadza się z ostrzeżeniem.
+
+
+#### UX10.1 „↗” na pasku pulpitu otwiera okno główne jednym kliknięciem
+- [ ] Odebrane
+- **Tylko Ty:** kolejność okien sprawdza CI na Windows (`tests/e2e/bar-windows.spec.ts`), ale wygląd i Twój pulpit – tylko Ty.
+- **Jak sprawdzić:** okno główne schowane w zasobniku; jedno kliknięcie „↗” nad „×” w prawym pasie paska pulpitu.
+- **Oczekiwany efekt:** okno główne na pierwszym planie; pasek pulpitu dalej pod oknami; „↗” nie zasłania przycisków.
+- **Nie przechodzi, gdy:** trzeba dwukliku; pasek wychodzi nad inne okna; „↗” zasłania przycisk.
+
+#### UX10.2 Panel ikony – nagłówek i stopka
+- [ ] Odebrane
+- **Automatycznie:** E2E `smoke` („role powierzchni”), `tests/web/bar-roles.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** kliknij ikonę w zasobniku; potem kliknij tuż obok przycisku w stopce (w odstęp albo „·”).
+- **Oczekiwany efekt:** nagłówek „Regulated Day ×”, pasek jak dotąd, stopka „↗ Otwórz okno główne · ▣ Pasek pulpitu: pokaż / schowaj · ⏻ Zakończ aplikację”; klik obok przycisku w stopce nic nie robi; menu ikony mówi „Otwórz okno główne” i „Zakończ aplikację”.
+- **Nie przechodzi, gdy:** brak stopki przy „Odcinam się”; klik obok przycisku stopki otwiera okno główne.
+
+#### UX10.3 „Pasek pulpitu: schowaj / pokaż” w stopce panelu
+- [ ] Odebrane
+- **Automatycznie:** E2E `smoke`, `tests/web/bar-roles.test.ts`, `tests/unit/bar-close.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w stopce „schowaj”, potem „pokaż”; osobno wyłącz pasek w Ustawieniach i kliknij „pokaż”.
+- **Oczekiwany efekt:** „schowaj” chowa pasek jak „×”, „pokaż” go przywraca, przy pasku wyłączonym w Ustawieniach – włącza go na tym komputerze; napis zmienia się od razu.
+- **Nie przechodzi, gdy:** dwuklik chowa i od razu pokazuje; napis się nie zmienia; „pokaż” nic nie robi przy pasku schowanym „×”.
+
+#### UX10.4 „+ Skrzynka” na pasku pulpitu – okienko „Do skrzynki”
+- [ ] Odebrane
+- **Automatycznie:** E2E `quick`, fokus i kolejność – CI na Windows (`bar-windows`). Ty: rzut oka.
+- **Jak sprawdzić:** kliknij „+ Skrzynka” na pasku pulpitu, wpisz tytuł, Enter; drugi raz – Esc.
+- **Oczekiwany efekt:** okienko „Do skrzynki” jak po Win+Alt+N, z kursorem w polu; Enter zapisuje do Skrzynki; Esc chowa okienko. W oknie głównym i panelu „+ Skrzynka” dalej rozwija pole w pasku.
+- **Nie przechodzi, gdy:** otwiera się panel; okienko bez fokusu; zostaje na wierzchu po Esc.
+
+#### UX10.5 Dwuklik w przycisk paska działa raz, panel otwiera się zwinięty
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/bar-roles.test.ts`, `tests/unit/panel-open.test.ts`. Ty: blok w toku.
+- **Jak sprawdzić:** dwuklik w „Dalej” w panelu i na pasku pulpitu; dwuklik w „Skończył się o…”; rozwiń „Prośba ▸”, schowaj panel i otwórz go znowu.
+- **Oczekiwany efekt:** jedno „Dalej”; dwuklik w „Skończył się o…” nie zmienia godziny o −5; ponownie otwarty panel bez rozwiniętego „Prośba ▸” ani „±5”; kliknięcie powiadomienia przy otwartym panelu nie czyści wpisanego tekstu.
+- **Nie przechodzi, gdy:** dwa bloki przeskoczone; rozwinięcie wraca po ponownym otwarciu; wpisany tekst ginie.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
