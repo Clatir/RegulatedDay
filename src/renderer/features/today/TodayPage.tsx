@@ -4,7 +4,7 @@
  * exception), getting up later, the change of the day's type, the exchange for a work block added after the approval,
  * moving and copying.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { costText } from '@shared/costText'
 import { durationLabel, logicalClock, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
@@ -57,8 +57,8 @@ import { judgeBlocks } from '../plan/groupRun'
 import { rememberNewBlockCategory } from '../plan/lastCategory'
 import { edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
-import { PPM as AXIS_PPM, Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
-import { contentTop, followAxis, scrollAxis } from '../../lib/axisScroll'
+import { Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
+import { useAxisOpening, type PlacedDay } from './axisOpening'
 import { EnergyLegend, LANES_WIDTH } from '../plan/EnergyLanes'
 import { hasEnergy } from '../plan/energyDraw'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
@@ -111,12 +111,14 @@ export function TodayPage() {
   const today = view?.today ?? ''
   const date = chosen ?? today
   const model = useDay(date)
+  // The day the axis was put for: DayView is mounted anew with each day (the page says „Liczę dzień…” between), this stays.
+  const placed = useRef<string | null | undefined>(undefined)
   if (!view || view.status !== 'open') return <EmptyState why="Folder danych nie jest jeszcze otwarty." />
   if (!model) return <div className="p-6 text-muted">Liczę dzień…</div>
-  return <DayView model={model} today={today} />
+  return <DayView model={model} today={today} placed={placed} />
 }
 
-function DayView({ model, today }: { model: DayModel; today: string }) {
+function DayView({ model, today, placed }: { model: DayModel; today: string; placed: PlacedDay }) {
   const { rd, routines, requests, series } = useData()
   const view = useData((s) => s.view)!
   const brightness = useMachine((s) => s.prefs.brightness)
@@ -339,6 +341,9 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     window.addEventListener('focus', report)
     return () => window.removeEventListener('focus', report)
   }, [lateSeenId])
+  // D563 (P6): the axis put at its hour (`axisOpening.ts`); the ritual's own scroll below ends its following of the content.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const stopFollowing = useAxisOpening(scrollRef, useUi((u) => u.day), placed)
   // The ritual (D318): today after the end of work (a day without work: any time), a day before from the ritual's first
   // day while it is not frozen (the morning's „Popraw” opens it, D320).
   const ritualFrom = rd.ritualFrom
@@ -347,32 +352,11 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const ritualRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (focus !== 'ritual' || !ritualRef.current) return
+    // The scroll to the ritual is the last word: the axis does not follow the content back over it.
+    stopFollowing()
     ritualRef.current.scrollIntoView({ block: 'start' })
     useUi.setState({ focus: null })
   }, [focus, ritual])
-  // D563 (P6): the axis opens with today's „teraz” a third of the way down, another day from an hour before its wake – never past the top of
-  // a card that asks you something (the morning plan not approved, a late wake, unclosed days, the ritual: `data-prompt-card`). Again at each
-  // day chosen (the page is not remounted by the arrows), not when the logical day turns over under an open page. It follows what grows over the
-  // axis (a strip of events, a card) until you act. The ritual's own scroll (above, a passive effect) runs after this layout one and wins.
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const chosenDay = useUi((u) => u.day)
-  useLayoutEffect(() => {
-    const box = scrollRef.current
-    const content = box?.firstElementChild
-    if (!box || !(content instanceof HTMLElement)) return
-    const apply = () => {
-      const axisEl = box.querySelector<HTMLElement>('[data-testid="timeline-axis"]')
-      if (!axisEl) return
-      const at = (id: string) => {
-        const el = box.querySelector<HTMLElement>(`[data-testid="marker-${id}"]`)
-        return el ? contentTop(el, box) : null
-      }
-      const card = box.querySelector<HTMLElement>('[data-prompt-card]')
-      scrollAxis(box, { axisTop: contentTop(axisEl, box), nowY: at('teraz'), wakeY: at('pobudka'), hourPx: 60 * AXIS_PPM, maxTop: card ? contentTop(card, box) : null })
-    }
-    apply()
-    return followAxis(box, content, apply)
-  }, [chosenDay])
 
   // D367: a day to come pushes blocks apart (a day gone is history).
   const pushes = date >= today

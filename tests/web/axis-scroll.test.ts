@@ -76,12 +76,17 @@ describe('ponowny pomiar osi, gdy treść nad nią urośnie (followAxis)', () =>
     vi.useRealTimers()
   })
 
-  it('zmiana wysokości treści liczy oś od nowa; pierwszy ruch użytkownika kończy', () => {
-    vi.stubGlobal('ResizeObserver', FakeObserver)
+  const parts = () => {
     const box = document.createElement('div')
     const content = document.createElement('div')
     box.append(content)
     document.body.append(box)
+    return { box, content }
+  }
+
+  it('zmiana wysokości treści liczy oś od nowa; kółko nad pudłem kończy', () => {
+    vi.stubGlobal('ResizeObserver', FakeObserver)
+    const { box, content } = parts()
     const apply = vi.fn()
     const stop = followAxis(box, content, apply)
     observers[0]!.cb()
@@ -90,35 +95,50 @@ describe('ponowny pomiar osi, gdy treść nad nią urośnie (followAxis)', () =>
     expect(observers[0]!.disconnected).toBe(true)
     observers[0]!.cb()
     expect(apply).toHaveBeenCalledTimes(1)
-    stop()
+    // Ended by you already: the stop says it did nothing.
+    expect(stop()).toBe(false)
     box.remove()
   })
 
-  it.each(['pointerdown', 'touchstart'])('%s w pudle też kończy', (type) => {
+  it.each(['pointerdown', 'touchstart'])('%s poza pudłem (panel bloku, nagłówek, menu) też kończy', (type) => {
     vi.stubGlobal('ResizeObserver', FakeObserver)
-    const box = document.createElement('div')
-    const content = document.createElement('div')
+    const { box, content } = parts()
     followAxis(box, content, vi.fn())
-    box.dispatchEvent(new Event(type))
+    const elsewhere = document.createElement('button')
+    document.body.append(elsewhere)
+    elsewhere.dispatchEvent(new Event(type, { bubbles: true }))
     expect(observers[0]!.disconnected).toBe(true)
+    elsewhere.remove()
+    box.remove()
   })
 
-  it('klawisz w oknie kończy; krótkie okno po otwarciu też', () => {
+  it('klawisz kończy; bez okna czasu śledzi dowolnie długo, z oknem – do jego końca', () => {
     vi.useFakeTimers()
     vi.stubGlobal('ResizeObserver', FakeObserver)
-    const box = document.createElement('div')
-    const content = document.createElement('div')
+    const { box, content } = parts()
     followAxis(box, content, vi.fn())
+    vi.advanceTimersByTime(3_600_000)
+    expect(observers[0]!.disconnected).toBe(false)
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown' }))
     expect(observers[0]!.disconnected).toBe(true)
     followAxis(box, content, vi.fn(), 500)
     vi.advanceTimersByTime(600)
     expect(observers[1]!.disconnected).toBe(true)
+    box.remove()
+  })
+
+  it('stop przed działaniem użytkownika mówi, że zatrzymał śledzenie (true), drugi raz – nie (false)', () => {
+    vi.stubGlobal('ResizeObserver', FakeObserver)
+    const { box, content } = parts()
+    const stop = followAxis(box, content, vi.fn())
+    expect(stop()).toBe(true)
+    expect(stop()).toBe(false)
+    box.remove()
   })
 
   it('bez ResizeObserver: nic nie robi i nie pada', () => {
     vi.stubGlobal('ResizeObserver', undefined)
     const box = document.createElement('div')
-    expect(() => followAxis(box, box, vi.fn())()).not.toThrow()
+    expect(followAxis(box, box, vi.fn())()).toBe(false)
   })
 })

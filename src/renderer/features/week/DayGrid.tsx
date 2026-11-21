@@ -204,7 +204,11 @@ export function DayGrid({
       })
     }
     apply()
-    return followAxis(box, content, apply)
+    const stop = followAxis(box, content, apply)
+    // Taken down before you acted (the effect run twice in development, a view replaced at once): the next one puts the axis again.
+    return () => {
+      if (stop()) opened.current = null
+    }
   }, [])
   const namesOf = useMemo(() => (date: string): Names => ({ rd, settings: settingsOn(rd.settings, date), routines, requests }), [rd, routines, requests])
   const cols = { gridTemplateColumns: `${AXIS_PX}px repeat(${days.length}, minmax(0, 1fr))` }

@@ -69,31 +69,32 @@ export function scrollAxis(box: HTMLElement, at: Omit<AxisScrollInput, 'viewH' |
   return top
 }
 
-/** How long after the opening the axis follows the content growing over it, at most. */
-export const FOLLOW_MS = 3000
-
 /**
- * The page's content over the axis may still grow after the axis was put (a strip of all-day events, a card, the chips of the calendars):
- * `apply` – the measuring and setting of the axis – runs again whenever `content` changes its size, until you act (the wheel, a press, a key)
- * or `windowMs` have passed. Returns the stop (also for the page leaving). Without `ResizeObserver` it does nothing.
+ * The page's content over the axis may still change after the axis was put (a strip of all-day events, a card that asks you something
+ * arriving from a slow read, the chips of the calendars): `apply` – the measuring and setting of the axis – runs again whenever `content`
+ * changes its size, until you act: the wheel over `box`, a press or a key anywhere in the window (`windowMs` – an end in time too, none by
+ * default). Returns the stop, which says whether it ended the following (true) or you had ended it already (false) – a page leaving
+ * before you acted asks the axis to be put again at its next opening. Without `ResizeObserver` it does nothing.
  */
-export function followAxis(box: HTMLElement, content: HTMLElement, apply: () => void, windowMs = FOLLOW_MS): () => void {
-  if (typeof ResizeObserver === 'undefined') return () => undefined
+export function followAxis(box: HTMLElement, content: HTMLElement, apply: () => void, windowMs?: number): () => boolean {
+  if (typeof ResizeObserver === 'undefined') return () => false
   let live = true
   const doc = box.ownerDocument
   const observer = new ResizeObserver(() => {
     if (live) apply()
   })
-  const stop = (): void => {
-    if (!live) return
+  const stop = (): boolean => {
+    if (!live) return false
     live = false
     observer.disconnect()
-    clearTimeout(timer)
-    for (const type of ['wheel', 'pointerdown', 'touchstart']) box.removeEventListener(type, stop, true)
-    doc.removeEventListener('keydown', stop, true)
+    if (timer != null) clearTimeout(timer)
+    box.removeEventListener('wheel', stop, true)
+    for (const type of ['pointerdown', 'touchstart', 'keydown']) doc.removeEventListener(type, stop, true)
+    return true
   }
-  const timer = setTimeout(stop, windowMs)
-  for (const type of ['wheel', 'pointerdown', 'touchstart']) box.addEventListener(type, stop, { capture: true, passive: true })
+  const timer = windowMs != null ? setTimeout(stop, windowMs) : null
+  box.addEventListener('wheel', stop, { capture: true, passive: true })
+  for (const type of ['pointerdown', 'touchstart']) doc.addEventListener(type, stop, { capture: true, passive: true })
   doc.addEventListener('keydown', stop, true)
   observer.observe(content)
   return stop

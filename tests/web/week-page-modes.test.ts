@@ -5,7 +5,7 @@
  * list (all-day events on top, blocks with hour, name, length, category; a day with nothing says „nic”; a click opens the day).
  * The hooks that count the views are the main process's – here they give a fixed answer.
  */
-import { act, createElement } from 'react'
+import { act, createElement, StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DataView } from '@shared/api'
@@ -259,5 +259,43 @@ describe('oś przy otwarciu widoku (D563, P6)', () => {
     expect(writes).toHaveLength(3)
     await click('three-next')
     expect(writes).toHaveLength(3)
+  })
+
+  it('efekt uruchomiony dwa razy (StrictMode) albo zdjęty przed działaniem: śledzenie treści dalej działa, oś ustawia się znowu', async () => {
+    const live: Array<{ cb: () => void; disconnected: boolean }> = []
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        rec: { cb: () => void; disconnected: boolean } = { cb: () => undefined, disconnected: false }
+        constructor(cb: () => void) {
+          this.rec.cb = cb
+          live.push(this.rec)
+        }
+        observe(): void {}
+        disconnect(): void {
+          this.rec.disconnected = true
+        }
+      }
+    )
+    try {
+      const writes: number[] = []
+      host = document.createElement('div')
+      host.style.overflowY = 'auto'
+      Object.defineProperty(host, 'scrollTop', { get: () => 0, set: (v: number) => void writes.push(v), configurable: true })
+      document.body.append(host)
+      root = createRoot(host)
+      vi.mocked(useWeekView).mockImplementation((date) => {
+        const week = weekStart(date)
+        return { view: weekViewOf(week, TODAY, weekDates(week).map((d) => ({ ...day(d, blocksOf(d)), wakeMin: 8 * 60 }))), failed: false }
+      })
+      await act(async () => root!.render(createElement(StrictMode, null, createElement(WeekPage))))
+      // Both runs put the axis; the one that stays follows the content.
+      expect(writes).toHaveLength(2)
+      expect(live.at(-1)!.disconnected).toBe(false)
+      await act(async () => live.at(-1)!.cb())
+      expect(writes).toHaveLength(3)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
