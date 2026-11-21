@@ -92,6 +92,15 @@ describe('idAfter – id nowego szablonu nigdy mniejsze od istniejących (wygryw
     expect(deep.length - 14).toBeGreaterThanOrEqual(8)
     expect(deep > 'zzzzzzzzzzzzz0zz').toBe(true)
     expect(idAfter(['zzz'], 'abcdefghijklmnop')).toBe('zzzabcdefgh')
+    // The greatest has „z” on all the places of `id` and a letter after them: the bump is on that letter – no growth with every new template.
+    const long = ['z'.repeat(16) + 'axxxxxxxx']
+    let id = ''
+    for (let n = 0; n < 20; n++) {
+      id = idAfter(long, '0'.repeat(16))
+      expect(id.length).toBe(25)
+      expect(id > long[0]!).toBe(true)
+      long[0] = id
+    }
     // A bump high up keeps the whole tail of the id: no growth.
     expect(idAfter(['b000000000000000'], '0123456789abcdef')).toBe('c123456789abcdef')
   })

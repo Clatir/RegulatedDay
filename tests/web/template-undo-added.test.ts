@@ -47,7 +47,8 @@ describe('undoAddedBlock – odwrotność dodania', () => {
   it('szablon stoi tak, jak zostawiło dodanie: zapis stanu sprzed (dokładna odwrotność)', async () => {
     const before = template([version('2026-01-01', [blk('old')])])
     const after = template([version('2026-01-01', [blk('old')]), version(FROM, [blk('old'), blk('new', { startMin: 700 })])])
-    records.set(REL, raw(after))
+    // The main process stamps the record it writes (`updatedAt`, `updatedBy`): the template still stands as the add left it.
+    records.set(REL, { ...raw(after), updatedAt: 1_700_000_000_000, updatedBy: 'komputer' })
     await undoAddedBlock('t1', FROM, 'new', added(before, after))
     expect(records.get(REL)).toEqual(raw(before))
     expect(toasts()).toEqual([])
@@ -78,13 +79,13 @@ describe('undoAddedBlock – odwrotność dodania', () => {
     ])
   })
 
-  it('blok skopiowany do późniejszej wersji (zmiana od późniejszej daty) schodzi ze wszystkich wersji od FROM', async () => {
+  it('blok skopiowany do późniejszej wersji (zmiana od późniejszej daty) schodzi ze wszystkich wersji, które go mają', async () => {
     const before = template([version('2026-01-01', [blk('old')])])
     const after = template([version('2026-01-01', [blk('old')]), version(FROM, [blk('old'), blk('new')])])
     records.set(REL, raw(template([version('2026-01-01', [blk('old')]), version(FROM, [blk('old'), blk('new', { name: 'X' })]), version('2026-12-24', [blk('old'), blk('new', { name: 'X' })])])))
     await undoAddedBlock('t1', FROM, 'new', added(before, after))
-    // The version of the add (a copy of the one before it, now) goes; the later one stays – only the block was taken out of it.
-    expect(stored().versions.map((v) => [v.from, v.blocks.map((b) => b.id)])).toEqual([['2026-01-01', ['old']], ['2026-12-24', ['old']]])
+    // Both versions that lost the block are what the one in force before them is – none stays.
+    expect(stored().versions.map((v) => [v.from, v.blocks.map((b) => b.id)])).toEqual([['2026-01-01', ['old']]])
   })
 
   it('wersja, która była przed dodaniem (od FROM), zostaje – zdejmowany jest tylko blok', async () => {
@@ -93,6 +94,63 @@ describe('undoAddedBlock – odwrotność dodania', () => {
     records.set(REL, raw(template([version(FROM, [blk('old'), blk('new', { name: 'X' })])])))
     await undoAddedBlock('t1', FROM, 'new', added(before, after))
     expect(stored().versions.map((v) => [v.from, v.blocks.map((b) => b.id)])).toEqual([[FROM, ['old']]])
+  })
+})
+
+describe('undoAddedBlock – kilka dodań, kopie wersji (jedna reguła na szablonie takim, jaki jest teraz)', () => {
+  // The only version starts later than the add's date: the add makes an empty version from FROM (nothing was in force then) – it must not stay.
+  const base = template([version('2026-12-01', [blk('old')])])
+  const one = template([version(FROM, [blk('n1')]), version('2026-12-01', [blk('old')])])
+  const two = template([version(FROM, [blk('n1'), blk('n2', { startMin: 700 })]), version('2026-12-01', [blk('old')])])
+  const only = (t: Template) => t.versions.map((v) => [v.from, v.blocks.map((b) => b.id)])
+
+  it('dwa dodania, dwa „Cofnij” – w kolejności dodań: po obu nie zostaje pusta wersja od FROM', async () => {
+    records.set(REL, raw(two))
+    await undoAddedBlock('t1', FROM, 'n1', added(base, one))
+    expect(only(stored())).toEqual([[FROM, ['n2']], ['2026-12-01', ['old']]])
+    await undoAddedBlock('t1', FROM, 'n2', added(one, two))
+    expect(only(stored())).toEqual([['2026-12-01', ['old']]])
+    expect(toasts()).toEqual([])
+  })
+
+  it('dwa dodania, dwa „Cofnij” – w odwrotnej kolejności: to samo', async () => {
+    records.set(REL, raw(two))
+    await undoAddedBlock('t1', FROM, 'n2', added(one, two))
+    // The second add undone as it stands: the template is as after the first add.
+    expect(only(stored())).toEqual([[FROM, ['n1']], ['2026-12-01', ['old']]])
+    await undoAddedBlock('t1', FROM, 'n1', added(base, one))
+    expect(only(stored())).toEqual([['2026-12-01', ['old']]])
+  })
+
+  it('dodanie, potem zmiana od późniejszej daty D2 (kopia wersji od FROM), „Cofnij”: ani wersja od FROM, ani jej kopia nie zostają puste', async () => {
+    const D2 = '2026-11-25'
+    records.set(REL, raw(template([version(FROM, [blk('n1')]), version(D2, [blk('n1')]), version('2026-12-01', [blk('old')])])))
+    await undoAddedBlock('t1', FROM, 'n1', added(base, one))
+    expect(only(stored())).toEqual([['2026-12-01', ['old']]])
+  })
+
+  it('kopia D2 ze zmienionym budżetem zostaje (z budżetem), tylko bez bloku; wersja od FROM znika; wersje bez bloku nietknięte', async () => {
+    const D2 = '2026-11-25'
+    records.set(REL, raw(template([version(FROM, [blk('n1')]), { ...version(D2, [blk('n1')]), budgetMin: 300 }, version('2026-12-01', [blk('old')])])))
+    await undoAddedBlock('t1', FROM, 'n1', added(base, one))
+    expect(stored().versions.map((v) => [v.from, v.blocks.map((b) => b.id), v.budgetMin])).toEqual([
+      [D2, [], 300],
+      ['2026-12-01', ['old'], null]
+    ])
+  })
+
+  it('wersja, która straciła blok i równa się obowiązującej przed nią, znika także poza FROM', async () => {
+    const before = template([version('2026-01-01', [blk('old')])])
+    const after = template([version('2026-01-01', [blk('old')]), version(FROM, [blk('old'), blk('n1')])])
+    records.set(REL, raw(template([version('2026-01-01', [blk('old')]), version(FROM, [blk('old'), blk('n1')]), version('2026-12-24', [blk('old'), blk('n1')])])))
+    await undoAddedBlock('t1', FROM, 'n1', added(before, after))
+    expect(only(stored())).toEqual([['2026-01-01', ['old']]])
+  })
+
+  it('rekord, którego nie da się sparsować (istnieje, ale to nie szablon): „nie da się teraz odczytać”, nie „bloku już nie ma”', async () => {
+    records.set(REL, { schema: 1, id: 't1' })
+    await undoAddedBlock('t1', FROM, 'n1', added(base, one))
+    expect(toasts()).toEqual([['Nie cofnięto – szablonu nie da się teraz odczytać (może go już nie ma).', 'error']])
   })
 })
 

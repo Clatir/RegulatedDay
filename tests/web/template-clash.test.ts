@@ -13,6 +13,8 @@ import { installEscape } from '@renderer/lib/escape'
 import { TemplatesPage } from '@renderer/features/templates/TemplatesPage'
 import { saveRecord, useData } from '@renderer/store/data'
 
+// The copy's id comes from `newId`: a small one (below every id of the folder) is raised – never smaller than an older template's.
+vi.mock('@shared/model/ids', async (orig) => ({ ...(await orig<typeof import('@shared/model/ids')>()), newId: vi.fn((length = 16) => '0'.repeat(length)) }))
 vi.mock('@renderer/store/data', async (orig) => ({
   ...(await orig<typeof import('@renderer/store/data')>()),
   saveRecord: vi.fn(async () => [{ status: 'applied' }])
@@ -79,6 +81,16 @@ describe('A7: dwa szablony na ten sam dzień tygodnia', () => {
     await click(item('Poranek'))
     expect(q('template-clash')).toBeNull()
     expect(q('template-unused')).toBeNull()
+  })
+})
+
+describe('A7: „Kopiuj” szablon', () => {
+  it('kopia nigdy nie ma id mniejszego niż istniejące (nie wygrywa z oryginałem po cichu)', async () => {
+    await open([t('mmmmmmmmmmmmmmmm', 'Oryginał', [3])])
+    await click(item('Oryginał'))
+    await click(q('template-copy'))
+    const copy = templateFrom(vi.mocked(saveRecord).mock.calls[0]![2] as RawRecord)!
+    expect(copy.id > 'mmmmmmmmmmmmmmmm').toBe(true)
   })
 })
 
