@@ -81,7 +81,7 @@ describe('„Skopiuj ten dzień do…” = okno dni szablonu (F6)', () => {
   const SOURCE = '2026-11-26'
   const model = { date: SOURCE, ctx: { plan: [] }, dayFile: null } as unknown as DayModel
 
-  it('ma pola Od i Do w DD.MM.RRRR; osiem cyfr staje się datą; dzień kopiowany nie liczy się do celów; kopia nie ma limitu dni', async () => {
+  it('ma pola Od i Do w DD.MM.RRRR; osiem cyfr staje się datą; dzień kopiowany nie liczy się do celów; wpisany zakres ma limit 366 dni', async () => {
     await mount(createElement(CopyDayDialog, { model, today: '2026-11-21', onClose: () => undefined }))
     const from = q('copy-dialog-from') as HTMLInputElement
     const to = q('copy-dialog-to') as HTMLInputElement
@@ -96,10 +96,11 @@ describe('„Skopiuj ten dzień do…” = okno dni szablonu (F6)', () => {
     // „3.01” works as in every field of a date: the nearest 3 January from today – 25.11 to 3.01 is 40 days, 39 without the day copied from.
     await type(to, '3.01')
     expect(q('copy-apply')!.textContent).toBe('Skopiuj (39)')
-    // The copy has no cap of its own as the drag in the grid has none (review 1, 7): a range of more than a year is taken.
+    // A range typed has the cap of „Zastosuj do…” (review 2): 366 days; 404 is refused, nothing stays chosen (the grid has no cap).
     await type(to, '3.01.2028')
-    expect(q('copy-dialog-count')!.textContent).not.toContain('Zakres dłuższy')
-    expect(q('copy-apply')!.textContent).toBe('Skopiuj (404)')
+    expect(q('copy-dialog-count')!.textContent).toContain('Zakres dłuższy niż 366 dni')
+    expect(q('copy-apply')!.textContent).toBe('Skopiuj')
+    expect((q('copy-apply') as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('zakres wpisany w polach to cele kopii: „Skopiuj” wysyła dni bez dnia kopiowanego', async () => {
@@ -151,6 +152,31 @@ describe('okno dni: pole błędne, puste, dzień kopiowany, minione (przegląd 1
     expect((q('copy-apply') as HTMLButtonElement).disabled).toBe(true)
   })
 
+  it('pole, które nie jest datą, czyści zaznaczenie: siatka, licznik i wołający zgodni z tym, czego pola nie pokazują', async () => {
+    await mount(createElement(CopyDayDialog, { model, today: '2026-11-21', onClose: () => undefined }))
+    await type(q('copy-dialog-from')!, '27.11.2026')
+    await type(q('copy-dialog-to')!, '28.11.2026')
+    expect(q('day-2026-11-27')!.getAttribute('aria-pressed')).toBe('true')
+    await type(q('copy-dialog-to')!, '28.11.202')
+    expect(q('day-2026-11-27')!.getAttribute('aria-pressed')).toBe('false')
+    expect(q('day-2026-11-28')!.getAttribute('aria-pressed')).toBe('false')
+    expect(q('copy-apply')!.textContent).toBe('Skopiuj')
+    expect(q('copy-dialog-count')!.textContent).toContain('Kliknij dzień')
+  })
+
+  it('ostrzeżenie kopii znika, gdy pole przestaje być datą: „Kopiuj mimo to” nie kopiuje na dni, których pola nie pokazują', async () => {
+    await mount(createElement(CopyDayDialog, { model, today: '2026-11-27', onClose: () => undefined }))
+    await type(q('copy-dialog-from')!, '25.11.2026')
+    await type(q('copy-dialog-to')!, '28.11.2026')
+    await click(q('copy-apply'))
+    expect(q('copy-anyway')).not.toBeNull()
+    await type(q('copy-dialog-to')!, '28.11.202')
+    expect(q('copy-anyway')).toBeNull()
+    expect(q('copy-ahead')).toBeNull()
+    expect((q('copy-apply') as HTMLButtonElement).disabled).toBe(true)
+    expect(copied.calls).toEqual([])
+  })
+
   it('opróżnione „Od” czyści zaznaczenie', async () => {
     await mount(createElement(CopyDayDialog, { model, today: '2026-11-21', onClose: () => undefined }))
     await type(q('copy-dialog-from')!, '25.11.2026')
@@ -180,12 +206,12 @@ describe('okno dni: pole błędne, puste, dzień kopiowany, minione (przegląd 1
     expect(q('copy-apply')!.textContent).toBe('Skopiuj (2)')
   })
 
-  it('„(minione: N)” liczy to samo co ostrzeżenie kopii: dni do dziś włącznie', async () => {
+  it('kopia: „(już trwały: N)” liczy to samo co jej ostrzeżenie – dni do dziś włącznie', async () => {
     await mount(createElement(CopyDayDialog, { model, today: '2026-11-27', onClose: () => undefined }))
     await type(q('copy-dialog-from')!, '25.11.2026')
     await type(q('copy-dialog-to')!, '28.11.2026')
     // 25, 27 (today) and 28; the 26th is the day copied from.
-    expect(q('copy-dialog-count')!.textContent).toBe('Wybrane: 3 dni (minione: 2)')
+    expect(q('copy-dialog-count')!.textContent).toBe('Wybrane: 3 dni (już trwały: 2)')
     await click(q('copy-apply'))
     expect(q('copy-warning')!.textContent).toContain('25.11.2026, 27.11.2026')
   })
@@ -220,6 +246,7 @@ describe('puste stany i opisy: szablon, seria, rutyna (F9)', () => {
     await mount(createElement(RoutinesPage))
     expect(document.body.textContent).toContain(THING_KINDS_HINT)
     expect(document.body.textContent!.split('kroki z czasem').length - 1).toBe(1)
+    expect(document.body.textContent).toContain('Nie ma jeszcze rutyn (np. poranna: woda, karmienie kota, prysznic).')
   })
 
   it('rutyna mówi, gdzie jest używana: szablony i serie z jej imieniem', async () => {
@@ -234,8 +261,15 @@ describe('puste stany i opisy: szablon, seria, rutyna (F9)', () => {
     const early = part('p1', '2026-01-01', '2026-06-30', 'r1', 'Wczesna')
     const late = part('p2', '2026-07-01', null, null, 'Późna')
     const nameOf = (s: Series) => s.versions[0]!.block.name ?? ''
-    expect(routineUses('r1', [], [early, late], nameOf, '2026-11-18').series).toEqual([])
-    expect(routineUses('r1', [], [early, { ...late, versions: [{ ...late.versions[0]!, block: { ...late.versions[0]!.block, routine: 'r1' } }] }], nameOf, '2026-11-18').series).toEqual(['Późna'])
+    // The routine in an earlier part, or in a part to come, is in use (removing it would leave a part without it): the root once, under its current part's name.
+    const usesLate = { ...late, versions: [{ ...late.versions[0]!, block: { ...late.versions[0]!.block, routine: 'r1' } }] } as Series
+    const future = part('p3', '2027-01-01', null, 'r1', 'Przyszła')
+    expect(routineUses('r1', [], [early, late], nameOf, '2026-11-18').series).toEqual(['Późna'])
+    expect(routineUses('r1', [], [early, usesLate], nameOf, '2026-11-18').series).toEqual(['Późna'])
+    expect(routineUses('r1', [], [late, future], nameOf, '2026-11-18').series).toEqual(['Późna'])
+    expect(routineUses('r1', [], [early, late, { ...series('z', 'r1'), archived: true }], nameOf, '2026-11-18').series).toEqual(['Późna'])
+    expect(routineUses('r1', [], [late], nameOf, '2026-11-18').series).toEqual([])
+    expect(routineUses('r1', [], [{ ...early, archived: true }, late], nameOf, '2026-11-18').series).toEqual([])
     expect(usesText({ templates: [], series: [] })).toBe('Nie jest użyta w żadnym szablonie ani serii.')
     useData.setState({ routines: [routine], templates: [t], series: [series('s1', 'r1')], rd: rdFrom({}), view })
     ;(window as unknown as { rd: unknown }).rd = {}

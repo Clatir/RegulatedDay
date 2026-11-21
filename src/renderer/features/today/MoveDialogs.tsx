@@ -15,6 +15,7 @@ import { isSaved } from '../../store/data'
 import { useBusy } from '../../lib/busy'
 import { DaysDialog } from '../calendar/DaysDialog'
 import { monthOf } from '../calendar/MonthGrid'
+import { APPLY_DAYS_MAX } from '../templates/applyDays'
 import { tellMoved } from '../week/weekActions'
 import { copyDayTo, moveDayBlock } from './dayActions'
 
@@ -126,7 +127,7 @@ export function CopyDayDialog({ model, today, onClose }: { model: DayModel; toda
             <button type="button" className="btn" onClick={() => setWarn(false)} data-testid="copy-back">
               Anuluj
             </button>
-            <button type="button" className="btn" disabled={busy} onClick={() => void copy(targets)} data-testid="copy-anyway">
+            <button type="button" className="btn" disabled={busy || !targets.length} onClick={() => void copy(targets)} data-testid="copy-anyway">
               Kopiuj mimo to
             </button>
             <button type="button" className="btn btn-accent" disabled={!ahead.length || busy} onClick={() => void copy(ahead)} data-testid="copy-ahead">
@@ -136,6 +137,8 @@ export function CopyDayDialog({ model, today, onClose }: { model: DayModel; toda
         ) : undefined
       }
       past={(d) => d <= today}
+      pastLabel="już trwały"
+      max={APPLY_DAYS_MAX}
     />
   )
 }

@@ -5,7 +5,7 @@
  * replaces the selection, the selection in the month shows its first and last day in the fields.
  */
 import { useState, type ComponentProps, type ReactNode } from 'react'
-import { daysFromTo, dmy, parseDmy, typedDmy } from '@shared/dateInput'
+import { daysFromTo, dmy, isBadDmy, parseDmy, typedDmy } from '@shared/dateInput'
 import { countLabel } from '@shared/format'
 import { Dialog } from '../../components/Dialog'
 import { MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from './MonthGrid'
@@ -15,7 +15,7 @@ const TYPED_MAX = 3660
 
 /** A field of a date: eight digits become the date (DD.MM.RRRR) as soon as they are typed; a text that is no date is marked. */
 function DmyField({ label, value, today, onChange, testId }: { label: string; value: string; today: string; onChange: (v: string) => void; testId: string }) {
-  const bad = value.trim() !== '' && parseDmy(value, today) == null
+  const bad = isBadDmy(value, today)
   return (
     <label className="flex items-center gap-2 text-[12.5px]">
       <span className="text-muted">{label}</span>
@@ -45,6 +45,7 @@ export function DaysDialog({
   okTestId,
   max,
   past: isPast,
+  pastLabel = 'minione',
   month: firstMonth,
   skip,
   cell,
@@ -66,6 +67,8 @@ export function DaysDialog({
   max?: number
   /** Which days count as „minione” in the line below (a day before today by default; the copy: the days its warning names, today included). */
   past?: (date: string) => boolean
+  /** What the line below calls those days: „minione” by default (the copy: „już trwały”). */
+  pastLabel?: string
   /** The month shown first (the one of today by default). */
   month?: string
   /** A day that is never a target (the day copied from): it may stay marked in the month, it is not counted nor picked. */
@@ -97,9 +100,10 @@ export function DaysDialog({
     const a = parseDmy(f, today)
     const b = parseDmy(t, today)
     setTooLong(false)
-    // Nothing in „Od”: nothing chosen (the old selection would stay behind an empty field).
-    if (!f.trim()) return chosen([])
-    if (!a || (t.trim() && !b)) return
+    // Nothing in „Od”, or a field that is no date: nothing chosen – the old selection would stay behind fields that do not show it (the grid, the
+    // count and the caller's own state – the copy's warning – would go on with days no field names).
+    if (!f.trim() || isBadDmy(f, today) || isBadDmy(t, today)) return chosen([])
+    if (!a) return
     // Counted before the days are listed (without the day `skip`): a range of centuries is never built.
     const limit = max ?? TYPED_MAX
     const span = Math.abs(Date.parse(b ?? a) - Date.parse(a)) / 86_400_000 + 1
@@ -122,9 +126,6 @@ export function DaysDialog({
   }
   const list = listOf(sel)
   const past = list.filter(isPast ?? ((d) => d < today)).length
-  // A field that is no date (a text typed half way): the selection of the moment before is not taken (nothing is applied to a day not asked for).
-  const bad = (v: string) => v.trim() !== '' && parseDmy(v, today) == null
-  const invalid = bad(from) || bad(to)
   const [y, m] = month.split('-')
   return (
     <Dialog
@@ -136,12 +137,12 @@ export function DaysDialog({
         footer ?? (
           <>
             <span className="mr-auto text-[12px] text-muted" data-testid={`${testId}-count`}>
-              {tooLong ? `Zakres dłuższy niż ${max ?? TYPED_MAX} dni – wybierz krótszy.` : list.length ? `Wybrane: ${countLabel(list.length, 'dzień', 'dni', 'dni')}${past ? ` (minione: ${past})` : ''}` : 'Kliknij dzień; Ctrl+klik dodaje, Shift+klik – zakres.'}
+              {tooLong ? `Zakres dłuższy niż ${max ?? TYPED_MAX} dni – wybierz krótszy.` : list.length ? `Wybrane: ${countLabel(list.length, 'dzień', 'dni', 'dni')}${past ? ` (${pastLabel}: ${past})` : ''}` : 'Kliknij dzień; Ctrl+klik dodaje, Shift+klik – zakres.'}
             </span>
             <button type="button" className="btn" onClick={onClose}>
               Anuluj
             </button>
-            <button type="button" className="btn btn-accent" disabled={!list.length || busy || tooLong || invalid} onClick={() => onPick(list)} data-testid={okTestId ?? `${testId}-ok`}>
+            <button type="button" className="btn btn-accent" disabled={!list.length || busy || tooLong} onClick={() => onPick(list)} data-testid={okTestId ?? `${testId}-ok`}>
               {verb}
               {list.length ? ` (${list.length})` : ''}
             </button>

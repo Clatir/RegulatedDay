@@ -141,6 +141,9 @@ export function isoDay(y: number, mo: number, d: number): string | null {
   return `${y}-${pad2(mo)}-${pad2(d)}`
 }
 
+/** A year with fewer than four digits (or 0000) is no year of a date: the message says it, not „Nie ma takiego dnia.”. */
+const yearRefusal = (y: number): Parsed<never> | null => (y < 1000 || y > 9999 ? refuse('Rok musi mieć cztery cyfry.') : null)
+
 /**
  * A date typed (spec „Czas i długość”, D565 P24 – the same in every field of a date): „21.10.2026”, with dots, dashes, slashes or
  * spaces (`21-10-2026`, `21/10/2026`), one-digit day or month, eight digits `21102026`, `2026-10-21`, or without its year – „3.01”
@@ -151,12 +154,14 @@ export function parseDate(text: string, today: string, o: { past?: boolean } = {
   const t = text.trim()
   if (!t) return refuse('Wpisz datę, np. 21.10.2026 albo 3.01.')
   let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t)
-  if (m) return isoDay(Number(m[1]), Number(m[2]), Number(m[3])) ? ok(isoDay(Number(m[1]), Number(m[2]), Number(m[3]))!) : refuse('Nie ma takiego dnia.')
+  if (m) return yearRefusal(Number(m[1])) ?? (isoDay(Number(m[1]), Number(m[2]), Number(m[3])) ? ok(isoDay(Number(m[1]), Number(m[2]), Number(m[3]))!) : refuse('Nie ma takiego dnia.'))
   m = /^(\d{2})(\d{2})(\d{4})$/.exec(t) ?? /^(\d{1,2})[./ -](\d{1,2})(?:[./ -](\d{4}))?\.?$/.exec(t)
   if (!m) return refuse('Nie rozumiem tej daty – wpisz np. 21.10.2026 albo 3.01.')
   const d = Number(m[1])
   const mo = Number(m[2])
   if (m[3]) {
+    const bad = yearRefusal(Number(m[3]))
+    if (bad) return bad
     const day = isoDay(Number(m[3]), mo, d)
     return day ? ok(day) : refuse('Nie ma takiego dnia.')
   }

@@ -14,10 +14,10 @@ const regen = (towardMin: number, requiredMin: number, reached = towardMin >= re
 
 describe('tytuł tygodnia i nagłówki kolumn', () => {
   it('„3–9.11.2026”; na przełomie miesięcy i lat z obiema datami', () => {
-    expect(weekTitle('2026-11-02')).toBe('2–8.11.2026')
-    expect(weekTitle('2026-11-09')).toBe('9–15.11.2026')
-    expect(weekTitle('2026-10-26')).toBe('26.10–1.11.2026')
-    expect(weekTitle('2026-12-28')).toBe('28.12.2026–3.01.2027')
+    expect(weekTitle('2026-11-02')).toBe('02–08.11.2026')
+    expect(weekTitle('2026-11-09')).toBe('09–15.11.2026')
+    expect(weekTitle('2026-10-26')).toBe('26.10–01.11.2026')
+    expect(weekTitle('2026-12-28')).toBe('28.12.2026–03.01.2027')
   })
 
   it('dzień i data kolumny; nazwa miesiąca', () => {

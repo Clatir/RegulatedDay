@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { dayOfText, type AllDayEvent } from '@shared/model/allDay'
 import { ofLabel, parseDate, plDate, plDateTime, WEEKDAY_SHORT } from '@shared/format'
-import { parseDmy } from '@shared/dateInput'
+import { isBadDmy, parseDmy } from '@shared/dateInput'
 import { stepsProgress } from '@shared/model/steps'
 
 const TODAY = '2026-11-21'
@@ -78,6 +78,28 @@ describe('rok spoza czterocyfrowego zakresu nie jest datą (przegląd 1)', () =>
     expect(parseDmy('01.01.1899', TODAY)).toBeNull()
     expect(parseDmy('01.01.3000', TODAY)).toBeNull()
     expect(parseDmy('01.01.1900', TODAY)).toBe('1900-01-01')
+  })
+})
+
+describe('rok spoza zakresu ma własny komunikat (przegląd 2)', () => {
+  const message = (t: string): string | null => {
+    const r = parseDate(t, TODAY)
+    return r.ok ? null : r.message
+  }
+  it('„Rok musi mieć cztery cyfry.” – w każdej postaci daty; zły dzień zostaje „Nie ma takiego dnia.”', () => {
+    for (const t of ['01.01.0500', '01010500', '0500-01-01', '1.1.0999']) expect(message(t)).toBe('Rok musi mieć cztery cyfry.')
+    expect(message('31.02.2027')).toBe('Nie ma takiego dnia.')
+    expect(message('31.02')).toBe('Nie ma takiego dnia.')
+  })
+
+  it('jeden pomocnik „to nie jest data” pól Od i Do', () => {
+    expect(isBadDmy('', TODAY)).toBe(false)
+    expect(isBadDmy('  ', TODAY)).toBe(false)
+    expect(isBadDmy('19.11.2026', TODAY)).toBe(false)
+    expect(isBadDmy('3.01', TODAY)).toBe(false)
+    expect(isBadDmy('19.11.202', TODAY)).toBe(true)
+    expect(isBadDmy('01.01.0500', TODAY)).toBe(true)
+    expect(isBadDmy('jutro', TODAY)).toBe(true)
   })
 })
 

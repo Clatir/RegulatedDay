@@ -16,6 +16,9 @@ export function parseDmy(text: string, today: string): string | null {
   return year < 1900 || year > 2999 ? null : r.value
 }
 
+/** A field that holds text which is no date (an empty one is not bad – it is nothing chosen): marked in the window of days and never taken. */
+export const isBadDmy = (text: string, today: string): boolean => text.trim() !== '' && parseDmy(text, today) == null
+
 /** What the field shows while typing: eight digits that make a date become DD.MM.RRRR at once, anything else stays as typed. */
 export function typedDmy(text: string): string {
   if (!/^\d{8}$/.test(text.trim())) return text

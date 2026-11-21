@@ -13,14 +13,19 @@ export interface RoutineUses {
 
 /**
  * The names of the templates and series whose blocks use the routine `id` (an archived template too – it comes back with its blocks; a removed series is gone);
- * each name once. A series cut into parts is one: only the part the list „Serie” shows (`currentSeries` of `today`) counts. `seriesName` – a series
- * by its block's name, as the list in „Szablony” has it.
+ * each name once. A series cut into parts is one: it is in use when any of its parts that has not been removed uses the routine (one in the past or
+ * to come too – removing the routine would leave that part without it), and it is named as the list „Serie” names it – by its current part
+ * (`currentSeries` of `today`); `seriesName` – a series by its block's name, as the list in „Szablony” has it.
  */
 export function routineUses(id: string, templates: readonly Template[], series: readonly Series[], seriesName: (s: Series) => string, today: string): RoutineUses {
   const names = (list: string[]) => [...new Set(list)]
   return {
     templates: names(templates.filter((t) => t.versions.some((v) => v.blocks.some((b) => b.routine === id))).map((t) => t.name)),
-    series: names(currentSeries(series, today).filter((s) => s.versions.some((v) => v.block.routine === id)).map(seriesName))
+    series: names(
+      currentSeries(series, today)
+        .filter((current) => series.some((s) => !s.archived && s.root === current.root && s.versions.some((v) => v.block.routine === id)))
+        .map(seriesName)
+    )
   }
 }
 

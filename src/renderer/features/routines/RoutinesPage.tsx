@@ -94,7 +94,7 @@ export function RoutinesPage() {
         )}
       </div>
       <div className="min-w-0 flex-1 overflow-y-auto p-4">
-        {current ? <Editor routine={current} onRemoved={() => setSelected(null)} /> : <EmptyState why={routines.length ? 'Wybierz rutynę z listy.' : `Nie ma jeszcze rutyn. ${THING_KINDS_HINT} Np. poranna: woda, karmienie kota, prysznic.`} action={{ label: '+ Rutyna', run: () => void create() }} />}
+        {current ? <Editor routine={current} onRemoved={() => setSelected(null)} /> : <EmptyState why={routines.length ? 'Wybierz rutynę z listy.' : `Nie ma jeszcze rutyn (np. poranna: woda, karmienie kota, prysznic). ${THING_KINDS_HINT}`} action={{ label: '+ Rutyna', run: () => void create() }} />}
       </div>
     </div>
   )

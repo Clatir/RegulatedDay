@@ -15,10 +15,10 @@ import type { WeekPush } from '../../store/weekPush'
 
 export const WEEKDAY_FULL = WEEKDAY_NAMES
 
-const day = (d: string) => String(Number(d.slice(8, 10)))
+const day = (d: string) => d.slice(8, 10)
 const month = (d: string) => d.slice(5, 7)
 
-/** The week from Monday `week`: „3–9.11.2026”, „30.11–6.12.2026”, „28.12.2026–3.01.2027”. */
+/** The week from Monday `week`: „03–09.11.2026”, „30.11–06.12.2026”, „28.12.2026–03.01.2027” (two digits each, as `plDayMonth`). */
 export function weekTitle(week: string): string {
   const end = addDays(week, 6)
   if (week.slice(0, 4) !== end.slice(0, 4)) return `${day(week)}.${month(week)}.${week.slice(0, 4)}–${day(end)}.${month(end)}.${end.slice(0, 4)}`
