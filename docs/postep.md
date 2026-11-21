@@ -122,7 +122,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
       | UX11 | scalone 21.11 (81a230b, konflikt: sekcja paska w `MachineSections.tsx` od UX14): T2123–T2128, odbiór UX11.1–UX11.4 (PX4 poprawione); przegląd xhigh 3 rundy; uwagi na później: po nieudanym położeniu ptaszek menu zaznaczony (zamiar), wyłączenie schowanego „×” – dwa kliknięcia |
       | UX9 | scalone 21.11 (c76f0b9, konflikt `TodayPage.tsx` z UX17): T2040–T2045, odbiór UX9.1–UX9.5; przegląd high 4 rundy; uwagi na później: karty rutyn niewidoczne przy otwartym panelu bloku (jest linia „czeka na kroki”), test linii rutyny bloku otwartego przez konstrukcję |
       | UX18 | scalone 21.11 (71abbd8, konflikt `BlockEditor.tsx` z UX9): T2260–T2262, odbiór UX18.1–UX18.4; przegląd high 4 rundy; uwagi na później: Esc zamykający najwyższy dymek błędu, stos dymków może chwilowo przekroczyć 4 |
-      | UX12 (`ux-b`), UX15 (`ux-d`, runda 1), UX19 (`ux-a`), UX13 (`ux-c`) | w pracy |
+      | UX15 | scalone 21.11 (konflikty `ui.tsx` Toggle z UX11, `wizard.spec.ts`): T2360–T2365, odbiór UX15.1–UX15.5; przegląd high 2 rundy; uwagi na później: „?” w kreatorze nie działa (straż jak Ctrl K), Ctrl+Z do listy skrótów po UX19, krótkie własne podpowiedzi pól na granicy testu 20 znaków |
+      | UX12 (`ux-b`), UX19 (`ux-a`), UX13 (`ux-c`) | w pracy |
       | UX9, UX11–UX13, UX15, UX17–UX19 | do zrobienia; szkic CHANGELOG – w raportach wykonawców (scratchpad sesji), sekcja 1.34.0 na końcu |
 
 ## Do odbioru na Windows

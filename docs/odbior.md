@@ -338,6 +338,11 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX18.2 „Historia” sprawy, szablonu, rutyny i serii (1.34.0)
    - [ ] UX18.3 Filtr i szukanie w Historii (1.34.0)
    - [ ] UX18.4 Dymek błędu do zamknięcia „×” (1.34.0)
+   - [ ] UX15.1 Opis przy każdym polu Ustawień i „?” przy pojęciach (1.34.0)
+   - [ ] UX15.2 Okno „Jak to działa” z Ctrl K i „?” (1.34.0)
+   - [ ] UX15.3 Lista skrótów pod F1 i „Skróty” w menu (1.34.0)
+   - [ ] UX15.4 Kreator – „Zakończ z domyślnymi” i podsumowanie z krokami (1.34.0)
+   - [ ] UX15.5 Pokój i lista „Pierwszy dzień” (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3515,6 +3520,42 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** wywołaj błąd zapisu albo folderu (np. folder chwilowo niedostępny); osobno błąd pola (budżet „17h”); przy kilku błędach usuń coś (dymek „Cofnij”).
 - **Oczekiwany efekt:** błąd zapisu stoi do „×”, ten sam się nie dubluje; błąd pola znika sam po kilku sekundach; „Cofnij” nie znika przez nadmiar dymków.
 - **Nie przechodzi, gdy:** błąd zapisu znika sam; „×” zamyka szkic otwartego bloku; „Cofnij” wypchnięte przed czasem.
+
+
+#### UX15.1 Opis przy każdym polu Ustawień i „?” przy pojęciach
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux15-hints.test.ts` (każde pole ze spisu ma opis). Ty: czytelność.
+- **Jak sprawdzić:** przejrzyj każdą sekcję Ustawień; kliknij „?” przy rezerwie, buforze, maksimum.
+- **Oczekiwany efekt:** pod każdym polem zdanie, co robi; „?” otwiera „Jak to działa” na tym pojęciu.
+- **Nie przechodzi, gdy:** pole ma tylko nazwę; „?” nic nie otwiera; opis kreatora i Ustawień różni się słowami.
+
+#### UX15.2 Okno „Jak to działa” z Ctrl K i „?”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux15-help.test.ts`. Ty: treść.
+- **Jak sprawdzić:** Ctrl K → „twardy koniec”, Enter; potem „Jak to działa” z Ctrl K.
+- **Oczekiwany efekt:** okno otwiera się na tym pojęciu (podświetlone); są pule G·E·B·C, rezerwa, granica, maksimum, pula projektów, twardy koniec, nuty, dzień ochronny, „bez danych”; Esc zamyka.
+- **Nie przechodzi, gdy:** okno otwiera się na górze listy; brakuje pojęcia; Ctrl K nie ma grupy „Pojęcia”.
+
+#### UX15.3 Lista skrótów pod F1 i „Skróty” w menu
+- [ ] Odebrane
+- **Automatycznie:** E2E `search` (F1, „Skróty” w menu, Esc). Ty: rzut oka.
+- **Jak sprawdzić:** F1; drugi raz F1; „Skróty (F1)” u dołu menu bocznego; F1 przy otwartym oknie dialogowym.
+- **Oczekiwany efekt:** lista skrótów (także PgUp/PgDn, Home, F1, Del, Shift+×), drugi F1 zamyka; przy otwartym oknie dialogowym nic; w Ustawieniach listy już nie ma.
+- **Nie przechodzi, gdy:** F1 otwiera listę nad dialogiem albo kreatorem; brakuje skrótu.
+
+#### UX15.4 Kreator – „Zakończ z domyślnymi” i podsumowanie z krokami
+- [ ] Odebrane
+- **Automatycznie:** E2E `wizard`, `tests/web/ux15-wizard.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** kreator na nowym folderze: folder → „to pierwszy komputer” → „Zakończ z domyślnymi”; osobno przejdź do podsumowania i kliknij „Zmień · Osoby”.
+- **Oczekiwany efekt:** dane zapisane z domyślnymi, „Dziś” otwarte; „Zmień · <krok>” wraca do kroku; „Zajęcia stacjonarne” i „Przypnij w OneDrive” brzmią jak w Ustawieniach.
+- **Nie przechodzi, gdy:** przycisk już na kroku folderu; nic nie zapisuje albo zapisuje dwa razy; link prowadzi do złego kroku.
+
+#### UX15.5 Pokój i lista „Pierwszy dzień”
+- [ ] Odebrane
+- **Tylko Ty:** pierwszy start po kreatorze.
+- **Jak sprawdzić:** po kreatorze pierwszego komputera; w Pokoju najedź na dzień „Ostatnich dni”.
+- **Oczekiwany efekt:** lista „Pierwszy dzień” z czterema drogami, „Zamknij” ją chowa; w Pokoju nota o nutach z „?”, po najechaniu – znaczenie statusu dnia.
+- **Nie przechodzi, gdy:** lista wraca po „Zamknij”; kolejny komputer ją dostaje; „?” w nocie nic nie otwiera.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
