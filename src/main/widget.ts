@@ -272,7 +272,7 @@ export class WidgetEngine {
   /** The causes holding now: closing the panel closes all of them (the marker never comes back for another of them). */
   private causesNow: VariantCause[] = []
   /** The open panel of variants – one for every window (the main process owns it): its cause and its variants. */
-  private panel: { cause: VariantCause | null; variants: Variant[] } | null = null
+  private panel: { cause: VariantCause | null; variants: Variant[]; by: 'main' | 'panel' | 'bar' } | null = null
   /**
    * The lines of changes of the plan, each with its own „Cofnij” for 15 min (line `moved:<kind>`): „Przestawiono: …” after
    * a variant (D313, T502) and „Przesunięto N bloków” after blocks pushed apart in the main window (D367). A variant
@@ -569,7 +569,12 @@ export class WidgetEngine {
     }
     this.markerNow = markerCause(causes, { shown: this.markerShown, done: this.markerDone, quiet, lastQuiet: this.lastQuiet, now })
     if (this.markerNow) this.markerShown.add(this.markerNow.id)
-    v.variants = { marker: !!this.markerNow && !v.hidden && !v.night, open: this.panel && !v.hidden ? this.panel.variants.map((x) => ({ id: x.id, label: x.label, ...(x.details?.length ? { details: x.details } : {}) })) : null }
+    v.variants = {
+      marker: !!this.markerNow && !v.hidden && !v.night,
+      open: this.panel && !v.hidden ? this.panel.variants.map((x) => ({ id: x.id, label: x.label, ...(x.details?.length ? { details: x.details } : {}) })) : null,
+      // Who opened it – said also while the view hides it (the icon's panel closes its own at its next opening, C8).
+      ...(this.panel ? { by: this.panel.by } : {})
+    }
     for (const [kind, mv] of [...this.moved]) if (mv.until <= mono) this.moved.delete(kind)
     // The newest first; after every line of the day (`linesLast`): the bar shows one of them at most, the other waits in
     // „⋯” with its „Cofnij” (`barLines`).
@@ -627,7 +632,7 @@ export class WidgetEngine {
    * energię” before its last „Zostaw” when today's order can clearly raise the lowest energy (D369, D374, T612) – also without
    * a cause (then with „Zostaw plan”). Neither – the plan fits.
    */
-  private async openVariants(): Promise<void> {
+  private async openVariants(from: ViewKind): Promise<void> {
     const m = this.model
     const names = this.names
     if (!m || !names) return
@@ -642,7 +647,8 @@ export class WidgetEngine {
     }
     const variants = cause ? variantsFor(m.ctx, m.state, cause, nameOf) : [keepPlan(m.ctx, m.state)]
     if (order) variants.splice(variants.length - 1, 0, order)
-    this.panel = { cause, variants }
+    // The window that asked (the sound's and the quick window never do): the icon's panel closes only its own (C8).
+    this.panel = { cause, variants, by: from === 'panel' || from === 'bar' ? from : 'main' }
     return this.refresh()
   }
 
@@ -1070,7 +1076,7 @@ export class WidgetEngine {
       }
       case 'variants': {
         const [what, which] = (arg ?? '').split('|')
-        if (what === 'open') return this.openVariants()
+        if (what === 'open') return this.openVariants(from)
         if (what === 'pick') return this.pickVariant(which)
         if (what === 'close') {
           this.panel = null

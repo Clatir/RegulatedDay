@@ -743,16 +743,10 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
   const beat = usePulse(pulseClass(view.warn, pulse, mode, quiet), `${view.block?.name ?? ''}|${view.block?.endsAt ?? ''}`)
   // The panel of variants belongs to the main process (D313): one for every window, open while the view has it.
   const variantsOpen = view.variants.open != null
-  /** The panel of variants was opened by a click of this bar (the icon's panel closes it at its next opening, C8). */
-  const variantsHere = useRef(false)
-  useEffect(() => {
-    if (!variantsOpen) variantsHere.current = false
-  }, [variantsOpen])
   const toggle = (u: Exclude<Unfold, null>) => {
     // The field of the quick capture opened (not closed): it takes the keys at its mount.
     if (u === 'quick') quickFocus.current = unfold !== 'quick'
     if (u === 'variants') {
-      variantsHere.current = !variantsOpen
       act('variants', variantsOpen ? 'close' : 'open')
       setUnfold(null)
       return
@@ -793,10 +787,9 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
     if (foldedFor.current === opening) return
     foldedFor.current = opening
     setUnfold(null)
-    // The panel of variants is the main process's, one for every window: closed when this bar opened it – never one the
-    // main window's bar has open now.
-    if (variantsOpen && variantsHere.current) act('variants', 'close')
-    variantsHere.current = false
+    // The panel of variants is the main process's, one for every window: closed when the icon's panel opened it (the main
+    // process says who – also while „Odcinam się” hides it), never one the main window's bar has open now.
+    if (mode === 'panel' && view.variants.by === 'panel') act('variants', 'close')
   }, [opening])
   // The title typed into the field of the quick capture: the bar's own, so it stays when the layout changes (T763) – and
   // only then: the field closed (Esc, „+”, saved), it is gone (T767).

@@ -260,21 +260,30 @@ describe('panel ikony – nagłówek i stopka (P13 wariant A, C1, C7)', () => {
     expect(rd.showMain).toHaveBeenCalledTimes(1)
   })
 
-  it('pasek nie na ekranie (schowany „×”, wyłączony, bez pomocnika, „Odcinam się”) – „Pasek pulpitu: pokaż”, nigdy „schowaj”', async () => {
+  it('pasek nie na ekranie (schowany „×”, wyłączony, bez pomocnika) – „Pasek pulpitu: pokaż”, nigdy „schowaj”', async () => {
     act(() => useWidget.setState({ view: { ...dayView(), barShown: false, barClosed: true } }))
     await render(createElement(PanelApp))
     expect(q('panel-bar-toggle')!.textContent).toBe('▣ Pasek pulpitu: pokaż')
     click(q('panel-bar-toggle')!)
     expect(rd.barAction.mock.calls).toEqual([['showBar']])
-    for (const view of [
-      { ...dayView(), barShown: false, barNote: 'Pasek pulpitu ukryty: pomocnik nie działa' },
-      { ...dayView(), barShown: false, hidden: true, stateLine: 'Odcinam się od 10:00' }
-    ]) {
-      act(() => useWidget.setState({ view }))
-      expect(q('panel-bar-toggle')!.textContent).toBe('▣ Pasek pulpitu: pokaż')
-    }
+    act(() => useWidget.setState({ view: { ...dayView(), barShown: false, barNote: 'Pasek pulpitu ukryty: pomocnik nie działa' } }))
+    expect(q('panel-bar-toggle')!.textContent).toBe('▣ Pasek pulpitu: pokaż')
     act(() => useWidget.setState({ view: dayView() }))
     expect(q('panel-bar-toggle')!.textContent).toBe('▣ Pasek pulpitu: schowaj')
+  })
+
+  it('„Odcinam się”: przycisk paska w stopce nieaktywny – „Pasek wróci po „Wracam””, kliknięcie nic nie robi', async () => {
+    act(() => useWidget.setState({ view: { ...dayView(), barShown: false, hidden: true, stateLine: 'Odcinam się od 10:00' } }))
+    await render(createElement(PanelApp))
+    const button = q('panel-bar-toggle') as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(button.textContent).toBe('▣ Pasek wróci po „Wracam”')
+    expect(button.getAttribute('aria-label')).toBe('Pasek wróci po „Wracam”')
+    click(button)
+    expect(rd.barAction).not.toHaveBeenCalled()
+    expect(rd.showMain).not.toHaveBeenCalled()
+    act(() => useWidget.setState({ view: dayView() }))
+    expect((q('panel-bar-toggle') as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('tytuł nagłówka, odstępy i „·” stopki to nie wolne pole – chybienie obok przycisku nie otwiera okna głównego', async () => {
@@ -378,29 +387,44 @@ describe('panel otwarty ponownie – nic rozwiniętego sprzed schowania (C8)', (
     expect(host!.querySelector<HTMLInputElement>('[data-testid="bar-quick-title"]')?.value).toBe('Kupić mleko')
   })
 
-  it('panel wariantów otwarty w panelu przed schowaniem – nowe otwarcie go zamyka; poproszony przy otwartym – zostaje', async () => {
-    const withVariants = { ...dayView(), variants: { marker: true, open: [{ id: 'keep', label: 'Zostaw plan' }] } }
+  const open = [{ id: 'keep', label: 'Zostaw plan' }]
+
+  it('panel wariantów otwarty przez panel ikony – nowe otwarcie go zamyka; poproszony przy otwartym – zostaje', async () => {
+    act(() => useWidget.setState({ view: { ...dayView(), variants: { marker: true, open, by: 'panel' } } }))
+    await render(createElement(PanelApp))
+    await opened(false)
+    expect(acts()).toEqual([])
+    await opened()
+    expect(acts()).toEqual(['variants|close'])
+    // Closed already: a new opening asks nothing.
+    act(() => useWidget.setState({ view: dayView() }))
+    await opened()
+    expect(acts()).toEqual(['variants|close'])
+  })
+
+  it('kliknięte w panelu, ale odmówione („Plan się mieści”), potem otwarte w oknie głównym – otwarcie panelu ikony ich nie zamyka', async () => {
     act(() => useWidget.setState({ view: { ...dayView(), variants: { marker: true, open: null } } }))
     await render(createElement(PanelApp))
     await opened()
     click(q('bar-variants')!)
-    act(() => useWidget.setState({ view: withVariants }))
-    await opened(false)
+    // The main process refused (no panel): the view stays without one; later the main window opens them.
+    act(() => useWidget.setState({ view: { ...dayView(), note: { text: 'Plan się mieści – nie ma czego przestawiać.', left: 6_000 }, variants: { marker: true, open: null } } }))
+    act(() => useWidget.setState({ view: { ...dayView(), variants: { marker: true, open, by: 'main' } } }))
+    await opened()
+    await opened()
     expect(acts()).toEqual(['variants|open'])
-    await opened()
-    expect(acts()).toEqual(['variants|open', 'variants|close'])
-    // Closed already: a new opening asks nothing.
-    act(() => useWidget.setState({ view: dayView() }))
-    await opened()
-    expect(acts()).toEqual(['variants|open', 'variants|close'])
   })
 
-  it('panel wariantów otwarty w oknie głównym – otwarcie panelu ikony go nie zamyka (jeden panel dla wszystkich okien)', async () => {
-    act(() => useWidget.setState({ view: { ...dayView(), variants: { marker: true, open: [{ id: 'keep', label: 'Zostaw plan' }] } } }))
+  it('„Odcinam się” chowa warianty otwarte przez panel (zostają w procesie głównym) – nowe otwarcie i tak je zamyka, nie wracają po „Wracam”', async () => {
+    act(() => useWidget.setState({ view: { ...dayView(), variants: { marker: true, open, by: 'panel' } } }))
     await render(createElement(PanelApp))
     await opened()
+    expect(acts()).toEqual(['variants|close'])
+    rd.widgetAction.mockClear()
+    // Hidden by the rule: the view shows none, the main process still holds them (by the panel).
+    act(() => useWidget.setState({ view: { ...dayView(), hidden: true, stateLine: 'Odcinam się od 10:00', variants: { marker: false, open: null, by: 'panel' } } }))
     await opened()
-    expect(acts()).toEqual([])
+    expect(acts()).toEqual(['variants|close'])
   })
 
   it('pasek, który nie jest w panelu, nie zwija się bez otwarcia (zmiana widoku nic nie zwija)', async () => {

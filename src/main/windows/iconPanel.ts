@@ -145,7 +145,8 @@ export class IconPanel {
     this.win.setContentProtection(this.d.hideFromCapture())
     this.openedAt = Date.now()
     this.touchedAt = this.openedAt
-    this.unfolded = false
+    // A new opening: its page folds (C8). Asked again while open: nothing folds – what is unfolded keeps the 60 s from running.
+    if (reopened) this.unfolded = false
     // Said at every opening (also without a line); only one of a hidden panel folds what stayed unfolded when it hid (C8) –
     // asked again while open (a notification's click), what you unfolded or typed now stays.
     const opening: PanelOpening = { target, reopened }

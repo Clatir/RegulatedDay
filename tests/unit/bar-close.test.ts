@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ BrowserWindow: class {}, shell: {} }))
 
-const { barBackWithMain, barCloseOf, barFromPanel } = await import('../../src/main/windows/desktopBar')
+const { barBackWithMain, barCloseOf, barFromPanel, BarSeen } = await import('../../src/main/windows/desktopBar')
 
 describe('„×” paska pulpitu', () => {
   it('„×” chowa pasek, z Shift kończy aplikację', () => {
@@ -57,5 +57,38 @@ describe('„▣ Pasek pulpitu: pokaż / schowaj” w stopce panelu (D564 P13)',
         expect(r.why).toContain('odmowa')
       }
     expect(barFromPanel('hideBar', 'panel', { closed: false, desktopBar: true }).ok).toBe(true)
+  })
+})
+
+describe('pasek pulpitu, jak go słyszą okna (D564 P13): „na ekranie” i powód ukrycia', () => {
+  it('na ekranie tylko chciany i naprawdę pokazany – przed potwierdzeniem pomocnika, nad pełnym ekranem i przy oknie głównym z przodu nie', () => {
+    let told = 0
+    const seen = new BarSeen(() => void told++)
+    expect([seen.shown, seen.problem]).toEqual([false, null])
+    // The start: wanted, not shown until the helper confirms it.
+    seen.see({ wanted: true, visible: false })
+    expect([seen.shown, told]).toEqual([false, 0])
+    seen.see({ wanted: true, visible: true })
+    expect([seen.shown, told]).toEqual([true, 1])
+    // „Zawsze na wierzchu” over a full screen or with the main window in front: not wanted now – hidden.
+    seen.see({ wanted: false, visible: false })
+    expect([seen.shown, told]).toEqual([false, 2])
+    // A window still shown for a moment while it is no longer wanted is not „on the screen” for the panel.
+    seen.see({ wanted: false, visible: true })
+    expect([seen.shown, told]).toEqual([false, 2])
+  })
+
+  it('powód ukrycia (pomocnik, nieudane położenie): każda zmiana mówiona raz, ta sama – nic; „ponów” zeruje powód', () => {
+    let told = 0
+    const seen = new BarSeen(() => void told++)
+    seen.setProblem('helper')
+    seen.setProblem('helper')
+    expect([seen.problem, told]).toEqual(['helper', 1])
+    seen.setProblem('failed')
+    expect([seen.problem, told]).toEqual(['failed', 2])
+    seen.setProblem(null)
+    expect([seen.problem, told]).toEqual([null, 3])
+    seen.setProblem(null)
+    expect(told).toBe(3)
   })
 })

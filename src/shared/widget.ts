@@ -231,6 +231,11 @@ export interface BarVariants {
    * `details` – the changes said one by one under the label (the changes of order, D374).
    */
   open: Array<{ id: string; label: string; details?: string[] }> | null
+  /**
+   * The window whose click opened the panel (while the main process holds it – also when the view hides it, „Odcinam się”);
+   * absent – no panel. The icon's panel closes only its own at its next opening (C8): one panel for every window.
+   */
+  by?: 'main' | 'panel' | 'bar'
 }
 
 export const NO_REQUESTS: BarRequests = { people: [], running: null, interrupted: null }

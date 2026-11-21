@@ -103,14 +103,16 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   `listWhole` (`engine/stepsFlow.ts`, T1120), linia `stepsFinished:<blok>` „Skończono: <nazwa> · Cofnij” przez `ROUTINE_UNDO_MS` (jak
   `routineSaved`, po całym zapisie – T1114), „Cofnij” = `undoAfterSteps` (najpierw koniec; odmowa – nic więcej).
 - Panel ikony – „pilot” (D564 P13, wariant A): nagłówek `panel-head` („Regulated Day” i „×”), pasek, stopka `panel-foot` – `panel-open-main`
-  (`showMain`), `panel-bar-toggle` („▣ Pasek pulpitu: schowaj” przy `view.barShown` – włączony, bez „×”, bez reguły ukrycia, bez `barProblem`; inaczej
-  „pokaż”) → `barAction('hideBar' | 'showBar')` → `barFromPanel(chcę, nadawca, stan)` w `windows/desktopBar.ts` (tylko od `panel`): `setBarClosed`,
-  `setPrefs({ desktopBar: true })` albo `retryBar` (jak „Pokaż pasek”); `barProblem` zmienia tylko `setBarProblem` (rozsyła widok), `setPrefs`
-  rozsyła widok przy zmianie `desktopBar`. `panel-quit` (`panelClose('quit')`). Nagłówek i stopka (`data-panel-chrome`) nie są wolnym polem. Jedna nazwa
+  (`showMain`), `panel-bar-toggle` („▣ Pasek pulpitu: schowaj” przy `view.barShown`, inaczej „pokaż”; przy `view.hidden` nieaktywny – „Pasek wróci po
+  „Wracam””) → `barAction('hideBar' | 'showBar')` → `barFromPanel(chcę, nadawca, stan)` w `windows/desktopBar.ts` (tylko od `panel`): `setBarClosed`,
+  `setPrefs({ desktopBar: true })` albo `retryBar` (jak „Pokaż pasek”). `BarSeen` (`desktopBar.ts`) – jedyne miejsce powodu ukrycia (`setProblem`) i
+  „na ekranie” (`see`: `barWanted()` i okno naprawdę pokazane – potwierdzone przez pomocnika albo na wierzchu; `seeBar` po każdym `layoutBar` i słowie
+  pomocnika), każda zmiana rozsyła widok. `panel-quit` (`panelClose('quit')`). Nagłówek i stopka (`data-panel-chrome`) nie są wolnym polem. Jedna nazwa
   okna i wyjścia: `OPEN_MAIN_TEXT` / `QUIT_APP_TEXT` (`shared/widget.ts`) – menu ikony (`trayMenuItems` w `tray.ts`), stopka, „↗”, linia bez folderu.
   Każde otwarcie wysyła `rd:panelTarget` = `PanelOpening { target, reopened }` (`reopened` – panel był schowany): tylko wtedy `PanelApp` liczy
   `opening`, a `Bar` zwija rozwinięcie (także pole „+ Skrzynka”; linie mają klucz z `opening` – ±5 min „Skończył się o…” znika) i zamyka panel
-  wariantów, który sam otworzył (`variantsHere`; otwarty w oknie głównym zostaje). Poproszony przy otwartym (powiadomienie) – tylko `target`.
+  wariantów otwarty przez panel (`view.variants.by` – okno, które go otworzyło, z procesu głównego, także gdy „Odcinam się” go chowa; otwarty w oknie
+  głównym zostaje). Poproszony przy otwartym (powiadomienie) – tylko `target`, `IconPanel.unfolded` zostaje (60 s nie biegnie przy rozwiniętym).
 - Panel ikony (D558, T1974): „×” (`panel-close`) – `panelClose('x')`, z Shift `panelClose('quit')` → `quitApp`; Esc – `panelClose()`;
   kliknięcie w wolne pole – `opensMain` w `PanelApp.tsx` → `showMain` (wciśnięcie i kliknięcie poza przyciskiem/polem/linkiem/etykietą, nic rozwiniętego, brak `[data-busy]`;
   drugie kliknięcie dwukliku, którego pierwsze wciśnięcie było na kontrolce – nic, C8).

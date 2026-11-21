@@ -1672,6 +1672,26 @@ describe('warianty w pasku (D313)', () => {
     expect(w.current().lines.some((l) => l.id === 'moved:variant')).toBe(false)
   })
 
+  it('panel wariantów mówi, które okno go otworzyło (C8) – także gdy „Odcinam się” go chowa; zamknięty – nic', async () => {
+    const { w, clock } = await over()
+    await w.act('variants', 'open', 'panel')
+    expect(w.current().variants).toMatchObject({ marker: true, by: 'panel' })
+    expect(w.current().variants.open).not.toBeNull()
+    clock.now += 1_000
+    await w.act('cutOff', undefined, 'main')
+    expect(w.current().hidden).toBe(true)
+    expect(w.current().variants).toMatchObject({ open: null, by: 'panel' })
+    clock.now += 1_000
+    await w.act('variants', 'close', 'panel')
+    expect(w.current().variants).toEqual({ marker: false, open: null })
+    // Opened by the main window's bar: its own.
+    clock.now += 1_000
+    await w.act('back', undefined, 'main')
+    clock.now += 1_000
+    await w.act('variants', 'open', 'main')
+    expect(w.current().variants.by).toBe('main')
+  })
+
   it('T623: wariant przyczyny, gdy plan jest już tak zmieniony (drugi komputer) – zamyka przyczynę jak przed J5, bez zapisu i bez uwagi', async () => {
     // As \`over()\`, with a request of 2 h: the end of work 14:00 – „Skróć” (b to 15 min) leaves it past the boundary, the
     // cause holds after it.

@@ -42,15 +42,18 @@ const OWN_DOUBLE = 'button, a, input, textarea, select, [role="button"], [conten
 export const doubleOpensMain = (first: EventTarget | null, second: EventTarget | null): boolean => [first, second].every((el) => el instanceof Element && !el.closest(OWN_DOUBLE))
 
 /** A button of the header and the footer: the second click of a double click does nothing (C8 – „schowaj” would „pokaż” again). */
-function PanelButton({ testId, label, onAct, children, className }: { testId: string; label?: string; onAct: (e: MouseEvent) => void; children: ReactNode; className: string }) {
+function PanelButton({ testId, label, onAct, children, className, disabled }: { testId: string; label?: string; onAct: (e: MouseEvent) => void; children: ReactNode; className: string; disabled?: boolean }) {
   return (
-    <button type="button" className={className} aria-label={label} onClick={(e) => e.detail <= 1 && onAct(e)} data-testid={testId}>
+    <button type="button" className={className} aria-label={label} disabled={disabled} onClick={(e) => e.detail <= 1 && onAct(e)} data-testid={testId}>
       {children}
     </button>
   )
 }
 
-const FOOT_BUTTON = 'rounded px-1 py-0.5 text-[12px] whitespace-nowrap text-muted hover:bg-hover hover:text-fg'
+const FOOT_BUTTON = 'rounded px-1 py-0.5 text-[12px] whitespace-nowrap text-muted enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-default'
+
+/** „Odcinam się” hides the bar by its rule: nothing to show or hide now – it comes back with „Wracam” (D564 P13). */
+const BAR_BACK_TEXT = 'Pasek wróci po „Wracam”'
 
 export function PanelApp() {
   const view = useWidget((s) => s.view)
@@ -96,8 +99,10 @@ export function PanelApp() {
     if (e.detail > 1 && !free(firstPress.current)) return
     if (opensMain(down, up, unfolded, e.currentTarget)) window.rd.showMain()
   }
-  // „schowaj” only for the bar on the screen now (the main process says it – `barShown`); hidden for any reason, „pokaż”.
+  // „schowaj” only for the bar on the screen now (the main process says it – `barShown`); hidden for any reason, „pokaż” –
+  // but not while „Odcinam się” hides it by its rule: then the button is inactive and says when the bar comes back.
   const barShown = view?.barShown === true
+  const barByRule = view?.hidden === true
   return (
     <div ref={ref} className="flex flex-col gap-2 border border-line-strong bg-panel p-2" data-testid="panel" onPointerDown={onPress} onPointerUp={onRelease} onClick={freeClick} onMouseDown={onMouseDown} onDoubleClick={(e) => doubleOpensMain(firstPress.current, e.target) && window.rd.showMain()}>
       <div className="flex items-center justify-between gap-2 pl-1" data-testid="panel-head" data-panel-chrome="">
@@ -132,8 +137,8 @@ export function PanelApp() {
           ↗ {OPEN_MAIN_TEXT}
         </PanelButton>
         <span aria-hidden="true">·</span>
-        <PanelButton testId="panel-bar-toggle" className={FOOT_BUTTON} onAct={() => void window.rd.barAction(barShown ? 'hideBar' : 'showBar')}>
-          ▣ Pasek pulpitu: {barShown ? 'schowaj' : 'pokaż'}
+        <PanelButton testId="panel-bar-toggle" className={FOOT_BUTTON} disabled={barByRule} label={barByRule ? BAR_BACK_TEXT : undefined} onAct={() => void window.rd.barAction(barShown ? 'hideBar' : 'showBar')}>
+          {barByRule ? `▣ ${BAR_BACK_TEXT}` : `▣ Pasek pulpitu: ${barShown ? 'schowaj' : 'pokaż'}`}
         </PanelButton>
         <span aria-hidden="true">·</span>
         <PanelButton testId="panel-quit" className={FOOT_BUTTON} onAct={() => window.rd.panelClose('quit')}>
