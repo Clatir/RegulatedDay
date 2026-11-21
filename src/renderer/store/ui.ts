@@ -238,14 +238,16 @@ export function closeToast(id: number): void {
 const TOASTS_MAX = 4
 /** An error without an action stays until „×” closes it (UX18); `ms` 0. */
 const pinned = (t: Pick<Toast, 'kind' | 'ms' | 'action'>): boolean => t.kind === 'error' && t.ms === 0 && !t.action
+/** Which goes first past `TOASTS_MAX`: an ordinary message (0), then an error that stays (1), a message with an action – a „Cofnij” still to be had – last (2). */
+const dropRank = (t: Toast): number => (t.action ? 2 : pinned(t) ? 1 : 0)
 
 /**
  * A message. An identical one standing (the same text and kind, F7) is not shown twice: it stays and its time starts again. One with
  * an action („Cofnij”) is never merged – two operations with the same words each keep their own `run`. An error without an action
  * (UX18, D565 P26) has no time: it stays until „×” closes it, whatever `ms` says (the argument only keeps the callers as they are); an
  * error with an action keeps its time (the window of the „Cofnij”), and so does the refusal of a field (`refusalToast` – its words
- * stand under the field too). Past `TOASTS_MAX` the oldest message goes – an ordinary one first, an error that stays only when
- * nothing else is standing.
+ * stand under the field too). Past `TOASTS_MAX` one goes (`dropRank`, the oldest of its kind): an ordinary message, then an error that
+ * stays, a message with an action („Cofnij” – its window is not taken for a newer message) last.
  */
 export function toast(text: string, kind: Toast['kind'] = 'info', ms = 5000, action?: Toast['action'], timed = false): number {
   const same = action ? undefined : useUi.getState().toasts.find((t) => t.text === text && t.kind === kind && !t.action)
@@ -260,8 +262,8 @@ export function toast(text: string, kind: Toast['kind'] = 'info', ms = 5000, act
   else {
     const all = [...useUi.getState().toasts]
     while (all.length >= TOASTS_MAX) {
-      const out = all.findIndex((t) => !pinned(t))
-      const [gone] = all.splice(out < 0 ? 0 : out, 1)
+      const rank = Math.min(...all.map(dropRank))
+      const [gone] = all.splice(all.findIndex((t) => dropRank(t) === rank), 1)
       clearTimeout(timers.get(gone!.id))
       timers.delete(gone!.id)
     }

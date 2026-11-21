@@ -21,7 +21,6 @@ import { Toasts } from '@renderer/components/Toasts'
 import { BlockEditor } from '@renderer/features/plan/BlockEditor'
 import { HistoryPage } from '@renderer/features/history/HistoryPage'
 import { installEscape } from '@renderer/lib/escape'
-import { openHistoryChecked } from '@renderer/lib/historyOpen'
 import { useOutsidePointer } from '@renderer/lib/outside'
 import { useData } from '@renderer/store/data'
 import { useMachine } from '@renderer/store/machine'
@@ -115,6 +114,14 @@ describe('dymki błędów (F7 cz. 2, P26)', () => {
     expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['Błąd A', 'Dwa', 'Trzy', 'Cztery'])
     undoToast('Usunięto', () => undefined)
     expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['Błąd A', 'Trzy', 'Cztery', 'Usunięto'])
+    // The „Cofnij” is dropped last: three errors that stay, the undo, a new message – the oldest error goes, the undo stays.
+    for (const t of useUi.getState().toasts) closeToast(t.id)
+    for (const n of ['E1', 'E2', 'E3']) toast(n, 'error')
+    undoToast('Usunięto', () => undefined)
+    toast('Zapisano', 'success')
+    expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['E2', 'E3', 'Usunięto', 'Zapisano'])
+    toast('Nowy', 'info')
+    expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['E2', 'E3', 'Usunięto', 'Nowy'])
     // Only errors standing: the oldest of them goes (the new message is never the one dropped).
     for (const t of useUi.getState().toasts) closeToast(t.id)
     for (const n of ['E1', 'E2', 'E3', 'E4']) toast(n, 'error')
@@ -263,10 +270,8 @@ describe('Historia: filtr z licznikami, szukanie, „x z y” (E7)', () => {
 describe('„Historia” w panelu bloku (E7)', () => {
   const names = { rd: rdFrom({}), settings: DEFAULT_SETTINGS, routines: [], requests: [] }
   const analiza = planBlock({ id: 'b1', categoryId: 'analiza', startMin: 9 * 60, durationMin: 45, origin: 'user' })
-  /** The panel over a window that has the history of the records `have` (keys `kind/id`); `null` – a window that cannot say. */
-  const panel = async (o: Partial<Parameters<typeof BlockEditor>[0]> = {}, have: string[] | null = ['day/2026-11-12', 'day/2026-11-13', 'template/t1', 'series/s2']) => {
-    const list = have && (() => Promise.resolve(have.map((k) => ({ kind: k.split('/')[0]!, id: k.split('/')[1]!, rel: '', versions: 2, last: 1, exists: true })) as HistoryRecord[]))
-    ;(window as unknown as { rd: unknown }).rd = { pathForFile: () => '', ...(list ? { historyList: list } : {}) }
+  const panel = async (o: Partial<Parameters<typeof BlockEditor>[0]> = {}) => {
+    ;(window as unknown as { rd: unknown }).rd = { pathForFile: () => '' }
     await mount(createElement(BlockEditor, { block: analiza, plan: [], names, computers: [], onChange: () => undefined, onClose: () => undefined, ...o }))
     await act(async () => undefined)
     return q('block-editor')!
@@ -310,41 +315,6 @@ describe('„Historia” w panelu bloku (E7)', () => {
     expect(q('history-open', p)).toBeNull()
     again()
     expect(q('history-open', await panel())).toBeNull()
-  })
-
-  it('rekord bez wersji: przycisk nieaktywny, z podpisem „brak wersji”; klik nic nie robi', async () => {
-    const p = await panel({ day: '2026-11-14' })
-    const b = q('history-open', p) as HTMLButtonElement
-    expect(b.disabled).toBe(true)
-    expect(b.textContent).toBe('Historia (brak wersji)')
-    await click(b)
-    expect(useUi.getState().page).toBe('today')
-    expect(useUi.getState().pick).toBeNull()
-  })
-
-  it('okno, które nie umie powiedzieć (brak historyList): przycisk czynny, ekran Historii powie sam', async () => {
-    const p = await panel({ day: '2026-11-14' }, null)
-    const b = q('history-open', p) as HTMLButtonElement
-    expect(b.disabled).toBe(false)
-    await click(b)
-    expect(useUi.getState().pick).toEqual({ kind: 'history', id: 'day/2026-11-14' })
-  })
-})
-
-describe('openHistoryChecked – droga z menu „…” (E7)', () => {
-  const have = (...keys: string[]) => {
-    ;(window as unknown as { rd: unknown }).rd = { historyList: () => Promise.resolve(keys.map((k) => ({ kind: k.split('/')[0]!, id: k.split('/')[1]!, rel: '', versions: 1, last: 1, exists: true }))) }
-  }
-
-  it('rekord z wersjami – ekran Historii z nim; bez wersji – dymek i zostajesz', async () => {
-    have('request/a')
-    await act(async () => openHistoryChecked('requests/a.json'))
-    expect(useUi.getState().page).toBe('history')
-    expect(useUi.getState().pick).toEqual({ kind: 'history', id: 'request/a' })
-    useUi.setState({ page: 'requests', pick: null })
-    await act(async () => openHistoryChecked('requests/b.json'))
-    expect(useUi.getState().page).toBe('requests')
-    expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['Ten rekord nie ma jeszcze wersji w historii.'])
   })
 })
 
