@@ -80,6 +80,15 @@ test('Ctrl K: dwa słowa z notatki minionego dnia, Enter otwiera ten dzień z pa
       await page.keyboard.press('Enter')
       await expect(page.getByTestId('day-title')).toContainText(plDate(addDays(today, 1)))
       await expect(page.getByTestId('day-title')).not.toContainText('Dziś')
+
+      // UX14: a field of the settings by its label – Enter opens the settings with the field in view and marked.
+      await page.keyboard.press('Control+k')
+      await page.getByTestId('search-input').fill('rezerwa')
+      await expect(page.locator('[data-testid="search-hit"][data-kind="setting"]').first()).toContainText('Rezerwa energii')
+      await page.keyboard.press('Enter')
+      await expect(page.getByTestId('page-settings')).toBeVisible()
+      await expect(page.getByTestId('field-reserve')).toHaveAttribute('data-found', '')
+      await expect(page.getByTestId('field-reserve')).toBeInViewport()
     })
     expect(errors).toEqual([])
   } finally {

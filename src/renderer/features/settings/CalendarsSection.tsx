@@ -13,7 +13,7 @@ import { CALENDAR_NAME_MAX, DEFAULT_CALENDAR_ID, MAX_CALENDARS, addCalendarRaw, 
 import { CATEGORY_COLORS } from '@shared/model/rd'
 import { blockFill } from '@shared/theme'
 import { TextField } from '../../components/fields'
-import { Section, cx } from '../../components/ui'
+import { NowTag, Section, cx } from '../../components/ui'
 import { rawRecord, saveAnswer, storedAnswer, trySaveWith, useData, type SendState } from '../../store/data'
 import { useMachine } from '../../store/machine'
 import { useBusy } from '../../lib/busy'
@@ -85,7 +85,7 @@ export function CalendarsSection() {
     })
 
   return (
-    <Section title="Kalendarze" data-testid="settings-calendars">
+    <Section title="Kalendarze" data-testid="settings-calendars" tag={<NowTag />}>
       <p className="text-[12px] text-muted">
         Kalendarz to grupa kategorii: kategorię przypisujesz do niego w jej wierszu poniżej, wydarzenie całodniowe – w jego karcie. Odznaczenie kalendarza nad widokiem ukrywa jego bloki i wydarzenia tylko w oknie – energia, granica dnia, pasek i powiadomienia liczą je dalej.
       </p>

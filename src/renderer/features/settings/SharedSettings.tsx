@@ -8,18 +8,18 @@
  */
 import { useMemo } from 'react'
 import { DAY_TYPE_FIELDS, FIELD_GROUP_NAMES, NUMBER_FIELDS, TOGGLE_FIELDS, type FieldGroup } from '@shared/model/fields'
-import { plDate } from '@shared/format'
 import { newId } from '@shared/model/ids'
 import { MODULES, MODULE_NAMES } from '@shared/model/rd'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn, type DayTypeId, type RulesSettings } from '@shared/model/settings'
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { Choice, DateField, TextField } from '../../components/fields'
-import { Field, Section, Segmented, Toggle } from '../../components/ui'
+import { Field, NowTag, Section, Segmented, Toggle } from '../../components/ui'
 import { useData } from '../../store/data'
 import { countDay } from '../../store/day'
 import { toast } from '../../store/ui'
 import { SettingNumber } from './SettingNumber'
+import { fieldGroupWhen } from './settingsLayout'
 import { saveGeneral, saveSettings, setFromDate, setModule, useSettingsFrom, type FromMode } from './settingsStore'
 
 const WEEKDAY_NAMES = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela']
@@ -43,9 +43,7 @@ export function useShared(): { s: RulesSettings; today: string; save: (patch: Re
 export function FromBar() {
   const mode = useSettingsFrom((x) => x.mode)
   const date = useSettingsFrom((x) => x.date)
-  const rd = useData((x) => x.rd)
   const today = useData((x) => x.view?.today ?? '')
-  const future = [...new Set(rd.settings.filter((c) => c.from > today).map((c) => c.from))].sort()
   return (
     <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-panel px-4 py-2.5" data-testid="settings-from">
       <span className="text-[12.5px]">Zmiany ustawień działają</span>
@@ -71,8 +69,7 @@ export function FromBar() {
         />
       )}
       <span className="text-[12px] text-muted">
-        {mode === 'today' ? 'Reszta dzisiejszego dnia liczy się według nowych wartości; minuty już sklasyfikowane się nie zmieniają.' : 'Dni wcześniejsze się nie zmieniają. Moduły i przerwy działają zawsze od razu.'}
-        {future.length ? ` Zaplanowane zmiany: od ${future.map(plDate).join(', od ')}.` : ''}
+        {mode === 'today' ? 'Reszta dzisiejszego dnia liczy się według nowych wartości; minuty już sklasyfikowane się nie zmieniają.' : 'Dni wcześniejsze się nie zmieniają. Sekcje ze znacznikiem „od razu” działają bez daty.'}
       </span>
     </div>
   )
@@ -81,10 +78,12 @@ export function FromBar() {
 export function ModulesSection() {
   const g = useData((x) => x.rd.general)
   return (
-    <Section title="Moduły" data-testid="settings-modules">
+    <Section title="Moduły" data-testid="settings-modules" tag={<NowTag />}>
       <p className="text-[12px] text-muted">Plan, timer, granica, czas wolny i rytuał działają zawsze. Włączenie albo wyłączenie modułu działa od razu, a jego nagrody z dnia zmiany nie liczą się w żadną stronę.</p>
       {MODULES.map((m) => (
-        <Toggle key={m} checked={g.modules[m]} onChange={(v) => void setModule(m, v)} label={MODULE_NAMES[m]} data-testid={`module-${m}`} />
+        <div key={m} data-testid={`field-module-${m}`}>
+          <Toggle checked={g.modules[m]} onChange={(v) => void setModule(m, v)} label={MODULE_NAMES[m]} data-testid={`module-${m}`} />
+        </div>
       ))}
     </Section>
   )
@@ -107,7 +106,7 @@ export function DayTypesSection() {
       <div className="grid items-center gap-x-2 gap-y-1.5" style={{ gridTemplateColumns: `150px repeat(${DAY_TYPE_FIELDS.length}, minmax(0, 1fr))` }}>
         <span />
         {DAY_TYPE_FIELDS.map((f) => (
-          <span key={f.key} className="text-[11.5px] text-muted">
+          <span key={f.key} className="text-[11.5px] text-muted" data-testid={`field-daytype-${f.key}`}>
             {f.label}
           </span>
         ))}
@@ -133,7 +132,7 @@ export function DayTypesSection() {
           Minimum regeneracji nie zmieści się przed porą snu w typie: {warnings.map((t) => DAY_TYPE_NAMES[t].toLowerCase()).join(', ')} (przy obecnym planie). Możesz to zapisać – plan pokaże ostrzeżenie.
         </p>
       )}
-      <Field label="Tydzień" hint="Typ, który dzień tygodnia ma, gdy w kalendarzu nie ustawisz innego.">
+      <Field label="Tydzień" data-testid="field-week" hint="Typ, który dzień tygodnia ma, gdy w kalendarzu nie ustawisz innego.">
         <div className="grid grid-cols-4 gap-x-2 gap-y-1.5">
           {WEEKDAY_NAMES.map((n, i) => (
             <label key={n} className="flex flex-col gap-0.5 text-[11.5px] text-muted">
@@ -153,11 +152,11 @@ export function FieldsSection({ group }: { group: FieldGroup }) {
   const general = useData((x) => x.rd.general)
   const fields = NUMBER_FIELDS.filter((f) => f.group === group)
   return (
-    <Section title={FIELD_GROUP_NAMES[group]} data-testid={`settings-${group}`}>
+    <Section title={FIELD_GROUP_NAMES[group]} tag={fieldGroupWhen(group) === 'now' ? <NowTag /> : undefined} data-testid={`settings-${group}`}>
       {fields.map((f) => {
         const value = (f.scope === 'dated' ? f.path.reduce<unknown>((v, k) => (v as Record<string, unknown>)[k], s) : general[f.path[0] as keyof typeof general]) as number
         return (
-          <Field key={f.key} label={f.label} hint={f.hint} labelWidth={260}>
+          <Field key={f.key} label={f.label} hint={f.hint} labelWidth={260} data-testid={`field-${f.key}`}>
             <SettingNumber
               field={f}
               value={value}
@@ -170,7 +169,7 @@ export function FieldsSection({ group }: { group: FieldGroup }) {
       {TOGGLE_FIELDS.filter((f) => f.group === group).map((f) => {
         const on = f.path.reduce<unknown>((v, k) => (v as Record<string, unknown>)[k], s) === true
         return (
-          <Field key={f.key} label={f.label} hint={f.hint} labelWidth={260}>
+          <Field key={f.key} label={f.label} hint={f.hint} labelWidth={260} data-testid={`field-${f.key}`}>
             <Toggle checked={on} onChange={(v) => void save(f.path.reduceRight<unknown>((inner, k) => ({ [k]: inner }), v) as Record<string, unknown>)} label={on ? 'włączone' : 'wyłączone'} data-testid={`setting-${f.key}`} />
           </Field>
         )
