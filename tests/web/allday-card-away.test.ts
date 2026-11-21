@@ -9,7 +9,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
 import { AllDayCard } from '@renderer/features/allday/AllDayCard'
 import { installEscape } from '@renderer/lib/escape'
-import { askFreeDays } from '@renderer/features/allday/freeDays'
+import { askFreeDays, setFreeDays } from '@renderer/features/allday/freeDays'
 import { saveAllDay } from '@renderer/store/allDay'
 
 vi.mock('@renderer/store/allDay', async (orig) => ({
@@ -19,7 +19,8 @@ vi.mock('@renderer/store/allDay', async (orig) => ({
 
 vi.mock('@renderer/features/allday/freeDays', async (orig) => ({
   ...(await orig<typeof import('@renderer/features/allday/freeDays')>()),
-  askFreeDays: vi.fn(async () => [] as string[])
+  askFreeDays: vi.fn(async () => [] as string[]),
+  setFreeDays: vi.fn(async () => ({ change: null, duringDay: null, asked: false, saved: true, unreadable: [] }))
 }))
 
 let root: Root | null = null
@@ -135,8 +136,6 @@ describe('klik obok karty wydarzenia całodniowego (D563 P4)', () => {
     await press()
     expect(reached).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
-    document.body.removeEventListener('pointerdown', reached)
-    document.body.removeEventListener('click', reached)
   })
 
   it('zapis, który pyta o „Wolne”: klik obok wstrzymany, pytanie zostaje w karcie; następny klik obok to „Nie” i idzie dalej', async () => {
@@ -152,8 +151,6 @@ describe('klik obok karty wydarzenia całodniowego (D563 P4)', () => {
     await press()
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(reached).toHaveBeenCalled()
-    document.body.removeEventListener('pointerdown', reached)
-    document.body.removeEventListener('click', reached)
   })
 
   it('dymek (role=status) i prawy przycisk to nie „klik obok”', async () => {
@@ -166,5 +163,32 @@ describe('klik obok karty wydarzenia całodniowego (D563 P4)', () => {
     toast.remove()
     expect(onClose).not.toHaveBeenCalled()
     expect(saveAllDay).not.toHaveBeenCalled()
+  })
+  it('zawieszony zapis nie zamraża okna (D72): pierwszy klik obok czeka, drugi zamyka kartę', async () => {
+    reached.mockClear()
+    probe()
+    vi.mocked(saveAllDay).mockImplementationOnce(() => new Promise(() => undefined))
+    await card(saved(), null)
+    await act(async () => host!.querySelector<HTMLElement>('[data-testid="allday-save"]')!.click())
+    reached.mockClear() // the click on „Zapisz” itself bubbles to the probe
+    await press()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(reached).not.toHaveBeenCalled()
+    await press()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(reached).toHaveBeenCalled()
+  })
+
+  it('w trakcie „Tak” na pytanie „Wolne” klik obok nie zamyka karty od razu (pytanie nie ginie), kolejny zamyka', async () => {
+    vi.mocked(askFreeDays).mockResolvedValueOnce(['2026-11-19'])
+    vi.mocked(setFreeDays).mockImplementationOnce(() => new Promise(() => undefined))
+    await card(saved({ free: true }), null)
+    await act(async () => host!.querySelector<HTMLElement>('[data-testid="allday-save"]')!.click())
+    await act(async () => host!.querySelector<HTMLElement>('[data-testid="allday-free-yes"]')!.click())
+    await press()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(host!.querySelector('[data-testid="allday-free-ask"]')).not.toBeNull()
+    await press()
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })
