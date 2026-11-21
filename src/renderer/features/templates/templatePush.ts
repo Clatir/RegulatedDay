@@ -60,6 +60,15 @@ function frameOf(day: TemplateDay, plan: readonly PlanBlock[]) {
   return { toTemplate, onDay, reach }
 }
 
+/**
+ * The start in the template's hours that makes the day show the block `b` at `dayMin` – for a block that follows another („po bloku”)
+ * set to „o godzinie” at the place the axis shows it (UX1, T1979): the same conversion as a drag (`unshiftedStart`, the block
+ * unanchored), not the axis minute as it is – in a week the sessions start earlier the axis is the day's, not the template's.
+ */
+export function templateStartAt(day: TemplateDay, b: Pick<PlanBlock, 'fixed' | 'durationMin'>, dayMin: number): number {
+  return frameOf(day, day.ctx.plan).toTemplate({ ...b, anchor: null }, dayMin)
+}
+
 /** The day's plan with every block of the template where the day's wake shows it by `onDay` (the changed plan's first fixed block). */
 function reshown(day: TemplateDay, onDay: (b: Placeable, startMin: number) => number): PlanBlock[] {
   const ofSnapshot = new Map(day.snapshot.blocks.map((x) => [x.id, x]))

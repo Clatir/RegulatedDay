@@ -54,7 +54,7 @@ import { templateBlockPatch } from '@shared/model/templateSessions'
 import { axisSources } from './sessionChoices'
 import { sampleDay, templateDayOf, versionFrom } from './templateDay'
 import { SessionFields } from './SessionFields'
-import { templateAdd, templateCopy, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
+import { templateAdd, templateCopy, templateDrag, templateStartAt, withTemplateChange, type TemplateChange } from './templatePush'
 import { copyTemplateBlock } from '../plan/blockCopy'
 import { dragTemplateGroup, templateDragPreview } from '../plan/groupDrag'
 import { COPY_SPAN_ID } from '../today/dayPush'
@@ -277,6 +277,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     return withAttachCounts(own, (id) => blocks.get(id) ?? null, attachPlace, attachments)
   }, [axis, byPlanId, version.blocks, attachPlace, attachments])
   const block = version.blocks.find((b) => b.id === selected) ?? null
+  const shownStart = block ? items.find((i) => i.id === block.id)?.startMin : undefined
+  const forecastStart = block && shownStart != null ? templateStartAt(model, block, shownStart) : undefined
   // D527, D528: the selection of many blocks of the version (Ctrl+click, Shift+click, Shift+arrows, Ctrl+A, the menu of the right button – without the
   // day's actions); only the template's own blocks are selected (the sessions and lectures of the sample day are no blocks of it); scope: the version.
   const menuCtx = useMemo(() => menuCtxOf(names, true), [names])
@@ -497,8 +499,9 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           sessions={settings.sessions}
           place={attachPlace}
           focusName={fresh === block.id}
-          // A2: „o godzinie” after „po bloku” starts where the axis of the sample day puts the block (its forecast).
-          forecastStart={items.find((i) => i.id === block.id)?.startMin}
+          // A2: „o godzinie” after „po bloku” starts where the axis of the sample day puts the block (its forecast) – in the template's
+          // hours (`templateStartAt`: the axis keeps the day's wake of a week the sessions start earlier, UX1 T1979).
+          forecastStart={forecastStart}
           // D511: a block given a category of sessions becomes a session (and stops being one with another category).
           onChange={(patch) => patchBlock(block.id, templateBlockPatch(block, patch, settings.categories, version.blocks))}
           session={<SessionFields block={block} blocks={version.blocks} kind={settings.categories[block.categoryId]?.kind} weekdays={template.weekdays} onChange={(patch) => void patchBlock(block.id, patch)} />}

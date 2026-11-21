@@ -10,7 +10,7 @@ import { computeDay } from '@shared/engine/day'
 import { PLAN_MAX, planBlock, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
 import { placeLogical } from '@shared/time/day'
-import { templateAdd, templateCopy, templateDrag, withTemplateChange } from '@renderer/features/templates/templatePush'
+import { templateAdd, templateCopy, templateDrag, templateStartAt, withTemplateChange } from '@renderer/features/templates/templatePush'
 import { countDay } from '@renderer/store/day'
 import { lm, Scenario } from '../unit/engine/dsl'
 
@@ -126,6 +126,30 @@ describe('D372 – szablon w tygodniu przesunięcia sesji: miejsce tuż przed pi
     expect(planned(blocks, 'm')).toBe(lm('05:30'))
     expect(c.preview.get('n')!.startMin).toBeGreaterThanOrEqual(lm('07:00'))
     expect(planned(blocks, 'n')).toBe(c.preview.get('n')!.startMin)
+  })
+})
+
+describe('UX1 (T1979) – „po bloku” → „o godzinie” w „Szablonach” w tygodniu przesunięcia sesji', () => {
+  const DATE = '2026-03-10'
+  it('początek z osi (godzina dnia) jest zapisany w godzinach szablonu – dzień pokazuje blok tam, gdzie stał na osi', () => {
+    // m: template 06:00, shown 05:00; p follows it (anchored): the axis shows it at 05:30, a morning block (before the 07:00 session).
+    const m = tb('m', '06:00', 30)
+    const p = tb('p', '06:30', 30, { anchor: 'm', startMin: null })
+    const { day } = templateDay(DATE, [m, p])
+    const shown = lm('05:30')
+    const startMin = templateStartAt(day, p, shown)
+    expect(startMin).toBe(lm('06:30'))
+    // The block saved as „o godzinie” with that start: the day (the wake an hour early) shows it where the axis did.
+    const after = templateDay(DATE, [m, { ...p, anchor: null, startMin }]).day.ctx.plan.find((b) => b.sourceId === 'p')!
+    expect(after.startMin).toBe(shown)
+    // The axis minute written as it is (the old way) moves the block by the wake's difference – to 04:30.
+    expect(templateDay(DATE, [m, { ...p, anchor: null, startMin: shown }]).day.ctx.plan.find((b) => b.sourceId === 'p')!.startMin).toBe(lm('04:30'))
+  })
+
+  it('bez przesunięcia pobudki i po pierwszym stałym – ta sama minuta', () => {
+    const p = tb('p', '18:00', 30, { anchor: 'm', startMin: null })
+    const { day } = templateDay(SUNDAY, [tb('m', '17:00', 60), p])
+    expect(templateStartAt(day, p, lm('18:00'))).toBe(lm('18:00'))
   })
 })
 

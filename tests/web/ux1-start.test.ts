@@ -62,4 +62,10 @@ describe('„o godzinie” po „po bloku” (A2)', () => {
       expect(readFileSync(`src/renderer/features/${f}`, 'utf8')).toMatch(/forecastStart=\{/)
     }
   })
+
+  it('„Szablony” podają początek w godzinach szablonu (`templateStartAt`), nie surową minutę osi (T1979)', () => {
+    const page = readFileSync('src/renderer/features/templates/TemplatesPage.tsx', 'utf8')
+    expect(page).toMatch(/templateStartAt\(model, block, shownStart\)/)
+    expect(page).not.toMatch(/forecastStart=\{items\.find/)
+  })
 })
