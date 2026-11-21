@@ -11,6 +11,7 @@ import { Field, NowTag, Section, Segmented, Toggle, cx } from '../../components/
 import { setMachinePrefs, useMachine } from '../../store/machine'
 import { useWidget } from '../../store/widget'
 import { BarPlaceMap } from './BarPlaceMap'
+import { BarSwitch } from './BarSwitch'
 import { QuickKeyField } from './QuickKeyField'
 import { QUICK_KEY_HELP } from './quickKey'
 
@@ -21,7 +22,7 @@ export function BarSection() {
   return (
     <Section title="Pasek pulpitu" data-testid="settings-bar" tag={<NowTag />}>
       <Field label="Pasek pulpitu" data-testid="field-bar" hint={barNote ?? (prefs.onTop !== 'off' ? 'Leży nad oknami (Zawsze na wierzchu), bez zabierania fokusu; chowa się nad pełnym ekranem i przy oknie głównym na pierwszym planie.' : 'Leży pod oknami innych aplikacji – widać go tam, gdzie nic go nie zasłania.')}>
-        <Toggle checked={prefs.desktopBar} onChange={(v) => void setMachinePrefs({ desktopBar: v })} label={prefs.desktopBar ? 'włączony' : 'wyłączony'} data-testid="pref-desktop-bar" />
+        <BarSwitch />
       </Field>
       {off && (
         <p className="text-[12px] text-muted" data-testid="settings-bar-off">
@@ -35,12 +36,12 @@ export function BarSection() {
           hint={
             prefs.barBackWithMain
               ? 'Pasek schowany „×” pojawia się znowu, gdy minimalizujesz albo zamykasz okno główne.'
-              : 'Pasek schowany „×” wraca tylko z „Pokaż pasek pulpitu” w menu ikony, z ustawień albo po ponownym uruchomieniu.'
+              : 'Pasek schowany „×” wraca tylko z „Pasek pulpitu” w menu ikony, z panelu ikony, z ustawień albo po ponownym uruchomieniu.'
           }
         >
           <Toggle checked={prefs.barBackWithMain} onChange={(v) => void setMachinePrefs({ barBackWithMain: v })} label={prefs.barBackWithMain ? 'włączone' : 'wyłączone'} data-testid="pref-bar-back-with-main" />
         </Field>
-        <Field label="Miejsce paska" data-testid="field-bar-place" hint="Monitory tak, jak ustawia je Windows. Pasek zostaje w wybranym miejscu na tym komputerze.">
+        <Field label="Miejsce paska" data-testid="field-bar-place" hint="Monitory tak, jak ustawia je Windows. Pasek zostaje w wybranym miejscu na tym komputerze; schowany „×” pokazuje się w nowym miejscu.">
           <BarPlaceMap />
         </Field>
         <Field label="Pulsowanie paska" data-testid="field-bar-pulse" hint={prefs.animations ? 'Pasek pulpitu pulsuje trzy razy, gdy do końca zostaje 5 min i przy końcu (poza trybem sesji, zajęć i „mniej pytań”).' : 'Bez animacji pasek tylko zmienia kolor.'}>

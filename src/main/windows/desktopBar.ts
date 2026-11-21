@@ -27,27 +27,66 @@ export interface BarApply {
 }
 
 /**
- * How the bar's closing asked by a window goes (D559, T1975): „×” (`x`) hides the bar until „Pokaż pasek pulpitu” in the
- * icon's menu or the next start, „×” with Shift (`quit`) ends the app – both only from the bar's own window; another one
- * changes nothing (and the log says so).
+ * How the bar's closing asked by a window goes (D559, T1975): „×” (`x`) hides the bar until „Pasek pulpitu” in the icon's
+ * menu, the panel's „pokaż”, the settings (D564 P16) or the next start, „×” with Shift (`quit`) ends the app – both only from
+ * the bar's own window; another one changes nothing (and the log says so).
  */
 export function barCloseOf(how: unknown, from: string): { hide: boolean; quit: boolean; why: string } {
   if (from !== 'bar') return { hide: false, quit: false, why: `× paska – odmowa (okno ${from})` }
   if (how === 'quit') return { hide: false, quit: true, why: '× paska z Shift – wyjście' }
-  if (how === 'x') return { hide: true, quit: false, why: '× paska – schowany do „Pokaż pasek pulpitu”' }
+  if (how === 'x') return { hide: true, quit: false, why: '× paska – schowany' }
   return { hide: false, quit: false, why: '× paska – nieznane polecenie' }
 }
 
+/** What the panel's „▣ Pasek pulpitu: pokaż / schowaj” and the icon's „Pasek pulpitu” ask (D564 P13, P16). */
+export type BarWant = 'showBar' | 'hideBar'
+
 /**
- * The panel's „▣ Pasek pulpitu: pokaż / schowaj” (D564 P13): „schowaj” hides the bar as its „×” does (`closed` – until
- * „Pokaż”, the settings, the main window going or the next start); „pokaż” shows it again – one switched off in the
- * settings is switched on on this computer (`switchOn`). Off, there is nothing to hide: the state stays. Only from the
- * panel's own window (`ok`), as „×” only from the bar's; another one changes nothing (and the log says so).
+ * „Schowaj” hides the bar as its „×” does (`closed` – until „pokaż”, the settings, the main window going or the next start);
+ * „pokaż” shows it again – one switched off in the settings is switched on on this computer (`switchOn`). Off, there is
+ * nothing to hide: the state stays. One rule for the panel's footer and the icon's menu (`by` – where, for the log); a word that
+ * changes nothing (a menu popped up before the state changed elsewhere) says „już” in the log – only when the bar is on the
+ * screen (`onScreen`, by default yes): wanted but kept away (the helper, a full screen, a rule) it says so. With the widget hidden
+ * (`hidden` – „Odcinam się”) the „×” goes, the bar comes back after „Wracam”.
  */
-export function barFromPanel(want: 'showBar' | 'hideBar', from: string, s: { closed: boolean; desktopBar: boolean }): { ok: boolean; closed: boolean; switchOn: boolean; why: string } {
+export function barWant(want: BarWant, s: { closed: boolean; desktopBar: boolean; hidden?: boolean; onScreen?: boolean }, by: string): { closed: boolean; switchOn: boolean; why: string } {
+  if (want === 'hideBar') {
+    if (!s.desktopBar) return { closed: s.closed, switchOn: false, why: 'pasek pulpitu wyłączony w ustawieniach – nie ma czego chować' }
+    return { closed: true, switchOn: false, why: s.closed ? `pasek pulpitu już schowany (${by})` : `pasek pulpitu schowany ${by}` }
+  }
+  if (!s.desktopBar) return { closed: false, switchOn: true, why: `pasek pulpitu włączony i pokazany ${by}` }
+  const why = s.closed
+    ? s.hidden
+      ? `„×” zdjęty ${by} – pasek wróci po „Wracam”`
+      : `pasek pulpitu pokazany ${by}`
+    : s.onScreen === false
+      ? `pasek pulpitu bez „×” (${by}) – teraz go nie widać (pomocnik, pełny ekran albo reguła)`
+      : `pasek pulpitu już pokazany (${by})`
+  return { closed: false, switchOn: false, why }
+}
+
+/**
+ * The panel's „▣ Pasek pulpitu: pokaż / schowaj” and its line „Pasek pulpitu schowany · Pokaż pasek” (D564 P13, P16) – `barWant`
+ * only from the panel's own window (`ok`), as „×” only from the bar's; another one changes nothing (and the log says so).
+ */
+export function barFromPanel(want: BarWant, from: string, s: { closed: boolean; desktopBar: boolean; hidden?: boolean; onScreen?: boolean }): { ok: boolean; closed: boolean; switchOn: boolean; why: string } {
   if (from !== 'panel') return { ok: false, closed: s.closed, switchOn: false, why: `pasek pulpitu z panelu – odmowa (okno ${from})` }
-  if (want === 'hideBar') return s.desktopBar ? { ok: true, closed: true, switchOn: false, why: 'pasek pulpitu schowany z panelu ikony' } : { ok: true, closed: s.closed, switchOn: false, why: 'pasek pulpitu wyłączony w ustawieniach – nie ma czego chować' }
-  return { ok: true, closed: false, switchOn: !s.desktopBar, why: s.desktopBar ? 'pasek pulpitu pokazany z panelu ikony' : 'pasek pulpitu włączony i pokazany z panelu ikony' }
+  return { ok: true, ...barWant(want, s, 'z panelu ikony') }
+}
+
+/**
+ * The settings switch the bar on (D564 P16, C3): `desktopBar: true` in the change – also when it already was on, so one hidden by
+ * its „×” shows with one click (the switch says „schowany”); any other change leaves it hidden.
+ */
+export const switchesBarOn = (patch: unknown): boolean => typeof patch === 'object' && patch !== null && (patch as { desktopBar?: unknown }).desktopBar === true
+
+/**
+ * A change of this computer's settings takes the „×” off (D564 P16): the bar switched on from off – always, whoever writes it (the
+ * old „×” is not seen while off, `widgetView` masks it); on already – only by the settings' own word (`settings`: the switch and
+ * „Pokaż pasek” through `CH.setPrefs`), never by the wizard's prefs, which say `desktopBar: true` of a bar simply left on.
+ */
+export function unclosesBar(s: { closed: boolean; before: boolean; after: boolean }, patch: unknown, by: 'settings' | 'app'): boolean {
+  return s.closed && s.after && (!s.before || (by === 'settings' && switchesBarOn(patch)))
 }
 
 /**

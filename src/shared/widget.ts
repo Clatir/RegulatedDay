@@ -119,8 +119,8 @@ export interface WidgetView {
   /** Why the desktop bar is hidden although it is on (the panel, the main window and the settings say it, D270). */
   barNote: string | null
   /**
-   * The desktop bar hidden by its „×” or the panel's „Pasek pulpitu: schowaj” (D559, D564 P13) – until shown again; the main
-   * process sets it (`widgetView`), the engine's view never knows it.
+   * The desktop bar hidden by its „×”, the panel's „Pasek pulpitu: schowaj” or the icon's menu (D559, D564 P13, P16) – until
+   * shown again, and only while it is on in the settings; the main process sets it (`widgetView`), the engine's view never knows it.
    */
   barClosed: boolean
   /** The bar's own buttons now. */
@@ -248,6 +248,21 @@ export const QUIT_APP_TEXT = 'Zakończ aplikację'
 
 export const BAR_NOTE_HELPER = 'Pasek pulpitu ukryty: pomocnik nie działa'
 export const BAR_NOTE_FAILED = 'Paska pulpitu nie udało się położyć pod oknami (inny program trzyma okno na dole)'
+/** The way back of a desktop bar not on the screen – beside its note (D270) and beside the bar hidden by its „×” (D564 P16). */
+export const SHOW_BAR_TEXT = 'Pokaż pasek'
+/** The line of the bar hidden by its „×” (D564 P16): in the icon's panel and in the settings, with „Pokaż pasek”. */
+export const BAR_CLOSED_TEXT = 'Pasek pulpitu schowany'
+/** Its button while the widget is hidden („Odcinam się”): the „×” goes at once, the bar comes back after „Wracam”. */
+export const SHOW_BAR_AFTER_BACK_TEXT = 'Pokaż po „Wracam”'
+/** The item of the icon's menu (P16): always there, ticked by your choice (`barChosen`). */
+export const BAR_MENU_TEXT = 'Pasek pulpitu'
+
+/**
+ * The desktop bar by your choice, not by what is on the screen now (D564 P13, P16): on in the settings and not hidden by its
+ * „×” – also while a rule, the helper or a full screen keeps it away. The panel's „schowaj”, the tick of „Pasek pulpitu” in the
+ * icon's menu and the settings' switch say it.
+ */
+export const barChosen = (desktopBar: boolean, closed: boolean): boolean => desktopBar && !closed
 
 /**
  * The bar without a data folder (the first start before the wizard, OneDrive not ready yet – D327, in place of the trial,

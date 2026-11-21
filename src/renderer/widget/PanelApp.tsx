@@ -1,14 +1,15 @@
 /**
  * The icon's panel – the remote of the app (D564 P13, variant A): a header „Regulated Day” with „×”, the bar as on the desktop
  * and in the window, and a footer „↗ Otwórz okno główne · ▣ Pasek pulpitu: pokaż / schowaj · ⏻ Zakończ aplikację” (C1, C7).
- * While the widget is hidden the bar is only its state line and the question waiting (spec „Widget”). Esc closes it (after
+ * While the widget is hidden the bar is only its state line and the question waiting (spec „Widget”) – and, for a desktop bar hidden
+ * by its „×”, the line „Pasek pulpitu schowany · Pokaż po „Wracam”” (D564 P16; otherwise „· Pokaż pasek”). Esc closes it (after
  * whatever Esc closes first); a line a notification's click opened it for is marked. „×” closes it (the app goes on in the
  * tray), „×” with Shift ends the app; a click on a free spot opens the main window (D558): pressed and released on a free
  * spot, nothing unfolded or waiting (`data-busy`); a double click opens it always (D559) – anywhere but on a control, also
  * with something unfolded or waiting. Opened again, it shows nothing unfolded from before it hid (C8).
  */
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
-import { OPEN_MAIN_TEXT, QUIT_APP_TEXT } from '@shared/widget'
+import { OPEN_MAIN_TEXT, QUIT_APP_TEXT, barChosen } from '@shared/widget'
 import { setWindowEscape } from '../lib/escape'
 import { useMachine } from '../store/machine'
 import { useWidget } from '../store/widget'
@@ -100,7 +101,7 @@ export function PanelApp() {
   }
   // By your intention, not by what is on the screen now (D564 P13): on in the settings and not hidden by its „×” – „schowaj”
   // (also while a rule, the helper or a full screen keeps it away for a while); else „pokaż” (takes the „×” off, switches it on).
-  const barOn = desktopBar && !view?.barClosed
+  const barOn = barChosen(desktopBar, !!view?.barClosed)
   return (
     <div ref={ref} className="flex flex-col gap-2 border border-line-strong bg-panel p-2" data-testid="panel" onPointerDown={onPress} onPointerUp={onRelease} onClick={freeClick} onMouseDown={onMouseDown} onDoubleClick={(e) => doubleOpensMain(firstPress.current, e.target) && window.rd.showMain()}>
       <div className="flex items-center justify-between gap-2 pl-1" data-testid="panel-head" data-panel-chrome="">

@@ -27,7 +27,11 @@ export function Field({ label, children, hint, labelWidth = 180, ...rest }: { la
   )
 }
 
-export function Toggle({ checked, onChange, label, disabled, ...rest }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; disabled?: boolean; 'data-testid'?: string }) {
+/**
+ * A switch. `once`: the second click of a double click does nothing (C8) – for a switch whose first click changes what it shows
+ * from elsewhere (the main process), so the second would undo it; a key (detail 0) always acts.
+ */
+export function Toggle({ checked, onChange, label, disabled, once, ...rest }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; disabled?: boolean; once?: boolean; 'data-testid'?: string }) {
   return (
     <label className={cx('inline-flex cursor-default items-center gap-2', disabled && 'opacity-50')}>
       <button
@@ -36,7 +40,7 @@ export function Toggle({ checked, onChange, label, disabled, ...rest }: { checke
         aria-checked={checked}
         disabled={disabled}
         data-testid={rest['data-testid']}
-        onClick={() => onChange(!checked)}
+        onClick={(e) => (!once || e.detail <= 1) && onChange(!checked)}
         className={cx('relative h-[18px] w-[32px] rounded-full border transition-colors duration-150', checked ? 'border-lamp bg-lamp-soft' : 'border-line-strong bg-bg')}
       >
         <span className={cx('absolute top-[3px] h-[10px] w-[10px] rounded-full transition-all duration-150', checked ? 'left-[17px] bg-lamp' : 'left-[3px] bg-muted')} />

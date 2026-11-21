@@ -9,7 +9,7 @@
  * line's button clicked with the real cursor (the gap's „Przesuń resztę wcześniej”, D368) writes its change and opens no
  * window, the bar staying where it lay in the order. The bar's „↗” clicked for real brings the main window to the foreground
  * with one click (D564 P12), its „+ Skrzynka” the window „Do skrzynki” on top with the focus (P15) – the bar stays under the
- * other windows.
+ * other windows. Hidden by its „×” and shown again by the settings (P16), it lies under them too.
  */
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -518,3 +518,40 @@ test('„↗” i „+ Skrzynka” paska pulpitu prawdziwym kliknięciem: okno g
   }
 })
 
+
+/**
+ * UX11 (D564 P16): the bar hidden by its „×” and shown again by the settings – the switch turned on (it already was) and its
+ * place chosen in the mock-up (the same place) – is laid by the helper as at every showing: under the window that overlaps it,
+ * right above the desktop.
+ */
+test('pasek schowany „×” pokazany z ustawień (przełącznik, miejsce paska) leży pod oknem, które na niego nachodzi, i nad pulpitem (D564 P16)', async () => {
+  const { app, page, userData } = await launch()
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      await settledBarBounds(app)
+      const bar = await barInfo(app)
+      const cover = await windowOverBar(app, 'RD-CI-okno', true)
+      const barPage = await viewPage(app, 'bar')
+      const screens = await page.evaluate(() => window.rd.barScreens())
+      for (const how of ['switch', 'place'] as const) {
+        await barPage.getByTestId('bar-close').click()
+        await expect.poll(async () => (await barInfo(app)).visible).toBe(false)
+        if (how === 'switch') await page.evaluate(() => window.rd.setPrefs({ desktopBar: true }))
+        else await page.evaluate((s) => window.rd.placeBar(s.bar.display, s.bar.spot ?? 'bottom-left'), screens)
+        await expect.poll(async () => (await barInfo(app)).visible, { message: how, timeout: 30_000 }).toBe(true)
+        // Shown, it may stand over the window for a moment, until the next check of the second lays it again.
+        await expect
+          .poll(() => {
+            const l = topWindows()
+            return zIndex(l, cover) < zIndex(l, bar.hwnd) && zIndex(l, bar.hwnd) < desktopIndex(l, bar.hwnd)
+          }, { message: how, timeout: 10_000 })
+          .toBe(true)
+      }
+      expect(logOf(userData, 'main')).toContain('pasek pulpitu pokazany ponownie po „×” – włączony w ustawieniach')
+      expect(logOf(userData, 'main')).toContain('pasek pulpitu pokazany ponownie po „×” – miejsce wybrane w ustawieniach')
+    })
+  } finally {
+    await app.close()
+  }
+})
