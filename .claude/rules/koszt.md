@@ -105,8 +105,10 @@ T1360–T1374, T1395–T1399, T1430–T1437, T1440–T1447.
   `dayData` – plan, `foldFacts`, plik): niezaczęty → plik dnia (`patchedBlock` z `dayActions`), zaczęty → `logEvents` `block.cost`
   (chwila z zegara procesu głównego, `USER_EVENTS`); minięty zegarem (`windowPassed` – stały/czekający po końcu okna) – odmowa.
 
-## Przelicz koszty ×N (D566, D567, T2420–T2423)
-- Czysty plan i cofnięcie w `engine/costScale.ts`: `COST_SCALE_FACTORS` (0,5–3 co 0,25, domyślnie 2), `roundHalfAway` (połówki od zera),
+## Przelicz koszty ×N (D566, D567, T2420–T2423, T2431)
+- Czysty plan i cofnięcie w `engine/costScale.ts`: `COST_SCALE_FACTORS` (0,5–3 co 0,25, domyślnie 2), własny mnożnik `parseScaleFactor`
+  (przecinek albo kropka, liczba > 0 – inaczej null; okno: „Własny…” → `cost-scale-custom`, zła wartość – `cost-scale-custom-error`,
+  bez podglądu, „Przelicz” nieaktywne; podgląd tylko dla opcji, dla których go policzono – `counted.opts`), `roundHalfAway` (połówki od zera),
   `scaleCost` (clamp do `COST_MIN`..`COST_MAX`, flaga `clipped`), `costScalePlan(input, opts)` → `{ items, write }`. Zmienia tylko wybrane
   pule i zakres (`categories`, `variants`, `routines`, `blocks`, `templates`); pozycje bez zmiany wartości są pomijane. Podkategorie i
   warianty z własnym kosztem składają jeden `settingsPatch` z ustawień w mocy od daty i chwili zmiany (warianty zmienionej podkategorii

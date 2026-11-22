@@ -361,6 +361,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] SK1.1 Okno „Przelicz koszty ×N” z Ustawień i Ctrl+K – mnożnik, pule, zakres i podgląd „przed → po” (1.35.0)
    - [ ] SK1.2 „Przelicz” od jutra i „od dziś” – podkategorie, rutyny, szablony, serie i bloki dni (1.35.0)
    - [ ] SK1.3 Linia „Przeliczono N kosztów · Cofnij” i koszt zmieniony w międzyczasie (1.35.0)
+   - [ ] SK2.1 Własny mnożnik „Przelicz koszty ×N” – „1,3”, zła wartość (1.36.0)
+   - [ ] EA1.1 Pasy energii przy osi „Dziś” przed check-inem, po „Pomiń” i na dniu przyszłym – „przyjęte” (1.36.0)
+   - [ ] EA1.2 Kolumna dzisiejsza „Tygodnia” i „3 dni” przed check-inem – „przyjęte”, po check-inie pełna (1.36.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3137,6 +3140,31 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** po „Przelicz” kliknij „Cofnij” w linii w sekcji „Kategorie” (albo Ctrl+Z). Potem przelicz ponownie, zmień ręcznie koszt jednej podkategorii albo rutyny i kliknij „Cofnij”.
 - **Oczekiwany efekt:** linia „Przeliczono N kosztów ×… · Cofnij”; „Cofnij” przywraca wszystkie przeliczone koszty do wartości sprzed przeliczenia; koszt zmieniony ręcznie w międzyczasie zostaje na Twojej nowej wartości, a dymek mówi „Cofnięto · 1 koszt zmieniony w międzyczasie – został”.
 - **Nie przechodzi, gdy:** „Cofnij” nadpisuje koszt, który zmieniłeś ręcznie po przeliczeniu; brak komunikatu o pozostawionym koszcie; po „Cofnij” zostają przeliczone wartości.
+
+### SK2 – własny mnożnik „Przelicz koszty ×N” (1.36.0, T2431)
+
+#### SK2.1 Własny mnożnik „Przelicz koszty ×N” – „1,3”, zła wartość
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/cost-scale.test.ts` (`parseScaleFactor`, dokładność), `tests/web/cost-scale-dialog.test.ts` („Własny mnożnik”). Ty: rzut oka.
+- **Jak sprawdzić:** w oknie „Przelicz koszty ×N” wybierz z listy „Własny…”, wpisz `1,3`, potem `1.3`; następnie `0`, `abc` i `1,,3`; na koniec `1,3` i „Przelicz”.
+- **Oczekiwany efekt:** obok listy pojawia się pole z bieżącym mnożnikiem (np. „2”); przy `1,3` i `1.3` podgląd liczy z mnożnikiem 1,3 (np. 3 → 4, 2 → 3); przy złej wartości pole ma czerwoną ramkę, obok „Podaj liczbę większą od 0, np. 1,3.”, podgląd znika („Podaj mnożnik, żeby zobaczyć podgląd.”), a „Przelicz” jest nieaktywne; po „Przelicz” linia „Przeliczono N kosztów ×1,3 · Cofnij”.
+- **Nie przechodzi, gdy:** przecinek nie jest przyjmowany; przy złej wartości da się kliknąć „Przelicz” albo widać stary podgląd; zapisane koszty nie odpowiadają mnożnikowi 1,3; powrót do mnożnika z listy zostawia pole.
+
+### EA1 – energia przed check-inem (1.36.0, T2430)
+
+#### EA1.1 Pasy energii przy osi „Dziś” przed check-inem, po „Pomiń” i na dniu przyszłym – „przyjęte”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/energy-draw.test.ts` (pasy przyjęte, oś „Dziś” bez check-inu), `tests/unit/engine/multi-day.test.ts`. Ty: rzut oka rano.
+- **Jak sprawdzić:** rano przed check-inem otwórz „Dziś”; potem kliknij „Pomiń” w check-inie; otwórz dzień przyszły (PgDn w „Dziś” albo klik w nagłówek jutra w „Tygodniu”); wróć na dziś i wypełnij check-in.
+- **Oczekiwany efekt:** przed check-inem, po „Pomiń” i na dniu przyszłym obok osi stoją cztery pasy G · E · B · C, przygaszone, pod literami podpis „przyjęte”; dziś przy kresce „teraz” cztery liczby (przygaszone) z prognozy od 100 o 04:00; po check-inie pasy od razu pełne, podpis znika, liczby wyraźne; dzień miniony bez check-inu – bez pasów.
+- **Nie przechodzi, gdy:** przed check-inem nie ma pasów; pasy przyjęte nie są przygaszone albo nie mają podpisu „przyjęte”; po check-inie zostaje podpis lub przygaszenie; w historii dnia albo w statystykach pojawia się check-in, którego nie zrobiłeś.
+
+#### EA1.2 Kolumna dzisiejsza „Tygodnia” i „3 dni” przed check-inem – „przyjęte”, po check-inie pełna
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/day-grid.test.ts` (kolumna dziś przyjęta), `tests/unit/engine/multi-day.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** przed check-inem (albo po „Pomiń”) otwórz „Tydzień” i „3 dni”; potem wypełnij check-in i wróć do nich.
+- **Oczekiwany efekt:** kolumna dzisiejsza ma pasek energii jaśniejszy z podpisem „przyjęte” – jak dni przyszłe; po check-inie pasek pełny, bez podpisu.
+- **Nie przechodzi, gdy:** kolumna dzisiejsza przed check-inem nie ma paska; pasek nie jest jaśniejszy albo nie ma podpisu; po check-inie podpis zostaje.
 
 ### UX – ciąg poprawek użytkowych (1.34.0, D561–D565)
 

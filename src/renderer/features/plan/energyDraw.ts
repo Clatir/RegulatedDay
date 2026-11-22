@@ -18,6 +18,12 @@ export { POOL_LETTER }
 export const RESERVE_COLOR = '#D49A97'
 /** The scale every drawing of the energy names (D500). */
 export const ENERGY_SCALE = 'energia 0–100'
+/** The caption of a drawing counted from the assumed check-in (a day to come – D422; today before its own check-in – T2430). */
+export const ASSUMED_CAPTION = 'przyjęte'
+/** Such a drawing is fainter: its opacity × this (the lanes of „Dziś” and the strip of a column). */
+export const ASSUMED_FACTOR = 0.5
+/** The numbers at „teraz” of the lanes counted from the assumed check-in (T2430). */
+export const ASSUMED_NOW_OPACITY = 0.6
 /**
  * What the numbers beside a tile are (D7) – one text for the legend and the tile's window: a level of cost an hour, between −5 and 5; a cost k
  * takes 3·k points of the pool's 0–100 an hour (spec „Koszt na godzinę”).

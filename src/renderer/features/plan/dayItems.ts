@@ -2,7 +2,8 @@
  * The axis of a counted day: started blocks where they ran (a running one up to now or its planned end), blocks still
  * to come where the forecast puts them today (other days: at their planned times, an anchored one after its anchor),
  * dimmed when passed, parked or cancelled; the lines of the wake, the boundary (approved – solid, a proposal – dashed),
- * the maximum, the hard end, the bedtime's forecast and now; the energy's forecast (after the check-in).
+ * the maximum, the hard end, the bedtime's forecast and now; the energy's forecast (after the check-in; today before it and a day
+ * to come – from the assumed check-in, T2430).
  */
 import { movableBlock, plannedSpan } from '@shared/engine/blocks'
 import { namedById } from '@shared/blockName'
@@ -10,7 +11,7 @@ import { namingOf } from '@shared/engine/context'
 import { dueBadge } from '@shared/engine/caseDates'
 import { isDone } from '@shared/engine/cases'
 import type { Priority, RequestRecord } from '@shared/model/requests'
-import { energyTrack } from '@shared/engine/energyTrack'
+import { assumedEnergy, energyTrack } from '@shared/engine/energyTrack'
 import { atOf, logicalSpan } from '@shared/engine/grid'
 import { pausedPlaceOf } from '@shared/engine/facts'
 import { runningEdges } from '@shared/engine/resize'
@@ -178,8 +179,10 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
   markers.push({ at: lm(state.bedtime.forecast), label: `pora snu ${logicalClock(lm(state.bedtime.forecast))}`, tone: 'muted' })
   if (nowIdx != null && nowIdx >= 0 && nowIdx <= g.length) markers.push({ at: lm(nowIdx), label: `teraz ${logicalClock(lm(nowIdx))}`, tone: 'fg', now: true })
 
-  // The one sampling of the curve (`energyTrack` – the columns of „Tydzień” and „3 dni” draw the same, D417).
-  const energy = energyTrack(model.date, g, model.energy)
+  // The one sampling of the curve (`energyTrack` – the columns of „Tydzień” and „3 dni” draw the same, D417). Today without its
+  // check-in (none yet, skipped) and a day to come: from the assumed check-in, for the drawing only (T2430) – never in the log.
+  const assumed = today != null && model.date >= today && !model.energy.known && model.energy.enabled
+  const energy = assumed ? assumedEnergy(ctx, state, true) : energyTrack(model.date, g, model.energy)
   return { items, markers, energy, from: Math.min(lm(state.wake) - 30, 6 * 60), to: Math.max(lm(state.bedtime.forecast) + 30, 22 * 60) }
 }
 

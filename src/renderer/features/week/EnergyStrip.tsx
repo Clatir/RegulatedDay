@@ -2,22 +2,21 @@
  * The energy of a column of „Tydzień” and „3 dni” (D500): a narrow strip at the column's left edge, coloured by the weakest
  * pool at each minute in one of three shades – dobrze · uwaga (the weakest less than 15 above the reserve) · poniżej rezerwy
  * (`stripRuns`, T1281); the blocks stand right of it, nothing lies under them. A day to come is counted from the check-in
- * assumed for it (all pools 100 at 04:00, D422) – its strip is fainter, with the caption „przyjęte”. The pointer over the strip
+ * assumed for it (all pools 100 at 04:00, D422), and so is today before its own check-in (none yet, skipped – T2430) – its strip is
+ * fainter, with the caption „przyjęte”. The pointer over the strip
  * shows the hour and the four values („10:30 · głowa 71 · emocje 66 · bodźce 41 · ciało 58”).
  */
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
-import { ENERGY_SCALE, hoverText, nearestSample, POOL_COLOR, POOL_LETTER, POOL_NAME, POOLS, STRIP_STATE_NAME, stripRuns, WATCH_ABOVE_RESERVE, type StripState } from '../plan/energyDraw'
+import { ASSUMED_CAPTION, ASSUMED_FACTOR, ENERGY_SCALE, hoverText, nearestSample, POOL_COLOR, POOL_LETTER, POOL_NAME, POOLS, STRIP_STATE_NAME, stripRuns, WATCH_ABOVE_RESERVE, type StripState } from '../plan/energyDraw'
 import { axisY } from './weekLayout'
 
-/** The caption of a strip counted from the assumed check-in. */
-export const ASSUMED_CAPTION = 'przyjęte'
+export { ASSUMED_CAPTION, ASSUMED_FACTOR }
 /** The strip's width; the blocks of the column start one pixel right of it (D500: nothing under them). */
 export const STRIP_WIDTH = 5
-/** The opacity of each shade (dobrze faint, poniżej rezerwy full); a day to come – half of it. */
+/** The opacity of each shade (dobrze faint, poniżej rezerwy full); counted from the assumed check-in – `ASSUMED_FACTOR` of it. */
 export const STRIP_OPACITY: Record<StripState, number> = { ok: 0.3, watch: 0.65, low: 1 }
-export const ASSUMED_FACTOR = 0.5
 const STATES: readonly StripState[] = ['ok', 'watch', 'low']
 /** The room the hover takes beside the strip (its words are about 230 px); past the window's right edge it stands left. */
 export const HOVER_ROOM = 260

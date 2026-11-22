@@ -5,7 +5,7 @@
  * nadal stoi jak po przeliczeniu.
  */
 import { describe, expect, it } from 'vitest'
-import { COST_SCALE_FACTORS, costScalePlan, costScaleUndo, roundHalfAway, scaleCost, scaleCosts, scaleLabel, type ScaleInput, type ScaleOptions } from '@shared/engine/costScale'
+import { COST_SCALE_FACTORS, costScalePlan, costScaleUndo, parseScaleFactor, roundHalfAway, scaleCost, scaleCosts, scaleLabel, type ScaleInput, type ScaleOptions } from '@shared/engine/costScale'
 import type { Costs } from '@shared/model/categories'
 import { planBlock, type Template } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
@@ -62,6 +62,29 @@ describe('reguła liczby (D567 p.3)', () => {
   it('mnożnik 0,5–3 co 0,25, zapis polski z przecinkiem', () => {
     expect(COST_SCALE_FACTORS).toEqual([0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3])
     expect([scaleLabel(1.5), scaleLabel(2), scaleLabel(0.75)]).toEqual(['×1,5', '×2', '×0,75'])
+  })
+
+  it('własny mnożnik (T2431): liczba dodatnia, przecinek albo kropka („1,3” = 1.3)', () => {
+    expect(['1,3', '1.3', ' 1,3 ', '×1,3', 'x 1,3', '0,05', ',5', '5', '6', '1,234', '10'].map(parseScaleFactor)).toEqual([1.3, 1.3, 1.3, 1.3, 1.3, 0.05, 0.5, 5, 6, 1.234, 10])
+    expect(['', ' ', '0', '0,00', '-1', '−1', 'abc', '1,3x', '1,,3', '1.3.1', '1,3,1', '1e1', 'Infinity', '1,', `1${'0'.repeat(400)}`].map(parseScaleFactor)).toEqual(Array(15).fill(null))
+    expect([scaleLabel(1.3), scaleLabel(0.05), scaleLabel(0.0000001), scaleLabel(1e21), scaleLabel(1.234)]).toEqual(['×1,3', '×0,05', '×0,0000001', '×1000000000000000000000', '×1,234'])
+  })
+
+  it('własny mnożnik liczony jak dokładnie (T2431): każdy koszt −5…5 × każdy mnożnik 0,0001–5 (do czterech miejsc) – jak w liczbach całkowitych', () => {
+    const D = 10_000
+    // v · k / D rounded half away from zero, in integers only.
+    const exact = (v: number, k: number) => {
+      const q = Math.trunc((2 * Math.abs(v) * k + D) / (2 * D))
+      return Math.max(-5, Math.min(5, v < 0 ? -q : q))
+    }
+    let wrong = 0
+    for (let k = 1; k <= 5 * D; k++) {
+      const n = parseScaleFactor(`${Math.trunc(k / D)},${String(k % D).padStart(4, '0')}`)!
+      for (let v = -5; v <= 5; v++) if (scaleCost(v, n).value !== exact(v, k)) wrong++
+    }
+    expect(wrong).toBe(0)
+    expect([scaleCost(3, 1.3).value, scaleCost(2, 1.3).value, scaleCost(-3, 1.3).value, scaleCost(5, 0.7).value, scaleCost(4, 0.125).value, scaleCost(-4, 0.125).value]).toEqual([4, 3, -4, 4, 1, -1])
+    expect([scaleCost(2, 6), scaleCost(1, 6)]).toEqual([{ value: 5, clipped: true }, { value: 5, clipped: true }])
   })
 })
 

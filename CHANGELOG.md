@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.36.0
+- „Przelicz koszty ×N” ma mnożnik „Własny…”: wpisujesz dowolną liczbę większą od 0, z przecinkiem albo kropką (np. 1,3). Podgląd „przed → po” liczy się od razu z wpisanej wartości, a przy złej wartości okno mówi, co poprawić, i „Przelicz” czeka.
+- Pasy energii G · E · B · C przy osi „Dziś” są widoczne także przed porannym check-inem, po „Pomiń” i na dniach przyszłych: liczone od przyjętego check-inu (wszystkie pule 100 o 04:00), przygaszone, z podpisem „przyjęte” pod literami; liczby przy kresce „teraz” też są przygaszone. Po check-inie pasy od razu są pełne, a podpis znika.
+- W „Tygodniu” i „3 dniach” kolumna dzisiejszego dnia przed check-inem albo po „Pomiń” ma pasek energii jak dni przyszłe – jaśniejszy, z podpisem „przyjęte”; po check-inie pełny.
+- Przyjęty check-in służy tylko do rysowania prognozy – nigdy nie trafia do logu ani do pliku dnia.
+
 ## 1.35.0
 - Nowa akcja „Przelicz koszty ×N” (Ustawienia → Kategorie → „Przelicz koszty ×N…” oraz polecenie w Ctrl+K): jednym ruchem przeskalowuje zapisane koszty na godzinę przez wybrany mnożnik od ×0,5 do ×3 (co 0,25; domyślnie ×2), z zaokrągleniem do całości (połówki od zera: 1,5 → 2, −1,5 → −2) i przycięciem do zakresu −5…5.
 - Wybierasz, które pule przeliczyć (G · E · B · C, domyślnie wszystkie) i jaki zakres objąć: podkategorie, warianty z własnym kosztem, rutyny, własne koszty bloków (zaplanowane dni i serie) oraz szablony. Podgląd przed zapisem pokazuje każdą zmianę „przed → po” czterema liczbami wraz z licznikiem i oznaczeniem pul przyciętych do ±5; pozycje bez zmiany są pomijane.

@@ -123,6 +123,19 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
       PR #110 z pełnym zielonym CI (run 45021866279) scalony do `main` (`d7de25f`). CI na `main` zielone (run 45031651006) – wydanie
       `v1.35.0` opublikowane 22.11 16:00 UTC (PR #110). Lokalny instalator w `Downloads\Regulated-Day-Setup.exe`. Odbiór SK1.1–SK1.3 w `docs/odbior.md`.
 
+17. **1.36.0 – własny mnożnik i energia przed check-inem (T2430, T2431):** zlecenie użytkownika 22.11 (zakres i zachowanie podane wprost).
+    Gałąź `claude/1.36-energia-assumed` (od 0823ca5); główna sesja sama (Opus 5.5), przegląd high (silnik energii – tylko rysunek).
+    - **Kod i testy:** `engine/energyTrack.ts` (`assumedEnergy`, `columnEnergy` dla dziś bez check-inu), `plan/dayItems.ts` (oś „Dziś”),
+      `plan/EnergyLanes.tsx` (× 0,5, liczby „teraz” 0,6, `energy-assumed`), `engine/costScale.ts` (`parseScaleFactor`),
+      `settings/CostScaleDialog.tsx` („Własny…”, `cost-scale-custom`); testy `energy-draw`, `day-grid`, `multi-day`, `cost-scale` (unit i web).
+    - **Przyjęte bez pytania:** pole „Własny…” startuje od mnożnika wybranego na liście. Bez górnej granicy i limitu miejsc po przecinku (jak w zleceniu).
+    - **Przegląd high (runda 1):** podgląd innego mnożnika w trakcie liczenia – poprawione z testem (`counted.opts`); granice mnożnika spoza zlecenia – usunięte;
+      martwa podpowiedź „przyjęte” – usunięta. Runda 2: `Infinity` z bardzo długiej liczby – odrzucone z testem; `scaleLabel` bez wykładnika.
+      Uwagi na później: drugie `computeEnergy` dla dnia bez check-inu (oś i kolumna; ~2 ms).
+    - **Dokumenty:** T2430–T2431, reguły `energia.md`, `koszt.md`, `widoki.md`, specyfikacja (D500, SNT1, „Przelicz koszty”), `CHANGELOG.md`,
+      odbiór SK2.1, EA1.1–EA1.2. Punkt „Pasek energii GEBC” z „Pytań na później” – zrobiony.
+    - **Wydanie:** PR, CI i publikacja – stan niżej (uzupełniany po każdym kroku).
+
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
   niżej „Wszystkie punkty” – pełny opis każdego nieodebranego według etapu i numeru, z wersją przy nagłówku. Odebrany
@@ -148,4 +161,3 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
   może być niepełny.” obok banera folderu – zostawić czy ukryć, gdy widać baner?
 - Przed E4a: punkt 15 listy E0 niesprawdzony – czy OBS nagrywa przy wygaszonym ekranie; od 0.20.0 bez Próby sprawdzisz
   to przy prawdziwym wykładzie nagrywanym na tym komputerze (D184, „Ekran świeci”).
-- Pasek energii GEBC (D500): pokazywać pasek energii przy osi („Dziś”) oraz w kolumnie („Tydzień”) także wtedy, gdy nie odpowiedziano jeszcze na pytania check-inu, check-in pominięto lub dzień jest oglądany w przód na osi „Dziś” (ze stanem przyjętym/założonym 100, jak w kolumnach przyszłych dni).

@@ -1,5 +1,6 @@
 /**
- * „Przelicz koszty ×N” (D566, D567): every stored cost per hour of the chosen pools and kinds multiplied by N (0,5–3 by 0,25), each pool
+ * „Przelicz koszty ×N” (D566, D567): every stored cost per hour of the chosen pools and kinds multiplied by N (0,5–3 by 0,25, or your own
+ * – `parseScaleFactor`, T2431), each pool
  * rounded half away from zero (1,5 → 2, −1,5 → −2) and clipped to −5…5 – the stored values change, the engine knows no factor. What it
  * touches: the subcategories' and the variants' own costs of the settings in force from the change's date (one dated change of rd.json); the
  * routines' costs (a routine has one cost without dates – changed at once); the own costs of blocks of the days' files from the change's date
@@ -22,8 +23,19 @@ export const COST_SCALE_FACTORS: readonly number[] = Array.from({ length: 11 }, 
 /** The factor by default (D566). */
 export const DEFAULT_SCALE = 2
 
-/** „×1,5” – a Polish decimal comma. */
-export const scaleLabel = (n: number): string => `×${String(n).replace('.', ',')}`
+/**
+ * A factor of your own as typed (T2431): a positive number with a decimal comma or point („1,3” = 1.3); spaces around it and a leading
+ * „×” / „x” are fine. Anything else (empty, 0, negative, a letter, two commas, an exponent, too long to be finite) – null.
+ */
+export function parseScaleFactor(text: string): number | null {
+  const t = text.trim().replace(/^[×xX]\s*/, '').replace(',', '.')
+  if (!/^(\d+(\.\d+)?|\.\d+)$/.test(t)) return null
+  const n = Number(t)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/** „×1,5” – a Polish decimal comma; never an exponent (×0,0000001, not ×1e-7 – T2431). */
+export const scaleLabel = (n: number): string => `×${n.toLocaleString('pl-PL', { maximumSignificantDigits: 15, useGrouping: false })}`
 
 /** What the change may touch (D566): subcategories, variants, routines, the own costs of blocks (days and series), templates. */
 export type ScaleScope = 'categories' | 'variants' | 'routines' | 'blocks' | 'templates'
@@ -35,7 +47,11 @@ export const roundHalfAway = (v: number): number => {
   return r === 0 ? 0 : r
 }
 
-/** One pool's cost × n: rounded half away from zero, clipped to −5…5 (`clipped` – it would have gone past). */
+/**
+ * One pool's cost × n: rounded half away from zero, clipped to −5…5 (`clipped` – it would have gone past). With a cost −5…5 and a factor
+ * of up to four decimals the floating product rounds as the exact one (T2431 – checked in the tests for every such pair up to ×5); a factor
+ * of more decimals rounds on the floating product (a half may differ in the last digit).
+ */
 export function scaleCost(v: number, n: number): { value: number; clipped: boolean } {
   const r = roundHalfAway(v * n)
   const value = Math.max(COST_MIN, Math.min(COST_MAX, r))

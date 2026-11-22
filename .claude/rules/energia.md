@@ -20,6 +20,9 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
   `reserveReaction` (nagroda: stany zejść i werdykt).
 - `engine/energyTrack.ts` – krzywa przy osi (`energyTrack`, próbki co 10 min; „Dziś” i kolumny) i `columnEnergy` (D417,
   T903): dzień przyszły od przyjętego check-inu (`ASSUMED_CHECKIN`, 04:00, `assumed`) – tylko dla energii, nie zdarzenie logu.
+  Dziś bez check-inu (brak, „Pomiń”) – też `assumedEnergy` (T2430): w kolumnie (`columnEnergy` `today`) i przy osi „Dziś” (`dayAxis`, gdy
+  `date >= today`); przyjęte zdarzenie żyje tylko w kopii `ctx.events` do `computeEnergy` – nigdy w logu, pliku dnia ani `DayState`.
+  Rysunek: `EnergyLanes` (× `ASSUMED_FACTOR`, liczby „teraz” `ASSUMED_NOW_OPACITY`, podpis `energy-assumed`), `EnergyStrip` (`data-assumed`).
 - Zdarzenia `energy.*` w `model/events.ts`; `DayState.rest` i `settingsAtMinute` z `engine/day.ts`;
   `DataFolder.energyState` i zapis `energy.reserve` w zadaniach prowadzącego (`main/data/folder.ts`).
 

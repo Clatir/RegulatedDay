@@ -1,5 +1,6 @@
 /**
- * The window „Przelicz koszty ×N” (D566, D567): the factor (0,5–3 by 0,25, ×2 at first), the pools (G · E · B · C, all at first), what it
+ * The window „Przelicz koszty ×N” (D566, D567): the factor (0,5–3 by 0,25, ×2 at first, or „Własny…” – a number of your own above 0
+ * with a comma or a point – `parseScaleFactor`, T2431; while it is not one, no preview and „Przelicz” off), the pools (G · E · B · C, all at first), what it
  * touches (subcategories, variants, routines, the own costs of blocks – the days planned from the change's date and the series –, templates;
  * all at first), and the preview „przed → po” of every cost that changes (one that stays is not listed; one clipped to ±5 is marked). The
  * date is the bar's („od jutra / od dziś / od daty”); a routine has one cost without dates – changed at once, the window says so. „Przelicz”
@@ -9,7 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { plDate } from '@shared/format'
 import { costsText } from '@shared/model/blockCosts'
 import { POOL_LETTER, POOLS, type Pool } from '@shared/model/categories'
-import { COST_SCALE_FACTORS, DEFAULT_SCALE, SCALE_SCOPES, scaleLabel, type ScaleItem, type ScaleKind, type ScalePlan, type ScaleScope } from '@shared/engine/costScale'
+import { COST_SCALE_FACTORS, DEFAULT_SCALE, parseScaleFactor, SCALE_SCOPES, scaleLabel, type ScaleItem, type ScaleKind, type ScaleOptions, type ScalePlan, type ScaleScope } from '@shared/engine/costScale'
 import { addDays } from '@shared/time/zone'
 import { Choice } from '../../components/fields'
 import { Dialog } from '../../components/Dialog'
@@ -31,10 +32,18 @@ export function fromText(f: ScaleFrom, today: string): string {
 /** Where an item is: a day's block – its date; a version of a template or series – „od” its date. */
 const whereOf = (it: ScaleItem): string => (it.kind === 'day' ? ` · ${plDate(it.date!)}` : it.kind === 'template' || it.kind === 'series' ? ` · od ${plDate(it.date!)}` : '')
 
+/** The choice „Własny…” of the factor's list. */
+const CUSTOM = 'custom'
+/** Why the factor typed is not one (T2431). */
+export const CUSTOM_FACTOR_HINT = 'Podaj liczbę większą od 0, np. 1,3.'
+/** A factor as the field shows it: a decimal comma. */
+const factorText = (n: number): string => String(n).replace('.', ',')
+
 const toggled = <T,>(list: readonly T[], v: T): T[] => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
 
 /** The preview's first line: how many costs change and how many are clipped, or why it cannot be told. */
-function countText(plan: ScalePlan | null, error: string | null): string {
+function countText(plan: ScalePlan | null, error: string | null, factor: number | null): string {
+  if (factor == null) return 'Podaj mnożnik, żeby zobaczyć podgląd.'
   if (error) return `Nie da się teraz policzyć podglądu – ${error}.`
   if (!plan) return 'Liczę…'
   if (!plan.items.length) return 'Nic się nie zmienia.'
@@ -70,36 +79,47 @@ export function CostScaleDialog({ onClose }: { onClose: () => void }) {
   // The bar's date as the window opened.
   const [from] = useState<ScaleFrom>(() => changeFrom(today))
   const [n, setN] = useState(DEFAULT_SCALE)
+  // „Własny…”: the text as typed; the factor – `parseScaleFactor` of it (null: not a factor yet).
+  const [custom, setCustom] = useState<string | null>(null)
+  const factor = custom == null ? n : parseScaleFactor(custom)
   const [pools, setPools] = useState<readonly Pool[]>(POOLS)
   const [scope, setScope] = useState<readonly ScaleScope[]>(SCALE_SCOPES)
-  const [plan, setPlan] = useState<ScalePlan | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // The preview with the options it was counted for: shown only while they are still the window's (another factor – „Liczę…”).
+  const [counted, setCounted] = useState<{ opts: ScaleOptions; plan: ScalePlan | null; error: string | null } | null>(null)
   const [busy, run] = useBusy()
-  const opts = useMemo(() => ({ n, pools, scope }), [n, pools, scope])
+  const opts = useMemo(() => (factor == null ? null : { n: factor, pools, scope }), [factor, pools, scope])
   // The preview for the options, read again when the data change (another computer, a save of the window).
   useEffect(() => {
+    // Not a factor yet: nothing to read (the window shows no preview – `items`, `countText`).
+    if (!opts) return
     let alive = true
     costScalePreview(from, opts).then(
       (p) => {
-        if (!alive) return
-        setPlan(p)
-        setError(null)
+        if (alive) setCounted({ opts, plan: p, error: null })
       },
       (e: unknown) => {
-        if (!alive) return
-        setPlan(null)
-        setError(e instanceof Error ? e.message : String(e))
+        if (alive) setCounted({ opts, plan: null, error: e instanceof Error ? e.message : String(e) })
       }
     )
     return () => {
       alive = false
     }
   }, [from, opts, stamp])
+  const current = counted != null && counted.opts === opts ? counted : null
+  const plan = current?.plan ?? null
+  const error = current?.error ?? null
   const items = plan?.items ?? []
   const confirm = () =>
     run(async () => {
-      if ((await applyCostScale(from, opts, scaleLabel(n))) != null) onClose()
+      if (!opts) return
+      if ((await applyCostScale(from, opts, scaleLabel(opts.n))) != null) onClose()
     })
+  const pick = (v: string) => {
+    if (v !== CUSTOM) {
+      setCustom(null)
+      setN(Number(v))
+    } else if (custom == null) setCustom(factorText(n))
+  }
   return (
     <Dialog
       title="Przelicz koszty"
@@ -120,10 +140,43 @@ export function CostScaleDialog({ onClose }: { onClose: () => void }) {
       <p className="text-[12.5px] text-muted">
         Każdy zapisany koszt wybranych pul mnoży się przez N, zaokrągla do całości (połówki od zera) i przycina do −5…5. Podkategorie, warianty i szablony – {fromText(from, today)} (pasek nad ustawieniami); bloki – w dniach od tej daty, dni minione i bloki już zaczęte zostają; rutyny – od razu.
       </p>
-      <label className="flex items-center gap-2 text-[12.5px]">
-        Mnożnik
-        <Choice value={String(n)} options={COST_SCALE_FACTORS.map((f) => ({ value: String(f), label: scaleLabel(f) }))} onChange={(v) => setN(Number(v))} className="w-[90px]" aria-label="Mnożnik" data-testid="cost-scale-factor" />
-      </label>
+      <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+        <label className="flex items-center gap-2">
+          Mnożnik
+          <Choice
+            value={custom == null ? String(n) : CUSTOM}
+            options={[...COST_SCALE_FACTORS.map((f) => ({ value: String(f), label: scaleLabel(f) })), { value: CUSTOM, label: 'Własny…' }]}
+            onChange={pick}
+            className="w-[100px]"
+            aria-label="Mnożnik"
+            data-testid="cost-scale-factor"
+          />
+        </label>
+        {custom != null && (
+          <>
+            <label className="flex items-center gap-1">
+              ×
+              <input
+                className={`input w-[72px] ${factor == null ? 'border-rose' : ''}`}
+                type="text"
+                inputMode="decimal"
+                autoFocus
+                value={custom}
+                onChange={(e) => setCustom(e.currentTarget.value)}
+                aria-label="Własny mnożnik"
+                aria-invalid={factor == null}
+                aria-describedby={factor == null ? 'cost-scale-custom-error' : undefined}
+                data-testid="cost-scale-custom"
+              />
+            </label>
+            {factor == null && (
+              <span id="cost-scale-custom-error" className="text-rose" role="alert" data-testid="cost-scale-custom-error">
+                {CUSTOM_FACTOR_HINT}
+              </span>
+            )}
+          </>
+        )}
+      </div>
       <fieldset className="flex flex-wrap items-center gap-3 text-[12.5px]" data-testid="cost-scale-pools">
         <legend className="mb-1 text-muted">Pule</legend>
         {POOLS.map((p) => (
@@ -144,7 +197,7 @@ export function CostScaleDialog({ onClose }: { onClose: () => void }) {
       </fieldset>
       <div className="flex flex-col gap-1" data-testid="cost-scale-preview">
         <p className="text-[12.5px]" role="status" data-testid="cost-scale-count">
-          {countText(plan, error)}
+          {countText(plan, error, factor)}
         </p>
         {items.length > 0 && (
           <ul className="flex max-h-[40vh] flex-col gap-0.5 overflow-y-auto rounded border border-line p-2 text-[12px]">

@@ -11,6 +11,9 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
 import { EnergyLanes, EnergyLegend, LANE_WIDTH, laneLeft, LANES_WIDTH, NOW_CHIP_HEIGHT } from '@renderer/features/plan/EnergyLanes'
 import {
+  ASSUMED_CAPTION,
+  ASSUMED_FACTOR,
+  ASSUMED_NOW_OPACITY,
   curveAt,
   energySpan,
   hasEnergy,
@@ -31,6 +34,13 @@ import {
   poolCurves
 } from '@renderer/features/plan/energyDraw'
 import { Timeline } from '@renderer/features/plan/Timeline'
+import { dayAxis } from '@renderer/features/plan/dayItems'
+import type { DayModel } from '@renderer/store/day'
+import { computeDay } from '@shared/engine/day'
+import { computeEnergy } from '@shared/engine/energy'
+import { checkinSkipId } from '@shared/engine/reminders'
+import { rdFrom } from '@shared/model/rd'
+import { block, Scenario } from '../unit/engine/dsl'
 
 /** The body (D520) stands high unless a test says otherwise, so it is never the weakest pool by accident. */
 const sample = (at: number, head: number, emotions: number, senses: number, body = 100) => ({ at, head, emotions, senses, body })
@@ -325,5 +335,71 @@ describe('cztery pasy przy osi „Dziś” (D500, D520)', () => {
     expect(text).toContain('C ciało')
     expect(text).toContain('rezerwa 30')
     expect(text).toContain('jaśniej – poniżej rezerwy')
+  })
+})
+
+describe('pasy przed check-inem: od przyjętego check-inu, przygaszone, „przyjęte” (T2430)', () => {
+  const t = track([sample(360, 100, 50, 20, 80), sample(390, 70, 50, 40, 60), sample(420, 40, 50, 60, 40)])
+  const lanes = (tr: EnergyTrack, nowAt: number | null = 390) => render(createElement(EnergyLanes, { track: tr, lo: 360, ppm: 1, height: 60, nowAt, nowColor: '#EEE3D6' }))
+
+  it('przyjęte: słupki o połowę jaśniejsze, pod literami „przyjęte”, liczby „teraz” wyliczone i przygaszone (0,6)', async () => {
+    await lanes({ ...t, assumed: true })
+    expect(ASSUMED_FACTOR).toBe(0.5)
+    expect(ASSUMED_NOW_OPACITY).toBe(0.6)
+    expect(q('energy-track')!.dataset.assumed).toBe('true')
+    for (const p of POOLS) {
+      expect(Number(q(`energy-bar-full-${p}`)!.getAttribute('opacity'))).toBeCloseTo(0.85 * 0.5, 9)
+      expect(Number(q(`energy-bar-${p}`)!.getAttribute('opacity'))).toBeCloseTo(0.3 * 0.5, 9)
+    }
+    expect(q('energy-assumed')!.textContent).toBe(ASSUMED_CAPTION)
+    expect(q('energy-letters')!.contains(q('energy-assumed'))).toBe(true)
+    expect(q('energy-now')!.style.opacity).toBe('0.6')
+    expect(q('energy-now-head')!.textContent).toBe('70')
+  })
+  it('Twój check-in: pełne słupki, bez „przyjęte”, liczby „teraz” bez przygaszenia', async () => {
+    await lanes(t)
+    expect(q('energy-track')!.dataset.assumed).toBeUndefined()
+    expect(q('energy-bar-full-head')!.getAttribute('opacity')).toBe('0.85')
+    expect(q('energy-assumed')).toBeNull()
+    expect(q('energy-now')!.style.opacity).toBe('')
+  })
+})
+
+describe('oś „Dziś” bez check-inu – energia od przyjętego check-inu, tylko do rysowania (T2430)', () => {
+  const TODAY = '2026-11-04'
+  const plan = [block({ id: 'a', cat: 'analiza', at: '13:00', min: 60, origin: 'user' })]
+  const names = { rd: rdFrom({}), settings: undefined, routines: [], requests: [] } as unknown as Parameters<typeof dayAxis>[1]
+  /** The axis as „Dziś” has it at `now` (the day `date`, the window's day `today`). */
+  function axisAt(s: Scenario, date: string, now: string, today: string | null = TODAY, moduleOn = true) {
+    const ctx = s.contextAt(s.at(now))
+    const state = computeDay(ctx)
+    const model = { date, ctx, state, energy: computeEnergy(ctx, state, { moduleOn }) } as unknown as DayModel
+    return { axis: dayAxis(model, { ...names, settings: s.settings }, s.at(now), today), ctx }
+  }
+
+  it('dziś bez check-inu i po „Pomiń”: pasy od 100 o 04:00, `assumed`; zdarzenie przyjęte nie trafia do logu dnia', () => {
+    const s = new Scenario({ date: TODAY, plan })
+    s.presence('07:30')
+    const { axis, ctx } = axisAt(s, TODAY, '10:00')
+    expect(axis.energy).toMatchObject({ assumed: true })
+    expect(axis.energy!.samples[0]).toEqual({ at: 240, head: 100, emotions: 100, senses: 100, body: 100 })
+    expect(ctx.events.some((e) => e.k === 'energy.checkin')).toBe(false)
+    s.mark('07:35', checkinSkipId(TODAY), 'skip')
+    expect(axisAt(s, TODAY, '10:00').axis.energy!.assumed).toBe(true)
+  })
+  it('po check-inie: Twoja energia, bez `assumed`', () => {
+    const s = new Scenario({ date: TODAY, plan })
+    s.presence('07:30').checkin('07:40', { head: [1, 1], emotions: [0, 0], senses: [0, 0], body: [0, 0] })
+    const { axis } = axisAt(s, TODAY, '10:00')
+    expect(axis.energy).not.toBeNull()
+    expect(axis.energy!.assumed).toBeUndefined()
+  })
+  it('dzień przyszły na osi: przyjęte; dzień miniony bez check-inu, „Szablony” / kreator (bez dnia okna) i moduł wyłączony – bez pasów', () => {
+    const FUT = '2026-11-05'
+    expect(axisAt(new Scenario({ date: FUT, plan }), FUT, '10:00').axis.energy!.assumed).toBe(true)
+    const PAST = '2026-11-03'
+    expect(axisAt(new Scenario({ date: PAST, plan }), PAST, '10:00').axis.energy).toBeNull()
+    expect(axisAt(new Scenario({ date: TODAY, plan }), TODAY, '10:00', null).axis.energy).toBeNull()
+    expect(axisAt(new Scenario({ date: TODAY, plan }), TODAY, '10:00', TODAY, false).axis.energy).toBeNull()
   })
 })

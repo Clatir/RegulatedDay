@@ -387,7 +387,20 @@ describe('pasek energii przy lewej krawędzi kolumny (D500, D422)', () => {
     expect(Number(rects(DATES[2]!)[0]!.getAttribute('opacity'))).toBeCloseTo(STRIP_OPACITY.ok * ASSUMED_FACTOR, 9)
     expect(q(`week-energy-assumed-${DATES[2]}`)!.textContent).toBe('przyjęte')
   })
-  it('bez energii (przed check-inem, dzień minął bez check-inu, moduł wyłączony) – nic nie jest rysowane', async () => {
+  it('dziś przed check-inem albo po „Pomiń” (T2430): jak dzień przyszły – jaśniej, „przyjęte”; po check-inie pełny, bez podpisu', async () => {
+    const list = days()
+    list[1] = { ...list[1]!, energy: track(true) }
+    await mount(list)
+    expect(q(`week-energy-${TODAY}`)!.getAttribute('data-assumed')).toBe('true')
+    expect(Number(rects(TODAY)[0]!.getAttribute('opacity'))).toBeCloseTo(STRIP_OPACITY.ok * ASSUMED_FACTOR, 9)
+    expect(q(`week-energy-assumed-${TODAY}`)!.textContent).toBe('przyjęte')
+    list[1] = { ...list[1]!, energy: track() }
+    await act(async () => root!.render(grid([...list], WEEK_PPM)))
+    expect(q(`week-energy-${TODAY}`)!.getAttribute('data-assumed')).toBeNull()
+    expect(Number(rects(TODAY)[0]!.getAttribute('opacity'))).toBe(STRIP_OPACITY.ok)
+    expect(q(`week-energy-assumed-${TODAY}`)).toBeNull()
+  })
+  it('bez energii (dzień minął bez check-inu, moduł wyłączony) – nic nie jest rysowane', async () => {
     await mount(days())
     expect(host!.querySelectorAll('[data-testid^="week-energy-"]')).toHaveLength(0)
   })
