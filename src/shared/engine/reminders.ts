@@ -6,9 +6,9 @@
  *
  * - The morning plan: `morningAfterWakeMin` after the wake (the day's own wake too), at the latest `morningBeforeFixedMin`
  *   before the first fixed block of work, never before the wake (then at the wake). 0 after the wake – no reminder; 0 before
- *   the fixed block – no such bound. It holds for `REMINDER_LINE_MIN` while something of the plan is still to do: a boundary
- *   proposed and not approved (also by the first work block), or the check-in – the energy module on, no check-in that day and
- *   no „Pomiń” (`checkinSkipId`, written by the window). A day with nothing to approve and no check-in to do has none.
+ *   the fixed block – no such bound. It holds for `REMINDER_LINE_MIN` while the plan is still to do (`morningToDo`): a boundary
+ *   proposed and not approved (an approval – also by the first work block – closes it); in a day with no boundary to approve,
+ *   the check-in – the energy module on, no check-in that day and no „Pomiń” (`checkinSkipId`, written by the window).
  * - The ritual: `ritualBeforeBedMin` before the effective bedtime (0 – none), up to the bedtime (the night's quiet), while
  *   the ritual is due (`ritualDue` – the bar's „Rytuał”: no work runs) and the day is not closed.
  *
@@ -38,7 +38,7 @@ export interface Reminder {
   at: number
   /** „mniej pytań”: the line only, no notification. */
   quiet: boolean
-  /** The morning plan's check-in is still to do (its words name the questions about symptoms); false for the ritual. */
+  /** The morning plan's reminder is of the check-in alone (a day with no boundary to approve – its words name the questions about symptoms); false for the ritual. */
   checkin: boolean
 }
 
@@ -79,11 +79,16 @@ export function ritualReminderAt(state: DayState): number | null {
   return before > 0 ? state.bedtime.effective - before : null
 }
 
-/** What of the morning plan is still to do: the boundary to approve, the check-in (the energy module on). */
-export function morningToDo(ctx: DayContext, state: DayState, energyOn: boolean): { approve: boolean; checkin: boolean } {
-  const approve = state.boundary.proposal != null && state.boundary.approved == null
+/**
+ * What of the morning plan is still to do – one thing, as the card's „do zrobienia / zatwierdzony” says it: the boundary proposed
+ * and not approved (an approval – yours or the first work block's – closes the plan); only a day with no boundary to approve has
+ * its check-in to do (the energy module on, no check-in, no „Pomiń”). Null – nothing.
+ */
+export function morningToDo(ctx: DayContext, state: DayState, energyOn: boolean): 'approve' | 'checkin' | null {
+  if (state.boundary.approved != null) return null
+  if (state.boundary.proposal != null) return 'approve'
   const checkedIn = ctx.events.some((e) => isKnown(e) && e.k === 'energy.checkin' && !state.facts.undone.has(e.id))
-  return { approve, checkin: energyOn && !checkedIn && !answered(ctx.events, checkinSkipId(state.grid.date)) }
+  return energyOn && !checkedIn && !answered(ctx.events, checkinSkipId(state.grid.date)) ? 'checkin' : null
 }
 
 /** A session or classes now by the day's facts (spec „Cisza”; as the notifications' `inClass`), not this computer's modes. */
@@ -119,7 +124,7 @@ export function remindersDue(i: RemindersInput): Reminder[] {
   const morning = morningReminderAt(state)
   if (morning != null && now >= atOf(state.grid, morning) && now < atOf(state.grid, morning) + REMINDER_LINE_MIN * MIN) {
     const todo = morningToDo(ctx, state, i.energyOn)
-    if (todo.approve || todo.checkin) add('morning', morning, todo.checkin)
+    if (todo) add('morning', morning, todo === 'checkin')
   }
   const ritual = ritualReminderAt(state)
   if (ritual != null && now >= atOf(state.grid, ritual) && now < atOf(state.grid, state.bedtime.effective) && !state.facts.closed && ritualDue(state, date, i.ritualFrom)) add('ritual', ritual, false)
@@ -130,7 +135,7 @@ const clockOf = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Eu
 
 /** The words of a reminder: its bar's line, the label of its „open” and its notification. */
 export function reminderWords(r: Pick<Reminder, 'kind' | 'checkin'>, state: DayState): { text: string; open: string; title: string; body: string } {
-  if (r.kind === 'morning') return { text: 'Plan poranny czeka', open: 'Otwórz', title: 'Plan poranny', body: r.checkin ? 'Pytania o objawy i plan dnia czekają w oknie głównym.' : 'Plan dnia czeka w oknie głównym.' }
+  if (r.kind === 'morning') return { text: 'Plan poranny czeka', open: 'Otwórz', title: 'Plan poranny', body: r.checkin ? 'Pytania o objawy czekają w oknie głównym.' : 'Plan dnia czeka w oknie głównym.' }
   const bed = clockOf(atOf(state.grid, state.bedtime.effective))
   return { text: `Pora snu o ${bed} – rytuał zamknięcia`, open: 'Rytuał', title: 'Rytuał zamknięcia', body: `Pora snu o ${bed} – czas zamknąć dzień.` }
 }

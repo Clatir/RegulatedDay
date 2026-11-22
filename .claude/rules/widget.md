@@ -40,8 +40,8 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   najwyżej 60 min od minięcia albo końca trybu zajęć – `classModeEnd`) albo komunikat minuty minięcia (`hardEndMessage`);
   nigdy przy „mniej pytań” w minucie minięcia albo teraz (`fewerAt`, nie `view.quiet` – sesja je zachowuje). Bez stanu
   w pamięci – wszystko z faktów dnia.
-- Przypomnienia (UX13, D565 P21): `engine/reminders.ts` (`remindersDue`; plan – `morningToDo`: granica do zatwierdzenia albo check-in bez
-  „Pomiń” – `checkinSkipId`, `skipCheckinDay`; sesja i zajęcia z faktów, nie `modesOf`) – linia `remind:<dzień>:<rodzaj>` (`open`, `notToday` =
+- Przypomnienia (UX13, D565 P21): `engine/reminders.ts` (`remindersDue`; plan – `morningToDo`: granica do zatwierdzenia, bez niej check-in
+  bez „Pomiń” – `checkinSkipId`, `skipCheckinDay`, `checkinOpen`; sesja i zajęcia z faktów, nie `modesOf`) – linia `remind:<dzień>:<rodzaj>` (`open`, `notToday` =
   `mark`, `SEEN_LINE`) zawsze ostatnia (`linesLast`); powiadomienie `notice:<dzień>:remind:<rodzaj>` (`notices.reminders`) do
   `REMINDER_NOTICE_MIN`, nie przy `quiet` ani `fewerAt` chwili.
 - `main/widget.ts` – `WidgetEngine`: `refresh()` po każdym sprawdzeniu folderu, co 15 s, po kliknięciu i w chwili

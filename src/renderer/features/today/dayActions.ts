@@ -309,13 +309,19 @@ export async function tellFreed(date: string, freed: Freed | null): Promise<void
 }
 
 /**
- * „Pomiń” of the morning's check-in: the card's own skip stays the window's (D563 B5, `skipCheckin`), and the day's log gets its
- * mark (`checkinSkipId`, the timer's `mark`) – the morning plan's reminder counts the check-in as done on every computer
- * (UX13). A mark refused (given before, the folder away) changes nothing in the window: the reminder may only stay.
+ * „Pomiń” of the morning's check-in (UX13): the day's log gets its mark (`checkinSkipId`, the timer's `mark`) – the card does not
+ * ask again after a restart nor on another computer (`checkinOpen`), and the morning plan's reminder counts the check-in as done –
+ * and the window skips it at once (`skipCheckin`, D563 B5). Given before (`answered` – another computer): skipped as well. Refused
+ * otherwise (the folder away, the day not usable): a toast says why and the check-in stays. True – skipped.
  */
-export async function skipCheckinDay(date: string): Promise<void> {
+export async function skipCheckinDay(date: string): Promise<boolean> {
+  const r = await timerClick({ a: 'mark', question: checkinSkipId(date), answer: 'skip', day: date })
+  if (!r.ok && r.code !== 'answered') {
+    toast(`Nie pominięto pytań o objawy: ${r.why ?? 'spróbuj za chwilę'}.`, 'error')
+    return false
+  }
   skipCheckin(date)
-  await timerClick({ a: 'mark', question: checkinSkipId(date), answer: 'skip', day: date })
+  return true
 }
 
 /** A click of the timer whose failure (the IPC throws) is an answer, not an unhandled rejection. */

@@ -10,7 +10,7 @@ import { placeOf, type CategoryRules, type Pool } from '../model/categories'
 import { compareEvents, isKnown, type AnyEvent, type GameEvent, type LogEvent } from '../model/events'
 import { questionId } from '../model/ids'
 import { addDays, weekday } from '../time/zone'
-import { DEFAULT_SETTINGS, settingsFrom } from '../model/settings'
+import { RANGES } from '../model/settings'
 import type { DayContext, DayState } from './day'
 import type { Descent, EnergyState } from './energy'
 import { OPEN, ranMinutes, type BlockFact } from './facts'
@@ -217,16 +217,20 @@ export interface EstimatedBlock {
 /**
  * „Tolerancja trafności” of a block by its start (UX13, A1): the day's setting in force then – the day's snapshot (the
  * setting of its date), or the last „od dziś” snapshot (`day.snapshot`) written before the start in the order of events
- * (`compareEvents` – a change in the start's own minute counts when it came first). The block's estimate is its length at
- * its start, so the start's setting judges it.
+ * (`compareEvents` – a change in the start's own minute counts when it came first). A snapshot without the field (an older
+ * version's) holds none: the one before it says it, and with none the day's snapshot – never the default 15 % (as the body of
+ * an older snapshot, T1532). The block's estimate is its length at its start, so the start's setting judges it.
  */
 export function toleranceOf(ctx: DayContext, state: DayState, start: LogEvent): number {
-  let last: Extract<LogEvent, { k: 'day.snapshot' }> | null = null
+  const [lo, hi] = RANGES.accuracyTolerancePct
+  let last: { e: LogEvent; pct: number } | null = null
   for (const e of ctx.events) {
     if (!isKnown(e) || e.k !== 'day.snapshot' || state.facts.undone.has(e.id) || compareEvents(e, start) >= 0) continue
-    if (!last || compareEvents(e, last) > 0) last = e
+    const pct = (e.settings as unknown as Record<string, unknown>).accuracyTolerancePct
+    if (typeof pct !== 'number' || !Number.isInteger(pct) || pct < lo || pct > hi) continue
+    if (!last || compareEvents(e, last.e) > 0) last = { e, pct }
   }
-  return last ? settingsFrom(last.settings, DEFAULT_SETTINGS, { whole: true }).accuracyTolerancePct : ctx.snapshot.settings.accuracyTolerancePct
+  return last ? last.pct : ctx.snapshot.settings.accuracyTolerancePct
 }
 
 /**

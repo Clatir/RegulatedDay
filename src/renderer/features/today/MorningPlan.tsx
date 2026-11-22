@@ -94,7 +94,7 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
   const allDayLine = morningAllDayLine(useData((d) => d.allDay), model.date)
   return (
     <section className="rounded-lg border border-line bg-panel" data-testid="morning-plan" data-prompt-card={approvedByYou ? undefined : 'true'}>
-      <MorningHeader model={model} open={open} plan={!sideB && !goals && !checkinOpen(needCheckin, checkinSkipped, model.date)} onToggle={() => setOpen(!open)} busy={busy} />
+      <MorningHeader model={model} open={open} plan={!sideB && !goals && !checkinOpen(needCheckin, checkinSkipped, model.date, model.ctx.events)} onToggle={() => setOpen(!open)} busy={busy} />
       {allDayLine && (
         <div className="px-4 pb-2.5 text-[12.5px] text-muted" data-testid="morning-allday">
           {allDayLine}
@@ -102,7 +102,7 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
       )}
       {open && (
         <div className="flex flex-col gap-3 border-t border-line px-4 py-3">
-          {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep key={month} month={month} /> : checkinOpen(needCheckin, checkinSkipped, model.date) ? <Checkin model={model} onSkip={() => void skipCheckinDay(model.date)} /> : <Plan model={model} names={names} busy={busy} />}
+          {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep key={month} month={month} /> : checkinOpen(needCheckin, checkinSkipped, model.date, model.ctx.events) ? <Checkin model={model} /> : <Plan model={model} names={names} busy={busy} />}
         </div>
       )}
     </section>
@@ -144,7 +144,8 @@ export function MorningHeader({ model, open, plan, onToggle, busy: shared }: { m
 }
 
 /** The first check-in: 8 questions, two per pool (D521: the body's too), no / a little / yes (spec „Pierwszy check-in”). */
-export function Checkin({ model, onSkip }: { model: DayModel; onSkip: () => void }) {
+/** The first check-in; „Pomiń” – `skipCheckinDay` (the window and the day's log, UX13) unless the caller gives its own. */
+export function Checkin({ model, onSkip }: { model: DayModel; onSkip?: () => void }) {
   // In the store, per day (B5, D563): a trip to another screen and back keeps what you ticked.
   const answers = checkinAnswersOf(useUi((u) => u.checkinAnswers), model.date)
   const byPool = Object.fromEntries(POOLS.map((p) => [p, QUESTIONS.flatMap((q, i) => (q.pool === p ? [answers[i]!] : []))])) as Record<Pool, [Answer, Answer]>
@@ -189,7 +190,7 @@ export function Checkin({ model, onSkip }: { model: DayModel; onSkip: () => void
             Zapisz i włącz „mniej pytań”
           </button>
         )}
-        <button type="button" className="btn" onClick={onSkip} data-testid="checkin-skip">
+        <button type="button" className="btn" onClick={onSkip ?? (() => void skipCheckinDay(model.date))} data-testid="checkin-skip">
           Pomiń
         </button>
       </div>

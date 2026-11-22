@@ -129,9 +129,10 @@ export interface ActionCost {
 
 /**
  * Why a click found nothing to do, for a caller that must tell it from another refusal (D336) – never read from the text; the
- * ends of a list of steps say these by no word (D474, D328 – `quietRefusal`, T1109).
+ * ends of a list of steps say these by no word (D474, D328 – `quietRefusal`, T1109); `answered` – a `mark` given before (the morning's
+ * „Pomiń” on another computer, UX13).
  */
-export type ResultCode = 'alreadyOver' | 'notBegun' | 'notRunning' | 'routineSaved' | 'noRoutine'
+export type ResultCode = 'alreadyOver' | 'notBegun' | 'notRunning' | 'routineSaved' | 'noRoutine' | 'answered'
 
 export type ActionResult =
   | { ok: true; events: TimerDraft[]; confirm: ActionCost | null }
@@ -1041,7 +1042,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       return yes([{ k: 'question.answer', at, question: x.id, answer: 'work', value: ms }, { k: 'work.end', at, end: ms }])
     }
     case 'mark':
-      if (state.facts.answers.has(act.question)) return no('już odpowiedziane')
+      if (state.facts.answers.has(act.question)) return no('już odpowiedziane', null, 'answered')
       return yes([{ k: 'question.answer', at, question: act.question, answer: act.answer, value: null }])
     case 'unmark': {
       const answer = state.facts.answers.get(act.question)

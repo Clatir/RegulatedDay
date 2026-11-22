@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { activityOf } from '@shared/engine/activity'
 import { modesOf, type ModePrefs, type Modes } from '@shared/engine/modes'
 import { checkinSkipId, morningReminderAt, REMINDER_LINE_MIN, reminderLineId, remindersDue, reminderWords, ritualReminderAt } from '@shared/engine/reminders'
-import { timerNow } from '@shared/engine/timer'
+import { timerAction, timerNow } from '@shared/engine/timer'
 import { engineView } from '@shared/engineView'
 import { idxOf } from '@shared/engine/grid'
 import type { Pool } from '@shared/model/categories'
@@ -74,30 +74,25 @@ describe('przypomnienie o planie porannym – kiedy jest', () => {
   it('od swojej chwili przez 3 h, póki plan poranny nie jest zrobiony', () => {
     const s = day()
     expect(due(s, '06:29')).toEqual([])
-    expect(due(s, '06:30')).toEqual([{ kind: 'morning', line: reminderLineId(DATE, 'morning'), at: s.at('06:30'), quiet: false, checkin: true }])
+    expect(due(s, '06:30')).toEqual([{ kind: 'morning', line: reminderLineId(DATE, 'morning'), at: s.at('06:30'), quiet: false, checkin: false }])
     expect(due(s, '09:29').map((r) => r.kind)).toEqual(['morning'])
     expect(REMINDER_LINE_MIN).toBe(180)
     expect(due(s, '09:30')).toEqual([])
   })
 
-  it('zrobiony = granica zatwierdzona (także sama, startem pierwszego bloku pracy) i check-in zrobiony albo pominięty; póki jedno czeka – przypomnienie zostaje', () => {
-    const both = day()
-    both.approve('17:00', '06:20').checkin('06:15', MID)
-    expect(due(both, '06:30')).toEqual([])
-    // Approved, the check-in still to do: it holds – and says the check-in (`checkin`).
+  it('dzień z granicą do zatwierdzenia: zrobiony = granica zatwierdzona (także sama, startem pierwszego bloku pracy) – jak „zatwierdzony” karty; check-in tego nie zmienia', () => {
+    // Approved, no check-in (the energy on): none – the card says „zatwierdzony”.
     const approved = day()
     approved.approve('17:00', '06:20')
-    expect(due(approved, '06:30')).toMatchObject([{ kind: 'morning', checkin: true }])
-    // „Pomiń” counts as done.
-    expect(due(skipped(approved, '06:25'), '06:30')).toEqual([])
-    // The check-in done, the boundary still to approve: it holds, without the check-in.
-    const checkin = day()
-    checkin.checkin('06:15', MID)
-    expect(due(checkin, '06:30')).toMatchObject([{ kind: 'morning', checkin: false }])
-    // The energy module off: no check-in to do – the approval is all.
-    const off = day()
-    off.approve('17:00', '06:20')
-    expect(due(off, '06:30', { energyOn: false })).toEqual([])
+    expect(due(approved, '06:30')).toEqual([])
+    // Approved by the first work block's start: none.
+    const auto = day([block({ id: 'a', cat: 'inne', at: '06:20', min: 60 })]).start('a', '06:20')
+    expect(auto.stateAt(auto.at('06:30')).boundary).toMatchObject({ auto: true })
+    expect(due(auto, '06:30')).toEqual([])
+    // Not approved: it holds – with the check-in done or not, and with the energy off – and says the plan (`checkin` false).
+    expect(due(day(), '06:30')).toMatchObject([{ kind: 'morning', checkin: false }])
+    expect(due(day().checkin('06:15', MID), '06:30')).toMatchObject([{ kind: 'morning', checkin: false }])
+    expect(due(day(), '06:30', { energyOn: false })).toMatchObject([{ kind: 'morning', checkin: false }])
   })
 
   it('dzień bez pracy (nic do zatwierdzenia): przypomnienie tylko o check-inie – przy wyłączonej energii, po check-inie albo „Pomiń” go nie ma', () => {
@@ -124,17 +119,23 @@ describe('przypomnienie o planie porannym – kiedy jest', () => {
     expect(due(session, '06:55')).toEqual([])
     session.raw({ k: 'block.cancel', block: 'ny', at: session.at('06:56'), rule: 'user' }, '06:56')
     expect(due(session, '06:57', { prefs: off }).map((r) => r.kind)).toEqual(['morning'])
-    // A remote class (the class mode's category) and the commute running: none.
+    // A remote class (the class mode's category) and the commute running: none (their start approves the boundary too).
     const remote = day([block({ id: 'z', cat: 'zajecia-zdalne', at: '07:00', min: 60, fixed: true })]).start('z', '07:00')
     expect(due(remote, '07:05', { prefs: off })).toEqual([])
     const commute = day([block({ id: 'd', cat: 'dojazd', at: '07:00', min: 60 })]).start('d', '07:00')
     expect(due(commute, '07:05', { prefs: off })).toEqual([])
   })
 
+  it('„Pomiń” zapisany drugi raz (np. na innym komputerze) – odmowa z kodem „answered”, nie błąd', () => {
+    const s = skipped(day([block({ id: 'm', cat: 'posilek', at: '09:00', min: 30 })]), '06:20')
+    const t = s.at('06:25')
+    expect(timerAction(s.contextAt(t), s.stateAt(t), { a: 'mark', question: checkinSkipId(DATE), answer: 'skip' }, t)).toMatchObject({ ok: false, code: 'answered' })
+  })
+
   it('nigdy w „Odcinam się”; w „mniej pytań” cicho (bez powiadomienia)', () => {
     const s = day()
     expect(due(s, '06:40', { modes: { disconnect: s.at('06:35') } })).toEqual([])
-    expect(due(s, '06:40', { modes: { fewer: true, quiet: true } })).toEqual([{ kind: 'morning', line: reminderLineId(DATE, 'morning'), at: s.at('06:30'), quiet: true, checkin: true }])
+    expect(due(s, '06:40', { modes: { fewer: true, quiet: true } })).toEqual([{ kind: 'morning', line: reminderLineId(DATE, 'morning'), at: s.at('06:30'), quiet: true, checkin: false }])
   })
 
   it('tylko w dniu dzisiejszym', () => {
@@ -170,6 +171,25 @@ describe('przypomnienie o rytuale', () => {
     expect(due(s, '21:41').map((r) => r.kind)).toEqual(['ritual'])
   })
 
+  it('w sesji (trwającej albo czekającej na „Zacznij”) i w dojeździe według faktów dnia – także przy wyłączonych trybach tego komputera', () => {
+    const off: ModePrefs = { sessionMode: false, classMode: false }
+    // An evening session after the day's work: waiting for „Zacznij” at 21:35 and running at 21:45 – none.
+    const session = day([block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'ny', cat: 'sesja', at: '21:20', min: 60, fixed: true })])
+    session.ran('a', '08:00', '09:00').workEnd('09:00')
+    expect(due(session, '21:35', { prefs: off })).toEqual([])
+    session.start('ny', '21:40')
+    expect(due(session, '21:45', { prefs: off })).toEqual([])
+    // Ended before the bedtime: the ritual's reminder comes.
+    session.end('ny', '21:50').workEnd('21:50')
+    expect(due(session, '21:51', { prefs: off }).map((r) => r.kind)).toEqual(['ritual'])
+    // The commute running in the evening: none; over – it comes.
+    const commute = day([block({ id: 'd', cat: 'dojazd', at: '21:30', min: 20 })])
+    commute.start('d', '21:30')
+    expect(due(commute, '21:40', { prefs: off })).toEqual([])
+    commute.end('d', '21:45').workEnd('21:45')
+    expect(due(commute, '21:46', { prefs: off }).map((r) => r.kind)).toEqual(['ritual'])
+  })
+
   it('0 wyłącza; w „mniej pytań” cicha linia (spec „Cisza”)', () => {
     const off = day([], { ritualBeforeBedMin: 0 })
     expect(ritualReminderAt(off.stateAt(off.at('20:00')))).toBeNull()
@@ -195,11 +215,11 @@ describe('linie paska', () => {
     expect(view(s, '06:29').lines.filter((l) => l.id.startsWith('remind:'))).toEqual([])
   })
 
-  it('powiadomienie planu porannego mówi o pytaniach o objawy tylko, gdy check-in czeka (bez energii – sam plan dnia)', () => {
+  it('powiadomienie planu porannego: „Plan dnia czeka…” przy granicy do zatwierdzenia, „Pytania o objawy czekają…” przy samym check-inie', () => {
     const s = day()
-    const state = s.stateAt(s.at('06:30'))
-    expect(reminderWords(due(s, '06:30')[0]!, state)).toMatchObject({ title: 'Plan poranny', body: 'Pytania o objawy i plan dnia czekają w oknie głównym.' })
-    expect(reminderWords(due(s, '06:30', { energyOn: false })[0]!, state)).toMatchObject({ title: 'Plan poranny', body: 'Plan dnia czeka w oknie głównym.' })
+    expect(reminderWords(due(s, '06:30')[0]!, s.stateAt(s.at('06:30')))).toMatchObject({ title: 'Plan poranny', body: 'Plan dnia czeka w oknie głównym.' })
+    const free = day([block({ id: 'm', cat: 'posilek', at: '09:00', min: 30 })])
+    expect(reminderWords(due(free, '06:30')[0]!, free.stateAt(free.at('06:30')))).toMatchObject({ title: 'Plan poranny', body: 'Pytania o objawy czekają w oknie głównym.' })
   })
 
   it('rytuał: „Pora snu o 22:00 – rytuał zamknięcia · Rytuał · nie dziś”', () => {

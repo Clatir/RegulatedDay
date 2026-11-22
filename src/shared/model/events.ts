@@ -65,7 +65,8 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * version knows neither (it would end such a block at its limit, undo a start 2 min after a chain end, read the setting as off): it
  * gives way to this one as the leader. 18 – two changes of one release, each enough alone: (a) „Trafne szacowanie” by the day's
  * setting „Tolerancja trafności” (UX13, A1) – an older version judges every block by 15 % and would freeze the reward of a day with
- * another tolerance so; (b) [UX12 – written at the merge]. An older version gives way to this one as the leader, and the days it froze in the lookback are
+ * another tolerance so; (b) cofnięty sygnał lub ocena (`undo`) nie są kotwicą energii – UX12 (`liveEnergyEvent`), to samo wydanie.
+ * An older version gives way to this one as the leader, and the days it froze in the lookback are
  * graded again.
  */
 export const RULES_VERSION = 18

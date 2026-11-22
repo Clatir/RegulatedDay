@@ -13,7 +13,8 @@ import type { DayModel } from '@renderer/store/day'
 import { skipCheckin, useUi } from '@renderer/store/ui'
 import { skipCheckinDay } from '@renderer/features/today/dayActions'
 import { checkinSkipId } from '@shared/engine/reminders'
-import type { RdApi, TimerIn } from '@shared/api'
+import type { RdApi, TimerIn, TimerResult } from '@shared/api'
+import type { AnyEvent } from '@shared/model/events'
 
 vi.mock('@renderer/store/data', async (orig) => ({ ...(await orig<typeof import('@renderer/store/data')>()), logEvents: vi.fn(async () => true) }))
 
@@ -123,21 +124,54 @@ describe('check-in przy zmianie ekranu (B5, D563)', () => {
     expect(checkinOpen(false, null, '2026-11-18')).toBe(false)
   })
 
-  it('„Pomiń” planu porannego pisze też znacznik dnia dla przypomnienia (UX13): `mark` z `checkinSkipId` – karta pomija check-in od razu, odmowa niczego nie psuje', async () => {
-    const clicks: TimerIn[] = []
-    let refuse = false
-    ;(globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd = {
-      timer: async (click) => {
-        clicks.push(click)
-        if (refuse) throw new Error('folder danych jest niedostępny')
-        return { ok: true, why: null, confirm: null }
-      }
-    }
-    await skipCheckinDay('2026-11-18')
-    expect(useUi.getState().checkinSkipped).toBe('2026-11-18')
-    expect(clicks).toEqual([{ a: 'mark', question: checkinSkipId('2026-11-18'), answer: 'skip', day: '2026-11-18' }])
-    refuse = true
-    await expect(skipCheckinDay('2026-11-19')).resolves.toBeUndefined()
-    expect(useUi.getState().checkinSkipped).toBe('2026-11-19')
+  describe('„Pomiń” w logu dnia (UX13)', () => {
+    let clicks: TimerIn[] = []
+    let answer: TimerResult | Error = { ok: true, why: null, confirm: null }
+    beforeEach(() => {
+      clicks = []
+      answer = { ok: true, why: null, confirm: null }
+      useUi.setState({ toasts: [] })
+      vi.stubGlobal('rd', {
+        timer: async (click: TimerIn) => {
+          clicks.push(click)
+          if (answer instanceof Error) throw answer
+          return answer
+        }
+      } satisfies Partial<RdApi>)
+    })
+    afterEach(() => vi.unstubAllGlobals())
+
+    const mark = (date: string): TimerIn => ({ a: 'mark', question: checkinSkipId(date), answer: 'skip', day: date })
+
+    it('„Pomiń” karty woła `skipCheckinDay`: `mark` z `checkinSkipId`, potem karta pomija check-in', async () => {
+      await act(async () => {
+        host = document.createElement('div')
+        document.body.append(host)
+        root = createRoot(host)
+        root.render(createElement(Checkin, { model: { date: '2026-11-18' } as DayModel }))
+      })
+      await act(async () => q('checkin-skip')!.click())
+      expect(clicks).toEqual([mark('2026-11-18')])
+      expect(useUi.getState().checkinSkipped).toBe('2026-11-18')
+    })
+
+    it('odmowa: dymek, check-in zostaje; zapisany już gdzie indziej (`answered`) – pominięty', async () => {
+      answer = { ok: false, why: 'folder danych jest niedostępny', confirm: null }
+      expect(await skipCheckinDay('2026-11-18')).toBe(false)
+      expect(useUi.getState().checkinSkipped).toBeNull()
+      expect(useUi.getState().toasts.map((t) => [t.kind, t.text])).toEqual([['error', 'Nie pominięto pytań o objawy: folder danych jest niedostępny.']])
+      answer = new Error('IPC zamknięte')
+      expect(await skipCheckinDay('2026-11-18')).toBe(false)
+      expect(useUi.getState().checkinSkipped).toBeNull()
+      answer = { ok: false, why: 'już odpowiedziane', confirm: null, code: 'answered' }
+      expect(await skipCheckinDay('2026-11-18')).toBe(true)
+      expect(useUi.getState().checkinSkipped).toBe('2026-11-18')
+    })
+
+    it('`checkinOpen` czyta „Pomiń” z logu dnia: po restarcie okna i na innym komputerze nie pyta ponownie', () => {
+      const logged = [{ id: 'x', c: 'pcb', n: 1, t: 1, l: 1, v: 18, day: '2026-11-18', dom: 'timer', k: 'question.answer', at: 1, question: checkinSkipId('2026-11-18'), answer: 'skip', value: null }] as unknown as AnyEvent[]
+      expect(checkinOpen(true, null, '2026-11-18', logged)).toBe(false)
+      expect(checkinOpen(true, null, '2026-11-19', logged)).toBe(true)
+    })
   })
 })

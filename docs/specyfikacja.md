@@ -939,10 +939,10 @@ Wersja 1.0 zawiera wszystko, co działa jako hamulec w czasie i energii, wraz z 
   poranny czeka · Otwórz · nie dziś” i „Pora snu o 22:00 – rytuał zamknięcia · Rytuał · nie dziś” – i jedno ciche
   powiadomienie Windows prowadzącego (kliknięcie otwiera panel ikony na tej linii; „Otwórz” i „Rytuał” otwierają okno
   główne na „Dziś” albo rytuale – tylko Twoim kliknięciem, D229). Linia planu porannego trwa 3 h od swojej chwili, póki
-  coś z planu czeka: granica zaproponowana i niezatwierdzona (zatwierdza ją też sam start pierwszego bloku pracy) albo
-  check-in – przy włączonej energii, bez check-inu i bez „Pomiń” (to zapisuje się w logu dnia, więc liczy się na każdym
-  komputerze; sama karta pomija check-in jak dotąd, D563); dzień bez niczego do zatwierdzenia i bez check-inu do zrobienia
-  nie ma przypomnienia, a powiadomienie wymienia pytania o objawy tylko, gdy check-in czeka. Linia rytuału – od swojej
+  plan czeka: granica zaproponowana i niezatwierdzona – zatwierdzenie (także samym startem pierwszego bloku pracy)
+  kończy przypomnienie („Plan dnia czeka w oknie głównym.”); tylko w dniu bez granicy do zatwierdzenia – check-in przy
+  włączonej energii, bez check-inu i bez „Pomiń” („Pytania o objawy czekają w oknie głównym.”). „Pomiń” zapisuje się w
+  logu dnia: karta nie pyta ponownie po restarcie ani na innym komputerze; odmowa zapisu – dymek, check-in zostaje. Linia rytuału – od swojej
   chwili do pory snu, póki rytuał jest dostępny (jak przycisk „Rytuał”: nie biegnie praca) i dzień niezamknięty. „nie
   dziś” zamyka linię do końca dnia. Obie tylko dziś, nigdy w ciszy nocnej i w „Odcinam się”, a w sesji i zajęciach
   według faktów dnia (blok sesji trwa albo czeka na „Zacznij”, trwa blok z trybem zajęć albo dojazd), także gdy ten

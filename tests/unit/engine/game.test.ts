@@ -11,7 +11,7 @@ import type { Pool } from '@shared/model/categories'
 import type { Answer } from '@shared/model/events'
 import { questionId } from '@shared/model/ids'
 import type { PlanBlock } from '@shared/model/plan'
-import { settingsOn, type SettingsChange } from '@shared/model/settings'
+import { DEFAULT_SETTINGS, settingsOn, type SettingsChange } from '@shared/model/settings'
 import { dayEnd } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { block, Scenario } from './dsl'
@@ -193,6 +193,21 @@ describe('trafne szacowanie (1 nuta za blok, najwyżej 3 dziennie)', () => {
     s.raw({ k: 'day.snapshot', at: s.at('10:00'), dayType: 'zwykly', settings: { ...s.settings, accuracyTolerancePct: 25 }, reason: 'today' }, '10:00')
     s.ran('x', '08:00', '09:12').ran('y', '11:00', '12:12').workEnd('12:12')
     expect(grade(s).earned.accuracy).toEqual(['y'])
+  })
+
+  it('migawka „od dziś” starszej wersji bez tolerancji: tolerancja z poprzedniej migawki, bez niej – z migawki dnia (nie 15 %, jak ciało – T1532)', () => {
+    const { accuracyTolerancePct: _, ...older } = DEFAULT_SETTINGS
+    const s = day([work('x', '10:00', 60)], { settings: { accuracyTolerancePct: 25 } })
+    // A change of the day by an older version (another computer): its settings lack the field.
+    s.raw({ k: 'day.snapshot', at: s.at('09:00'), dayType: 'zwykly', settings: older, reason: 'today' }, '09:00')
+    s.ran('x', '10:00', '11:12').workEnd('11:12')
+    expect(grade(s).earned.accuracy).toEqual(['x'])
+    // A snapshot of 30 % before it: that one.
+    const t = day([work('x', '10:00', 60)])
+    t.raw({ k: 'day.snapshot', at: t.at('08:00'), dayType: 'zwykly', settings: { ...t.settings, accuracyTolerancePct: 30 }, reason: 'today' }, '08:00')
+    t.raw({ k: 'day.snapshot', at: t.at('09:00'), dayType: 'zwykly', settings: older, reason: 'today' }, '09:00')
+    t.ran('x', '10:00', '11:16').workEnd('11:16')
+    expect(grade(t).earned.accuracy).toEqual(['x'])
   })
 
   it('„od dziś” w minucie startu: rozstrzyga kolejność zdarzeń – zmiana zapisana przed startem obowiązuje blok, po nim – nie (UX13)', () => {

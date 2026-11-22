@@ -198,7 +198,7 @@ describe('widget w procesie głównym', () => {
       const opened: string[] = []
       const { w, folder, shown } = await morning({ opened })
       await w.refresh()
-      expect(shown).toEqual([{ id: `notice:${DAY}:remind:morning`, title: 'Plan poranny', body: 'Pytania o objawy i plan dnia czekają w oknie głównym.', line, day: DAY }])
+      expect(shown).toEqual([{ id: `notice:${DAY}:remind:morning`, title: 'Plan poranny', body: 'Plan dnia czeka w oknie głównym.', line, day: DAY }])
       expect(w.current().lines.at(-1)).toEqual({ id: line, text: 'Plan poranny czeka', actions: [{ id: 'open', label: 'Otwórz' }, { id: 'notToday', label: 'nie dziś' }], dot: false })
       expect(w.current().dot).toBe(false)
       // Once: its id in the day's log.
@@ -266,23 +266,26 @@ describe('widget w procesie głównym', () => {
 
     const approve = { k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 6 * 60 + 26), boundary: placeLogical(DAY, 17 * 60), auto: false }
 
-    it('plan zatwierdzony i check-in zrobiony przed chwilą przypomnienia: ani linii, ani powiadomienia', async () => {
-      const checkin = { k: 'energy.checkin', day: DAY, at: placeLogical(DAY, 6 * 60 + 26), answers: { head: [1, 1], emotions: [1, 1], senses: [1, 1], body: [1, 1] } }
-      const done = await morning({}, 6 * 60 + 30, (x) => x.folder.userEvents([approve, checkin]).then(() => undefined))
+    it('plan zatwierdzony przed chwilą przypomnienia (bez check-inu): ani linii, ani powiadomienia – jak „zatwierdzony” karty', async () => {
+      const done = await morning({}, 6 * 60 + 30, (x) => x.folder.userEvents([approve]).then(() => undefined))
       await done.w.refresh()
       expect(done.shown).toEqual([])
       expect(done.w.current().lines.some((l) => l.id.startsWith('remind:'))).toBe(false)
     })
 
-    it('sam plan zatwierdzony: przypomnienie o check-inie zostaje', async () => {
-      const approved = await morning({}, 6 * 60 + 30, (x) => x.folder.userEvents([approve]).then(() => undefined))
-      await approved.w.refresh()
-      expect(approved.shown.map((n) => n.body)).toEqual(['Pytania o objawy i plan dnia czekają w oknie głównym.'])
+    /** A day with nothing to approve (a weekend day – no sessions – with a meal only, wake 08:00): the reminder is of the check-in alone. */
+    const noWork = () => writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, dayType: 'weekend', blocks: [{ id: 'm', categoryId: 'posilek', startMin: 9 * 60, durationMin: 30, fixed: false, origin: 'user' }] }))
+
+    it('dzień bez granicy do zatwierdzenia: „Pytania o objawy czekają w oknie głównym.”', async () => {
+      noWork()
+      const m = await morning({}, 8 * 60 + 30)
+      await m.w.refresh()
+      expect(m.shown.map((n) => n.body)).toEqual(['Pytania o objawy czekają w oknie głównym.'])
     })
 
-    it('„Pomiń” check-inu z okna (zdarzenie `checkinSkipId`) przy zatwierdzonym planie: bez przypomnienia na każdym komputerze', async () => {
-      const m = await morning({}, 6 * 60 + 30, async (x) => {
-        await x.folder.userEvents([approve])
+    it('„Pomiń” check-inu z okna (zdarzenie `checkinSkipId`) w dniu bez granicy do zatwierdzenia: bez przypomnienia na każdym komputerze', async () => {
+      noWork()
+      const m = await morning({}, 8 * 60 + 30, async (x) => {
         expect((await x.folder.timerClick({ a: 'mark', question: checkinSkipId(DAY), answer: 'skip', day: DAY } as never)).ok).toBe(true)
       })
       await m.w.refresh()
