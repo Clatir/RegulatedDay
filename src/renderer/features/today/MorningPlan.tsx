@@ -10,6 +10,7 @@ import { marketDay } from '@shared/calendar/holidays'
 import { setAsked, setCancelled, setSessionAnswer } from '@shared/data/dayEdits'
 import { dueBadge } from '@shared/engine/caseDates'
 import { checkinStates } from '@shared/engine/energy'
+import { checkinSkipId } from '@shared/engine/reminders'
 import { atOf } from '@shared/engine/grid'
 import { fromYesterday, holidayQuestions, lighterDay, sessionQuestions, shiftNotice, type MorningInputs } from '@shared/engine/morning'
 import { morningCases, morningMinutes } from '@shared/engine/cases'
@@ -39,10 +40,10 @@ import { caseTitle, isMorningChosen, morningChosen, morningDeadlines, morningPri
 import { rememberCasesView, rememberMatrixFilter } from '../cases/casesView'
 import { queueRowText } from '../cases/casesUi'
 import { DueMark } from '../cases/DueMark'
-import { navigate, setCheckinAnswers, skipCheckin, toast, useUi } from '../../store/ui'
+import { navigate, setCheckinAnswers, toast, useUi } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { answerSeries } from '../series/seriesActions'
-import { arrangeDayBlocks, energyOrderCached, energyOrderKey, leaveEnergyOrder, saveDay, skipDeadline, variantStarts } from './dayActions'
+import { arrangeDayBlocks, energyOrderCached, energyOrderKey, leaveEnergyOrder, saveDay, skipCheckinDay, skipDeadline, variantStarts } from './dayActions'
 
 /**
  * What the screen says after „Dodaj do planu” (`planMorning`, D384): nothing made (every chosen sprawa was planned or done meanwhile)
@@ -82,6 +83,9 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
   const energyOn = names.rd.general.modules.energy
   const needCheckin = energyOn && model.energy.checkinAt == null
   const checkinSkipped = useUi((u) => u.checkinSkipped)
+  // „Pomiń” here (the window) or in the day's log (UX13: the facts' answer, a „Cofnij” undoes it) – counted once per change.
+  const skippedInLog = s.facts.answers.has(checkinSkipId(model.date))
+  const checkin = useMemo(() => checkinOpen(needCheckin, checkinSkipped, model.date, skippedInLog), [needCheckin, checkinSkipped, model.date, skippedInLog])
   // On Monday „Strona B tygodnia” comes first (spec „Plan poranny”), until „Dalej” on any computer.
   const sideBClosed = useUi((u) => u.sideBClosed)
   const sideB = sideBShown(model.date, !!model.dayFile?.asked.sideB, sideBClosed)
@@ -94,7 +98,7 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
   const allDayLine = morningAllDayLine(useData((d) => d.allDay), model.date)
   return (
     <section className="rounded-lg border border-line bg-panel" data-testid="morning-plan" data-prompt-card={approvedByYou ? undefined : 'true'}>
-      <MorningHeader model={model} open={open} plan={!sideB && !goals && !checkinOpen(needCheckin, checkinSkipped, model.date)} onToggle={() => setOpen(!open)} busy={busy} />
+      <MorningHeader model={model} open={open} plan={!sideB && !goals && !checkin} onToggle={() => setOpen(!open)} busy={busy} />
       {allDayLine && (
         <div className="px-4 pb-2.5 text-[12.5px] text-muted" data-testid="morning-allday">
           {allDayLine}
@@ -102,7 +106,7 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
       )}
       {open && (
         <div className="flex flex-col gap-3 border-t border-line px-4 py-3">
-          {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep key={month} month={month} /> : checkinOpen(needCheckin, checkinSkipped, model.date) ? <Checkin model={model} onSkip={() => skipCheckin(model.date)} /> : <Plan model={model} names={names} busy={busy} />}
+          {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep key={month} month={month} /> : checkin ? <Checkin model={model} /> : <Plan model={model} names={names} busy={busy} />}
         </div>
       )}
     </section>
@@ -144,7 +148,11 @@ export function MorningHeader({ model, open, plan, onToggle, busy: shared }: { m
 }
 
 /** The first check-in: 8 questions, two per pool (D521: the body's too), no / a little / yes (spec „Pierwszy check-in”). */
-export function Checkin({ model, onSkip }: { model: DayModel; onSkip: () => void }) {
+/**
+ * The first check-in; „Pomiń” – `skipCheckinDay` (the window at once, the day's log behind it, UX13) unless the caller gives its own;
+ * „Pomiń” and „Zapisz” share the card's `useBusy` – one at a time.
+ */
+export function Checkin({ model, onSkip }: { model: DayModel; onSkip?: () => void }) {
   // In the store, per day (B5, D563): a trip to another screen and back keeps what you ticked.
   const answers = checkinAnswersOf(useUi((u) => u.checkinAnswers), model.date)
   const byPool = Object.fromEntries(POOLS.map((p) => [p, QUESTIONS.flatMap((q, i) => (q.pool === p ? [answers[i]!] : []))])) as Record<Pool, [Answer, Answer]>
@@ -189,7 +197,7 @@ export function Checkin({ model, onSkip }: { model: DayModel; onSkip: () => void
             Zapisz i włącz „mniej pytań”
           </button>
         )}
-        <button type="button" className="btn" onClick={onSkip} data-testid="checkin-skip">
+        <button type="button" className="btn" disabled={busy} onClick={() => void run(async () => (onSkip ? onSkip() : void (await skipCheckinDay(model.date))))} data-testid="checkin-skip">
           Pomiń
         </button>
       </div>

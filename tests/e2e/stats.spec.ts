@@ -15,10 +15,13 @@ import { addDays } from '../../src/shared/time/zone'
 import { DEFAULT_SETTINGS } from '../../src/shared/model/settings'
 import { launch, logicalToday, withMainLog } from './app'
 
-/** A folder as the wizard sets it up (the person „Mama”), with frozen days: grades, and logs for all but `missing` of them. */
+/**
+ * A folder as the wizard sets it up (the person „Mama”, „Tolerancja trafności” 25 % – UX13), with frozen days: grades, and logs
+ * for all but `missing` of them.
+ */
 function seed(dir: string, days: string[], missing: string[] = []): void {
   const records = firstComputerRecords(
-    { settings: DEFAULT_SETTINGS, general: DEFAULT_GENERAL, categories: rdFrom(undefined).categories, people: [{ id: 'mama', name: 'Mama', archived: false }], templates: defaultTemplates(), lectures: [], days: {} },
+    { settings: { ...DEFAULT_SETTINGS, accuracyTolerancePct: 25 }, general: DEFAULT_GENERAL, categories: rdFrom(undefined).categories, people: [{ id: 'mama', name: 'Mama', archived: false }], templates: defaultTemplates(), lectures: [], days: {} },
     Date.now(),
     'seed'
   )
@@ -97,8 +100,9 @@ test('Statystyki: trzy dni zamrożone – cztery sekcje z wykresem i tabelą, dz
       await expect(page.getByTestId('stats-hour-table')).toContainText('65')
       await expect(page.getByTestId('stats-weekday-table').locator('tbody tr')).toHaveCount(7)
       await expect(page.getByTestId('stats-felt-table')).toContainText('100%')
-      // Accuracy: no block judged in these days.
+      // Accuracy: no block judged in these days; the note says the tolerance of the setting (UX13, A1 – not 15 % for good).
       await expect(page.getByTestId('stats-accuracy-empty')).toBeVisible()
+      await expect(page.getByTestId('stats-accuracy-note')).toContainText('w granicach 25% planu, najmniej 5 min')
       // Requests: 3 × 20 min of Mama.
       await expect(page.getByTestId('stats-requests-table')).toContainText('Mama')
       await expect(page.getByTestId('stats-requests-table')).toContainText('1 h')

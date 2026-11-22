@@ -89,6 +89,7 @@ export function NoticesSection() {
           <Toggle checked={prefs.notices.start5} onChange={(v) => void setMachinePrefs({ notices: { ...prefs.notices, start5: v } })} label="5 min przed sesją, zajęciami i dojazdem" data-testid="pref-notice-start5" />
           <Toggle checked={prefs.notices.hardEnd} onChange={(v) => void setMachinePrefs({ notices: { ...prefs.notices, hardEnd: v } })} label="twardy koniec projektów" data-testid="pref-notice-hardend" />
           <Toggle checked={prefs.notices.reserve} onChange={(v) => void setMachinePrefs({ notices: { ...prefs.notices, reserve: v } })} label="energia na poziomie rezerwy" data-testid="pref-notice-reserve" />
+          <Toggle checked={prefs.notices.reminders} onChange={(v) => void setMachinePrefs({ notices: { ...prefs.notices, reminders: v } })} label="przypomnienia: plan poranny i rytuał" data-testid="pref-notice-reminders" />
         </div>
       </Field>
       <Field label="Dźwięk" data-testid="field-sound" hint="Cichy dźwięk 5 i 0 min przed końcem bloku i startem bloku stałego (gra także przy „Nie przeszkadzać”). Nigdy w trybie „mniej pytań”, w dniu zjazdu stacjonarnego ani na komputerze nagrywającym w czasie wykładu.">

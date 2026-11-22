@@ -4,9 +4,13 @@
  */
 import type { Answer } from '@shared/model/events'
 
-/** The check-in shows: it is due (`needCheckin`) and „Pomiń” did not skip this very day. */
-export function checkinOpen(needCheckin: boolean, skippedDay: string | null, date: string): boolean {
-  return needCheckin && skippedDay !== date
+/**
+ * The check-in shows: it is due (`needCheckin`) and „Pomiń” did not skip this very day – here (the window's state) or in the day's
+ * log (`skippedInLog` – the facts' answer `checkinSkipId`, not undone; UX13: after a restart and on another computer it is not
+ * asked again).
+ */
+export function checkinOpen(needCheckin: boolean, skippedDay: string | null, date: string, skippedInLog = false): boolean {
+  return needCheckin && skippedDay !== date && !skippedInLog
 }
 
 /** The eight answers of `date`: those kept for that day, else all „nie”. */

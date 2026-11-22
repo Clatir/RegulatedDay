@@ -52,6 +52,13 @@ describe('szukanie po etykietach', () => {
     expect(found.find((r) => r.id === 'field-reserve')?.hint).toBe('w ustawieniach · Energia')
   })
 
+  it('„przypomnienia” znajduje sekcję przypomnień i przełącznik ich powiadomienia Windows (UX13, D565 P21)', () => {
+    const found = hits('przypomnienia').map((r) => r.id)
+    expect(found).toContain('settings-reminders')
+    expect(found).toContain('field-notices')
+    expect(hits('rytual').map((r) => r.id)).toContain('field-notices')
+  })
+
   it('bez ogonków i po początku słowa: „tolerancja” → pole w „Trafność planu”, „folder” → folder danych', () => {
     expect(hits('toleran')[0]).toMatchObject({ id: 'field-accuracyTolerancePct', hint: 'w ustawieniach · Trafność planu' })
     expect(hits('folder').map((r) => r.id)).toContain('field-data-folder')

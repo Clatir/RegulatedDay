@@ -98,7 +98,7 @@ paths:
   `withTaskBlock` – odhaczenia; zmiany w bloku i w zadaniu idą w obie strony (`engine/steps.ts`).
 - Kopia (D513, reguły `kopia.md`): Ctrl przy upuszczeniu z panelu – `planCase(…, { copy })` planuje nową sprawę (`copiedCase`, rekord
   za plikiem dnia – T923), oryginał nietknięty; kopia bloku zadania/próśb na osi – nowe sprawy w tej samej edycji (`blockCopy`).
-- Pamięć i szkice (UX6, D563 P5, B5): „Pomiń” pierwszego check-inu i jego niezapisane odpowiedzi żyją w `useUi` na dzień (`checkinSkipped`, `checkinAnswers`
+- Pamięć i szkice (UX6, D563 P5, B5): „Pomiń” pierwszego check-inu (od UX13 także w logu dnia – `skipCheckinDay`, `checkinSkipId`, „Cofnij” = `unmark`) i jego niezapisane odpowiedzi żyją w `useUi` na dzień (`checkinSkipped`, `checkinAnswers`
   – `skipCheckin`, `setCheckinAnswers`; `checkinLogic.ts`: `checkinOpen`, `checkinAnswersOf`): zmiana ekranu ich nie gubi, inny dzień zaczyna od zer, zapis czyści odpowiedzi.
   Niezapisana reguła: pole „Powtarzaj” zamykane przyciskiem z kompletną regułą różną od zapisanej (`repeatChanged`, bez `draftProblem`) pyta „Zapisać zmianę powtarzania?
   · Zapisz · Odrzuć” (`features/series/UnsavedRuleDialog.tsx`, `Dialog` aplikacji; forma wystawia `RuleGuard { unsaved, save }` przez ref, wiersz trzyma okno w `data-row-form`,

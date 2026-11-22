@@ -10,6 +10,7 @@ import { placeOf, type CategoryRules, type Pool } from '../model/categories'
 import { compareEvents, isKnown, type AnyEvent, type GameEvent, type LogEvent } from '../model/events'
 import { questionId } from '../model/ids'
 import { addDays, weekday } from '../time/zone'
+import { RANGES } from '../model/settings'
 import type { DayContext, DayState } from './day'
 import type { Descent, EnergyState } from './energy'
 import { OPEN, ranMinutes, type BlockFact } from './facts'
@@ -26,8 +27,12 @@ export interface GameRules {
   /** Their number: every grade keeps it, a review that changes them gives the next one (spec „wersja reguł”). */
   version: number
   points: Record<Reward, number>
-  /** „Trafne szacowanie”: a block from `minMin`, its real time within `pct` % of its length but never less than `floorMin`; at most `perDay` blocks. */
-  accuracy: { minMin: number; pct: number; floorMin: number; perDay: number }
+  /**
+   * „Trafne szacowanie”: a block from `minMin`, its real time within the tolerance of its length but never less than
+   * `floorMin`; at most `perDay` blocks. The tolerance in % is the day's setting „Tolerancja trafności” (UX13, A1:
+   * `RulesSettings.accuracyTolerancePct`, dated – `toleranceOf`), not a rule of the game.
+   */
+  accuracy: { minMin: number; floorMin: number; perDay: number }
   /** „Wymiana zamiast dokładania”: both sides at least this long. */
   exchangeMinMin: number
   /** A week (from Monday): days without data that hold the streak, and days of protection. */
@@ -38,7 +43,7 @@ export interface GameRules {
 export const GAME_RULES: GameRules = {
   version: 1,
   points: { boundary: 3, regen: 3, reserve: 2, accuracy: 1, exchange: 1 },
-  accuracy: { minMin: 20, pct: 15, floorMin: 5, perDay: 3 },
+  accuracy: { minMin: 20, floorMin: 5, perDay: 3 },
   exchangeMinMin: 15,
   noDataPerWeek: 2,
   protectionPerWeek: 1
@@ -205,6 +210,27 @@ export interface EstimatedBlock {
   plannedMin: number
   realMin: number
   accurate: boolean
+  /** The tolerance in % it was judged by (the day's setting at its start). */
+  tolerancePct: number
+}
+
+/**
+ * „Tolerancja trafności” of a block by its start (UX13, A1): the day's setting in force then – the day's snapshot (the
+ * setting of its date), or the last „od dziś” snapshot (`day.snapshot`) written before the start in the order of events
+ * (`compareEvents` – a change in the start's own minute counts when it came first). A snapshot without the field (an older
+ * version's) holds none: the one before it says it, and with none the day's snapshot – never the default 15 % (as the body of
+ * an older snapshot, T1532). The block's estimate is its length at its start, so the start's setting judges it.
+ */
+export function toleranceOf(ctx: DayContext, state: DayState, start: LogEvent): number {
+  const [lo, hi] = RANGES.accuracyTolerancePct
+  let last: { e: LogEvent; pct: number } | null = null
+  for (const e of ctx.events) {
+    if (!isKnown(e) || e.k !== 'day.snapshot' || state.facts.undone.has(e.id) || compareEvents(e, start) >= 0) continue
+    const pct = (e.settings as unknown as Record<string, unknown>).accuracyTolerancePct
+    if (typeof pct !== 'number' || !Number.isInteger(pct) || pct < lo || pct > hi) continue
+    if (!last || compareEvents(e, last.e) > 0) last = { e, pct }
+  }
+  return last ? last.pct : ctx.snapshot.settings.accuracyTolerancePct
 }
 
 /**
@@ -220,8 +246,9 @@ export function estimatedBlocks(ctx: DayContext, state: DayState, rules: GameRul
     if (plan.get(x.f.id)?.byVariant || x.corrected.start || x.corrected.end) continue
     if (!x.clickStart || !x.realEnd || !x.done || (!x.away && x.start.c !== x.end.c) || x.absenceUnanswered) continue
     const real = ranMinutes(x.f, x.f.endedAt!)
-    const tolerance = Math.max(rules.accuracy.floorMin, (p.durationMin * rules.accuracy.pct) / 100)
-    out.push({ id: x.f.id, category: p.categoryId, plannedMin: p.durationMin, realMin: real, accurate: Math.abs(real - p.durationMin) <= tolerance })
+    const pct = toleranceOf(ctx, state, x.start)
+    const tolerance = Math.max(rules.accuracy.floorMin, (p.durationMin * pct) / 100)
+    out.push({ id: x.f.id, category: p.categoryId, plannedMin: p.durationMin, realMin: real, accurate: Math.abs(real - p.durationMin) <= tolerance, tolerancePct: pct })
   }
   return out
 }

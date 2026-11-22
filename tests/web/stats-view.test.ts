@@ -6,7 +6,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { BarChart, BoundaryChart } from '@renderer/features/stats/Charts'
-import { accuracyBars, lastWeeks, missingNote, MAX_WEEKS, weekAxisLabel, axisOf, barPlaces, daysNote, ENERGY_AXIS, statsNote, energyText, feltBars, hourLabel, meanBars, minutesText, niceStep, percentText, personBars, ratioText, stackPlaces, tooLittle, weekdayShort, weekLabel } from '@renderer/features/stats/statsView'
+import { accuracyBars, accuracyNote, lastWeeks, missingNote, MAX_WEEKS, weekAxisLabel, axisOf, barPlaces, daysNote, ENERGY_AXIS, statsNote, energyText, feltBars, hourLabel, meanBars, minutesText, niceStep, percentText, personBars, ratioText, stackPlaces, tooLittle, weekdayShort, weekLabel } from '@renderer/features/stats/statsView'
 
 describe('skale wykresów', () => {
   it('krok osi to 1, 2 albo 5 razy potęga dziesięciu; oś od 0 do okrągłego maksimum nad największą wartością', () => {
@@ -113,6 +113,15 @@ describe('teksty statystyk', () => {
     expect(feltBars(felt, name)).toEqual([{ label: 'A', value: 0.75, text: '75%' }])
     expect(accuracyBars([{ category: 'a', blocks: 2, medianRatio: 1.1, accurate: 1, share: 0.5 }], name)).toEqual([{ label: 'A', value: 0.5, text: '50%' }])
     expect(personBars([{ person: 'x', count: 1, minutes: 20 }], name)).toEqual([{ label: 'X', value: 20, text: '20 min' }])
+  })
+
+  it('nota trafności podaje tolerancję z ustawienia (UX13, A1): tej, którą liczono bloki okresu, a bez bloków – dzisiejszą', () => {
+    // The period's blocks were judged by 25 % (the setting from its date): the note says 25 %, whatever today has.
+    expect(accuracyNote({ min: 25, max: 25 }, 15)).toBe('Bloki elastyczne od 20 min, zaczęte i skończone kliknięciem, bez poprawki czasu – jak w nagrodzie „Trafne szacowanie”. Trafny: czas w granicach 25% planu, najmniej 5 min. Mediana: realny czas do planowanego.')
+    // Days of the period with two settings: the range.
+    expect(accuracyNote({ min: 15, max: 25 }, 25)).toContain('w granicach 15–25% planu (tolerancja dnia),')
+    // No block judged: today's setting.
+    expect(accuracyNote(null, 25)).toContain('w granicach 25% planu, najmniej 5 min')
   })
 })
 

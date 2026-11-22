@@ -9,11 +9,14 @@ import type { StatsPeriod, StatsResult } from '@shared/engine/stats'
 import { MIN_FELT_ANSWERS, MIN_STATS_DAYS } from '@shared/engine/stats'
 import { formatNumber } from '@shared/format'
 import { categoryName, personName } from '@shared/model/rd'
+import { settingsOn } from '@shared/model/settings'
+import { logicalDayOf } from '@shared/time/day'
 import { EmptyState, Section, Segmented } from '../../components/ui'
 import { useData } from '../../store/data'
 import { BarChart, BoundaryChart } from './Charts'
 import {
   accuracyBars,
+  accuracyNote,
   axisOf,
   checkinsText,
   statsNote,
@@ -77,6 +80,7 @@ const Sub = ({ children }: { children: ReactNode }) => <h3 className="text-[12.5
 
 export function StatsPage() {
   const rd = useData((s) => s.rd)
+  const today = useData((s) => s.view?.today ?? '')
   const [period, setPeriod] = useState<StatsPeriod>('4w')
   const [tries, setTries] = useState(0)
   const [loaded, setLoaded] = useState<Loaded>(null)
@@ -162,7 +166,7 @@ export function StatsPage() {
               </Section>
 
               <Section title="Trafność szacowania" data-testid="stats-accuracy">
-                <Note>Bloki elastyczne od 20 min, zaczęte i skończone kliknięciem, bez poprawki czasu – jak w nagrodzie „Trafne szacowanie”. Trafny: czas w granicach 15% planu, najmniej 5 min. Mediana: realny czas do planowanego.</Note>
+                <Note testId="stats-accuracy-note">{accuracyNote(result.accuracy.tolerancePct, settingsOn(rd.settings, today || logicalDayOf(Date.now()), Date.now()).accuracyTolerancePct)}</Note>
                 {result.accuracy.rows.length === 0 ? (
                   <Note testId="stats-accuracy-empty">W tym okresie nie ma takich bloków.</Note>
                 ) : (

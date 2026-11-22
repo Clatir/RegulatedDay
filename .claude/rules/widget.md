@@ -32,16 +32,18 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   `namingOf` (`engine/context.ts`) – wpis planu; zaczęty: kategoria, wariant, nazwa, zadanie, rutyna i prośby ze startu
   (`planned`, D431, T1024 – każdą drogą startu przez `startPlanned` z planem; brak pola w starszym starcie: z migawki),
   pochodzenie, notatka i to, czego start nie zapisał, z migawki (`snapshotEntries`, `namedOfPlan`) tylko przy tej samej
-  kategorii; niezaczęty: migawka; inaczej „blok” (T543). Oś, rytuał,
-  CSV, pasek i warianty – tylko przez nie; `blockName.ts` nie importuje `engine/`.
-  Koszt startu
-  w pasku i w panelu bloku – jedna funkcja `shared/costText.ts` (D339).
+  kategorii; niezaczęty: migawka; inaczej „blok” (T543). Oś, rytuał, CSV, pasek i warianty – tylko przez nie; `blockName.ts`
+  nie importuje `engine/`. Koszt startu w pasku i w panelu bloku – `shared/costText.ts` (D339).
 - Twardy koniec (D352, D355, T544): „aktualny” liczy jedno miejsce – `engine/hardEnd.ts` (`hardEndCurrent`); linia
-  `hardEnd:<dzień>:<minuta>` (`hardEndLines`; `hardEndLast` – zawsze ostatnia) póki aktualny, bez przycisków i kropki,
+  `hardEnd:<dzień>:<minuta>` (`hardEndLines`; ostatnia z linii dnia – po niej tylko `moved:` i `remind:`) póki aktualny, bez przycisków i kropki,
   bez przełącznika powiadomienia, w trybie zajęć czeka; powiadomienie (`notices()`) – póki aktualny (bez projektu
   najwyżej 60 min od minięcia albo końca trybu zajęć – `classModeEnd`) albo komunikat minuty minięcia (`hardEndMessage`);
   nigdy przy „mniej pytań” w minucie minięcia albo teraz (`fewerAt`, nie `view.quiet` – sesja je zachowuje). Bez stanu
   w pamięci – wszystko z faktów dnia.
+- Przypomnienia (UX13, D565 P21): `engine/reminders.ts` (`remindersDue`; plan – `morningToDo`: granica do zatwierdzenia, bez niej check-in
+  bez „Pomiń” – `checkinSkipId`, `skipCheckinDay`, `checkinOpen`; sesja i zajęcia z faktów, nie `modesOf`) – linia `remind:<dzień>:<rodzaj>` (`open`, `notToday` =
+  `mark`, `SEEN_LINE`) zawsze ostatnia (`linesLast`); powiadomienie `notice:<dzień>:remind:<rodzaj>` (`notices.reminders`) do
+  `REMINDER_NOTICE_MIN`, nie przy `quiet` ani `fewerAt` chwili.
 - `main/widget.ts` – `WidgetEngine`: `refresh()` po każdym sprawdzeniu folderu, co 15 s, po kliknięciu i w chwili
   kroku (`stepDelay` z `warnDeadlines`: kroki po chwili widoku, czekanie od ustawienia zegara – krok, który minął w
   czasie odświeżenia, od razu; tylko po `start()`), z `folder.widgetModel()`; `act(action, arg, from)` → kliknięcia

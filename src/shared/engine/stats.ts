@@ -49,8 +49,8 @@ export interface DayStats {
   checkins: Array<{ minute: number; energy: number }>
   /** The felt cost of the ritual: the day's last answer for each category. */
   felt: Record<string, FeltCost>
-  /** The blocks the estimate was judged on. */
-  estimates: Array<{ category: string; plannedMin: number; realMin: number; accurate: boolean }>
+  /** The blocks the estimate was judged on, each with the tolerance in % it was judged by (the day's setting, UX13). */
+  estimates: Array<{ category: string; plannedMin: number; realMin: number; accurate: boolean; tolerancePct: number }>
   /** Requests by person ('?' – nobody named); null – the requests module was off that day („brak pomiaru”). */
   requests: Record<string, { count: number; minutes: number }> | null
   boundary: DayBoundary
@@ -97,7 +97,7 @@ export function dayStats(ctx: DayContext, know: Readonly<Record<string, number>>
     }
   }
   const boundary = storedBoundary(grade) ?? (isFreeDay(state, counted.events) ? 'free' : dayOutcome(state).boundary)
-  return { date: state.grid.date, energyOn: mods.energy, checkins, felt, estimates: estimatedBlocks(counted, state).map(({ category, plannedMin, realMin, accurate }) => ({ category, plannedMin, realMin, accurate })), requests, boundary }
+  return { date: state.grid.date, energyOn: mods.energy, checkins, felt, estimates: estimatedBlocks(counted, state).map(({ category, plannedMin, realMin, accurate, tolerancePct }) => ({ category, plannedMin, realMin, accurate, tolerancePct })), requests, boundary }
 }
 
 export interface MeanRow {
@@ -155,7 +155,11 @@ export interface StatsResult {
   /** At least `MIN_STATS_DAYS` frozen days. */
   enough: boolean
   energy: { checkins: number; byHour: MeanRow[]; byWeekday: MeanRow[]; felt: FeltRow[]; /** Days without the measure (the energy module was off). */ missing: number }
-  accuracy: { blocks: number; accurate: number; rows: AccuracyRow[] }
+  /**
+   * `tolerancePct` – the lowest and the highest tolerance the blocks were judged by (each by its day's setting, UX13); null – no
+   * block judged.
+   */
+  accuracy: { blocks: number; accurate: number; rows: AccuracyRow[]; tolerancePct: { min: number; max: number } | null }
   requests: { count: number; minutes: number; people: PersonRow[]; /** Days without the measure (the module was off). */ missing: number }
   boundaries: { weeks: WeekBoundaries[]; totals: Omit<WeekBoundaries, 'week'> }
 }
@@ -208,6 +212,8 @@ export function statsOf(period: StatsPeriod, days: readonly DayStats[], unreadab
     return { category, blocks: list.length, medianRatio: round(median(list.map((e) => e.realMin / e.plannedMin)), 2), accurate, share: accurate / list.length }
   })
   rows.sort((a, b) => b.blocks - a.blocks || (a.category < b.category ? -1 : 1))
+  const pcts = sorted.flatMap((d) => d.estimates.map((e) => e.tolerancePct))
+  const tolerancePct = pcts.length ? { min: Math.min(...pcts), max: Math.max(...pcts) } : null
 
   const peopleBy = new Map<string, { count: number; minutes: number }>()
   let missing = 0
@@ -244,7 +250,7 @@ export function statsOf(period: StatsPeriod, days: readonly DayStats[], unreadab
     unreadable,
     enough: sorted.length >= MIN_STATS_DAYS,
     energy: { checkins: samples.length, byHour, byWeekday, felt, missing: sorted.filter((d) => !d.energyOn).length },
-    accuracy: { blocks: rows.reduce((s, r) => s + r.blocks, 0), accurate: rows.reduce((s, r) => s + r.accurate, 0), rows },
+    accuracy: { blocks: rows.reduce((s, r) => s + r.blocks, 0), accurate: rows.reduce((s, r) => s + r.accurate, 0), rows, tolerancePct },
     requests: { count: people.reduce((s, p) => s + p.count, 0), minutes: people.reduce((s, p) => s + p.minutes, 0), people, missing },
     boundaries: { weeks: [...weeks.values()].sort((a, b) => (a.week < b.week ? -1 : 1)), totals }
   }
