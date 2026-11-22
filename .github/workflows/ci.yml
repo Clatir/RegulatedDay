@@ -107,6 +107,7 @@ jobs:
           cmd /c "npm ci > npm-ci.log 2>&1"
           if ($LASTEXITCODE -eq 0) { Get-Content npm-ci.log; throw "npm ci should fail on Node 22.11" }
           if (-not (Select-String -Path npm-ci.log -Pattern "jest za stary" -Quiet)) { Get-Content npm-ci.log; throw "missing 'jest za stary' in npm-ci.log" }
+          $global:LASTEXITCODE = 0
 
   # Windows: pull requests, the default branch (releases) and by hand – a plain push to a working branch runs the Linux
   # jobs only (its pull request runs the whole CI anyway).
