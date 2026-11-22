@@ -352,6 +352,12 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX13.3 Przypomnienie planu porannego (1.34.0)
    - [ ] UX13.4 Przypomnienie rytuału (1.34.0)
    - [ ] UX13.5 Wyłączanie przypomnień (1.34.0)
+   - [ ] UX12.1 Wiersz bloku pracy w jednym wierszu (1.34.0)
+   - [ ] UX12.2 „Dalej?” bez powtórzonych przycisków (1.34.0)
+   - [ ] UX12.3 „<akcja> · Cofnij” po kliknięciu na pasku (1.34.0)
+   - [ ] UX12.4 Koszt z „Potwierdź · Anuluj” (1.34.0)
+   - [ ] UX12.5 Podpowiedź „×” i uchwyt ⠿ (1.34.0)
+   - [ ] UX12.6 Trwająca prośba „Prośba: <osoba>” (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3630,6 +3636,49 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** 0 w „Przypomnieniach”; osobno przełącznik „przypomnienia: plan poranny i rytuał” w powiadomieniach.
 - **Oczekiwany efekt:** przy 0 nic nie przychodzi; przy wyłączonym przełączniku linia zostaje, powiadomienia nie ma.
 - **Nie przechodzi, gdy:** przy 0 coś przychodzi; przy wyłączonym przełączniku jest powiadomienie.
+
+
+#### UX12.1 Wiersz bloku pracy w jednym wierszu
+- [ ] Odebrane
+- **Automatycznie:** CI na Windows `bar-windows` (100 % i 125 %, zrzuty), `tests/web/bar-row.test.ts`. Ty: Twoja skala ekranu.
+- **Jak sprawdzić:** blok pracy z następnym blokiem – spójrz na pasek pulpitu; otwórz „⋯”.
+- **Oczekiwany efekt:** „Dalej: <nazwa>”, Pauza, Przedłuż, Koniec pracy, „+ Skrzynka”, „⋯” w jednym wierszu; „Odcinam się”, „Prośba ▸”, „Sygnały ▸” na początku „⋯”; w nocy „Prośba ▸” w wierszu.
+- **Nie przechodzi, gdy:** wiersz łamie się na dwa; nazwa wchodzi pod „↗ / ×”; brak „Prośba ▸” w nocy.
+
+#### UX12.2 „Dalej?” bez powtórzonych przycisków
+- [ ] Odebrane
+- **Tylko Ty:** blok mijający planowany koniec.
+- **Jak sprawdzić:** pozwól blokowi minąć planowany koniec.
+- **Oczekiwany efekt:** pytanie „Dalej: X · Przedłuż (· Koniec pracy)”, w wierszu pod nim tych przycisków nie ma (Pauza, + Skrzynka, ⋯ zostają).
+- **Nie przechodzi, gdy:** „Dalej” albo „Przedłuż” stoi dwa razy; znika koszt „Przedłuż”.
+
+#### UX12.3 „<akcja> · Cofnij” po kliknięciu na pasku
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/widget.test.ts`, `tests/unit/engine/click-undo.test.ts`, CI Windows `bar-windows` (prawdziwe „Dalej” i „Cofnij”). Ty: z prawdziwym dniem.
+- **Jak sprawdzić:** kliknij na pasku „Dalej” albo „Skończyłem”, potem „Cofnij” w 10 s; osobno sygnał z „Sygnały ▸”.
+- **Oczekiwany efekt:** linia „Skończono: … · Cofnij” (sygnał: „Sygnał: … · Cofnij”); po „Cofnij” blok biegnie dalej, następny się nie zaczął, sygnał nie liczy się w energii; po ok. 10 s linia znika.
+- **Nie przechodzi, gdy:** linii nie ma; stoi wyraźnie dłużej niż 10 s; „Cofnij” zostawia blok skończony albo następny zaczęty.
+
+#### UX12.4 Koszt z „Potwierdź · Anuluj”
+- [ ] Odebrane
+- **Tylko Ty:** start za granicą.
+- **Jak sprawdzić:** start albo „Dalej” do bloku za granicą; „Anuluj”, a osobno „Potwierdź”.
+- **Oczekiwany efekt:** „… · Potwierdź · Anuluj”; „Anuluj” zdejmuje koszt od razu i niczego nie zaczyna; po „Potwierdź” linia „Cofnij” mówi też o starcie.
+- **Nie przechodzi, gdy:** „Anuluj” coś zaczyna; koszt zostaje po „Anuluj”.
+
+#### UX12.5 Podpowiedź „×” i uchwyt ⠿
+- [ ] Odebrane
+- **Tylko Ty:** kursor nad paskiem pulpitu.
+- **Jak sprawdzić:** najedź kursorem na „×” paska pulpitu; spójrz na uchwyt ⠿ bez najechania.
+- **Oczekiwany efekt:** napis „Schowaj pasek · Shift+× – zakończ aplikację” w samym pasku, pasek nie zmienia wysokości; uchwyt ⠿ widoczny, przygaszony, jaśniejszy po najechaniu.
+- **Nie przechodzi, gdy:** osobne okienko podpowiedzi; pasek „skacze”; uchwytu nie widać bez najechania.
+
+#### UX12.6 Trwająca prośba „Prośba: <osoba>”
+- [ ] Odebrane
+- **Automatycznie:** E2E `screens` (prośby), `tests/web/bar-row.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** „⋯” → „Prośba ▸” → „Zrobione teraz: <osoba>”.
+- **Oczekiwany efekt:** w miejscu bloku „Prośba: <osoba> · 0:0x · Koniec”.
+- **Nie przechodzi, gdy:** stoi „Zrobione teraz · …”; „Koniec” nie kończy prośby.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
