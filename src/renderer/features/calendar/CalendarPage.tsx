@@ -274,8 +274,12 @@ export function CalendarPage() {
   }
 
   // The actions of the menu are always the page's latest (the items live in a memo).
-  const actions = useRef({ setType, setWakeOf, apply: apply.start })
-  actions.current = { setType, setWakeOf, apply: apply.start }
+  // UX19: the template applied (or its window of hours asked) – the days are done with, as after „Typ dnia”.
+  const applyTo = async (t: Template, ids: readonly string[]) => {
+    if (await apply.start(t, ids)) selection.clear()
+  }
+  const actions = useRef({ setType, setWakeOf, apply: applyTo })
+  actions.current = { setType, setWakeOf, apply: applyTo }
   const menuActions = useMemo(() => ({ setType: (t: DayTypeId | null, ids: readonly string[]) => void actions.current.setType(t, ids), setWake: (v: number | null, ids: readonly string[]) => void actions.current.setWakeOf(v, ids), applyTemplate: (t: Template, ids: readonly string[]) => void actions.current.apply(t, ids) }), [])
   /** What each day of the menu is, from the grid's files and the ones read for the menu – once per change, not per item. */
   const menuDays = useMemo(() => {

@@ -12,7 +12,7 @@ import { Toasts } from '@renderer/components/Toasts'
 import { onModal } from '@renderer/lib/escape'
 import { latestUndoButton, useUndoKey } from '@renderer/lib/undoKey'
 import { SHORTCUTS } from '@renderer/lib/shortcuts'
-import { clearGroupLine, showGroupLine } from '@renderer/store/groupLine'
+import { clearGroupLine, showGroupLine, useGroupLine } from '@renderer/store/groupLine'
 import { toast, undoToast, useUi } from '@renderer/store/ui'
 
 let root: Root | null = null
@@ -110,6 +110,21 @@ describe('Ctrl+Z = ostatnie widoczne „Cofnij”', () => {
     act(() => void showGroupLine('week', { text: 'Zmieniono 3 bloki', undo: lineUndo }))
     vi.setSystemTime(new Date('2026-11-21T10:00:05Z'))
     act(() => void undoToast('Usunięto blok', toastUndo))
+    press()
+    expect(toastUndo).toHaveBeenCalledTimes(1)
+    expect(lineUndo).not.toHaveBeenCalled()
+  })
+
+  it('czas linii grupowej to czas jej zmiany: przedłużony po nieudanym cofnięciu koniec nie czyni jej nowszą od dymku', async () => {
+    const toastUndo = vi.fn()
+    const lineUndo = vi.fn()
+    await mount()
+    act(() => void showGroupLine('week', { text: 'Zmieniono 3 bloki', undo: lineUndo }))
+    expect(useGroupLine.getState().lines.week!.at).toBe(Date.parse('2026-11-21T10:00:00Z'))
+    vi.setSystemTime(new Date('2026-11-21T10:00:05Z'))
+    act(() => void undoToast('Usunięto blok', toastUndo))
+    // The undo failed once and the line's end was moved on (`undoGroupLine`): its change is still the older one.
+    act(() => useGroupLine.setState((s) => ({ lines: { week: { ...s.lines.week!, until: s.lines.week!.until + 10 * 60_000 } } })))
     press()
     expect(toastUndo).toHaveBeenCalledTimes(1)
     expect(lineUndo).not.toHaveBeenCalled()

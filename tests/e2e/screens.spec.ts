@@ -861,6 +861,8 @@ test('rozsuwanie w „Szablonach” (D367, D372): blok przeciągnięty na zajęt
       await expect.poll(() => startsFrom(tomorrow)).toEqual({ a: 19 * 60, b: 20 * 60, c: 21 * 60 })
       expect(startsFrom(SETUP_FROM)).toEqual({ a: 18 * 60, b: 19 * 60, c: 20 * 60 })
       const line = page.getByTestId('template-pushed')
+      // UX19 (P29): Ctrl+Z may press its „Cofnij” – the button carries the instant of the change.
+      await expect(page.getByTestId('template-pushed-undo')).toHaveAttribute('data-undo', /^[0-9]+$/)
       await expect(line).toContainText('Przesunięto 2 bloki')
       await page.getByTestId('template-pushed-undo').click()
       // The template as before the push: no version from tomorrow.

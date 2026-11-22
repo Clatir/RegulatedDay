@@ -158,6 +158,15 @@ describe('weekDropAt (czyste)', () => {
     document.body.append(a)
     // 10 + 123 px from the top of the column = 5:00 + 123 min = 07:03, on the grid 07:05 (425).
     expect(weekDropAt(50, 133)).toEqual({ date: '2026-11-18', minute: 425 })
+    // The sticky headings and the strip of all-day events stand over the columns: a point in them is no drop (the column under them has an hour nobody sees).
+    const head = document.createElement('div')
+    head.dataset.testid = 'week-head'
+    head.setAttribute('data-testid', 'week-head')
+    head.getBoundingClientRect = () => ({ left: 0, right: 100, top: 0, bottom: 150 }) as DOMRect
+    document.body.append(head)
+    expect(weekDropAt(50, 133)).toBeNull()
+    expect(weekDropAt(50, 151)).toEqual({ date: '2026-11-18', minute: 440 })
+    head.remove()
     // Not over a column.
     expect(weekDropAt(150, 133)).toBeNull()
     expect(weekDropAt(50, 5)).toBeNull()

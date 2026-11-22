@@ -1,8 +1,8 @@
 /**
  * Ctrl+Z in the main window (UX19, D565 P29) = „Cofnij” of the last change that is still offered: the newest of the „Cofnij” buttons on the
- * screen – the message of the corner (`Toasts`) and the lines of the pages (`GroupLine`, `WeekPushLine`, `AllDayLines`, the line of a template,
- * the card of the boundary). Each of those buttons carries `data-undo` with the instant it was made (ms; empty – no instant known, they come after
- * the dated ones); the key presses the newest button itself, so what the button does (its busy state, the line going away) is exactly what a click does.
+ * screen – the message of the corner (`Toasts`) and the lines of the pages (`GroupLine`, `WeekPushLine`, `AllDayLines`, the line of a template).
+ * Each of those buttons carries `data-undo` with the instant of its change (ms; empty – no instant known, it comes after the dated ones). Not covered
+ * (T2071): „Cofnij zatwierdzenie” of the morning plan's card (a state, not the last change) and the automatic actions of the bar. The key presses the newest button itself, so what the button does (its busy state, the line going away) is exactly what a click does.
  * The key is the page's only while the focus is not in a text field (its own undo) and no dialog or menu is open; no button – the key is left alone.
  */
 import { useEffect } from 'react'

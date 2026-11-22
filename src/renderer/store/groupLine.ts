@@ -21,6 +21,8 @@ export interface GroupLineState {
   view: GroupView
   text: string
   undo: GroupUndo
+  /** The instant the change was made (ms, the window's clock): „Ctrl+Z” takes the newest change first. It stays when `until` moves on after a failed undo. */
+  at: number
   /** The instant it ends (ms, the window's clock). */
   until: number
   /** The undo is running – „Cofnij” does nothing meanwhile. */
@@ -66,7 +68,7 @@ export function showGroupLine(view: GroupView, line: { text: string; undo: Group
   const which = ++seq
   const until = now + UNDO_LINE_MS
   arm(view, which, until)
-  useGroupLine.setState((s) => ({ lines: { ...s.lines, [view]: { seq: which, view, text: line.text, undo: line.undo, until, undoing: false } } }))
+  useGroupLine.setState((s) => ({ lines: { ...s.lines, [view]: { seq: which, view, text: line.text, undo: line.undo, at: now, until, undoing: false } } }))
   return which
 }
 

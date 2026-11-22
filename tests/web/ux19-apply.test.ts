@@ -146,6 +146,8 @@ describe('Kalendarz: menu zaznaczonych dni', () => {
     await act(async () => undefined)
     expect(applied.calls).toEqual([{ id: 't-wolny', dates: ['2026-12-07', '2026-12-09'], mode: 'fill' }])
     expect(q('calendar-menu')).toBeNull()
+    // As after „Typ dnia”: the days are done with, the selection goes.
+    expect(document.querySelectorAll('[data-testid^="day-"][aria-pressed="true"]')).toHaveLength(0)
   })
 
   it('dzień, który już trwa, wśród zaznaczonych: najpierw okno godzin (D546), zapis dopiero po „Zastosuj”', async () => {

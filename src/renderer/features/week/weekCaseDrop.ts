@@ -31,6 +31,10 @@ export const PAST_CASE_DROP_TEXT = 'Dni minionych nie zmieniasz przeciąganiem.'
 
 /** The column of a day under a point of the window and the minute at that height (5-min grid, at least 5 min before the axis's bottom); null – over no column. */
 export function weekDropAt(x: number, y: number): WeekDrop | null {
+  // The headings of the days and the strip of all-day events stay over the columns while the axis scrolls: a point in them is no drop (the column
+  // under them has an hour nobody sees there).
+  const head = document.querySelector<HTMLElement>('[data-testid="week-head"]')?.getBoundingClientRect()
+  if (head && x >= head.left && x <= head.right && y >= head.top && y <= head.bottom) return null
   for (const el of document.querySelectorAll<HTMLElement>('[data-week-col]')) {
     const r = el.getBoundingClientRect()
     if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue
