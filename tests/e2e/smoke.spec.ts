@@ -615,15 +615,17 @@ test('role powierzchni (UX10, D564): „↗” paska pulpitu otwiera okno głów
       await expect(panel.getByTestId('panel-open-main')).toHaveText('↗ Otwórz okno główne')
       await expect(panel.getByTestId('panel-bar-toggle')).toHaveText('▣ Pasek pulpitu: schowaj')
       await expect(panel.getByTestId('panel-quit')).toHaveText('⏻ Zakończ aplikację')
-      // C8: a double click on „Prośba ▸” – unfolded once, its second click does nothing.
-      await panel.getByTestId('bar-group-request').dblclick()
-      await expect(panel.getByTestId('bar-request-group')).toBeVisible()
+      // C8: a double click on „⋯” – unfolded once, its second click does nothing (in the night's quiet, without „⋯”, on „Prośba ▸”).
+      const night = await page.evaluate(async () => (await window.rd.widget()).night)
+      const unfolded = night ? 'bar-request-group' : 'bar-unfold-more'
+      await panel.getByTestId(night ? 'bar-group-request' : 'bar-group-more').dblclick()
+      await expect(panel.getByTestId(unfolded)).toBeVisible()
       // Hidden (Esc) and opened again: nothing unfolded from before.
       await panel.keyboard.press('Escape')
       await expect.poll(panelShown).toBe(false)
       await page.evaluate(() => window.rd.barAction('openPanel'))
       await expect.poll(panelShown).toBe(true)
-      await expect(panel.getByTestId('bar-request-group')).toHaveCount(0)
+      await expect(panel.getByTestId(unfolded)).toHaveCount(0)
 
       // „▣ Pasek pulpitu: schowaj” hides the bar as its „×” does; „pokaż” brings it back.
       await panel.getByTestId('panel-bar-toggle').click()

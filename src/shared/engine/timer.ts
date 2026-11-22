@@ -21,6 +21,7 @@ import { activityOf, firstUseAfter, type Activity } from './activity'
 import { atOf, idxOf } from './grid'
 import { derivedId } from '../model/ids'
 import { groupOf } from './parallel'
+import { clickUndoEvents } from './clickUndo'
 
 /** „Przedłuż” of a fixed block works up to this long after its planned end (spec „Timer”, D227). */
 export const FIXED_EXTEND_WINDOW_MIN = 30
@@ -114,6 +115,8 @@ export type TimerAction =
   /** The last step of a block ticked off (D474): it ends now, done („Skończono: … · Cofnij”), and „Cofnij” of that (T1104, T1105). */
   | { a: 'stepsFinish'; block: string }
   | { a: 'undoStepsFinish'; block: string }
+  /** „Cofnij” of a click of the bar (D564 P18): an `undo` of each event the click wrote (`ids` – the main process's own, `clickUndoEvents`). */
+  | { a: 'undoClick'; ids: string[] }
 
 /** The cost a first click shows (spec: „przedłużenie · −40 min puli”, „pora snu +40 min”, „przekroczenie”). */
 export interface ActionCost {
@@ -130,9 +133,10 @@ export interface ActionCost {
 /**
  * Why a click found nothing to do, for a caller that must tell it from another refusal (D336) – never read from the text; the
  * ends of a list of steps say these by no word (D474, D328 – `quietRefusal`, T1109); `answered` – a `mark` given before (the morning's
- * „Pomiń” on another computer, UX13).
+ * „Pomiń” on another computer, UX13); `clickGone`: the bar's click cannot be taken back any more (`clickUndoEvents` – frozen, gone,
+ * undone, not a click's, depended on; D564 P18).
  */
-export type ResultCode = 'alreadyOver' | 'notBegun' | 'notRunning' | 'routineSaved' | 'noRoutine' | 'answered'
+export type ResultCode = 'alreadyOver' | 'notBegun' | 'notRunning' | 'routineSaved' | 'noRoutine' | 'answered' | 'clickGone'
 
 export type ActionResult =
   | { ok: true; events: TimerDraft[]; confirm: ActionCost | null }
@@ -1097,6 +1101,10 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       if (!f?.endId || f.endRule !== STEPS_RULE || f.endedAt == null) return no('ten blok nie skończył się odhaczeniem kroków')
       if (begunSinceEnd(state, f)) return no('tego już nie cofniesz – po zakończeniu zaczął się inny blok, prośba albo „Odcinam się”')
       return yes([{ k: 'undo', at, target: f.endId, reason: 'user' }])
+    }
+    case 'undoClick': {
+      const r = clickUndoEvents(state, ctx.events, Array.isArray(act.ids) ? act.ids.filter((x): x is string => typeof x === 'string') : [], at)
+      return typeof r === 'string' ? no(r, null, 'clickGone') : yes(r)
     }
     case 'restart': {
       const info = byId.get(act.block)

@@ -48,6 +48,14 @@ paths:
   bramkę; blok stały w tle nie czeka) – poza tym jak w 1.0.1 (G2).
 
 ## Pułapki
+- „Cofnij” kliknięcia paska (D564 P18, UX12): `timerClick` odpowiada `wrote` (`{ day, ids }` zapisanych zdarzeń; `TimerResult.wrote`,
+  sygnał – `energySignal` → `{ day, id }`), akcja `undoClick` (`ids` tylko z procesu głównego – nie ma jej w `TIMER_ACTIONS` okna) →
+  `clickUndoEvents` (`engine/clickUndo.ts`): `undo` każdego żywego zdarzenia; odmowa – dzień zamrożony, zdarzenia nie w logu albo nie
+  z kliknięcia (`CLICK_KINDS`), już cofnięte, a dla timera – późniejsze (`compareEvents`) zdarzenie z `DEPENDS` (start, wznowienie, koniec
+  prośby i „Odcinam się”), `work.end` albo zdarzenie bloku tego kliknięcia (`CLICK_UNDO_TEXT.later`); każda odmowa ma `code: 'clickGone'`
+  (ostateczna – pasek zdejmuje linię; inna odmowa i wyjątek ją zostawiają). Sygnał / ocena nie zależą od niczego. W trakcie „Cofam…”
+  (kolejne kliknięcia nic nie robią); koszt „Dalej” znika na stałe przy kliknięciu „Cofnij” (nie wraca; „Start” – jeszcze raz). Nazwa
+  startu w linii – `begunOf`: blok, w który kliknięto „Dalej” (`nextBlock`), gdy jest w `wrote.begun` (`block.start`, też w tle, `block.resume`), inaczej pierwszy.
 - Start bloku życia (`isLife`) przy biegnącej pracy pauzuje ją jak regeneracja (D335, `startEvents`); inny blok elastyczny zamienia się z
   biegnącym (D478, niżej) – kończy go tylko po planowanym końcu, regeneracja i blok „poza komputerem”. „Usuń” zaczętego bloku: `removeBegun` (`block.end` z `rule: 'removed'`, `done: false`) i `undoRemove`
   (`undo` tego końca, D336; odmowa, gdy po zdarzeniu usunięcia – kolejnością zdarzeń `compareOrder` z `BlockFact.endOrder`, nie minutami – zaczął się inny blok, prośba (`RequestFact.begun`) albo „Odcinam się”; kończy przez `endInstant` jak „Skończyłem”; powody „już skończony” / „nie zaczął się” mają `code` w `ActionResult`/`TimerResult`); blok zdjęty z planu zostaje w dniu jako „poza planem” (`dayItems`) z nazwą ze startu albo z migawki dnia (`nameById`, T543, T1024), liczy się jak każdy przebieg.

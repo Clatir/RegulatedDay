@@ -104,6 +104,11 @@ const click = (el: Element, detail = 1, init: MouseEventInit = {}) => act(() => 
 const release = (el: Element, init: MouseEventInit = {}) => act(() => void el.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, button: 0, screenX: 200, screenY: 40, ...init })))
 const later = (ms: number) => vi.setSystemTime(Date.now() + ms)
 const acts = () => rd.widgetAction.mock.calls.map(([a, arg]) => (arg == null ? a : `${a}|${arg}`))
+/** „Prośba ▸” waits in „⋯” (D564 P17): „⋯”, then „Prośba ▸”. */
+const openRequest = () => {
+  click(q('bar-group-more')!)
+  click(q('bar-group-request')!)
+}
 
 describe('„↗” paska pulpitu (P12, C2)', () => {
   it('stoi w pasie 24 px nad „×” – tylko na pasku pulpitu, z dniem i bez folderu', () => {
@@ -167,10 +172,14 @@ describe('dwuklik w przycisk paska działa raz (C8)', () => {
     expect(acts()).toEqual(['next'])
   })
 
-  it('„Prośba ▸” dwuklikiem zostaje rozwinięta (nie zwija się drugim kliknięciem)', async () => {
+  it('„⋯” i „Prośba ▸” w nim dwuklikiem zostają rozwinięte (nie zwijają się drugim kliknięciem)', async () => {
     await bar(dayView(), 'panel')
+    click(q('bar-group-more')!, 1)
+    click(q('bar-group-more')!, 2)
+    expect(q('bar-unfold-more')).not.toBeNull()
     click(q('bar-group-request')!, 1)
-    click(q('bar-group-request')!, 2)
+    // The second click lands where „Prośba ▸” stood – on the unfolded group now: nothing.
+    click(q('bar-request-group')!, 2)
     expect(q('bar-request-group')).not.toBeNull()
   })
 
@@ -396,15 +405,15 @@ describe('panel otwarty ponownie – nic rozwiniętego sprzed schowania (C8)', (
     await render(createElement(PanelApp))
     await opened()
     for (const [open, shown] of [
-      ['bar-group-request', 'bar-request-group'],
-      ['bar-group-more', 'bar-unfold-more'],
-      ['bar-quick', 'bar-quick-field']
+      [openRequest, 'bar-request-group'],
+      [() => click(q('bar-group-more')!), 'bar-unfold-more'],
+      [() => click(q('bar-quick')!), 'bar-quick-field']
     ] as const) {
-      click(q(open)!)
-      expect(q(shown), open).not.toBeNull()
+      open()
+      expect(q(shown), shown).not.toBeNull()
       // Hidden and opened again (the main process says the target of each opening).
       await opened()
-      expect(q(shown), open).toBeNull()
+      expect(q(shown), shown).toBeNull()
     }
     click(q('bar-act-ended-endedAt')!)
     expect(q('bar-line-ended:2026-11-21:b1')!.getAttribute('data-busy')).toBe('on')
@@ -423,7 +432,7 @@ describe('panel otwarty ponownie – nic rozwiniętego sprzed schowania (C8)', (
     act(() => useWidget.setState({ view: dayView() }))
     await render(createElement(PanelApp))
     await opened()
-    click(q('bar-group-request')!)
+    openRequest()
     await opened(false, { line: 'ended:2026-11-21:b1', day: '2026-11-21' })
     expect(q('bar-request-group')).not.toBeNull()
     expect(q('panel-target')!.textContent).toContain('Blok skończył się?')
@@ -491,7 +500,7 @@ describe('panel otwarty ponownie – nic rozwiniętego sprzed schowania (C8)', (
   it('pasek, który nie jest w panelu, nie zwija się bez otwarcia (zmiana widoku nic nie zwija)', async () => {
     act(() => useWidget.setState({ view: dayView() }))
     await render(createElement(PanelApp))
-    click(q('bar-group-request')!)
+    openRequest()
     act(() => useWidget.setState({ view: { ...dayView(), tooltip: 'nowy widok' } }))
     expect(q('bar-request-group')).not.toBeNull()
   })

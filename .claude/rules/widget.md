@@ -125,7 +125,7 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   kliknięcie tylko po kliknięciu w siebie (dwuklik w „Skończył się o…” nie trafia w −5, które stanęło w jego miejscu). Przyciski
   nagłówka i stopki panelu (`PanelButton`) – to samo `detail`.
 - Pasek pulpitu „↗” i „×” (D564 P12, D559, T1975): `BarCorner` (`bar-corner`) w pasie 24 px – u góry `bar-open-main` (`showMain` na puszczenie),
-  pod nim „×” (`bar-close`); `BAR_BASE_WIDTH` 504, treść `pr-8` → `barClose('x'|'quit')`,
+  pod nim „×” (`bar-close`, kursor – `bar-close-hint` w pasku); `BAR_BASE_WIDTH` 504, treść `pr-8` → `barClose('x'|'quit')`,
   `barCloseOf` tylko od nadawcy `bar`; `barClosed` w `barWanted` do pokazania albo restartu.
   Dwuklik ikony → `openMainFromIcon`; dwuklik w panelu – `doubleOpensMain` (bez warunku `data-busy` i rozwinięcia).
 - Pasek schowany „×” (D564 P16, UX11): `WidgetView.barClosed` = schowany i włączony (`widgetView`; wyłączony – false). Pokazują go: „Pasek pulpitu” w menu
@@ -136,28 +136,12 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   „×” – `unclosesBar`: wyłączony → włączony zawsze, już włączony tylko `settings` (kreator `setPrefs(w.prefs)` nie).
   `barNote` (pomocnik, nieudane położenie) i linia „schowany” nigdy razem – notka tylko bez „×”.
 - Dwuklik paska pulpitu (D560, T1976): `barDouble.ts` – dwa puszczenia (nie `dblclick`: wciśnięcie często nie dochodzi, T1500) ≤ 500 ms i ≤ 4 px na `freeSpot` → `showMain`. Powrót paska: `barBackWithMain` przy `minimize`/`hide` okna głównego, pref `barBackWithMain` (domyślnie true).
+- Wiersz przycisków (UX12, D564 P17–P20): `bar-buttons` – „Dalej: <nazwa>” (`buttons.nextName`, `nextLabel`; też odpowiedź „Dalej?”), Pauza,
+  Przedłuż, Koniec pracy, „+ Skrzynka”, „⋯”; Odcinam się, „Prośba ▸”, „Sygnały ▸” – `bar-more-actions` w „⋯” (noc: „Prośba ▸” w wierszu); przy
+  „Dalej?” wiersz bez jego odpowiedzi (C5); `BarButton fit` – nazwa się tnie (jeden wiersz przy 100 %); koszt z „Anuluj” (`cancelPending`);
+  linia `clickUndo:<rodzaj>:<n>` „<akcja> · Cofnij” – pierwsza, `CLICK_UNDO_MS` 10 s; znika po udanym albo `clickGone` (`undoClick` – `timer.md`).
 - Wydarzenia całodniowe (D405, T740–T743): `WidgetView.allDay` (`barAllDay`, dziś = doba logiczna) – kropka i tytuł (≤ 20 znaków, „+N”) z lewej strony pierwszego wiersza
   paska pulpitu (`AllDayLabel`, tylko `desktop`), tylko odczyt, pełne tytuły po najechaniu w miejscu; miejsce zabiera tylko elastyczna nazwa bloku.
 
 ## Pułapki
-- W ciszy nocnej pasek nie ma Start ani Pauzy (ma „Prośba ▸”, D346) – testy E2E zaczynają blok z panelu bloku (`block-timer-start`), bo
-  uruchamiają się o dowolnej godzinie; tekst `bar-block` w nocy to godzina, nie „Bez bloku”.
-- Komponenty `renderer/widget/**` sprawdza check-code (bez title, select, pól daty i czasu): kroki ±5 min zamiast pól.
-- `DesktopBar.apply({ onTop })` to jedyne `setAlwaysOnTop` paska (check-code liczy wywołania); bez „na wierzchu” pasek
-  zawsze kładzie pomocnik pod oknami.
-- Okno dźwięku (`windows/soundWindow.ts`, widok `sound`) nigdy się nie pokazuje; dźwięk gra przy zmianie kroku na 5 i 0.
-- Pełny ekran dla paska „na wierzchu” (D291, E4b.9 z 27.10): `layoutBar` wysyła `fullscreen.watch` z oknem paska
-  (wyłączone – `unwatch`); pomocnik co 1 s i przy zmianie pierwszego planu patrzy na monitor paska: pierwszy plan na
-  nim decyduje (także pełny ekran w miejscu – film w przeglądarce), a okno pełnoekranowe zostaje, póki zakrywa monitor
-  (klik na drugim monitorze, chwilowy brak pierwszego planu). Wysyła tylko zmianę (`fullscreen`); proces główny –
-  `onFullscreen`, zerowane przy zatrzymaniu pomocnika. Test tylko w CI z prawdziwym pomocnikiem (`bar-windows.spec.ts`).
-- Miejsce paska (D303, D304, T497): `BarPlacement.spot` – kotwica z makiety, liczona w `barRect` z bieżącą wysokością
-  i skalą (margines 8 DIP zostaje); `spot: null` – własne przesunięcie złożonej części. Uchwyt `bar-drag` (nad lewym
-  odstępem głównej części – nie zasłania przycisków) wysyła `barDrag` start / move (raz na klatkę) / end; start także od ruchu
-  z lewym przyciskiem bez usłyszanego wciśnięcia (T1500, `barGrip.ts` – Windows nie zawsze daje stronie wciśnięcie), w trakcie słucha cały
-  dokument (puszczenie nic nie klika); proces główny co 16 ms sam przesuwa okno o drogę kursora (`followBarDrag`, od 4 px), puszczenie
-  przeciągania zaczętego ruchem mówi pomocnik (`mouse.watch`, koniec bez strony – `onBarDragOver`; bez pomocnika tylko strona), przy końcu bierze kursor z tej chwili i zapisuje
-  `placementAfterDrag`; samo kliknięcie nic nie zapisuje. `layoutBar` w trakcie czeka (`dragHolds`, najwyżej 2 min, awaria widoku
-  paska zeruje). Makieta: `barScreens()`, `placeBar(id, miejsce)`. E2E podstawia `getCursorScreenPoint`.
-- „Na wierzchu” pasek chowa się też przy oknie głównym na pierwszym planie (D302, `mainInFront`; focus, blur, hide,
-  minimize okna głównego wołają `layoutBar` tylko przy „na wierzchu”). Test tylko w CI (prawdziwe kliknięcia).
+- Pułapki paska, panelu i okien – `widget-pulapki.md`.

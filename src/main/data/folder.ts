@@ -55,7 +55,7 @@ import { placeOf, type Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type PlanBlock, type Template } from '@shared/model/plan'
 import { MODULES, personName, RD_SCHEMA, rdFrom, type ModuleId, type WriteOnceField } from '@shared/model/rd'
 import { runningRequestOf } from '@shared/engineView'
-import type { RunningRequest } from '@shared/widget'
+import { CLICK_UNDO_MS, CLICK_UNDO_WRITE_MS, type RunningRequest } from '@shared/widget'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { blockName, type Names } from '@shared/blockName'
 import { routineCostsOf, routineFrom, type Routine } from '@shared/model/routines'
@@ -1264,10 +1264,16 @@ export class DataFolder {
           }
           // Descents to the reserve, registered once their minute is closed by the gate (events up to 30 s after a minute
           // still round into it): they stay whatever later corrections say (spec). Apart, so energy never stops the rest.
+          // Nor from the minute of a signal or an assessment still within its „Cofnij” on the bar (D564 P18, `CLICK_UNDO_MS`): taken back,
+          // it never was one – a descent registered stays.
           try {
             const gateIdx = idxOf(state.grid, gate)
+            // Its age by the gate (how far the logs of every computer in use are seen – a signal of another computer comes later), with
+            // a margin for the write of its „Cofnij” clicked at the last moment.
+            const young = ctx.events.flatMap((e) => (isKnown(e) && (e.k === 'energy.signal' || e.k === 'energy.relative') && !state.facts.undone.has(e.id) && gate - e.at < CLICK_UNDO_MS + CLICK_UNDO_WRITE_MS ? [idxOf(state.grid, e.at)] : []))
+            const holdFrom = young.length ? Math.min(...young) : Number.POSITIVE_INFINITY
             for (const d of newDescents(state.grid, computeEnergy(ctx, state))) {
-              if (idxOf(state.grid, d.at) >= gateIdx) continue
+              if (idxOf(state.grid, d.at) >= gateIdx || idxOf(state.grid, d.at) >= holdFrom) continue
               this.append({ id: derivedId(day, 'energy.reserve', d.pool, d.at), day, dom: 'energy', k: 'energy.reserve', at: d.at, pool: d.pool, silent: d.silent })
             }
           } catch (e) {
@@ -2337,8 +2343,8 @@ export class DataFolder {
    * A click of the timer (spec „Akcje widgetu wykonuje proces główny i zapisuje je jako zdarzenia w logu”): judged on the
    * day as it is now – a second click of the same action finds it done and does nothing (no two entries) – one at a time.
    */
-  timerClick(click: TimerClick): Promise<ActionResult> {
-    const run = async (): Promise<ActionResult> => {
+  timerClick(click: TimerClick): Promise<ActionResult & { wrote?: { day: string; ids: string[]; begun?: string[] } }> {
+    const run = async (): Promise<ActionResult & { wrote?: { day: string; ids: string[]; begun?: string[] } }> => {
       const now = this.clock.now()
       // The day before chosen – counted once, by the choice itself (as `widgetModel`).
       const chosen = click.day && isIsoDate(click.day) ? { day: click.day } : await this.barActiveDay(now, click.a === 'requestEnd' ? click.request : null)
@@ -2354,7 +2360,12 @@ export class DataFolder {
       // computer's observation too.
       const activity = undoNeedsActivity(state, act as TimerAction) ? await this.activityFor(day, read, now) : undefined
       const r = act.a === 'requestNow' || act.a === 'requestEnd' || act.a === 'requestAfter' ? requestAction(state, act as RequestAction, now) : timerAction(ctx, state, act as TimerAction, now, activity)
-      if (r.ok && r.events.length && !probe) await this.writeOn(day, laid, r.events, chosen.before)
+      // What it wrote, by id: the bar's „Cofnij” of its click takes back exactly that (D564 P18); the blocks it began (in order, behind too) name its line.
+      if (r.ok && r.events.length && !probe) {
+        const written = await this.writeOn(day, laid, r.events, chosen.before)
+        const begun = written.flatMap((e) => (isKnown(e) && (e.k === 'block.start' || e.k === 'block.resume') ? [e.block] : []))
+        return { ...r, wrote: { day, ids: written.map((e) => e.id), ...(begun.length ? { begun } : {}) } }
+      }
       return r
     }
     return this.serial(run)
@@ -2569,9 +2580,9 @@ export class DataFolder {
    * A signal or the relative assessment from the bar (spec „Sygnały w ciągu dnia”): an anchor with the exact state before
    * it as this computer knows it now – later corrections of earlier times never change the state after it.
    */
-  energySignal(s: { signal: Signal } | { pool: Pool; delta: -10 | 0 | 10 }): Promise<void> {
-    // One at a time with the clicks: both may write the ends laid over the day (D345).
-    const run = async (): Promise<void> => {
+  energySignal(s: { signal: Signal } | { pool: Pool; delta: -10 | 0 | 10 }): Promise<{ day: string; id: string }> {
+    // One at a time with the clicks: both may write the ends laid over the day (D345). Answers its day and id (the bar's „Cofnij”, D564 P18).
+    const run = async (): Promise<{ day: string; id: string }> => {
       const at = this.clock.now()
       const day = logicalDayOf(at)
       const read = await this.log.readDay(day)
@@ -2582,8 +2593,9 @@ export class DataFolder {
       const check = parseEvent(JSON.stringify({ ...draft, id: 'x', c: this.o.computer, n: 0, t: at, l: at, v: this.rulesVersion }))
       if (!check.ok) throw new Error(`sygnał: ${check.why}`)
       await this.writeOn(day, laid, [])
-      this.append(draft)
+      const e = this.append(draft)
       await this.log.flush()
+      return { day, id: e.id }
     }
     return this.serial(run)
   }

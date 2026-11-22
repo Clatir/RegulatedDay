@@ -9,6 +9,7 @@
  * with its line); the quiet modes make the bar compact; the night's quiet leaves only the time, the running block and „Prośba ▸”.
  */
 import { questionsOf, type Question, chainOn } from './engine/auto'
+import { liveEnergyEvent } from './engine/clickUndo'
 import type { Activity } from './engine/activity'
 import { plannedSpan, type BlockInfo } from './engine/blocks'
 import { answered, contactEnded, waterDue, workRunStart, type CareSettings } from './engine/care'
@@ -26,7 +27,7 @@ import { ROUTINE_LINE_MIN, routinesDue } from './engine/routineCheck'
 import { TASK_ANSWERS, TASK_LINE_MIN, taskLineText, taskQuestions } from './engine/cases'
 import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
-import { awayEndUndo, awayStartUndoable, endsAtOf, fixedStartPair, laterWork, plannedEndOf, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
+import { awayEndUndo, awayStartUndoable, endsAtOf, fixedStartPair, laterWork, plannedEndOf, runningOfGroup, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
 import { workedUntilOf } from './engine/explain'
 import { namedById, type NamedBlock } from './blockName'
 import { namingOf } from './engine/context'
@@ -37,7 +38,7 @@ import type { Routine } from './model/routines'
 import type { AllDayEvent } from './model/allDay'
 import { ENGINE_TONE_SET, iconColor, toneColor, type Tone, type WarnStep } from './theme'
 import { firstOpen } from './model/steps'
-import { barAllDay, NO_VARIANTS, type BarLine, type BarPending, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from './widget'
+import { barAllDay, nextLabel, NO_VARIANTS, type BarLine, type BarPending, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from './widget'
 
 const MIN = 60_000
 
@@ -317,10 +318,14 @@ export function engineView(i: EngineInput): WidgetView {
   const tone: Tone = reserve ? 'rezerwa' : fg ? (CLASS_TONE[fg.info.rules.cls] ?? 'brak') : 'brak'
   const warn = hidden ? 'none' : warnOf(state, endsAt, now, byId)
 
-  // „Dalej?” in its fixed place at the start.
+  // What „Dalej” begins (D564 P20 – „Dalej: <nazwa>”): the next of the plan, nothing while another block of its parallel group stays
+  // in front (D499, T1196 – the timer's own rule).
+  const groupGoesOn = fg?.fact.group != null && runningOfGroup(t, fg.fact.group).some((x) => x !== fg && !x.info.bg)
+  const nextName = fg && t.next && !groupGoesOn ? nameOf(t.next.id) : null
+  // „Dalej?” in its fixed place at the start; its „Dalej” names what it begins, as the bar's button does.
   const next = questions.find((q) => q.kind === 'next' || q.kind === 'next2')
   const question: BarLine | null = next
-    ? { id: next.id, text: next.kind === 'next2' ? 'Dalej? (drugi raz)' : 'Dalej?', actions: next.answers.map((a) => ({ id: a.id, label: a.label })), dot: true, at: fg ? at(fg.plannedEnd) : null }
+    ? { id: next.id, text: next.kind === 'next2' ? 'Dalej? (drugi raz)' : 'Dalej?', actions: next.answers.map((a) => ({ id: a.id, label: a.id === 'next' ? nextLabel(nextName) : a.label })), dot: true, at: fg ? at(fg.plannedEnd) : null }
     : null
 
   // The request running now – the latest – in the bar (D312); without one today, one from before 04:00.
@@ -364,7 +369,8 @@ export function engineView(i: EngineInput): WidgetView {
       let lastShown: number | null = null
       const proposed = new Set<string>()
       for (const e of [...events].sort((a, b) => a.t - b.t)) {
-        if (e.k !== 'energy.signal') continue
+        // A signal taken back by the bar's „Cofnij” (D564 P18) proposes nothing.
+        if (e.k !== 'energy.signal' || !liveEnergyEvent(e, state.facts.undone)) continue
         const s = e as unknown as { at: number; signal: string }
         if (proposed.has(s.signal)) continue
         proposed.add(s.signal)
@@ -476,6 +482,7 @@ export function engineView(i: EngineInput): WidgetView {
     barClosed: false,
     buttons: {
       next: !!fg,
+      nextName,
       pause: !!fg && !fixedFg && !modes.night,
       extend: !!fg,
       workEnd: (!!fg && fg.info.isWork) || (!fg && workEndOpen(state, t, isWork)),
