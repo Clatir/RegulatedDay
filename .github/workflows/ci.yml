@@ -14,7 +14,7 @@ concurrency:
 
 defaults:
   run:
-    shell: bash
+    shell: powershell
 
 jobs:
   test:
@@ -40,7 +40,7 @@ jobs:
       # The built start.js requires only electron and Node (T381); the bar and the windows' rules.
       - run: npm run lint
       - name: CHANGELOG.md has a section for this version
-        run: node scripts/release-notes.mjs > /dev/null
+        run: node scripts/release-notes.mjs | Out-Null
       - name: Claude Code context files within limits
         run: node scripts/check-context.mjs
 
@@ -70,10 +70,10 @@ jobs:
           node-version-file: .node-version
           cache: npm
       - run: npm ci
-      - run: npx playwright install-deps chromium
+      - run: if ($env:RUNNER_OS -eq 'Linux') { npx playwright install-deps chromium }
       - run: npm run build
-      - run: mkdir -p "$XDG_CONFIG_HOME"
-      - run: xvfb-run -a npx playwright test
+      - run: New-Item -ItemType Directory -Force -Path $env:XDG_CONFIG_HOME | Out-Null
+      - run: if ($env:RUNNER_OS -eq 'Linux') { xvfb-run -a npx playwright test } else { npx playwright test }
       - uses: actions/upload-artifact@v4
         if: failure()
         continue-on-error: true
@@ -92,8 +92,9 @@ jobs:
           node-version: '22.11.0'
       - name: npm ci stops with instructions
         run: |
-          if npm ci > npm-ci.log 2>&1; then cat npm-ci.log; echo "npm ci should fail on Node 22.11"; exit 1; fi
-          grep -q "jest za stary" npm-ci.log
+          cmd /c "npm ci > npm-ci.log 2>&1"
+          if ($LASTEXITCODE -eq 0) { Get-Content npm-ci.log; throw "npm ci should fail on Node 22.11" }
+          if (-not (Select-String -Path npm-ci.log -Pattern "jest za stary" -Quiet)) { Get-Content npm-ci.log; throw "missing 'jest za stary' in npm-ci.log" }
 
   # Windows: pull requests, the default branch (releases) and by hand – a plain push to a working branch runs the Linux
   # jobs only (its pull request runs the whole CI anyway).
@@ -123,10 +124,10 @@ jobs:
           node-version-file: .node-version
       # The helper and the update paths run with the Polish culture and the Central European zone (spec „Testy”).
       - name: Strefa i kultura jak u użytkownika
-        shell: pwsh
+        shell: powershell
         run: |
-          tzutil /s "Central European Standard Time"
-          Set-Culture pl-PL
+          if ((Get-TimeZone).Id -ne 'Central European Standard Time') { tzutil /s "Central European Standard Time" }
+          if ((Get-Culture).Name -ne 'pl-PL') { Set-Culture pl-PL }
           Get-TimeZone | Select-Object Id
           Get-Culture | Select-Object Name
       - name: Samotest pomocnika
@@ -136,7 +137,7 @@ jobs:
           RD_REPORT: helper
       - name: E2E spakowanej aplikacji z prawdziwym pomocnikiem
         if: ${{ !cancelled() }}
-        shell: pwsh
+        shell: powershell
         run: |
           $env:RD_E2E_EXECUTABLE = (Resolve-Path 'release\win-unpacked\Regulated Day.exe').Path
           $env:RD_E2E_REAL_HELPER = '1'
@@ -152,14 +153,16 @@ jobs:
       # killed after a few seconds, can leave it without out\main\start.js (T559).
       - name: Następna wersja do testu aktualizacji
         if: ${{ !cancelled() }}
-        shell: pwsh
+        shell: powershell
         run: |
           npm run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $pkgPath = (Resolve-Path 'package.json').Path
+          $pkgRaw = [System.IO.File]::ReadAllBytes($pkgPath)
           $next = node scripts/next-version.mjs
           npx electron-builder --win --x64 --publish never '-c.directories.output=release-next'
           $code = $LASTEXITCODE
-          git checkout -- package.json
+          [System.IO.File]::WriteAllBytes($pkgPath, $pkgRaw)
           if ($code -ne 0) { exit $code }
           "RD_UPDATE_TO_VERSION=$next" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
         env:
@@ -188,22 +191,33 @@ jobs:
       # "version" in package.json and add a CHANGELOG.md section to release.
       - name: Publish v<version> (once per version)
         if: github.event_name == 'push'
-        shell: bash
+        shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version=$(node -p "require('./package.json').version")
-          if gh release view "v$version" > /dev/null 2>&1; then
-            echo "v$version is already published – bump the version in package.json to release a new one."
+          $utf8 = New-Object System.Text.UTF8Encoding($false)
+          $version = (node -p "require('./package.json').version").Trim()
+          cmd /c "gh release view v$version >nul 2>&1"
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "v$version is already published – bump the version in package.json to release a new one."
             exit 0
-          fi
-          last=$(gh release view --json tagName -q .tagName 2>/dev/null | sed 's/^v//' || true)
-          node scripts/release-notes.mjs "$version" ${last:+--since "$last"} > notes.md
-          mkdir -p dist
-          cp release/Regulated-Day-Setup.exe release/Regulated-Day-manifest.json dist/
-          (cd dist && sha256sum Regulated-Day-Setup.exe Regulated-Day-manifest.json > SHA256SUMS.txt && cat SHA256SUMS.txt)
-          gh release create "v$version" --target "$GITHUB_SHA" --title "Regulated Day $version" --notes-file notes.md \
+          }
+          $lastRaw = cmd /c "gh release view --json tagName -q .tagName 2>nul"
+          $last = if ($LASTEXITCODE -eq 0 -and $lastRaw) { ($lastRaw | Out-String).Trim() -replace '^v','' } else { '' }
+          $notes = if ($last) { node scripts/release-notes.mjs $version --since $last } else { node scripts/release-notes.mjs $version }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          [System.IO.File]::WriteAllText((Join-Path $PWD 'notes.md'), (($notes -join "`n") + "`n"), $utf8)
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item release\Regulated-Day-Setup.exe, release\Regulated-Day-manifest.json -Destination dist -Force
+          $sums = @('Regulated-Day-Setup.exe', 'Regulated-Day-manifest.json') | ForEach-Object {
+            $h = (Get-FileHash -LiteralPath (Join-Path 'dist' $_) -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$h  $_"
+          }
+          [System.IO.File]::WriteAllText((Join-Path $PWD 'dist\SHA256SUMS.txt'), (($sums -join "`n") + "`n"), $utf8)
+          Get-Content dist\SHA256SUMS.txt
+          gh release create "v$version" --target "$env:GITHUB_SHA" --title "Regulated Day $version" --notes-file notes.md `
             dist/Regulated-Day-Setup.exe dist/Regulated-Day-manifest.json dist/SHA256SUMS.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       # A build of a pull request to try out before merging.
       - uses: actions/upload-artifact@v4
         continue-on-error: true
