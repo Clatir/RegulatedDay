@@ -329,6 +329,10 @@ test('Ctrl K (D405): wydarzenie znalezione po tytule i po słowie z notatki, Ent
         await expect(hit).toHaveCount(1, { timeout: 15_000 })
         await expect(hit).toContainText('Konferencja')
         await expect(hit).toContainText(rangeText({ startDate: addDays(today, -1), endDate: addDays(today, 1) }))
+        // Since UX14 fields of the settings are hits too („konf” finds „Folder programu” by its words) and their group stands first:
+        // the arrows bring the choice to the event, Enter opens it.
+        for (let i = 0; i < 10 && (await hit.getAttribute('aria-selected')) !== 'true'; i++) await page.keyboard.press('ArrowDown')
+        await expect(hit).toHaveAttribute('aria-selected', 'true')
         await page.keyboard.press('Enter')
         await expect(page.getByTestId('search')).toHaveCount(0)
         await expect(page.getByTestId('week')).toBeVisible()

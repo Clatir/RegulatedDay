@@ -482,8 +482,10 @@ test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na 
       await expect(page.getByTestId('block-timer-start')).toHaveText('Wznów')
       await page.getByTestId('block-timer-start').click()
       await expect(page.getByTestId('bar-block')).toContainText('Inne obowiązki')
-      // The block stands on the axis where it runs (from now, not at 03:00 of its plan).
-      await expect(page.getByTestId('block-late')).not.toContainText('03:00')
+      // The block stands on the axis where it runs (from now, not at 03:00 of its plan) – said only when „now” is not 03:00–03:09 itself
+      // (a run at that hour has both on the same minute; seen 22.11 at 03:00).
+      const nowHm = new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit' }).format(new Date())
+      if (!nowHm.startsWith('03:0')) await expect(page.getByTestId('block-late')).not.toContainText('03:00')
       // Past its plan „Dalej?” stands with its own „Dalej” – the row then has none (C5).
       await page.locator('[data-testid="bar-main"] :is([data-testid="bar-next"], [data-testid="bar-q-next"])').first().click()
       await expect(page.getByTestId('bar-block')).not.toContainText('Inne obowiązki')
