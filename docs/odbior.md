@@ -343,6 +343,10 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX15.3 Lista skrótów pod F1 i „Skróty” w menu (1.34.0)
    - [ ] UX15.4 Kreator – „Zakończ z domyślnymi” i podsumowanie z krokami (1.34.0)
    - [ ] UX15.5 Pokój i lista „Pierwszy dzień” (1.34.0)
+   - [ ] UX19.1 Ctrl+Z cofa ostatnią zmianę z „Cofnij” (1.34.0)
+   - [ ] UX19.2 Panel Spraw przy „Tygodniu” i przeciąganie na dzień (1.34.0)
+   - [ ] UX19.3 „Zastosuj szablon ▸” z menu dni (1.34.0)
+   - [ ] UX19.4 Szybkie wybory dni i zwijane cele (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3556,6 +3560,35 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** po kreatorze pierwszego komputera; w Pokoju najedź na dzień „Ostatnich dni”.
 - **Oczekiwany efekt:** lista „Pierwszy dzień” z czterema drogami, „Zamknij” ją chowa; w Pokoju nota o nutach z „?”, po najechaniu – znaczenie statusu dnia.
 - **Nie przechodzi, gdy:** lista wraca po „Zamknij”; kolejny komputer ją dostaje; „?” w nocie nic nie otwiera.
+
+
+#### UX19.1 Ctrl+Z cofa ostatnią zmianę z „Cofnij”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux19-undo.test.ts`. Ty: z prawdziwym dniem.
+- **Jak sprawdzić:** usuń blok w „Dziś”, naciśnij Ctrl+Z; potem wpisz coś w pole nazwy i naciśnij Ctrl+Z; przy dwóch liniach „Cofnij” naraz – Ctrl+Z.
+- **Oczekiwany efekt:** blok wraca, dymek znika; w polu cofa się wpis w polu, nie blok; przy dwóch liniach cofa się nowsza zmiana.
+- **Nie przechodzi, gdy:** Ctrl+Z działa spod otwartego okna albo w polu; „Cofnij” widać, a klawisz nic nie robi; cofa starszą zmianę.
+
+#### UX19.2 Panel Spraw przy „Tygodniu” i przeciąganie na dzień
+- [ ] Odebrane
+- **Automatycznie:** E2E `week` („UX19”), `tests/web/ux19-week-cases.test.ts`. Ty: „3 dni” i Ctrl.
+- **Jak sprawdzić:** „Sprawy ▸” w „Tygodniu”; przeciągnij sprawę na kolumnę dnia (także z Ctrl – kopia) i nad nagłówek dnia; przeciągnij na dzień miniony.
+- **Oczekiwany efekt:** panel zwinięty przy pierwszym otwarciu; pasmo miejsca pod wskaźnikiem; po puszczeniu blok i „Cofnij”; nad nagłówkiem i na dniu minionym nic się nie zapisuje.
+- **Nie przechodzi, gdy:** panel otwarty domyślnie; zapis na dniu minionym albo pod nagłówkiem; pasmo stoi inaczej niż blok.
+
+#### UX19.3 „Zastosuj szablon ▸” z menu dni
+- [ ] Odebrane
+- **Automatycznie:** E2E `template-apply` („UX19”), `tests/web/ux19-apply.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Kalendarzu zaznacz dni i prawy przycisk; w „Tygodniu” prawy przycisk na nagłówku dnia.
+- **Oczekiwany efekt:** „Zastosuj szablon ▸” z listą szablonów (bez zarchiwizowanych); dziś albo dzień miniony pyta o godziny; po zapisie zaznaczenie znika.
+- **Nie przechodzi, gdy:** podmenu pokazuje zarchiwizowane; dziś zapisuje bez pytania.
+
+#### UX19.4 Szybkie wybory dni i zwijane cele
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux19-quick.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w oknie dni „pn–pt tego miesiąca” i „każdy: wt”; zwiń cele nad „Tygodniem” i przejdź na inny tydzień.
+- **Oczekiwany efekt:** zaznaczone dni miesiąca pokazanego w oknie; zwinięcie celów zostaje.
+- **Nie przechodzi, gdy:** wybór bierze dni innego miesiąca; zwinięcie znika po zmianie tygodnia.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
