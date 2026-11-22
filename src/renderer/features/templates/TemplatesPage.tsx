@@ -59,6 +59,7 @@ import { SessionFields } from './SessionFields'
 import { templateAdd, templateCopy, templateDrag, templateStartAt, withTemplateChange, type TemplateChange } from './templatePush'
 import { copyTemplateBlock } from '../plan/blockCopy'
 import { dragTemplateGroup, templateDragPreview } from '../plan/groupDrag'
+import { undoMark } from '../../lib/undoKey'
 import { COPY_SPAN_ID } from '../today/dayPush'
 import { losesText, winsText } from './clashText'
 import { freshAfter, removeTemplate, removeTemplateBlock, undoAddedBlock } from './templateActions'
@@ -469,7 +470,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           {pushedShown && (
             <div className="flex items-center gap-2 self-start rounded border border-line bg-raised px-3 py-1.5 text-[12.5px]" role="status" data-testid="template-pushed">
               <span>{pushed.text}</span>
-              <button type="button" className="btn" onClick={() => void undoPushed()} data-testid="template-pushed-undo">
+              <button type="button" className="btn" onClick={() => void undoPushed()} {...undoMark()} data-testid="template-pushed-undo">
                 Cofnij
               </button>
             </div>

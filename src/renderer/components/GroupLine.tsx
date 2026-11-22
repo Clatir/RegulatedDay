@@ -4,6 +4,8 @@
  * change back once and the line goes. The view says where it stands (`className`); the look is the one of `WeekPushLine`.
  */
 import { groupLineLeft, undoGroupLine, useGroupLine, type GroupView } from '../store/groupLine'
+import { UNDO_LINE_MS } from '@shared/widget'
+import { undoMark } from '../lib/undoKey'
 import { cx } from './ui'
 
 export function GroupLine({ view, className }: { view: GroupView; className?: string }) {
@@ -15,7 +17,7 @@ export function GroupLine({ view, className }: { view: GroupView; className?: st
     // (a menu, a new block's panel) like a press on any other button.
     <div className={cx('flex items-center gap-2 self-start rounded border border-line bg-raised px-3 py-1.5 text-[12.5px]', className)} data-testid={`group-line-${view}`}>
       <span role="status">{line.text}</span>
-      <button type="button" className="btn" disabled={line.undoing} onClick={() => void undoGroupLine(view)} data-testid={`group-line-${view}-undo`}>
+      <button type="button" className="btn" disabled={line.undoing} onClick={() => void undoGroupLine(view)} {...undoMark(line.until - UNDO_LINE_MS)} data-testid={`group-line-${view}-undo`}>
         Cofnij
       </button>
     </div>

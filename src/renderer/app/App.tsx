@@ -11,6 +11,7 @@ import { useWidget } from '../store/widget'
 import { commitActiveField } from '../lib/commit'
 import { modalOpen } from '../lib/escape'
 import { useDeleteKey } from '../lib/deleteKey'
+import { useUndoKey } from '../lib/undoKey'
 import { DeleteDialog } from '../components/DeleteDialog'
 import { Bar } from '../widget/Bar'
 import { Palette } from '../features/search/Palette'
@@ -111,6 +112,7 @@ export function App() {
   const wizardAsked = useWizard((s) => s.asked)
   useHotkeys()
   useDeleteKey()
+  useUndoKey()
   useGameFeed()
   useEffect(() => window.rd.onNavigate((p) => (p === 'ritual' ? openRitual() : (PAGES as string[]).includes(p) && navigate(p as Page))), [])
   // No folder on this computer: the wizard (until „Później”). A folder that did not open (OneDrive not ready at the

@@ -319,3 +319,47 @@ test('szablon: „Cofnij” dodanego bloku po wpisaniu nazwy usuwa blok i nie py
     await app.close()
   }
 })
+
+test('szablon (UX19, P28): „Zastosuj szablon ▸” w menu zaznaczonych dni Kalendarza zapisuje bez pytań; okno dni ma szybkie wybory „pn–pt” i „każdy <dzień>”', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-template-menu-'))
+  const { today } = seedAwake(dataDir, [])
+  const d1 = addDays(today, 3)
+  const d2 = addDays(today, 4)
+  write(dataDir, paths.record('template', training.id), templateJson(training))
+  const id = (date: string, b: string) => templateBlockId(date, 'trening', b)
+  const ids = (date: string) => fileOf(dataDir, date).blocks.map((b) => b.id)
+
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      // The quick picks of the window of days: every Monday of the month shown is chosen, with the count.
+      await page.getByTestId('nav-templates').click()
+      await page.getByTestId('template-item').filter({ hasText: 'Trening' }).click()
+      await page.getByTestId('template-apply').click()
+      await page.getByTestId('template-apply-pick').click()
+      const dialog = page.getByTestId('template-apply-days')
+      await dialog.getByTestId('template-apply-days-quick-weekday-1').click()
+      await expect(dialog.getByTestId('template-apply-days-count')).toContainText('Wybrane:')
+      await dialog.getByTestId('template-apply-days-quick-workdays').click()
+      await expect(dialog.getByTestId('template-apply-days-ok')).toContainText('Zastosuj (')
+      await page.keyboard.press('Escape')
+      await expect(dialog).toHaveCount(0)
+
+      // The menu of the selected days of the Calendar: the template on both days, no question (the days are empty).
+      await page.getByTestId('nav-calendar').click()
+      await page.getByTestId(`day-${d1}`).click({ modifiers: ['Control'] })
+      await page.getByTestId(`day-${d2}`).click({ modifiers: ['Control'] })
+      await page.getByTestId(`day-${d2}`).click({ button: 'right' })
+      await expect(page.getByTestId('calendar-menu')).toHaveAttribute('aria-label', 'Zmień 2 dni')
+      await page.getByTestId('calendar-menu-apply').click()
+      await page.getByTestId('calendar-menu-apply-trening').click()
+      await expect.poll(() => ids(d1)).toEqual(expect.arrayContaining([id(d1, 'x1'), id(d1, 'x2')]))
+      await expect.poll(() => ids(d2)).toEqual(expect.arrayContaining([id(d2, 'x1'), id(d2, 'x2')]))
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})

@@ -5,7 +5,9 @@
  * (`undoWeekLine`: what did not go through stays in the line).
  */
 import { useMemo } from 'react'
+import { UNDO_LINE_MS } from '@shared/widget'
 import { useBusy } from '../../lib/busy'
+import { undoMark } from '../../lib/undoKey'
 import { useDayFiles } from '../../store/day'
 import { useWeekPush, weekPushLeft, type WeekPushLine as Line } from '../../store/weekPush'
 import { undoWeekLine, weekPushStanding } from './weekActions'
@@ -26,7 +28,7 @@ export function WeekPushShown({ line }: { line: Line }) {
   return (
     <div className="flex items-center gap-2 self-start rounded border border-line bg-raised px-3 py-1.5 text-[12.5px]" role="status" data-testid="week-pushed">
       <span>{weekPushLineText(line.push)}</span>
-      <button type="button" className="btn" disabled={busy} onClick={() => void run(undoWeekLine)} data-testid="week-pushed-undo">
+      <button type="button" className="btn" disabled={busy} onClick={() => void run(undoWeekLine)} {...undoMark(line.until - UNDO_LINE_MS)} data-testid="week-pushed-undo">
         Cofnij
       </button>
     </div>

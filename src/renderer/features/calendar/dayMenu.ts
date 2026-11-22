@@ -7,7 +7,9 @@
 import { RANGES, DAY_TYPES, DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
 import { parseField } from '@shared/model/fields'
 import { triState } from '@shared/selection'
+import type { Template } from '@shared/model/plan'
 import type { MenuEntry } from '../../components/ContextMenu'
+import { applyTemplateEntry } from '../templates/applyMenu'
 
 /** What the menu needs of a day: the type it has (its own, else its weekday's), whether it is its own, its own wake (null – the type's). */
 export interface MenuDay {
@@ -19,6 +21,8 @@ export interface MenuDay {
 export interface DayMenuActions {
   setType: (type: DayTypeId | null, dates: readonly string[]) => void
   setWake: (wakeMin: number | null, dates: readonly string[]) => void
+  /** UX19 (P28): the template applied to the days (the screen runs the flow of „Zastosuj do…”). */
+  applyTemplate: (template: Template, dates: readonly string[]) => void
 }
 
 export const BUSY_WHY = 'Zapisuję…'
@@ -30,7 +34,7 @@ const check = (values: boolean[]): 'all' | 'some' | undefined => {
   return s === 'none' ? undefined : s
 }
 
-export function dayMenu(ids: readonly string[], days: ReadonlyMap<string, MenuDay>, today: string, busy: boolean, act: DayMenuActions): MenuEntry[] {
+export function dayMenu(ids: readonly string[], days: ReadonlyMap<string, MenuDay>, today: string, busy: boolean, act: DayMenuActions, templates: readonly Template[] = []): MenuEntry[] {
   const of = (d: string): MenuDay => days.get(d) ?? { type: 'zwykly', own: false, wake: null }
   const typeWhy = busy ? BUSY_WHY : ids.some((d) => d > today) ? undefined : TYPE_WHY
   const wakeWhy = busy ? BUSY_WHY : ids.some((d) => d >= today) ? undefined : WAKE_WHY
@@ -58,6 +62,8 @@ export function dayMenu(ids: readonly string[], days: ReadonlyMap<string, MenuDa
         act.setWake(r.value, ids)
       }
     },
-    { label: 'Pobudka z typu', check: check(ids.map((d) => of(d).wake == null)), disabled: wakeWhy, onPick: () => act.setWake(null, ids), testId: 'calendar-menu-wake-default' }
+    { label: 'Pobudka z typu', check: check(ids.map((d) => of(d).wake == null)), disabled: wakeWhy, onPick: () => act.setWake(null, ids), testId: 'calendar-menu-wake-default' },
+    { kind: 'separator' },
+    applyTemplateEntry(templates, busy, (t) => act.applyTemplate(t, ids), 'calendar-menu-apply')
   ]
 }

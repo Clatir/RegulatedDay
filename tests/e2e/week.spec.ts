@@ -15,6 +15,7 @@ import { DEFAULT_GENERAL, rdFrom } from '../../src/shared/model/rd'
 import { DEFAULT_SETTINGS } from '../../src/shared/model/settings'
 import { defaultTemplates, firstComputerRecords } from '../../src/shared/model/defaults'
 import { previousMonth } from '../../src/shared/model/goals'
+import { newTask } from '../../src/shared/model/requests'
 import { logicalMinuteOf } from '../../src/shared/time/day'
 import { launch, logicalToday, withMainLog } from './app'
 
@@ -186,7 +187,7 @@ test('krok „Cele na <miesiąc>” (D360): „Pomiń” chowa go na cały miesi
 })
 
 const dayFileOf = (dir: string, date: string): string => join(dir, 'days', date.slice(0, 4), `${date}.json`)
-type PlanFileBlock = { id: string; categoryId: string; startMin: number; durationMin: number; name?: string | null }
+type PlanFileBlock = { id: string; categoryId: string; startMin: number; durationMin: number; name?: string | null; task?: string | null }
 const planOf = (dir: string, date: string): PlanFileBlock[] => (existsSync(dayFileOf(dir, date)) ? (JSON.parse(readFileSync(dayFileOf(dir, date), 'utf8')) as { blocks: PlanFileBlock[] }).blocks : [])
 const plusDays = (date: string, n: number): string => new Date(Date.parse(`${date}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
 
@@ -1179,6 +1180,57 @@ test('Pamięć okresu i klawisze (UX8, D2, D6): następny tydzień → dzień �
       await expect(page.getByTestId('month-title')).toHaveText(title!)
       await page.getByTestId('month-today').click()
       await expect(page.getByTestId(`day-${today}`)).toBeVisible()
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Panel „Sprawy” przy „Tygodniu” (UX19, P27, P29): zwinięty; sprawa z panelu upuszczona na środę pokazuje pasmo i zapisuje blok o tej godzinie; Ctrl+Z cofa; panel celów się zwija', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-week-cases-'))
+  seed(dataDir)
+  const today = logicalToday()
+  mkdirSync(join(dataDir, 'requests'), { recursive: true })
+  writeFileSync(join(dataDir, 'requests', 'e2e-task.json'), JSON.stringify(newTask('e2e-task', Date.now(), today, { title: 'Zadanie z panelu', estimateMin: 30 })))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1500, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      const { wed } = await nextWeek(page)
+      // The panel of goals folds to its title; the fold stays.
+      await expect(page.getByTestId('goals-edit')).toBeVisible()
+      await page.getByTestId('goals-fold').click()
+      await expect(page.getByTestId('goals-edit')).toHaveCount(0)
+      await page.getByTestId('goals-fold').click()
+      await expect(page.getByTestId('goals-edit')).toBeVisible()
+      // The panel „Sprawy” is folded until opened.
+      await expect(page.getByTestId('week-cases-toggle')).toHaveAttribute('aria-expanded', 'false')
+      await expect(page.getByTestId('cases-panel')).toHaveCount(0)
+      await page.getByTestId('week-cases-toggle').click()
+      await expect(page.getByTestId('case-chip')).toContainText('Zadanie z panelu', { timeout: 30_000 })
+      const h = await freeHour(page, wed, 30, 12 * 60)
+      const y = (await hourY(page, h)) + 1
+      const chip = (await page.getByTestId('case-chip').boundingBox())!
+      const from = { x: chip.x + 30, y: chip.y + chip.height / 2 }
+      await page.mouse.move(from.x, from.y)
+      await page.mouse.down()
+      await page.mouse.move(from.x - 12, from.y + 4, { steps: 3 })
+      await page.mouse.move(await centreOf(page, wed), y, { steps: 8 })
+      // Held over the column: where the block would stand.
+      const band = page.getByTestId('week-case-drop')
+      await expect(band).toHaveAttribute('data-date', wed)
+      await expect(band).toHaveAttribute('data-start', String(h))
+      await page.mouse.up()
+      await expect.poll(() => planOf(dataDir, wed).find((b) => b.task === 'e2e-task')?.startMin, { timeout: 15_000 }).toBe(h)
+      await expect(page.getByTestId('week-case-drop')).toHaveCount(0)
+      // Ctrl+Z takes back the last „Cofnij” on the screen: the toast of the drop.
+      await expect(page.getByTestId('toast-action')).toHaveText('Cofnij')
+      await page.mouse.move(5, 5)
+      await page.keyboard.press('Control+KeyZ')
+      await expect.poll(() => planOf(dataDir, wed).some((b) => b.task === 'e2e-task'), { timeout: 15_000 }).toBe(false)
+      await expect(page.getByTestId('toast-action')).toHaveCount(0)
     })
     expect(errors).toEqual([])
   } finally {

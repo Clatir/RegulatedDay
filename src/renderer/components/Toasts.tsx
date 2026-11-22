@@ -1,5 +1,6 @@
 // adapted from FI src/renderer/components/Toasts.tsx @ de81f2b
 import { closeToast, useUi } from '../store/ui'
+import { bornOf, undoMark } from '../lib/undoKey'
 import { cx } from './ui'
 
 export function Toasts() {
@@ -24,6 +25,7 @@ export function Toasts() {
                 closeToast(t.id)
                 t.action!.run()
               }}
+              {...(t.action.label === 'Cofnij' ? undoMark(bornOf(t.id)) : {})}
               data-testid="toast-action"
             >
               {t.action.label}

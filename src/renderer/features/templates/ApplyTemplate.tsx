@@ -7,7 +7,7 @@
  * hours of today („Wg planu” / „W czasie rzeczywistym – od teraz”, only with today) and the blocks gone by („Dodaj jako zrealizowane” /
  * „Nie dodawaj minionych”), both at their first choice at each opening; the question of collisions is then asked at the hours chosen.
  */
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { plDate } from '@shared/format'
 import type { Template } from '@shared/model/plan'
 import { logicalDayOf } from '@shared/time/day'
@@ -23,32 +23,32 @@ type Kind = 'apply' | 'revoke'
 
 const LABEL: Record<Kind, string> = { apply: 'Zastosuj do…', revoke: 'Odwołaj w…' }
 
-export function TemplateDaysButton({ template, today, kind }: { template: Template; today: string; kind: Kind }) {
-  const button = useRef<HTMLButtonElement>(null)
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
-  const [picking, setPicking] = useState(false)
+/**
+ * „Zastosuj” on the days chosen, with its questions (UX19, P28: one flow for the button of a template and for the menus of days – the Calendar's and the
+ * columns' of „Tydzień”): the window of today's hours (D546) when today or a day gone by is among them, the question of collisions (D541), then the write.
+ * `start` – true: done (or nothing to do); `dialogs` – the windows, rendered once by the screen that uses it.
+ */
+export function useApplyFlow(): { start: (template: Template, dates: readonly string[]) => Promise<boolean | undefined>; busy: boolean; dialogs: ReactNode } {
   // The days of the window of today's hours and the day that was today when it opened (D546) – the engine takes it at the same click.
-  const [timing, setTiming] = useState<{ dates: string[]; today: string } | null>(null)
-  const [asking, setAsking] = useState<{ dates: string[]; asked: string[]; choice: ApplyChoice } | null>(null)
+  const [timing, setTiming] = useState<{ template: Template; dates: string[]; today: string } | null>(null)
+  const [asking, setAsking] = useState<{ template: Template; dates: string[]; asked: string[]; choice: ApplyChoice } | null>(null)
   const [busy, run] = useBusy()
-  const tomorrow = addDays(today, 1)
 
   /** „Zastosuj” at the hours chosen: after the question when a day asks it (D541). True – done (or nothing to do), the window may close. */
-  const apply = async (list: string[], choice: ApplyChoice) => {
+  const apply = async (template: Template, list: string[], choice: ApplyChoice) => {
     const asked = await askedDays(template, list, choice)
     if (asked.length) {
-      setAsking({ dates: list, asked, choice })
+      setAsking({ template, dates: list, asked, choice })
       return true
     }
     return applyToDays(template, list, 'fill', choice)
   }
 
   /**
-   * The chosen days: „Odwołaj” at once, „Zastosuj” – with today or a day gone by among them after the window of their hours (D546). Today
-   * is the logical day of the click (as the engine takes it – `timingAt`), not the one the page was drawn with: after 04:00 they agree.
-   * True – done (or nothing to do), the window may close.
+   * The chosen days: with today or a day gone by among them after the window of their hours (D546). Today is the logical day of the click (as the engine
+   * takes it – `timingAt`), not the one the page was drawn with: after 04:00 they agree.
    */
-  const go = (dates: readonly string[]) =>
+  const start = (template: Template, dates: readonly string[]) =>
     run(async () => {
       const list = [...new Set(dates)].sort()
       if (!list.length) return false
@@ -56,15 +56,72 @@ export function TemplateDaysButton({ template, today, kind }: { template: Templa
         toast(`Najwyżej ${APPLY_DAYS_MAX} dni naraz.`, 'error', 6000)
         return false
       }
-      // A day that cannot be read is said by the save (`plannedDay` never throws); the save says its own failures.
-      if (kind === 'revoke') return revokeInDays(template, list)
       const now = logicalDayOf(Date.now())
       if (asksTiming(list, now)) {
-        setTiming({ dates: list, today: now })
+        setTiming({ template, dates: list, today: now })
         return true
       }
-      return apply(list, DEFAULT_CHOICE)
+      return apply(template, list, DEFAULT_CHOICE)
     })
+
+  const dialogs = (
+    <>
+      {timing && (
+        <TimingDialog
+          name={timing.template.name}
+          dates={timing.dates}
+          today={timing.today}
+          busy={busy}
+          onClose={() => setTiming(null)}
+          onPick={(choice) =>
+            void run(async () => {
+              if (await apply(timing.template, timing.dates, choice)) setTiming(null)
+            })
+          }
+        />
+      )}
+      {asking && (
+        <ModeDialog
+          name={asking.template.name}
+          asked={asking.asked}
+          total={asking.dates.length}
+          busy={busy}
+          onClose={() => setAsking(null)}
+          onPick={(mode) =>
+            void run(async () => {
+              if (await applyToDays(asking.template, asking.dates, mode, asking.choice)) setAsking(null)
+            })
+          }
+        />
+      )}
+    </>
+  )
+  return { start, busy, dialogs }
+}
+
+export function TemplateDaysButton({ template, today, kind }: { template: Template; today: string; kind: Kind }) {
+  const button = useRef<HTMLButtonElement>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [picking, setPicking] = useState(false)
+  const flow = useApplyFlow()
+  const [revoking, run] = useBusy()
+  const busy = revoking || flow.busy
+  const tomorrow = addDays(today, 1)
+
+  /** The chosen days: „Odwołaj” at once, „Zastosuj” – through the flow. True – done (or nothing to do), the window may close. */
+  const go = (dates: readonly string[]): Promise<boolean | undefined> => {
+    if (kind === 'apply') return flow.start(template, dates)
+    return run(async () => {
+      const list = [...new Set(dates)].sort()
+      if (!list.length) return false
+      if (list.length > APPLY_DAYS_MAX) {
+        toast(`Najwyżej ${APPLY_DAYS_MAX} dni naraz.`, 'error', 6000)
+        return false
+      }
+      // A day that cannot be read is said by the save (`plannedDay` never throws); the save says its own failures.
+      return revokeInDays(template, list)
+    })
+  }
 
   /** „Dziś” and „Jutro” of the click's logical day (the menu's words are of the page). */
   const items = [
@@ -103,34 +160,7 @@ export function TemplateDaysButton({ template, today, kind }: { template: Templa
           testId={`template-${kind}-days`}
         />
       )}
-      {timing && (
-        <TimingDialog
-          name={template.name}
-          dates={timing.dates}
-          today={timing.today}
-          busy={busy}
-          onClose={() => setTiming(null)}
-          onPick={(choice) =>
-            void run(async () => {
-              if (await apply(timing.dates, choice)) setTiming(null)
-            })
-          }
-        />
-      )}
-      {asking && (
-        <ModeDialog
-          name={template.name}
-          asked={asking.asked}
-          total={asking.dates.length}
-          busy={busy}
-          onClose={() => setAsking(null)}
-          onPick={(mode) =>
-            void run(async () => {
-              if (await applyToDays(template, asking.dates, mode, asking.choice)) setAsking(null)
-            })
-          }
-        />
-      )}
+      {flow.dialogs}
     </>
   )
 }
