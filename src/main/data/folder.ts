@@ -55,7 +55,7 @@ import { placeOf, type Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type PlanBlock, type Template } from '@shared/model/plan'
 import { MODULES, personName, RD_SCHEMA, rdFrom, type ModuleId, type WriteOnceField } from '@shared/model/rd'
 import { runningRequestOf } from '@shared/engineView'
-import { CLICK_UNDO_MS, type RunningRequest } from '@shared/widget'
+import { CLICK_UNDO_MS, CLICK_UNDO_WRITE_MS, type RunningRequest } from '@shared/widget'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { blockName, type Names } from '@shared/blockName'
 import { routineCostsOf, routineFrom, type Routine } from '@shared/model/routines'
@@ -1268,7 +1268,9 @@ export class DataFolder {
           // it never was one – a descent registered stays.
           try {
             const gateIdx = idxOf(state.grid, gate)
-            const young = ctx.events.flatMap((e) => (isKnown(e) && (e.k === 'energy.signal' || e.k === 'energy.relative') && !state.facts.undone.has(e.id) && now - e.at < CLICK_UNDO_MS ? [idxOf(state.grid, e.at)] : []))
+            // Its age by the gate (how far the logs of every computer in use are seen – a signal of another computer comes later), with
+            // a margin for the write of its „Cofnij” clicked at the last moment.
+            const young = ctx.events.flatMap((e) => (isKnown(e) && (e.k === 'energy.signal' || e.k === 'energy.relative') && !state.facts.undone.has(e.id) && gate - e.at < CLICK_UNDO_MS + CLICK_UNDO_WRITE_MS ? [idxOf(state.grid, e.at)] : []))
             const holdFrom = young.length ? Math.min(...young) : Number.POSITIVE_INFINITY
             for (const d of newDescents(state.grid, computeEnergy(ctx, state))) {
               if (idxOf(state.grid, d.at) >= gateIdx || idxOf(state.grid, d.at) >= holdFrom) continue
@@ -2341,8 +2343,8 @@ export class DataFolder {
    * A click of the timer (spec „Akcje widgetu wykonuje proces główny i zapisuje je jako zdarzenia w logu”): judged on the
    * day as it is now – a second click of the same action finds it done and does nothing (no two entries) – one at a time.
    */
-  timerClick(click: TimerClick): Promise<ActionResult & { wrote?: { day: string; ids: string[] } }> {
-    const run = async (): Promise<ActionResult & { wrote?: { day: string; ids: string[] } }> => {
+  timerClick(click: TimerClick): Promise<ActionResult & { wrote?: { day: string; ids: string[]; begun?: string[] } }> {
+    const run = async (): Promise<ActionResult & { wrote?: { day: string; ids: string[]; begun?: string[] } }> => {
       const now = this.clock.now()
       // The day before chosen – counted once, by the choice itself (as `widgetModel`).
       const chosen = click.day && isIsoDate(click.day) ? { day: click.day } : await this.barActiveDay(now, click.a === 'requestEnd' ? click.request : null)
@@ -2358,8 +2360,12 @@ export class DataFolder {
       // computer's observation too.
       const activity = undoNeedsActivity(state, act as TimerAction) ? await this.activityFor(day, read, now) : undefined
       const r = act.a === 'requestNow' || act.a === 'requestEnd' || act.a === 'requestAfter' ? requestAction(state, act as RequestAction, now) : timerAction(ctx, state, act as TimerAction, now, activity)
-      // What it wrote, by id: the bar's „Cofnij” of its click takes back exactly that (D564 P18).
-      if (r.ok && r.events.length && !probe) return { ...r, wrote: { day, ids: (await this.writeOn(day, laid, r.events, chosen.before)).map((e) => e.id) } }
+      // What it wrote, by id: the bar's „Cofnij” of its click takes back exactly that (D564 P18); the blocks it began in front name its line.
+      if (r.ok && r.events.length && !probe) {
+        const written = await this.writeOn(day, laid, r.events, chosen.before)
+        const begun = written.flatMap((e) => (isKnown(e) && ((e.k === 'block.start' && !e.bg) || e.k === 'block.resume') ? [e.block] : []))
+        return { ...r, wrote: { day, ids: written.map((e) => e.id), ...(begun.length ? { begun } : {}) } }
+      }
       return r
     }
     return this.serial(run)

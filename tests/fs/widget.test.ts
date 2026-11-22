@@ -42,7 +42,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>; openQuick?: () => void; timerHook?: (c: { a: string }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null } = {}) {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>; openQuick?: () => void; timerHook?: (c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null } = {}) {
   // `now` is the wall clock; setting it moves the monotonic one by the same step (time passes), `jump` moves the wall clock
   // alone (Windows sets the time back or forward – the monotonic clock goes on).
   const clock = {
@@ -2763,7 +2763,7 @@ describe('„<akcja> · Cofnij” po kliknięciu paska (D564 P18, UX12)', () => 
 
   it('„Cofnij” odmówione na chwilę albo z wyjątkiem: linia i czekający koszt zostają do ponowienia; udane zdejmuje oba', async () => {
     twoBlocks()
-    let hook: ((c: { a: string }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null) | null = null
+    let hook: ((c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null) | null = null
     const { w, folder, at, clock } = await make({ timerHook: (c) => hook?.(c) ?? null })
     await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
     await w.refresh()
@@ -2779,7 +2779,8 @@ describe('„<akcja> · Cofnij” po kliknięciu paska (D564 P18, UX12)', () => 
     expect(w.current().note?.text).toBe(busy)
     expect(undoLine(w)?.id).toBe(line)
     expect(w.current().pending).toMatchObject({ button: 'start' })
-    hook = (c) => (c.a === 'undoClick' ? Promise.reject(new Error('plik zajęty')) : null)
+    // Thrown before the write: judged again without writing – still possible, so the cost comes back.
+    hook = (c) => (c.a === 'undoClick' && !c.probe ? Promise.reject(new Error('plik zajęty')) : null)
     clock.now += 1_000
     await w.act('line', `${line}|undo`, 'bar')
     expect(w.current().note?.text).toBe('Nie cofnięto: plik zajęty')
@@ -2823,6 +2824,83 @@ describe('„<akcja> · Cofnij” po kliknięciu paska (D564 P18, UX12)', () => 
     expect(w.current().pending).toMatchObject({ button: 'start' })
     clock.now += 2_000
     await w.act('confirm', undefined, 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('c')
+    expect(undoLine(w)?.text).toBe('Skończono: Pisanie, zaczęto: Notatki')
+  })
+
+  it('w trakcie „Cofnij” linia mówi „Cofam…”, czekający koszt „Dalej” jest już zdjęty (Potwierdź nic nie zaczyna), drugie kliknięcie nic nie robi', async () => {
+    twoBlocks()
+    let hook: ((c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null) | null = null
+    const { w, folder, at, clock } = await make({ timerHook: (c) => hook?.(c) ?? null })
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 58)
+    await w.act('next', undefined, 'bar')
+    expect(w.current().pending).toMatchObject({ button: 'start' })
+    const line = undoLine(w)!.id
+    let writes = 0
+    let during: { label: string | undefined; pending: unknown } | null = null
+    hook = (c) => {
+      if (c.a !== 'undoClick' || c.probe) return null
+      writes++
+      return (async () => {
+        during = { label: w.current().lines.find((l) => l.id === line)?.actions[0]?.label, pending: w.current().pending }
+        // „Potwierdź” and „Cofnij” once more meanwhile: nothing.
+        clock.now += 1_000
+        await w.act('confirm', undefined, 'bar')
+        clock.now += 1_000
+        await w.act('line', `${line}|undo`, 'bar')
+        const r = await folder.timerClick(c as never)
+        return { ok: r.ok, why: r.ok ? null : r.why, confirm: null, ...(!r.ok && r.code ? { code: r.code } : {}) }
+      })()
+    }
+    clock.now += 1_000
+    await w.act('line', `${line}|undo`, 'bar')
+    expect(during).toEqual({ label: 'Cofam…', pending: null })
+    expect(writes).toBe(1)
+    expect(w.current().pending).toBeNull()
+    expect(undoLine(w)).toBeNull()
+    const t = await folder.timer(DAY)
+    expect(t.fg?.info.id).toBe('a')
+    expect(t.bg).toEqual([])
+  })
+
+  it('wyjątek po zapisie „Cofnij”: cofnięte – czekający koszt i linia znikają', async () => {
+    twoBlocks()
+    let hook: ((c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null) | null = null
+    const { w, folder, at, clock } = await make({ timerHook: (c) => hook?.(c) ?? null })
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 58)
+    await w.act('next', undefined, 'bar')
+    const line = undoLine(w)!.id
+    hook = (c) =>
+      c.a === 'undoClick' && !c.probe
+        ? (async () => {
+            await folder.timerClick(c as never)
+            throw new Error('dziennik nie potwierdził zapisu')
+          })()
+        : null
+    clock.now += 1_000
+    await w.act('line', `${line}|undo`, 'bar')
+    expect(w.current().note?.text).toBe('Nie cofnięto: dziennik nie potwierdził zapisu')
+    expect(w.current().pending).toBeNull()
+    expect(undoLine(w)).toBeNull()
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+  })
+
+  it('„Dalej” bez kosztu nazywa blok, który jego kliknięcie zaczęło – nie ten z widoku sprzed kliknięcia', async () => {
+    twoBlocks()
+    const { w, folder, at } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 30)
+    await w.refresh()
+    expect(w.current().buttons.nextName).toBe('Raport')
+    twoBlocks([{ id: 'c', categoryId: 'inne', name: 'Notatki', startMin: 10 * 60 + 40, durationMin: 15, fixed: false, origin: 'user' }])
+    await w.act('next', undefined, 'bar')
     expect((await folder.timer(DAY)).fg?.info.id).toBe('c')
     expect(undoLine(w)?.text).toBe('Skończono: Pisanie, zaczęto: Notatki')
   })

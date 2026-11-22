@@ -188,7 +188,9 @@ describe('podpowiedź Shift+× w pasku (C6)', () => {
     for (const end of [
       () => q('bar-close')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, button: 0 })),
       () => q('bar-close')!.dispatchEvent(new MouseEvent('pointercancel', { bubbles: true })),
-      () => window.dispatchEvent(new Event('blur'))
+      () => window.dispatchEvent(new Event('blur')),
+      // The bar hidden (its „×”, a rule): it has no focus to lose – the page's visibility says it.
+      () => document.dispatchEvent(new Event('visibilitychange'))
     ]) {
       over()
       expect(q('bar-close-hint')).not.toBeNull()

@@ -598,7 +598,11 @@ describe('zejście do rezerwy (E2)', () => {
     f.now = again + 2_000
     await f.folder.check()
     expect(events().filter((e) => e.k === 'energy.reserve')).toEqual([])
+    // Its 10 s and the margin for the write of a „Cofnij” clicked at their end (5 s): only then.
     f.now = again + 11_000
+    await f.folder.check()
+    expect(events().filter((e) => e.k === 'energy.reserve')).toEqual([])
+    f.now = again + 16_000
     await f.folder.check()
     expect(events().filter((e) => e.k === 'energy.reserve')).toEqual([expect.objectContaining({ pool: 'head' })])
   })

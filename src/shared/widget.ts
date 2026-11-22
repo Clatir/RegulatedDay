@@ -13,6 +13,8 @@ export const UNDO_LINE_MS = 15 * 60_000
 
 /** „<akcja> · Cofnij” of a click of the bar (D564 P18) stays this long; the leader registers no descent to the reserve from a signal this young. */
 export const CLICK_UNDO_MS = 10_000
+/** The write of a „Cofnij” clicked at the end of those 10 s – the leader's hold of a descent waits that much longer. */
+export const CLICK_UNDO_WRITE_MS = 5_000
 
 /** A button of a line: its id goes back to the main process with the line's (`line` action, `<line>|<action>`). */
 export interface BarAction {

@@ -132,9 +132,9 @@ export interface ActionCost {
 
 /**
  * Why a click found nothing to do, for a caller that must tell it from another refusal (D336) – never read from the text; the
- * ends of a list of steps say these by no word (D474, D328 – `quietRefusal`, T1109).
+ * ends of a list of steps say these by no word (D474, D328 – `quietRefusal`, T1109). `clickGone`: the bar's click cannot be taken back
+ * any more (`clickUndoEvents` – frozen, gone, undone, not a click's, depended on; D564 P18).
  */
-/** `clickGone`: the bar's click cannot be taken back any more (`clickUndoEvents` – frozen, gone, undone, not a click's, depended on). */
 export type ResultCode = 'alreadyOver' | 'notBegun' | 'notRunning' | 'routineSaved' | 'noRoutine' | 'clickGone'
 
 export type ActionResult =

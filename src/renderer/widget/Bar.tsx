@@ -173,11 +173,15 @@ const CORNER_BUTTON = 'flex h-5 w-5 items-center justify-center rounded text-[14
  */
 function BarCorner() {
   const [hint, setHint] = useState(false)
-  // The window's focus gone (the bar hidden by its „×”, another window): no hint left for its return.
+  // The window's focus gone or the bar hidden (its „×”, a rule – the desktop bar never has the focus): no hint left for its return.
   useEffect(() => {
     const off = () => setHint(false)
     window.addEventListener('blur', off)
-    return () => window.removeEventListener('blur', off)
+    document.addEventListener('visibilitychange', off)
+    return () => {
+      window.removeEventListener('blur', off)
+      document.removeEventListener('visibilitychange', off)
+    }
   }, [])
   return (
     <div className="absolute top-1 right-1 z-10 flex flex-col gap-1" data-testid="bar-corner">

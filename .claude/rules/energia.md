@@ -50,7 +50,7 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
   czasów. DSL testów liczy `before` sam (`signal`, `relative`), `null` – jak komputer bez check-inu.
   Sygnał i ocena cofnięte „Cofnij” paska (D564 P18, `undo` w logu) nie są kotwicą: `liveEnergyEvent` (`engine/clickUndo.ts`) w
   `computeEnergy`, `costEvidence`, `dayMeasure` i propozycji „Włączyć mniej pytań?”; check-in zostaje, jak był zapisany. Prowadzący
-  nie rejestruje zejścia do rezerwy od minuty sygnału młodszego niż `CLICK_UNDO_MS` (`check()` w `folder.ts`).
+  nie rejestruje zejścia do rezerwy od minuty sygnału młodszego (względem bramki) niż `CLICK_UNDO_MS` + `CLICK_UNDO_WRITE_MS` (`check()`).
 - Zdarzenia energii są bierne dla silnika dnia (`isPassive`: `dom === 'energy'`) – nie unieważniają odcinków minut.
 - Przerwa ≥ 30 min przed końcem pracy liczy się od początku według prognozy: stan w trakcie przerwy już rośnie, gdy
   plan stawia następny blok dalej niż 30 min od jej początku.

@@ -53,7 +53,9 @@ paths:
   `clickUndoEvents` (`engine/clickUndo.ts`): `undo` każdego żywego zdarzenia; odmowa – dzień zamrożony, zdarzenia nie w logu albo nie
   z kliknięcia (`CLICK_KINDS`), już cofnięte, a dla timera – późniejsze (`compareEvents`) zdarzenie z `DEPENDS` (start, wznowienie, koniec
   prośby i „Odcinam się”), `work.end` albo zdarzenie bloku tego kliknięcia (`CLICK_UNDO_TEXT.later`); każda odmowa ma `code: 'clickGone'`
-  (ostateczna – pasek zdejmuje linię; inna odmowa i wyjątek ją zostawiają). Sygnał / ocena nie zależą od niczego.
+  (ostateczna – pasek zdejmuje linię; inna odmowa i wyjątek ją zostawiają). Sygnał / ocena nie zależą od niczego. W trakcie „Cofam…”
+  (kolejne kliknięcia nic nie robią); koszt „Dalej” zdjęty przed zapisem, wraca tylko przy chwilowej odmowie albo wyjątku bez zapisu
+  (ponowna ocena `probe`). Nazwa startu w linii – z `wrote.begun` (`block.start` na pierwszym planie, `block.resume`).
 - Start bloku życia (`isLife`) przy biegnącej pracy pauzuje ją jak regeneracja (D335, `startEvents`); inny blok elastyczny zamienia się z
   biegnącym (D478, niżej) – kończy go tylko po planowanym końcu, regeneracja i blok „poza komputerem”. „Usuń” zaczętego bloku: `removeBegun` (`block.end` z `rule: 'removed'`, `done: false`) i `undoRemove`
   (`undo` tego końca, D336; odmowa, gdy po zdarzeniu usunięcia – kolejnością zdarzeń `compareOrder` z `BlockFact.endOrder`, nie minutami – zaczął się inny blok, prośba (`RequestFact.begun`) albo „Odcinam się”; kończy przez `endInstant` jak „Skończyłem”; powody „już skończony” / „nie zaczął się” mają `code` w `ActionResult`/`TimerResult`); blok zdjęty z planu zostaje w dniu jako „poza planem” (`dayItems`) z nazwą ze startu albo z migawki dnia (`nameById`, T543, T1024), liczy się jak każdy przebieg.
