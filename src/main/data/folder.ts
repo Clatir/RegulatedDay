@@ -2360,10 +2360,10 @@ export class DataFolder {
       // computer's observation too.
       const activity = undoNeedsActivity(state, act as TimerAction) ? await this.activityFor(day, read, now) : undefined
       const r = act.a === 'requestNow' || act.a === 'requestEnd' || act.a === 'requestAfter' ? requestAction(state, act as RequestAction, now) : timerAction(ctx, state, act as TimerAction, now, activity)
-      // What it wrote, by id: the bar's „Cofnij” of its click takes back exactly that (D564 P18); the blocks it began in front name its line.
+      // What it wrote, by id: the bar's „Cofnij” of its click takes back exactly that (D564 P18); the blocks it began (in order, behind too) name its line.
       if (r.ok && r.events.length && !probe) {
         const written = await this.writeOn(day, laid, r.events, chosen.before)
-        const begun = written.flatMap((e) => (isKnown(e) && ((e.k === 'block.start' && !e.bg) || e.k === 'block.resume') ? [e.block] : []))
+        const begun = written.flatMap((e) => (isKnown(e) && (e.k === 'block.start' || e.k === 'block.resume') ? [e.block] : []))
         return { ...r, wrote: { day, ids: written.map((e) => e.id), ...(begun.length ? { begun } : {}) } }
       }
       return r

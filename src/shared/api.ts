@@ -564,7 +564,7 @@ export interface TimerResult {
   confirm: { block: string; minutes: number; overrun: boolean; bedtime: boolean } | null
   /**
    * What it wrote (a click that did something): its day and the ids of its events – the bar's „Cofnij” of the click (D564 P18) – and
-   * the blocks it began or resumed in front (`begun`, in order; its line „…, zaczęto: <nazwa>”).
+   * the blocks it began or resumed, in front or behind (`begun`, in order; its line „…, zaczęto: <nazwa>”).
    */
   wrote?: { day: string; ids: string[]; begun?: string[] }
   /** Why it did nothing, when the caller must tell it from other refusals (D336, T1109): never read from `why`. */

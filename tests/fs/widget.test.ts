@@ -16,7 +16,7 @@ import { HARD_END_TEXT } from '@shared/engineView'
 import { NO_FOLDER_LINE, noFolderView, type WidgetView } from '@shared/widget'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
-import { arrangedIn, planArrangedIpc, planPushedIpc, pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
+import { arrangedIn, begunOf, planArrangedIpc, planPushedIpc, pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
 import { recordEdit } from '@shared/data/merge'
 import { putBlock } from '@shared/data/dayEdits'
 import { dayFileFrom } from '@shared/model/plan'
@@ -2761,7 +2761,7 @@ describe('„<akcja> · Cofnij” po kliknięciu paska (D564 P18, UX12)', () => 
     expect((await folder.timer(DAY)).paused.map((p) => p.info.id)).toEqual(['b'])
   })
 
-  it('„Cofnij” odmówione na chwilę albo z wyjątkiem: linia i czekający koszt zostają do ponowienia; udane zdejmuje oba', async () => {
+  it('„Cofnij” odmówione na chwilę albo z wyjątkiem: linia zostaje do ponowienia, czekający koszt „Dalej” znika od razu i nie wraca', async () => {
     twoBlocks()
     let hook: ((c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null) | null = null
     const { w, folder, at, clock } = await make({ timerHook: (c) => hook?.(c) ?? null })
@@ -2778,14 +2778,14 @@ describe('„<akcja> · Cofnij” po kliknięciu paska (D564 P18, UX12)', () => 
     await w.act('line', `${line}|undo`, 'bar')
     expect(w.current().note?.text).toBe(busy)
     expect(undoLine(w)?.id).toBe(line)
-    expect(w.current().pending).toMatchObject({ button: 'start' })
-    // Thrown before the write: judged again without writing – still possible, so the cost comes back.
-    hook = (c) => (c.a === 'undoClick' && !c.probe ? Promise.reject(new Error('plik zajęty')) : null)
+    // The cost went for good at the first „Cofnij” (its „Start” can be clicked again).
+    expect(w.current().pending).toBeNull()
+    hook = (c) => (c.a === 'undoClick' ? Promise.reject(new Error('plik zajęty')) : null)
     clock.now += 1_000
     await w.act('line', `${line}|undo`, 'bar')
     expect(w.current().note?.text).toBe('Nie cofnięto: plik zajęty')
     expect(undoLine(w)?.id).toBe(line)
-    expect(w.current().pending).toMatchObject({ button: 'start' })
+    expect(w.current().pending).toBeNull()
     hook = null
     clock.now += 1_000
     await w.act('line', `${line}|undo`, 'bar')
@@ -2866,7 +2866,7 @@ describe('„<akcja> · Cofnij” po kliknięciu paska (D564 P18, UX12)', () => 
     expect(t.bg).toEqual([])
   })
 
-  it('wyjątek po zapisie „Cofnij”: cofnięte – czekający koszt i linia znikają', async () => {
+  it('wyjątek po zapisie „Cofnij”: koszt znika, linia zostaje – drugie „Cofnij” mówi, że już cofnięte, i ją zdejmuje', async () => {
     twoBlocks()
     let hook: ((c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null) | null = null
     const { w, folder, at, clock } = await make({ timerHook: (c) => hook?.(c) ?? null })
@@ -2887,8 +2887,14 @@ describe('„<akcja> · Cofnij” po kliknięciu paska (D564 P18, UX12)', () => 
     await w.act('line', `${line}|undo`, 'bar')
     expect(w.current().note?.text).toBe('Nie cofnięto: dziennik nie potwierdził zapisu')
     expect(w.current().pending).toBeNull()
-    expect(undoLine(w)).toBeNull()
+    expect(undoLine(w)?.id).toBe(line)
     expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+    hook = null
+    clock.now += 1_000
+    await w.act('line', `${line}|undo`, 'bar')
+    expect(w.current().note?.text).toBe('to kliknięcie jest już cofnięte')
+    expect(undoLine(w)).toBeNull()
+    expect(w.current().pending).toBeNull()
   })
 
   it('„Dalej” bez kosztu nazywa blok, który jego kliknięcie zaczęło – nie ten z widoku sprzed kliknięcia', async () => {
@@ -2903,5 +2909,24 @@ describe('„<akcja> · Cofnij” po kliknięciu paska (D564 P18, UX12)', () => 
     await w.act('next', undefined, 'bar')
     expect((await folder.timer(DAY)).fg?.info.id).toBe('c')
     expect(undoLine(w)?.text).toBe('Skończono: Pisanie, zaczęto: Notatki')
+  })
+
+  it('„Dalej” do bloku grupy: kliknięcie mówi o wszystkich zaczętych (także w tle), linia nazywa blok, w który kliknięto „Dalej”', async () => {
+    twoBlocks([{ id: 'g', categoryId: 'inne', name: 'Muzyka', startMin: 11 * 60, durationMin: 60, fixed: false, origin: 'user', alongside: 'b' }])
+    const { w, folder, at } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 30)
+    await w.refresh()
+    expect(w.current().buttons.nextName).toBe('Raport')
+    const r = await folder.timerClick({ a: 'next' })
+    expect(r.wrote?.begun).toEqual(['b', 'g'])
+    // Taken back by hand, then the bar's own „Dalej”.
+    await folder.timerClick({ a: 'undoClick', ids: r.wrote!.ids })
+    await w.refresh()
+    await w.act('next', undefined, 'bar')
+    expect(undoLine(w)?.text).toBe('Skończono: Pisanie, zaczęto: Raport')
+    // The block clicked toward, wherever its start stands among the ones the click wrote; else the first of them.
+    expect([begunOf('g', ['b', 'g']), begunOf('x', ['b', 'g']), begunOf(undefined, ['b']), begunOf('b', undefined)]).toEqual(['g', 'b', 'b', undefined])
   })
 })
