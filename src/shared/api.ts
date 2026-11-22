@@ -57,6 +57,7 @@ export const CH = {
   onData: 'rd:onData',
   dayData: 'rd:dayData',
   dayFiles: 'rd:dayFiles',
+  dayDatesFrom: 'rd:dayDatesFrom',
   edit: 'rd:edit',
   logEvents: 'rd:logEvents',
   resolve: 'rd:resolve',
@@ -888,6 +889,8 @@ export interface RdApi {
   dayData(date: string): Promise<DayData>
   /** The files of several days (the calendar's month), null where a day has none; a day whose file cannot be read now is left out. */
   dayFiles(dates: string[]): Promise<Record<string, RawRecord | null>>
+  /** The days from `from` on that have a file (with your queued edits), in order – „Przelicz koszty ×N” (D567); a folder not listed now – an error. */
+  dayDatesFrom(from: string): Promise<string[]>
   edit(entries: EditEntry[]): Promise<EditOutcome[]>
   /**
    * Blocks pushed apart (D367), already saved by the window as the one edit `entry` of the day's file (`made` – the file

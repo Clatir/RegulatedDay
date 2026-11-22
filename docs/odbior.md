@@ -358,6 +358,9 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX12.4 Koszt z „Potwierdź · Anuluj” (1.34.0)
    - [ ] UX12.5 Podpowiedź „×” i uchwyt ⠿ (1.34.0)
    - [ ] UX12.6 Trwająca prośba „Prośba: <osoba>” (1.34.0)
+   - [ ] SK1.1 Okno „Przelicz koszty ×N” z Ustawień i Ctrl+K – mnożnik, pule, zakres i podgląd „przed → po” (1.35.0)
+   - [ ] SK1.2 „Przelicz” od jutra i „od dziś” – podkategorie, rutyny, szablony, serie i bloki dni (1.35.0)
+   - [ ] SK1.3 Linia „Przeliczono N kosztów · Cofnij” i koszt zmieniony w międzyczasie (1.35.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3111,6 +3114,29 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** kliknij „×” na pasku pulpitu, otwórz okno główne (dwuklik ikony), zminimalizuj je. Powtórz z zamknięciem okna „×”. Potem w Ustawieniach wyłącz „Pasek wraca z oknem głównym” i powtórz.
 - **Oczekiwany efekt:** przy włączonym przełączniku pasek wraca w tym samym miejscu po minimalizacji i po zamknięciu okna; przy wyłączonym zostaje schowany do „Pokaż pasek pulpitu” w menu ikony; przełącznik pamięta się po ponownym uruchomieniu.
 - **Nie przechodzi, gdy:** pasek nie wraca przy włączonym przełączniku; wraca przy wyłączonym; wraca w innym miejscu; przełącznika nie ma w Ustawieniach przy włączonym pasku.
+
+### SK1 – „Przelicz koszty ×N” (1.35.0, D566, D567)
+
+#### SK1.1 Okno „Przelicz koszty ×N” z Ustawień i Ctrl+K – mnożnik, pule, zakres i podgląd „przed → po”
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/cost-scale.test.ts`, `tests/web/cost-scale-dialog.test.ts`, E2E `screens.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Ustawieniach → Kategorie kliknij „Przelicz koszty ×N…” (oraz otwórz je przez Ctrl+K „Przelicz koszty ×N”). Zmień mnożnik na ×1,5, odznacz część pul i zakresów, potem wybierz ×1. Zamknij Esc albo „Anuluj”.
+- **Oczekiwany efekt:** domyślnie ×2, zaznaczone wszystkie pule G · E · B · C i cały zakres; podgląd pokazuje każdą zmianę „przed → po” czterema liczbami, licznik zmian i oznaczenie „przycięte (…)” przy pulach uciętych do ±5; pozycje bez zmiany są pominięte; przy ×1 napis „Nic się nie zmienia.” i przycisk „Przelicz” nieaktywny; Esc i „Anuluj” nic nie zapisują.
+- **Nie przechodzi, gdy:** podgląd pokazuje pozycje, które się nie zmieniają; brakuje oznaczenia przycięcia do ±5; przy ×1 da się kliknąć „Przelicz”; Ctrl+K nie otwiera okna.
+
+#### SK1.2 „Przelicz” od jutra i „od dziś” – podkategorie, rutyny, szablony, serie i bloki dni
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/cost-scale.test.ts`, `tests/unit/engine/cost-scale.test.ts`. Ty: rzut oka na Twoje dane.
+- **Jak sprawdzić:** przy pasku Ustawień „od jutra” przelicz koszty (np. ×1,5 na wybranej puli); sprawdź podkategorię, rutynę z własnym kosztem, szablon i zaplanowany dzień przyszły oraz dzień miniony. Osobno przełącz pasek na „od dziś” przy zaczętym i niezaczętym bloku z własnym kosztem.
+- **Oczekiwany efekt:** jeden zapis zmienia podkategorie i warianty wpisem ustawień od wybranej daty, szablony i serie – nową wersją od tej daty, bloki z własnym kosztem – w dniach od tej daty, a rutyny – od razu; dni minione i bloki już zaczęte (lub minięte) zostają bez zmian.
+- **Nie przechodzi, gdy:** zmienia się dzień miniony albo zaczęty blok z własnym kosztem; szablon traci wcześniejszą wersję zamiast dostać wersję od daty zmiany; wariant „jak podkategoria” dostaje własny koszt.
+
+#### SK1.3 Linia „Przeliczono N kosztów · Cofnij” i koszt zmieniony w międzyczasie
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/cost-scale.test.ts`, `tests/web/cost-scale-dialog.test.ts`, E2E `screens.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** po „Przelicz” kliknij „Cofnij” w linii w sekcji „Kategorie” (albo Ctrl+Z). Potem przelicz ponownie, zmień ręcznie koszt jednej podkategorii albo rutyny i kliknij „Cofnij”.
+- **Oczekiwany efekt:** linia „Przeliczono N kosztów ×… · Cofnij”; „Cofnij” przywraca wszystkie przeliczone koszty do wartości sprzed przeliczenia; koszt zmieniony ręcznie w międzyczasie zostaje na Twojej nowej wartości, a dymek mówi „Cofnięto · 1 koszt zmieniony w międzyczasie – został”.
+- **Nie przechodzi, gdy:** „Cofnij” nadpisuje koszt, który zmieniłeś ręcznie po przeliczeniu; brak komunikatu o pozostawionym koszcie; po „Cofnij” zostają przeliczone wartości.
 
 ### UX – ciąg poprawek użytkowych (1.34.0, D561–D565)
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.35.0
+- Nowa akcja „Przelicz koszty ×N” (Ustawienia → Kategorie → „Przelicz koszty ×N…” oraz polecenie w Ctrl+K): jednym ruchem przeskalowuje zapisane koszty na godzinę przez wybrany mnożnik od ×0,5 do ×3 (co 0,25; domyślnie ×2), z zaokrągleniem do całości (połówki od zera: 1,5 → 2, −1,5 → −2) i przycięciem do zakresu −5…5.
+- Wybierasz, które pule przeliczyć (G · E · B · C, domyślnie wszystkie) i jaki zakres objąć: podkategorie, warianty z własnym kosztem, rutyny, własne koszty bloków (zaplanowane dni i serie) oraz szablony. Podgląd przed zapisem pokazuje każdą zmianę „przed → po” czterema liczbami wraz z licznikiem i oznaczeniem pul przyciętych do ±5; pozycje bez zmiany są pomijane.
+- Podkategorie, warianty, szablony i serie przeliczają się od daty wybranej na pasku nad Ustawieniami („od jutra / od dziś / od daty”, domyślnie od jutra), własne koszty bloków – w dniach od tej daty (dni minione oraz bloki już zaczęte, zaparkowane i odwołane zostają bez zmian), a rutyny – od razu.
+- „Przelicz” wykonuje jeden zapis i pokazuje w sekcji „Kategorie” linię „Przeliczono N kosztów ×2 · Cofnij” (także pod Ctrl+Z). „Cofnij” przywraca wszystkie przeliczone koszty, które nie zostały w międzyczasie zmienione ręcznie, a o zmienionych informuje w komunikacie.
+
 ## 1.34.0
 Wersja porządkuje wygodę pracy po przeglądzie użytkowym 1.33.0 (19 zadań).
 

@@ -17,9 +17,11 @@ import { TextField } from '../../components/fields'
 import { Section, cx } from '../../components/ui'
 import { rawRecord, saveAnswer, storedAnswer, useData, type SendState } from '../../store/data'
 import { useBusy } from '../../lib/busy'
-import { takeFoundPick, toast, undoToast, useUi } from '../../store/ui'
-import { GROUP_PICK } from '../search/records'
+import { takeFoundPick, takePick, toast, undoToast, useUi } from '../../store/ui'
+import { GroupLine } from '../../components/GroupLine'
+import { COST_SCALE_COMMAND, GROUP_PICK } from '../search/records'
 import { CategoryRow } from './CategoryRow'
+import { CostScaleDialog } from './CostScaleDialog'
 import { createCategory, NEW_CATEGORY_COSTS } from './categoryFields'
 import { saveTree, undoTree } from './categoryTreeEdits'
 import { GroupRemoveDialog } from './GroupRemoveDialog'
@@ -60,6 +62,8 @@ export function CategoriesSection() {
   // The category asked about, with the number of its subcategories when the window opened (T1425): a change from another computer meanwhile
   // never makes it say „Ma 0 podkategorii”.
   const [removing, setRemoving] = useState<{ group: CategoryGroup; count: number } | null>(null)
+  // „Przelicz koszty ×N” (D566): its window – from the button or from Ctrl K (the command waits as a pick until the section is there).
+  const [scaling, setScaling] = useState(false)
   // Something picked in the search (Ctrl K): a subcategory (its row open), a category, a variant (its subcategory open) – an archived one
   // shows with the archive – brought into view once.
   const pick = useUi((x) => x.pick)
@@ -85,6 +89,11 @@ export function CategoriesSection() {
       setBrought(byData('category', p.id))
     }
   }, [pick, s.categories, rd.categories, rd.categoryGroups])
+  useEffect(() => {
+    if (!takePick((x) => x.kind === 'command' && x.id === COST_SCALE_COMMAND)) return
+    setBrought(byData('testid', 'field-cost-scale'))
+    setScaling(true)
+  }, [pick])
   useEffect(() => {
     if (!brought) return
     document.querySelector(brought)?.scrollIntoView({ block: 'center' })
@@ -170,6 +179,16 @@ export function CategoriesSection() {
           </button>
         )}
       </div>
+      <div className="flex flex-wrap items-center gap-2" data-testid="field-cost-scale">
+        <button type="button" className="btn" onClick={() => setScaling(true)} data-testid="cost-scale-open">
+          Przelicz koszty ×N…
+        </button>
+        <span className="text-[12px] text-muted" data-hint="">
+          Mnoży zapisane koszty (podkategorie, warianty, rutyny, bloki, szablony) – z podglądem i „Cofnij”.
+        </span>
+      </div>
+      <GroupLine view="settings" />
+      {scaling && <CostScaleDialog onClose={() => setScaling(false)} />}
       {removing && (
         <GroupRemoveDialog
           group={removing.group}

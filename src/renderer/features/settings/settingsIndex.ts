@@ -38,6 +38,7 @@ const LISTED: readonly SettingField[] = [
   ...DAY_TYPE_FIELDS.map((f): SettingField => ({ id: `field-daytype-${f.key}`, title: f.label, section: 'settings-daytypes', keys: 'typ dnia' })),
   { id: 'field-week', title: 'Typy dni tygodnia', section: 'settings-daytypes', keys: 'tydzień poniedziałek wtorek środa czwartek piątek sobota niedziela' },
   ...MODULES.map((m): SettingField => ({ id: `field-module-${m}`, title: MODULE_NAMES[m], section: 'settings-modules', keys: 'moduł' })),
+  { id: 'field-cost-scale', title: 'Przelicz koszty ×N', section: 'settings-categories', keys: 'mnożnik skala pomnóż koszt kosztów' },
   { id: 'field-bar', title: 'Pasek pulpitu', section: 'settings-bar', keys: 'widget włącz wyłącz' },
   { id: 'field-bar-back', title: 'Pasek wraca z oknem głównym', section: 'settings-bar', keys: 'schowany ×' },
   { id: 'field-bar-place', title: 'Miejsce paska', section: 'settings-bar', keys: 'monitor róg położenie' },

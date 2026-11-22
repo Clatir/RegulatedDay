@@ -99,7 +99,7 @@ describe('rekordy wyszukiwarki', () => {
     const kinds = (k: string) => rs.filter((r) => r.kind === k)
     expect(kinds('screen').map((r) => r.title)).toContain('Tydzień')
     expect(kinds('screen').find((r) => r.id === 'week')!.hint).toBe('Ctrl+3')
-    expect(kinds('command').map((r) => r.title)).toEqual(['Nowy blok', 'Nowa prośba', 'Nowe zadanie', 'Jutro', 'Wczoraj', 'Rytuał', 'Jak to działa', 'Skróty klawiszowe'])
+    expect(kinds('command').map((r) => r.title)).toEqual(['Nowy blok', 'Nowa prośba', 'Nowe zadanie', 'Jutro', 'Wczoraj', 'Rytuał', 'Jak to działa', 'Skróty klawiszowe', 'Przelicz koszty ×N'])
     // The sections of the settings and their fields by the labels (UX14): the sections are the ones whose id starts with `settings-`.
     expect(kinds('setting').filter((r) => r.id.startsWith('settings-'))).toHaveLength(SETTING_SECTIONS.length)
     expect(kinds('setting').some((r) => r.id === 'field-reserve' && r.title === 'Rezerwa energii')).toBe(true)

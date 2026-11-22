@@ -105,14 +105,20 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
       wszystkie zadania scalone do `claude/ciag-ux`; tabela zadań, rundy przeglądu i uwagi na później –
       `docs/archiwum/postep-ciag-UX.md`, „Paczki 3–8” i „Wydanie 1.34.0”.
     - **Wydanie 1.34.0:** PR #109 scalony 22.11 (`main` d130578) po zielonym CI 44988376381 (Linux i Windows; wcześniej
-      poprawka strefy czasu w `ux8-calendar`, 42fd001). CI na `main` – run 45000947424; wydanie v1.34.0 – sprawdzić, że
-      zadanie Windows je opublikowało. Drzewa `ux-a`..`ux-d` i gałęzie usunięte. Odbiór UX*.* w `docs/odbior.md`.
+      poprawka strefy czasu w `ux8-calendar`, 42fd001). CI na `main` – run 45000947424 zielone, wydanie `v1.34.0` opublikowane 22.11.
+      Drzewa `ux-a`..`ux-d` i gałęzie usunięte. Odbiór UX*.* w `docs/odbior.md`.
       CI na `main` raz czerwone (E2E `week.spec.ts:1166` – Home na „Dziś”, `horizon.test.ts:180` – znany niestabilny), ponowione
       zadania, które padły.
 
-16. **1.35.0 – SK1 „Przelicz koszty ×N” (D566, D567):** „dalej” 22.11. Gałąź `claude/1.35-przelicz-koszty` (od 6c5072c).
+16. **1.35.0 – SK1 „Przelicz koszty ×N” (D566, D567, T2420–T2423):** „dalej” 22.11. Gałąź `claude/1.35-przelicz-koszty` (od 6c5072c).
     Przed etapem: pytania 1–4 odpowiedziane (D567, rekomendacje); wykonawca `wykonawca-opus` · xhigh, przegląd xhigh
-    (folder danych, zapis grupowy); T2420–T2449; szacunek 3–4 h. Stan: w toku.
+    (folder danych, zapis grupowy); szacunek 3–4 h.
+    - **Kod i testy (22.11):** `src/shared/engine/costScale.ts`, `src/renderer/features/settings/costScale.ts`,
+      `CostScaleDialog.tsx`, `tests/unit/engine/cost-scale.test.ts`, `tests/fs/cost-scale.test.ts`,
+      `tests/web/cost-scale-dialog.test.ts` + E2E w `tests/e2e/screens.spec.ts`; pełne testy zielone (`typecheck`,
+      `npm test` 356/5176, `build`, `lint`, `playwright test` 144/144).
+    - **Dokumenty i wydanie (Krok 1.3, 22.11):** T2420–T2423 w `docs/decyzje-techniczne.md`, reguły w `.claude/rules/koszt.md`,
+      `version` `1.35.0` w `package.json`, `CHANGELOG.md`, punkty odbioru `SK1.1`–`SK1.3` w `docs/odbior.md`.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
