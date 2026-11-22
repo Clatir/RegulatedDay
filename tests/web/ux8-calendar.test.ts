@@ -94,7 +94,7 @@ describe('miesiąc w „Kalendarzu” (D2, D6)', () => {
 describe('Ctrl+N w „Kalendarzu” (D6, P9)', () => {
   it('bieżący miesiąc: okienko dziś, godzina z najbliższego wolnego miejsca', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-11-18T09:07:00'))
+    vi.setSystemTime(new Date('2026-11-18T09:07:00+01:00'))
     try {
       await mount()
       await press('KeyN', { ctrlKey: true })
@@ -131,7 +131,7 @@ describe('Ctrl+N w „Kalendarzu” (D6, P9)', () => {
   })
   it('dziś w siatce następnego miesiąca: Ctrl+N bierze dziś (nie 1. dzień miesiąca), jego bloki czyta z dni (nie ma ich w widoku miesiąca)', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-11-30T05:00:00'))
+    vi.setSystemTime(new Date('2026-11-30T05:00:00+01:00'))
     const blk = { id: 'a', named: { categoryId: 'inne', variantId: null, routine: null, requests: [], note: '', origin: 'user', sourceId: null }, categoryId: 'inne', startMin: 6 * 60, endMin: 7 * 60, state: 'planned', background: false, outsidePlan: false }
     ;(window as unknown as { rd: Record<string, unknown> }).rd.daysView = async (dates: string[]) => ({ today: '2026-11-30', days: [{ date: dates[0], blocks: [blk] }], from: 0, to: 0 })
     useData.setState({ view: { today: '2026-11-30', allDay: [], computers: [] } as unknown as DataView })
@@ -149,7 +149,7 @@ describe('Ctrl+N w „Kalendarzu” (D6, P9)', () => {
   describe('dzień spoza widoku miesiąca – bloki czytane z dni (daysView)', () => {
     const inGrid = async (daysView: (dates: string[]) => Promise<unknown>) => {
       vi.useFakeTimers({ toFake: ['Date'] })
-      vi.setSystemTime(new Date('2026-11-30T05:00:00'))
+      vi.setSystemTime(new Date('2026-11-30T05:00:00+01:00'))
       ;(window as unknown as { rd: Record<string, unknown> }).rd.daysView = daysView
       useData.setState({ view: { today: '2026-11-30', allDay: [], computers: [] } as unknown as DataView })
       await mount()

@@ -193,7 +193,7 @@ describe('Ctrl+N w „Tygodniu” i „3 dniach” (D6, P9)', () => {
   const ctrlN = (init: KeyboardEventInit = {}) => press('KeyN', { ctrlKey: true, ...init })
   it('„Tydzień” z dziś: okienko dziś o najbliższej wolnej godzinie (po bloku 10:00–11:30)', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-11-18T09:07:00'))
+    vi.setSystemTime(new Date('2026-11-18T09:07:00+01:00'))
     try {
       await mount()
       await ctrlN()
@@ -221,7 +221,7 @@ describe('Ctrl+N w „Tygodniu” i „3 dniach” (D6, P9)', () => {
   })
   it('bloki ukrytych kalendarzy też zajmują miejsce (okienko nie staje na bloku, który jest)', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-11-18T09:07:00'))
+    vi.setSystemTime(new Date('2026-11-18T09:07:00+01:00'))
     try {
       await mount()
       useData.setState({ rd: rdFrom({ schema: 1, calendars: [{ id: 'praca', name: 'Praca', color: CATEGORY_COLORS[2] }, { id: 'dom', name: 'Dom', color: CATEGORY_COLORS[4] }], categories: { inne: { calendar: 'praca' } } }) })
