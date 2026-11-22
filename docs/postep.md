@@ -134,7 +134,9 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
       Uwagi na później: drugie `computeEnergy` dla dnia bez check-inu (oś i kolumna; ~2 ms).
     - **Dokumenty:** T2430–T2431, reguły `energia.md`, `koszt.md`, `widoki.md`, specyfikacja (D500, SNT1, „Przelicz koszty”), `CHANGELOG.md`,
       odbiór SK2.1, EA1.1–EA1.2. Punkt „Pasek energii GEBC” z „Pytań na później” – zrobiony.
-    - **Wydanie:** PR, CI i publikacja – stan niżej (uzupełniany po każdym kroku).
+    - **Wydanie:** PR #111 (commit 73d698e) z zielonym CI (run 45049909679) scalony do `main` (`a5d687d`). CI na `main` zielone (run 45060508018) –
+      wydanie `v1.36.0` opublikowane 22.11 21:01 UTC.
+      Lokalny instalator zbudowany (`release\Regulated-Day-Setup.exe`, 1.36.0); skopiowany do `Downloads\Regulated-Day-Setup.exe`.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
