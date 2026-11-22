@@ -18,7 +18,7 @@ według kolumny „Wykonawca” (D349).
 Przegląd 20.11 (ustalenia z dowodami, plik:linia – `docs/przeglad-ux-20.11.md`, litery A–G niżej to jego pozycje);
 21.11 użytkownik: wdrożyć wszystkie poprawki, paczki z jednym CI na końcu (D562, zamiast wydania po paczce – D413). 19 zadań
 w 8 paczkach – paczka to etap pracy i brama pytań, nie wydanie: zadanie – testy lokalne i `/code-review`, scalenie do gałęzi ciągu
-gałęzi sesji ciągu (21.11: `claude/dazzling-dijkstra-qat23f`, od `main` po PR #108) bez CI; po paczce wpis w `docs/postep.md` i wypchnięcie gałęzi (bez PR). Na końcu ciągu `version` 1.34.0 raz, jedna
+gałęzi ciągu `claude/ciag-ux` bez CI; po paczce wpis w `docs/postep.md` i wypchnięcie gałęzi (bez PR). Na końcu ciągu `version` 1.34.0 raz, jedna
 sekcja `CHANGELOG.md`, jeden PR z pełnym CI (Linux i Windows), wydanie. Testy tylko w CI na Windows (kolejność okien, pasek,
 powiadomienia – paczki 4 i 5) dają wynik dopiero wtedy: szacunek ma na to rundę poprawek po CI (2–4 h). Gdy `main` zmieni się w
 trakcie – `git merge origin/main` do gałęzi ciągu. Start ciągu po „dalej”; potem paczki idą po kolei jako ciąg (D317), z bramą pytań przed każdą: zachowanie widoczne dla
@@ -92,6 +92,12 @@ K (przegląd kalibracji) wchodzi między paczki, gdy aplikacja go zaproponuje. K
 | P27 | UX19 | Panel Spraw przy „Tygodniu” (zmienia D384) | tak, zwijany, domyślnie zwinięty |
 | P28 | UX19 | Szablon z menu dni, szybkie wybory dni, cele zwijane | tak |
 | P29 | UX19 | Ctrl+Z dla ostatniego „Cofnij” | tak, tylko póki linia lub dymek „Cofnij” jest widoczny |
+
+## Po ciągu UX – 1.35.0: przeskalowanie kosztów (D566)
+
+| # | Zadanie | Rodzaj | Wykonawca · przegląd | Szacunek | Pytania | Gotowe, gdy |
+| --- | --- | --- | --- | --- | --- | --- |
+| SK1 | „Przelicz koszty ×N”: okno (mnożnik, pule, zakres – podkategorie, rutyny, warianty, własne koszty bloków, szablony), podgląd „przed → po”, zaokrąglenie i przycięcie do ±5, jeden zapis (folder danych, zmiany grupowe jak ciąg Z) i „Cofnij”; dostęp z Ustawień (sekcja kosztów) i Ctrl K | Całość | `wykonawca-opus` · xhigh | 3–4 h | – (D566) | ×2 na wszystkich pulach zmienia koszt 2 → 4 i 3 → 5 (przycięte) w podkategorii, rutynie i bloku; podgląd pokazuje każdą zmianę; „Cofnij” przywraca wszystko; minione dni (zamrożone) bez zmian; testy silnika i `tests/fs`, E2E `screens` |
 
 ## Ciąg Z – zakończony z wydaniem 1.28.0 (D527–D531)
 

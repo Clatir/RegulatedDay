@@ -430,3 +430,10 @@
     animation: none !important;
   }
 }
+
+/* A field found by the search of the settings (UX14): an outline for a moment – no animation, so it shows with the animations off too. */
+[data-found] {
+  outline: 2px solid var(--color-lamp);
+  outline-offset: 4px;
+  border-radius: 6px;
+}

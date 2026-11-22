@@ -43,6 +43,8 @@ interface CalendarFilter {
   revealed: string | null
   /** A calendar checked ↔ unchecked. */
   toggle: (id: string) => void
+  /** Every calendar checked at once (UX17, F8: „Pokaż wszystkie”); remembered like a single click. */
+  showAll: () => void
   reveal: (eventId: string | null) => void
 }
 
@@ -50,6 +52,11 @@ export const useCalendarFilter = create<CalendarFilter>((set, get) => ({
   hidden: loadHiddenCalendars(),
   revealed: null,
   reveal: (eventId) => set({ revealed: eventId }),
+  showAll: () => {
+    if (!get().hidden.length) return
+    saveHiddenCalendars([])
+    set({ hidden: [] })
+  },
   toggle: (id) => {
     const cur = get().hidden
     const hidden = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]

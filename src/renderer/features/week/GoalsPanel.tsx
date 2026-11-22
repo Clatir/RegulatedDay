@@ -9,12 +9,19 @@ import { trySaveGoals, useData } from '../../store/data'
 import { useGoalsView } from '../../store/horizon'
 import { cx } from '../../components/ui'
 import { GoalFields, type GoalValues } from './GoalFields'
+import { goalsFolded, rememberGoalsFolded } from './weekViews'
 import { GOAL_HINTS, GOAL_LABELS, goalRows, monthLabel, progressNotes } from './weekText'
 
 export function GoalsPanel({ month }: { month: string }) {
   const { view, failed } = useGoalsView(month)
   const goals = useData((s) => s.rd.goals[month]) ?? NO_GOALS
   const [editing, setEditing] = useState(false)
+  // UX19 (P28): the panel folds to its title and progress line; remembered by this computer.
+  const [folded, setFolded] = useState(goalsFolded)
+  const fold = () => {
+    rememberGoalsFolded(!folded)
+    setFolded(!folded)
+  }
   const set = (area: GoalArea, value: number | null) => void trySaveGoals(month, { [area]: value })
   const values: GoalValues = { study: goals.study, regen: goals.regen, trading: goals.trading }
   return (
@@ -31,11 +38,16 @@ export function GoalsPanel({ month }: { month: string }) {
             </span>
           ))}
         <span className="flex-1" />
-        <button type="button" className="btn h-[26px]" onClick={() => setEditing(!editing)} aria-pressed={editing} data-testid="goals-edit">
-          {editing ? 'Gotowe' : hasGoals(goals) ? 'Zmień cele' : 'Ustaw cele'}
+        {!folded && (
+          <button type="button" className="btn h-[26px]" onClick={() => setEditing(!editing)} aria-pressed={editing} data-testid="goals-edit">
+            {editing ? 'Gotowe' : hasGoals(goals) ? 'Zmień cele' : 'Ustaw cele'}
+          </button>
+        )}
+        <button type="button" className="btn h-[26px]" onClick={fold} aria-expanded={!folded} title={folded ? 'Rozwiń panel celów' : 'Zwiń panel celów'} data-testid="goals-fold">
+          {folded ? '▸ Rozwiń' : '▾ Zwiń'}
         </button>
       </div>
-      {editing ? (
+      {folded ? null : editing ? (
         <GoalFields month={month} values={values} onChange={set} prefix="goal-set" />
       ) : !hasGoals(goals) ? (
         <span className="text-[12.5px] text-muted" data-testid="goals-none">

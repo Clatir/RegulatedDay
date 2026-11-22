@@ -33,7 +33,7 @@ export interface MachinePrefs {
   desktopBar: boolean
   /**
    * The desktop bar hidden by its „×” (D559) shows again when the main window is minimized or closed (D560, on by default);
-   * off – only „Pokaż pasek pulpitu” in the icon's menu, the settings or the next start show it.
+   * off – only „Pasek pulpitu” in the icon's menu, the panel, the settings (D564 P16) or the next start show it.
    */
   barBackWithMain: boolean
   /** The icon's panel and the desktop bar stay out of recordings and screen sharing. */
@@ -94,9 +94,12 @@ export function quickKeyFrom(v: unknown): string | null {
 export type OnTop = 'off' | 'bar' | 'barPanel'
 export const ON_TOP: readonly OnTop[] = ['off', 'bar', 'barPanel']
 
-/** The notifications on by default (D230): 5 min before a block waiting for „Zacznij”, classes and the commute; the hard end; the reserve. */
-export type NoticeKind = 'start5' | 'hardEnd' | 'reserve'
-export const NOTICE_KINDS: readonly NoticeKind[] = ['start5', 'hardEnd', 'reserve']
+/**
+ * The notifications on by default (D230): 5 min before a block waiting for „Zacznij”, classes and the commute; the hard end; the
+ * reserve; the reminders of the morning plan and of the ritual (D565 P21, UX13).
+ */
+export type NoticeKind = 'start5' | 'hardEnd' | 'reserve' | 'reminders'
+export const NOTICE_KINDS: readonly NoticeKind[] = ['start5', 'hardEnd', 'reserve', 'reminders']
 
 export const ZOOM_STEPS = [0.9, 1, 1.1, 1.25, 1.5] as const
 export const BRIGHTNESS_STEPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1] as const
@@ -116,7 +119,7 @@ export const DEFAULT_MACHINE_PREFS: MachinePrefs = {
   onTop: 'off',
   sessionMode: true,
   classMode: true,
-  notices: { start5: true, hardEnd: true, reserve: true },
+  notices: { start5: true, hardEnd: true, reserve: true, reminders: true },
   sound: false,
   soundVolume: 0.5,
   quickKey: DEFAULT_QUICK_KEY,

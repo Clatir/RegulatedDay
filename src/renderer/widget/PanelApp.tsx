@@ -1,12 +1,17 @@
 /**
- * The icon's panel: the bar and, while the widget is hidden, only its state line and the question waiting (spec
- * „Widget”). Esc closes it (after whatever Esc closes first); a line a notification's click opened it for is marked.
- * „×” in the upper right corner closes it (the app goes on in the tray), „×” with Shift ends the app; a click on a free
- * spot opens the main window (D558): pressed and released on a free spot, nothing unfolded or waiting (`data-busy`); a double
- * click opens it always (D559) – anywhere but on a control, also with something unfolded or waiting.
+ * The icon's panel – the remote of the app (D564 P13, variant A): a header „Regulated Day” with „×”, the bar as on the desktop
+ * and in the window, and a footer „↗ Otwórz okno główne · ▣ Pasek pulpitu: pokaż / schowaj · ⏻ Zakończ aplikację” (C1, C7).
+ * While the widget is hidden the bar is only its state line and the question waiting (spec „Widget”) – and, for a desktop bar hidden
+ * by its „×”, the line „Pasek pulpitu schowany · Pokaż po „Wracam”” (D564 P16; otherwise „· Pokaż pasek”). Esc closes it (after
+ * whatever Esc closes first); a line a notification's click opened it for is marked. „×” closes it (the app goes on in the
+ * tray), „×” with Shift ends the app; a click on a free spot opens the main window (D558): pressed and released on a free
+ * spot, nothing unfolded or waiting (`data-busy`); a double click opens it always (D559) – anywhere but on a control, also
+ * with something unfolded or waiting. Opened again, it shows nothing unfolded from before it hid (C8).
  */
-import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
+import { OPEN_MAIN_TEXT, QUIT_APP_TEXT, barChosen } from '@shared/widget'
 import { setWindowEscape } from '../lib/escape'
+import { useMachine } from '../store/machine'
 import { useWidget } from '../store/widget'
 import { Bar, useReportLayout } from './Bar'
 import { OWN } from './barDouble'
@@ -14,8 +19,11 @@ import { OWN } from './barDouble'
 /** What a click acts on by itself – never a click of the free panel (the same list as the desktop bar's free spot). */
 const OWN_CLICK = OWN
 
-/** A spot of the panel that is free: not a control, nor inside one. */
-const free = (el: EventTarget | null): boolean => el instanceof Element && !el.closest(OWN_CLICK)
+/** The panel's own header and footer (`data-panel-chrome`): a click missing a button of theirs opens nothing (UX10). */
+const CHROME = '[data-panel-chrome]'
+
+/** A spot of the panel that is free: not a control, nor inside one, nor in the header or the footer. */
+const free = (el: EventTarget | null): boolean => el instanceof Element && !el.closest(OWN_CLICK) && !el.closest(CHROME)
 
 /**
  * A click on a free spot opens the main window (D558): pressed and released on a free spot (a press slid onto a button or
@@ -35,22 +43,33 @@ const OWN_DOUBLE = 'button, a, input, textarea, select, [role="button"], [conten
  */
 export const doubleOpensMain = (first: EventTarget | null, second: EventTarget | null): boolean => [first, second].every((el) => el instanceof Element && !el.closest(OWN_DOUBLE))
 
+/** A button of the header and the footer: the second click of a double click does nothing (C8 – „schowaj” would „pokaż” again). */
+function PanelButton({ testId, label, onAct, children, className }: { testId: string; label?: string; onAct: (e: MouseEvent) => void; children: ReactNode; className: string }) {
+  return (
+    <button type="button" className={className} aria-label={label} onClick={(e) => e.detail <= 1 && onAct(e)} data-testid={testId}>
+      {children}
+    </button>
+  )
+}
+
+const FOOT_BUTTON = 'rounded px-1 py-0.5 text-[12px] whitespace-nowrap text-muted hover:bg-hover hover:text-fg'
+
 export function PanelApp() {
   const view = useWidget((s) => s.view)
-  const [target, setTarget] = useState<{ line: string | null; day: string | null; quick?: boolean } | null>(null)
+  const desktopBar = useMachine((s) => s.prefs.desktopBar)
+  const [target, setTarget] = useState<{ line: string | null; day: string | null } | null>(null)
+  // Each new opening of a hidden panel (the main process says it with its target, also none): the bar folds what stayed
+  // unfolded (C8); asked again while open, only the target changes.
+  const [opening, setOpening] = useState(0)
   const [unfolded, setUnfolded] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  useReportLayout(ref, unfolded)
-  // An opening by the desktop bar's „+” unfolds the field once: a bar drawn anew never opens it again from the same one –
-  // and it is spent only once a bar was there to take it (before the first view it waits, T772).
-  const usedQuick = useRef<object | null>(null)
-  const quickAt = target?.quick && usedQuick.current !== target ? target : null
-  useEffect(() => {
-    if (quickAt && view) usedQuick.current = quickAt
-  }, [quickAt, view])
+  useReportLayout(ref, unfolded, opening)
   useEffect(() => {
     setWindowEscape(() => window.rd.panelClose())
-    const off = window.rd.onPanelTarget(setTarget)
+    const off = window.rd.onPanelTarget((o) => {
+      setTarget(o.target)
+      if (o.reopened) setOpening((n) => n + 1)
+    })
     const touch = () => window.rd.panelTouch()
     window.addEventListener('keydown', touch)
     return () => {
@@ -75,24 +94,32 @@ export function PanelApp() {
   const freeClick = (e: MouseEvent<HTMLDivElement>) => {
     const { down, up } = pressed.current
     pressed.current = { down: null, up: null }
+    // The second click of a double click whose first was on a control – one that went away after it („Tak”, „Potwierdź”):
+    // no click of the free panel (C8).
+    if (e.detail > 1 && !free(firstPress.current)) return
     if (opensMain(down, up, unfolded, e.currentTarget)) window.rd.showMain()
   }
+  // By your intention, not by what is on the screen now (D564 P13): on in the settings and not hidden by its „×” – „schowaj”
+  // (also while a rule, the helper or a full screen keeps it away for a while); else „pokaż” (takes the „×” off, switches it on).
+  const barOn = barChosen(desktopBar, !!view?.barClosed)
   return (
-    <div ref={ref} className="relative flex flex-col gap-2 border border-line-strong bg-panel p-2 pr-7" data-testid="panel" onPointerDown={onPress} onPointerUp={onRelease} onClick={freeClick} onMouseDown={onMouseDown} onDoubleClick={(e) => doubleOpensMain(firstPress.current, e.target) && window.rd.showMain()}>
-      <button
-        type="button"
-        className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded text-[14px] leading-none text-muted hover:bg-hover hover:text-fg"
-        aria-label="Zamknij panel (z Shift – zakończ aplikację)"
-        onClick={(e) => window.rd.panelClose(e.shiftKey ? 'quit' : 'x')}
-        data-testid="panel-close"
-      >
-        ×
-      </button>
+    <div ref={ref} className="flex flex-col gap-2 border border-line-strong bg-panel p-2" data-testid="panel" onPointerDown={onPress} onPointerUp={onRelease} onClick={freeClick} onMouseDown={onMouseDown} onDoubleClick={(e) => doubleOpensMain(firstPress.current, e.target) && window.rd.showMain()}>
+      <div className="flex items-center justify-between gap-2 pl-1" data-testid="panel-head" data-panel-chrome="">
+        <span className="text-[12px] font-medium text-muted">Regulated Day</span>
+        <PanelButton
+          testId="panel-close"
+          className="flex h-5 w-5 items-center justify-center rounded text-[14px] leading-none text-muted hover:bg-hover hover:text-fg"
+          label="Zamknij panel (z Shift – zakończ aplikację)"
+          onAct={(e) => window.rd.panelClose(e.shiftKey ? 'quit' : 'x')}
+        >
+          ×
+        </PanelButton>
+      </div>
       {view && (
         // One structure whether the widget is hidden („Odcinam się”: the state line with „Wracam”) or not – the bar stays
         // the same one (what is typed in its field stays, T771).
         <div className={view.hidden ? 'flex flex-col gap-1.5 px-1 py-1' : 'contents'} data-testid={view.hidden ? 'panel-hidden' : 'panel-bar'}>
-          <Bar view={view} mode="panel" grows="down" onUnfold={setUnfolded} quickAt={quickAt} />
+          <Bar view={view} mode="panel" grows="down" onUnfold={setUnfolded} opening={opening} />
         </div>
       )}
       {target?.line && (
@@ -104,10 +131,18 @@ export function PanelApp() {
           })()}
         </div>
       )}
-      <div className="flex justify-end">
-        <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={() => window.rd.showMain()} data-testid="panel-open-main">
-          Otwórz okno główne
-        </button>
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 border-t border-line pt-1.5 text-[12px] text-muted" data-testid="panel-foot" data-panel-chrome="">
+        <PanelButton testId="panel-open-main" className={FOOT_BUTTON} onAct={() => window.rd.showMain()}>
+          ↗ {OPEN_MAIN_TEXT}
+        </PanelButton>
+        <span aria-hidden="true">·</span>
+        <PanelButton testId="panel-bar-toggle" className={FOOT_BUTTON} onAct={() => void window.rd.barAction(barOn ? 'hideBar' : 'showBar')}>
+          ▣ Pasek pulpitu: {barOn ? 'schowaj' : 'pokaż'}
+        </PanelButton>
+        <span aria-hidden="true">·</span>
+        <PanelButton testId="panel-quit" className={FOOT_BUTTON} onAct={() => window.rd.panelClose('quit')}>
+          ⏻ {QUIT_APP_TEXT}
+        </PanelButton>
       </div>
     </div>
   )

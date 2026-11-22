@@ -3,7 +3,7 @@
  * The main window (D287): the side menu with the screens' names; at the top the name „Regulated Day” and the bar; the
  * game's celebration over everything (D322). Ctrl+1…9 switch the screens by the
  * physical keys of the digits (any keyboard layout), Ctrl+, opens the settings, Ctrl+S commits the active field, Ctrl+N
- * creates a record in the current view (when it has records), Ctrl+K opens the search (D387).
+ * creates a record in the current view (when it has records), Ctrl+K opens the search (D387), F1 the list of shortcuts (UX15).
  */
 import { useEffect, type ReactNode } from 'react'
 import { navigate, openRitual, PAGES, useUi, type Page } from '../store/ui'
@@ -11,11 +11,14 @@ import { useWidget } from '../store/widget'
 import { commitActiveField } from '../lib/commit'
 import { modalOpen } from '../lib/escape'
 import { useDeleteKey } from '../lib/deleteKey'
+import { useUndoKey } from '../lib/undoKey'
 import { DeleteDialog } from '../components/DeleteDialog'
 import { Bar } from '../widget/Bar'
 import { Palette } from '../features/search/Palette'
 import { SeriesScopeDialog } from '../features/series/scopeAsk'
 import { openSearch } from '../features/search/searchStore'
+import { HelpHost } from '../features/help/HelpDialog'
+import { toggleShortcuts } from '../store/help'
 import { DIGIT_PAGES } from './pages'
 import { SideMenu } from './SideMenu'
 import { Toasts } from '../components/Toasts'
@@ -41,9 +44,15 @@ import { ProblemsBanner, QuestionsBanner } from './Questions'
 /** Screens that need the data folder (without it they point to the wizard). */
 const NEEDS_DATA = new Set<Page>(['today', 'calendar', 'week', 'requests', 'templates', 'routines', 'room', 'stats', 'history'])
 
-function useHotkeys(): void {
+export function useHotkeys(): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // F1 (UX15, D565 P23): the list of shortcuts; again – closes it. A dialog of the page open or the wizard: nothing (as for Ctrl K).
+      if (e.key === 'F1' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+        e.preventDefault()
+        if (!e.repeat) toggleShortcuts()
+        return
+      }
       if (!e.ctrlKey || e.altKey || e.metaKey) return
       const digit = /^Digit([1-9])$/.exec(e.code)?.[1]
       // A dialog open: no other screen under it (A6-21); Ctrl+S still commits its field.
@@ -111,6 +120,7 @@ export function App() {
   const wizardAsked = useWizard((s) => s.asked)
   useHotkeys()
   useDeleteKey()
+  useUndoKey()
   useGameFeed()
   useEffect(() => window.rd.onNavigate((p) => (p === 'ritual' ? openRitual() : (PAGES as string[]).includes(p) && navigate(p as Page))), [])
   // No folder on this computer: the wizard (until „Później”). A folder that did not open (OneDrive not ready at the
@@ -135,6 +145,7 @@ export function App() {
         </div>
       )}
       <Palette />
+      <HelpHost />
       <SeriesScopeDialog />
       <DeleteDialog />
       <Toasts />

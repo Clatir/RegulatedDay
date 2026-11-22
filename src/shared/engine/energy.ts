@@ -22,6 +22,7 @@ import { costChangesOf, ownAt, routineAt, startCostOf, type CostChange } from '.
 import { REST_FREE, settingsAtMinute, type DayContext, type DayState } from './day'
 import { compareOrder, type EventOrder, OPEN } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
+import { liveEnergyEvent } from './clickUndo'
 
 const UNIT = 2000
 /** The state of a pool by the sum of its two answers (spec: 0–4 → 100, 85, 65, 45, 25). */
@@ -195,7 +196,8 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
 
   const events = ctx.events
     .filter((e): e is EnergyEvent & AnyEvent => isKnown(e) && e.k.startsWith('energy.'))
-    .filter((e) => idx(e.at) >= 0 && idx(e.at) <= now)
+    // A signal or an assessment taken back by the bar's „Cofnij” (D564 P18) is no anchor.
+    .filter((e) => idx(e.at) >= 0 && idx(e.at) <= now && liveEnergyEvent(e, day.facts.undone))
     .sort(compareEvents)
 
   // The module: before its first change of the day the state that change names (older events: the opposite), else the setting.

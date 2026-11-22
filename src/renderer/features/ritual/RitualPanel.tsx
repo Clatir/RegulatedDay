@@ -22,6 +22,7 @@ import { nameById, type Names } from '../plan/blockView'
 import { PersonChoice } from '../cases/CasesPage'
 import { CasesRitualPart } from '../cases/CasesRitual'
 import { DayTime, typedOf, useTypedTime } from './dayTime'
+import { offerUndo } from './UnclosedDays'
 
 const BOUNDARY: Record<string, string> = { kept: 'dotrzymana', broken: 'niedotrzymana', noData: 'bez danych' }
 const FELT: Record<FeltCost, string> = { lighter: 'lżej', usual: 'jak zwykle', heavier: 'ciężej' }
@@ -165,10 +166,23 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
     setConfirm(false)
     try {
       const r = await window.rd.closeDay(date, 'ritual')
-      if (!r.ok && r.why) toast(r.why, 'error')
-      else onClosed?.()
+      if (r.ok) {
+        // The same „Zamknięto … · Cofnij” as the morning's list (D563 P1, D468): the day is among the days not closed again.
+        offerUndo(date, 'ritual', r.written, undoRun)
+        onClosed?.()
+      } else toast(r.why ?? 'Dzień się nie zamknął.', 'error')
     } catch (e) {
       toast(`Dzień się nie zamknął: ${e instanceof Error ? e.message : String(e)}`, 'error')
+    }
+    reload()
+  }
+  /** „Cofnij” of the close: its refusal said as every other, the ritual read again. */
+  const undoRun = async (what: () => Promise<{ ok: boolean; why: string | null }>) => {
+    try {
+      const r = await what()
+      if (!r.ok && r.why) toast(r.why, 'error')
+    } catch (e) {
+      toast(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
     reload()
   }
@@ -182,16 +196,24 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
     const at = time.take(date)
     if (at != null) void answer(row, choice, at, item)
   }
+  /** „Zapisz” of the stretch that was not rest: both ends typed and accepted (Enter in „Do” writes it too). */
+  const saveStretch = (r: Extract<RitualRow, { kind: 'rest' }>) => {
+    const from = stretchFrom.take(date)
+    const to = from == null ? null : stretchTo.take(date)
+    if (from != null && to != null) void answer(r, 'notRest', { from, to })
+  }
   const timeEditor = (row: RitualRow, choice: string, label: string, at: number, item: string | null = null) =>
     editing && editing.row === row.id && editing.choice === choice && editing.item === item ? (
       // The field only sets the time (its commit on leaving it); „Zapisz” writes it, „anuluj” writes nothing.
       <span className="inline-flex items-center gap-1.5">
-        {time.shown && <DayTime date={date} value={time.shown} onTyped={time.onTyped} label={label} testId={`ritual-time-${choice}`} />}
+        {time.shown && (
+          <DayTime date={date} value={time.shown} onTyped={time.onTyped} onEnter={() => saveTime(row, choice, item)} onEscape={() => setEditing(null)} label={label} testId={`ritual-time-${choice}`} />
+        )}
         <Act onClick={() => saveTime(row, choice, item)} testId={`ritual-time-save-${choice}`}>
           Zapisz
         </Act>
         <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={() => setEditing(null)}>
-          anuluj
+          Anuluj
         </button>
       </span>
     ) : (
@@ -208,7 +230,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           text: r.confirmed ? `Koniec pracy o ${t(r.end)} – potwierdzony` : `Koniec pracy o ${t(r.end)}`,
           acts: r.confirmed ? null : (
             <>
-              <Act onClick={() => void answer(r, 'ok')} testId="ritual-workEnd-ok">
+              <Act onClick={() => void answer(r, 'ok')} testId="ritual-workEnd-ok" label={OK_LABEL}>
                 ✓
               </Act>
               {timeEditor(r, 'workedUntil', 'Pracowałem do …', instant(r.explain ? r.explain.from : r.end))}
@@ -231,12 +253,12 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           acts: (
             <>
               {!r.answered && (
-                <Act onClick={() => void answer(r, 'ok')} testId="ritual-silent-ok">
+                <Act onClick={() => void answer(r, 'ok')} testId="ritual-silent-ok" label={OK_LABEL}>
                   ✓
                 </Act>
               )}
               <Act onClick={() => setOpen((s) => toggled(s, r.id))} testId="ritual-silent-unfold">
-                {open.has(r.id) ? 'zwiń' : 'rozwiń'}
+                {open.has(r.id) ? 'Zwiń' : 'Rozwiń'}
               </Act>
             </>
           ),
@@ -248,12 +270,12 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
                     {name(x.block)} {t(x.plannedEnd)}–{t(x.end)} bez odpowiedzi
                     {x.seenAt != null ? ` (widziane ${tm(x.seenAt)}${x.seenOn ? ` na ${x.seenOn}` : ''})` : ''}
                   </span>
-                  {timeEditor(r, 'endedAt', 'skończył się o …', instant(x.end), x.block)}
+                  {timeEditor(r, 'endedAt', 'Skończył się o …', instant(x.end), x.block)}
                   {x.explain && (
                     <>
-                      <Act onClick={() => void answer(r, 'work', null, x.block)}>praca</Act>
-                      <Act onClick={() => void answer(r, 'project', null, x.block)}>projekt</Act>
-                      <Act onClick={() => void answer(r, 'rest', null, x.block)}>odpoczynek</Act>
+                      <Act onClick={() => void answer(r, 'work', null, x.block)}>Praca</Act>
+                      <Act onClick={() => void answer(r, 'project', null, x.block)}>Projekt</Act>
+                      <Act onClick={() => void answer(r, 'rest', null, x.block)}>Odpoczynek</Act>
                     </>
                   )}
                 </li>
@@ -270,21 +292,21 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           acts: (
             <>
               {!r.answered && (
-                <Act onClick={() => void answer(r, 'ok')} testId="ritual-absence-ok">
+                <Act onClick={() => void answer(r, 'ok')} testId="ritual-absence-ok" label={OK_LABEL}>
                   ✓
                 </Act>
               )}
               {r.mode === 'counted' ? (
                 <>
-                  <Act onClick={() => void answer(r, 'end')}>zakończ w chwili odejścia</Act>
-                  <Act onClick={() => void answer(r, 'leave')}>nie odliczaj</Act>
+                  <Act onClick={() => void answer(r, 'end')}>Zakończ w chwili odejścia</Act>
+                  <Act onClick={() => void answer(r, 'leave')}>Nie odliczaj</Act>
                 </>
               ) : (
                 r.explain && (
                   <>
-                    <Act onClick={() => void answer(r, 'work')}>praca</Act>
-                    <Act onClick={() => void answer(r, 'project')}>projekt</Act>
-                    <Act onClick={() => void answer(r, 'rest')}>odpoczynek</Act>
+                    <Act onClick={() => void answer(r, 'work')}>Praca</Act>
+                    <Act onClick={() => void answer(r, 'project')}>Projekt</Act>
+                    <Act onClick={() => void answer(r, 'rest')}>Odpoczynek</Act>
                   </>
                 )
               )}
@@ -298,11 +320,11 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           acts: (
             <>
               {!r.answered && (
-                <Act onClick={() => void answer(r, 'ok')} testId="ritual-away-ok">
+                <Act onClick={() => void answer(r, 'ok')} testId="ritual-away-ok" label={OK_LABEL}>
                   ✓
                 </Act>
               )}
-              {timeEditor(r, 'endedAt', 'skończył się o …', instant(r.end))}
+              {timeEditor(r, 'endedAt', 'Skończył się o …', instant(r.end))}
             </>
           )
         }
@@ -313,11 +335,11 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           acts: (
             <>
               {!r.answered && (
-                <Act onClick={() => void answer(r, 'ok')} testId="ritual-shutdown-ok">
+                <Act onClick={() => void answer(r, 'ok')} testId="ritual-shutdown-ok" label={OK_LABEL}>
                   ✓
                 </Act>
               )}
-              {timeEditor(r, 'endedAt', 'skończył się o …', instant(r.at))}
+              {timeEditor(r, 'endedAt', 'Skończył się o …', instant(r.at))}
             </>
           )
         }
@@ -327,11 +349,11 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           acts: (
             <>
               {!r.answered && (
-                <Act onClick={() => void answer(r, 'ok')} testId="ritual-fixedMinutes-ok">
+                <Act onClick={() => void answer(r, 'ok')} testId="ritual-fixedMinutes-ok" label={OK_LABEL}>
                   ✓
                 </Act>
               )}
-              {timeEditor(r, 'endedAt', 'skończył się o …', instant(model.state.now))}
+              {timeEditor(r, 'endedAt', 'Skończył się o …', instant(model.state.now))}
             </>
           )
         }
@@ -355,8 +377,8 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           text: `${name(r.block)} zaparkowany – miał być po: ${name(r.anchor)}`,
           acts: (
             <>
-              {!r.answered && <Act onClick={() => void answer(r, 'ok')}>zostaw</Act>}
-              <Act onClick={() => void answer(r, 'drop')}>usuń</Act>
+              {!r.answered && <Act onClick={() => void answer(r, 'ok')}>Zostaw</Act>}
+              <Act onClick={() => void answer(r, 'drop')}>Usuń</Act>
             </>
           )
         }
@@ -373,22 +395,16 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
           acts: (
             <>
               {!r.answered && (
-                <Act onClick={() => void answer(r, 'ok')} testId="ritual-rest-ok">
+                <Act onClick={() => void answer(r, 'ok')} testId="ritual-rest-ok" label={OK_LABEL}>
                   ✓
                 </Act>
               )}
               {stretch === r.id && stretchFrom.shown && stretchTo.shown ? (
                 <span className="inline-flex items-center gap-1.5">
-                  <DayTime date={date} value={stretchFrom.shown} onTyped={stretchFrom.onTyped} label="Od" />
+                  <DayTime date={date} value={stretchFrom.shown} onTyped={stretchFrom.onTyped} onEnter={() => saveStretch(r)} onEscape={() => setStretch(null)} label="Od" />
                   –
-                  <DayTime date={date} value={stretchTo.shown} onTyped={stretchTo.onTyped} label="Do" />
-                  <Act
-                    onClick={() => {
-                      const from = stretchFrom.take(date)
-                      const to = from == null ? null : stretchTo.take(date)
-                      if (from != null && to != null) void answer(r, 'notRest', { from, to })
-                    }}
-                  >
+                  <DayTime date={date} value={stretchTo.shown} onTyped={stretchTo.onTyped} onEnter={() => saveStretch(r)} onEscape={() => setStretch(null)} label="Do" />
+                  <Act onClick={() => saveStretch(r)}>
                     Zapisz
                   </Act>
                 </span>
@@ -401,7 +417,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
                   }}
                   testId="ritual-rest-mark"
                 >
-                  zaznacz odcinek
+                  Zaznacz odcinek
                 </Act>
               )}
             </>
@@ -469,7 +485,7 @@ export function RitualPanel({ model, names, onClosed }: { model: DayModel; names
       <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
         <span className="text-muted">Szkic jutra:</span>
         <Act onClick={() => openDay(tomorrow)} testId="ritual-tomorrow">
-          otwórz jutro
+          Otwórz jutro
         </Act>
       </div>
       {!view.closed && (
@@ -504,9 +520,12 @@ function toggled(s: Set<string>, id: string): Set<string> {
   return n
 }
 
-function Act({ onClick, children, testId, pressed }: { onClick: () => void; children: React.ReactNode; testId?: string; pressed?: boolean }) {
+/** What the „✓” of a row says (F5): the row stays as it is written – nothing changes in it. */
+const OK_LABEL = 'Zgadza się'
+
+function Act({ onClick, children, testId, pressed, label }: { onClick: () => void; children: React.ReactNode; testId?: string; pressed?: boolean; label?: string }) {
   return (
-    <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={pressed} onClick={onClick} data-testid={testId}>
+    <button type="button" className="btn h-[24px] px-2 text-[12px]" aria-pressed={pressed} aria-label={label} title={label} onClick={onClick} data-testid={testId}>
       {children}
     </button>
   )

@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.34.0
+Wersja porządkuje wygodę pracy po przeglądzie użytkowym 1.33.0 (19 zadań).
+
+**„Dziś” i oś**
+- Oś „Dziś”, „Tygodnia” i „3 dni” po otwarciu pokazuje bieżącą godzinę (dziś na 1/3 wysokości) albo początek dnia; karta planu porannego, „Wstałeś później?” i rytuał nad osią zostają widoczne.
+- Przy granicy równej maksimum oś ma jeden napis („propozycja · maksimum 19:00”), a „+N” w miesiącu mówi, co kryje („+2 sesje”, „+1 blok”).
+- „Dziś” lżej: karty rutyn i ostrzeżenia dnia (z godziną maksimum i liczbami budżetu) w panelu bocznym i w panelu bloku, legenda energii pod „?”, „Zatwierdź” w nagłówku planu porannego, podpowiedzi przy liczbach; panel nowego bloku mówi, że jest szkicem („Zapisze się, gdy opuścisz panel · Esc – odrzuć”); jednostka kosztu w legendzie i okienku („1 = 3 punkty energii”).
+- „o godzinie” po „po bloku” zaczyna od godziny z prognozy osi; menu „⋯” zamyka Esc i klik obok; „Przenieś na…” liczy „jutro” od dziś; panel boczny i panel bloku mają tę samą szerokość.
+
+**Widoki, klawisze, Tydzień**
+- Tydzień, środek „3 dni”, Agenda i miesiąc zostają, gdzie byłeś; z dnia wracasz „← Tydzień” albo „← Kalendarz”. PgUp / PgDn zmieniają okres, Home wraca do dziś; Ctrl+N otwiera okienko nowego bloku także w „Tygodniu”, „3 dniach” i Kalendarzu.
+- Panel „Sprawy” przy „Tygodniu” i „3 dniach” (zwinięty) – sprawę przeciągasz na kolumnę dnia; „Zastosuj szablon ▸” w menu dni; szybkie wybory w oknie dni („pn–pt tego miesiąca”, „każdy wt”); cele nad „Tygodniem” zwijane.
+- Ctrl+Z cofa ostatnią zmianę, przy której widać „Cofnij” (poza polem tekstowym).
+- Del usuwa też pojedynczy blok zaznaczony Ctrl+klikiem w „Tygodniu”; filtr kalendarzy ma „Pokaż wszystkie”.
+
+**Nic nie ginie, wszystko się cofa**
+- „Zamknij dzień” w rytuale ma „Cofnij”; Enter zapisuje i Esc anuluje w polach godziny rytuału.
+- Zmiana typu jednego dnia w Kalendarzu i klik w pustą oś Szablonu mają „Cofnij”; dwa szablony na ten sam dzień – ostrzeżenie z nazwą wygrywającego i znak „nieużywany”.
+- Odpowiedzi check-inu i „Pomiń” zostają po zmianie ekranu; karta wydarzenia całodniowego z wpisanym tytułem zapisuje się kliknięciem obok; niezapisana reguła serii i powtarzania sprawy pyta „Zapisać zmianę?”.
+- Przytrzymany Ctrl+N i dwuklik „+ Szablon” robią jeden rekord; okienko „Nowy blok” w „Tygodniu” zapisuje się przy zmianie ekranu; ten sam dymek się nie dubluje.
+- Dymek błędu zostaje, dopóki go nie zamkniesz „×” (błąd pola znika sam); „Historia” przy bloku, sprawie, szablonie i rutynie prowadzi jednym kliknięciem do jego wersji, a lista Historii ma szukanie, filtr z liczbami i „x z y”.
+
+**Pasek pulpitu i panel ikony**
+- Na pasku pulpitu „↗” otwiera okno główne jednym kliknięciem, a „+ Skrzynka” – okienko „Do skrzynki”. Panel ikony ma nagłówek i stopkę „Otwórz okno główne · Pasek pulpitu: pokaż / schowaj · Zakończ aplikację”; dwuklik w przycisk działa raz.
+- Pasek schowany „×” nie znika bez śladu: panel i Ustawienia mówią „Pasek pulpitu schowany · Pokaż pasek”, a włączenie paska albo wybór jego miejsca w Ustawieniach pokazuje go jednym kliknięciem; w menu ikony zawsze jest „Pasek pulpitu” z ptaszkiem.
+- Wiersz bloku pracy mieści się w jednym wierszu: „Dalej: <następny blok>”, Pauza, Przedłuż, Koniec pracy, „+ Skrzynka”, „⋯” (Odcinam się, Prośba ▸, Sygnały ▸); przy „Dalej?” przyciski się nie powtarzają, koszt ma „Anuluj”; po „Dalej”, „Skończyłem”, „Koniec pracy” i sygnale z paska przez 10 s jest „Cofnij”; trwająca prośba to „Prośba: <osoba>”.
+
+**Ustawienia, pojęcia, pierwsze kroki**
+- Ustawienia mają spis sekcji po lewej i pole „Szukaj w ustawieniach”; Ctrl K znajduje pojedyncze pola. Sekcje bez daty mają znacznik „od razu”, pasek „od jutra” stoi tylko nad ustawieniami z datą, a zaplanowane zmiany pokazują, co się zmieni i od kiedy – z przyciskiem „Wycofaj”.
+- Każde pole Ustawień ma opis; okno „Jak to działa” tłumaczy pule energii, rezerwę, granicę, twardy koniec, nuty i dzień ochronny (Ctrl K albo „?” przy polu); lista skrótów pod F1 i „Skróty” w menu.
+- Kreator ma „Zakończ z domyślnymi”, podsumowanie z linkami do kroków i listę „Pierwszy dzień”.
+- „Tolerancja trafności” naprawdę działa: zmienia ocenę „Trafne szacowanie” od daty ustawienia, a Statystyki piszą Twoją tolerancję. Przypomnienia planu porannego i rytuału: cicha linia w pasku i ciche powiadomienie Windows (nie w nocy ani w sesji, 0 wyłącza).
+- Drogi z komunikatów: „Historia” przy uszkodzonym pliku, „Ustawienia” przy kopii, „Otwórz kreator” przy folderze niewybranym; Ctrl K znajduje „Plan dnia”, „Kalendarze” i „Nowe zadanie”.
+
+**Formaty i słowa**
+- Daty wszędzie jako DD.MM.RRRR; każde pole daty przyjmuje kropki, myślniki, ukośniki, osiem cyfr i „3.01”. „Skopiuj ten dzień do…” ma to samo okno dni z polami Od/Do; liczniki „x z y”, skróty zapisane „Ctrl+K”; sprawa zajmuje jeden wiersz (reszta pod „▸” i w „…”), Macierz obsługujesz klawiaturą; rutyna mówi, gdzie jest użyta.
+
 ## 1.33.0
 - Dwuklik w wolne miejsce paska pulpitu (poza przyciskami, polami i uchwytem) otwiera okno główne.
 - Zamknięcie zminimalizowanego okna głównego z paska zadań chowa je do zasobnika – wcześniej kończyło całą aplikację.

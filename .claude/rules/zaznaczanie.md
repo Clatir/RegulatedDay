@@ -86,7 +86,7 @@ paths:
 - Liczba „Zaznaczone dni: N” zostaje tylko w pasku działań (T1586; `daysSummary` jest w `shared`, Kalendarz go nie używa). Menu „Zmień N dni” (`dayMenu.ts`, czyste): „Typ dnia”
   (podmenu z ✓/„—”, „Typ z tygodnia”), „Pobudka” (pole z Enter, `parseField` jak `TimeField`) i „Pobudka z typu”; stany ✓/„—” z plików zaznaczonych dni, także spoza siatki
   (`readDayFiles` przed otwarciem); wyłączone z powodem, gdy żaden dzień nie pasuje (typ – od jutra, pobudka – od dziś), w trakcie zapisu – „Zapisuję…”.
-- Linia `GroupLine view="calendar"` po zmianie ≥ 2 dni (jeden dzień – jak dotąd, bez linii): typ – `saveDays` zbiera `WeekPushedDay` (`movedDay`), `undoDayEdits` (`dayGroup.ts`);
+- Linia `GroupLine view="calendar"` po zmianie ≥ 2 dni (jeden dzień – bez linii, `undoToast` „Typ dnia 14.12.2026: Wolne · Cofnij” → `undoOneDay` = `undoDayEdits`, D563 B2; „Cofnij” przywraca typ i zajęcia zjazdu zdjęte zmianą typu): typ – `saveDays` zbiera `WeekPushedDay` (`movedDay`), `undoDayEdits` (`dayGroup.ts`);
   pobudka – `setDayWake(…, group)` zamiast toastu z blokami, `undoWakeGroup` (dzień z pobudką albo przesuniętym blokiem zmienionym od tego czasu zostaje cały, `keptText`). Pominięte dni
   (minione, dzisiejszy przy typie) w linii: „pominięto 2: miniony, dzisiejszy” – przy linii bez toastu o nich (toast tylko, gdy linii nie ma). Zaznaczenie po zmianie czyści się.
 - Pliki dni czytają się porcjami po 62 (`readDayFiles`, `dayFilesNow`; hub odpowiada najwyżej 62 dniami); jedno „Cofnij” zmian dni to `takeBackDays` (`store/dayUndo.ts`: „Tydzień”,
@@ -103,7 +103,7 @@ paths:
   Napis „Zaznaczone: N · czas · energia …” (`blockSummary`: minuty kafelka, koszt/h z `TimelineItem.cost`) nad osią od 2; Del dla ≥ 2 – `removeBlocksTarget` („Usunąć 4 bloki?”)
   ma pierwszeństwo przed celem jednego bloku (`useDeleteResolver('block')` – fokus musi być na zaznaczonym).
 - „Tydzień” / „3 dni”: `week/weekSelect.tsx` `useWeekGroup` w `DayGrid` (klucz bloku `blockKey(date, id)`; order `weekOrder` – dzień, potem start; `BlockBox`: `marked`, `onPick` – Ctrl/Shift
-  zaznacza bez otwierania dnia, zwykły klik otwiera jak dotąd; `DayGrid` ma klucz pierwszego dnia, więc inny tydzień, zakres 3 dni i tryb zaczynają bez zaznaczenia); napis `week-selection`.
+  zaznacza bez otwierania dnia, zwykły klik otwiera jak dotąd; `DayGrid` ma klucz pierwszego dnia, więc inny tydzień, zakres 3 dni i tryb zaczynają bez zaznaczenia); napis `week-selection`. Del na kolumnach: ≥ 2 – `removeBlocksTarget`, jeden blok zaznaczony Ctrl+klikiem – `removeTarget` z nazwą bloku (UX17, F8; `useWeekGroup.removeTarget`, wcześniej jeden blok nie był celem Del).
 - Menu „Zmień N bloków” (`groupMenu.ts` – `blockMenu`, czyste: podkategoria i wariant z ✓/„—”, „Koszt…” → okno `GroupCostDialog`, rutyna tylko dla rodzaju „rutyna”, „Przesuń o…” → później /
   wcześniej o 5, 15, 30, 60 i pole, „Przenieś na dzień…” → `GroupMoveDialog`, „Odwołaj”, „Zaparkuj”, „Usuń”; szablon bez trzech działań dnia; wyłączone z powodem wg `MenuBlock.state` (`open` / `begun` / `past` / `off`): wszystkie zaczęte –
   „Żaden blok nie jest niezaczęty”, wszystkie minione, wszystkie zdjęte z planu (zaparkowane, odwołane), żaden nie ma godziny do przesunięcia, różne podkategorie dla wariantu; okno kosztu zaczyna od kosztu

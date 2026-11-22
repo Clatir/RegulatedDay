@@ -1,7 +1,8 @@
 /**
  * The card of an all-day event (D405, D406): a small window beside the strip – the title, the days from and to, one of six
  * colours, the calendar (D425; only with two or more – „Moje” is none), the note (the block's Markdown editor, D388), „To wolne (urlop, wyjazd)”; „Zapisz” · „Anuluj” · „Usuń” (only an
- * event that exists). Esc, „Anuluj” and a click outside close it and save nothing; a removal asks nothing (its line „Cofnij”
+ * event that exists). Esc and „Anuluj” close it and save nothing; a click outside saves what is written when the title is not empty (an event with nothing changed
+ * and an empty title just close, D563 P4 – it changes D405; days the wrong way round keep the card open under the problem); a removal asks nothing (its line „Cofnij”
  * is the strip's). After a „Zapisz” that turns „To wolne” on or changes the days of such an event the same window asks once
  * about the type „Wolne” for its days (T733: a mended title asks nothing).
  */
@@ -17,7 +18,7 @@ import { useBusy } from '../../lib/busy'
 import { commitActiveField } from '../../lib/commit'
 import { useEscapeLayer } from '../../lib/escape'
 import { removeTarget, useDeleteSelected } from '../../lib/deleteKey'
-import { IN_DIALOG } from '../../lib/outside'
+import { holdGesture, useOutsidePointer } from '../../lib/outside'
 import { allDayGone, removeAllDay, saveAllDay } from '../../store/allDay'
 import { useData } from '../../store/data'
 import { NoteEditor } from '../note/NoteEditor'
@@ -40,7 +41,7 @@ export function AllDayCard({
   today,
   place,
   brightness,
-  onClose,
+  onClose: closeWindow,
   onRemoved,
   onFree
 }: {
@@ -65,24 +66,42 @@ export function AllDayCard({
     form.current = { ...form.current, ...patch }
     setShown(form.current)
   }
-  const [tried, setTried] = useState(false)
-  const [ask, setAsk] = useState<string[] | null>(null)
-  const [busy, run] = useBusy()
+  // The card gone (another one opened by a click, Esc): a save, „Tak” or „Usuń” that ends later changes nothing here and closes no other card –
+  // what they wrote stays written (`onRemoved`, `onFree` say it in the window, they do not need the card).
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => void (alive.current = false)
+  }, [])
+  const onClose = () => alive.current && closeWindow()
+  const [tried, setTriedNow] = useState(false)
+  const setTried = (v: boolean) => alive.current && setTriedNow(v)
+  const [ask, setAskNow] = useState<string[] | null>(null)
+  const setAsk = (v: string[] | null) => alive.current && setAskNow(v)
+  const [busy, runBusy] = useBusy()
+  // The click held while a save, „Tak” or „Usuń” runs – one per run: it starts again with the next (the end of the run, not an effect on `busy`:
+  // a run that ends in the tick it began would show no change of `busy` at all).
+  const heldOnce = useRef(false)
+  const run = <T,>(fn: () => Promise<T>) =>
+    runBusy(async () => {
+      try {
+        return await fn()
+      } finally {
+        heldOnce.current = false
+      }
+    })
   const computers = useData((s) => s.view?.computers)
   const calendars = useData((s) => s.rd.calendars)
   useEscapeLayer(true, onClose)
   useEffect(() => {
     ref.current?.scrollIntoView({ block: 'nearest' })
   }, [])
-  // A click outside closes it (the answer „Nie” on the question).
-  useEffect(() => {
-    const away = (e: PointerEvent) => {
-      // A dialog over it (Del's question, D462) with its overlay is no „outside”: the card waits for the answer.
-      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target) && !(e.target instanceof Element && e.target.closest(IN_DIALOG))) onClose()
-    }
-    document.addEventListener('pointerdown', away)
-    return () => document.removeEventListener('pointerdown', away)
-  }, [onClose])
+  // A click outside (D563 P4): saves what is written when the title is not empty, closes at once with nothing written otherwise
+  // (the answer „Nie” on the question „Wolne”). The latest render's function – it reads the fields from the ref, never from a stale one.
+  // Heard before what the press starts where it lands (`useOutsidePointer`: the left button only; a dialog over the card with its overlay –
+  // Del's question, D462 – and a toast are no „outside”); a press the card does not let go (`holdGesture`) reaches nothing below.
+  const awayRef = useRef<(e: PointerEvent) => void>(() => undefined)
+  useOutsidePointer(true, ref, (e) => e.button > 0 || awayRef.current(e))
   const problems = cardProblems(shown)
 
   const save = () =>
@@ -106,6 +125,28 @@ export function AllDayCard({
       if (days.length) setAsk(days)
       else onClose()
     })
+  awayRef.current = (press) => {
+    // A save, „Tak” or „Usuń” runs (the fields are read-only meanwhile – nothing is written after it took its copy): its first click waits – the
+    // card is still needed for the question – and the next closes the card, the run ends in the background (D72: one that hangs never freezes
+    // the window). Then the question „Wolne”: the click elsewhere is its „Nie”.
+    if (busy) {
+      if (heldOnce.current) return onClose()
+      heldOnce.current = true
+      return holdGesture(press)
+    }
+    if (ask) return onClose()
+    const e = { ...form.current, title: form.current.title.trim() }
+    if (!e.title || (base && (Object.keys(e) as Array<keyof AllDayEvent>).every((k) => base[k] === e[k]))) return onClose()
+    // Days the wrong way round: the card stays with the message, and the click goes nowhere – another card opened by it would end this one.
+    if (cardProblems(e).dates) return (setTried(true), holdGesture(press))
+    // A save that asks the question „Wolne” stays in the card until it is answered (the next click elsewhere is its „Nie”); the click that
+    // started it goes nowhere for the same reason.
+    // The held click is the one this save lets go: the next click while it runs closes the card.
+    if (asksFreeAfter(base, e)) return (holdGesture(press), (heldOnce.current = true), void save())
+    // Closed at once: the click goes on to what it hit (another event, a day of the strip), the write follows.
+    onClose()
+    void saveAllDay(e, base)
+  }
   const remove = () =>
     run(async () => {
       if (!base) return
@@ -158,6 +199,7 @@ export function AllDayCard({
               className="input"
               value={shown.title}
               maxLength={ALL_DAY_TITLE_MAX}
+              readOnly={busy}
               placeholder="Tytuł"
               aria-label="Tytuł"
               aria-invalid={tried && problems.title != null}
@@ -176,10 +218,10 @@ export function AllDayCard({
             )}
           </div>
           <Field label="Od" labelWidth={34}>
-            <DateField value={shown.startDate} onCommit={(v) => set({ startDate: v })} today={today} past aria-label="Od" errorPlacement="below" data-testid="allday-start" />
+            <DateField value={shown.startDate} onCommit={(v) => set({ startDate: v })} today={today} past aria-label="Od" readOnly={busy} errorPlacement="below" data-testid="allday-start" />
           </Field>
           <Field label="Do" labelWidth={34}>
-            <DateField value={shown.endDate} onCommit={(v) => set({ endDate: v })} today={today} past aria-label="Do" errorPlacement="below" data-testid="allday-end" />
+            <DateField value={shown.endDate} onCommit={(v) => set({ endDate: v })} today={today} past aria-label="Do" readOnly={busy} errorPlacement="below" data-testid="allday-end" />
           </Field>
           {problems.dates && (
             <span className="text-[12px] text-rose" role="alert" data-testid="allday-dates-problem">
@@ -194,6 +236,7 @@ export function AllDayCard({
                 aria-label={ALL_DAY_COLOR_NAMES[c]}
                 title={ALL_DAY_COLOR_NAMES[c]}
                 aria-pressed={shown.color === c}
+                disabled={busy}
                 onClick={() => set({ color: c })}
                 className={cx('h-[20px] w-[20px] rounded-full border', shown.color === c ? 'ring-2 ring-lamp ring-offset-1 ring-offset-raised' : 'border-line-strong')}
                 style={{ background: blockFill(ALL_DAY_COLOR_HEX[c], brightness), borderColor: ALL_DAY_COLOR_HEX[c] }}
@@ -208,13 +251,14 @@ export function AllDayCard({
                 options={calendars.map((c) => ({ value: c.id, label: c.name }))}
                 onChange={(id) => set({ calendarId: id === DEFAULT_CALENDAR_ID ? null : id })}
                 aria-label="Kalendarz"
+                disabled={busy}
                 data-testid="allday-calendar"
               />
             </Field>
           )}
-          <NoteEditor value={shown.note} onCommit={(note) => set({ note })} olderComputers={olderComputers(computers ?? [])} />
+          <NoteEditor value={shown.note} onCommit={(note) => set({ note })} olderComputers={olderComputers(computers ?? [])} readOnly={busy} />
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={shown.free} onChange={(e) => set({ free: e.currentTarget.checked })} data-testid="allday-free" />
+            <input type="checkbox" disabled={busy} checked={shown.free} onChange={(e) => set({ free: e.currentTarget.checked })} data-testid="allday-free" />
             To wolne (urlop, wyjazd)
           </label>
           <div className="flex gap-2 pt-1">

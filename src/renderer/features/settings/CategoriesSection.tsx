@@ -141,7 +141,7 @@ export function CategoriesSection() {
   return (
     <Section title="Kategorie" data-testid="settings-categories">
       <p className="text-[12px] text-muted">
-        Kategoria zbiera podkategorie, podkategoria ma koszt i właściwości, a wariant – własny koszt i miejsce albo „jak podkategoria”. Wariantów podkategorii „Regeneracja” używasz jako sposobów regeneracji. Usunięcie niczego nie kasuje – zostaje w historii.
+        Kategoria zbiera podkategorie, podkategoria ma koszt i właściwości, a wariant – własny koszt i miejsce albo „jak podkategoria”. Wariantów podkategorii „Regeneracja” używasz jako sposobów regeneracji. Usunięcie niczego nie kasuje – zostaje w historii. Nazwy, kolory, przynależność i archiwum działają od razu; koszty i właściwości – od daty z paska „od jutra” (jak reszta ustawień z datą).
       </p>
       {tree.map(({ group: g, categories: groupIds }) => (
         <GroupBox

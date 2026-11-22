@@ -19,11 +19,15 @@ export const DIGIT_PAGES: Page[] = PAGES.filter((p) => p !== 'settings')
 
 /** The shortcut shown next to the screen's name (the same keys as the hotkeys). */
 export function pageKeys(page: Page): string | null {
-  if (page === 'settings') return 'Ctrl ,'
+  if (page === 'settings') return 'Ctrl+,'
   const digit = DIGIT_PAGES.indexOf(page) + 1
-  return digit ? `Ctrl ${digit}` : null
+  return digit ? `Ctrl+${digit}` : null
 }
 
-/** The search palette's entry at the bottom of the menu (D469): not a screen, so no digit; the keys are the hotkey's (Ctrl K, D387). */
+/** The search palette's entry at the bottom of the menu (D469): not a screen, so no digit; the keys are the hotkey's (Ctrl+K, D387). */
 export const SEARCH_LABEL = 'Szukaj'
-export const SEARCH_KEYS = 'Ctrl K'
+export const SEARCH_KEYS = 'Ctrl+K'
+
+/** The list of shortcuts at the bottom of the menu (UX15, D565 P23): not a screen, no digit; F1 opens it. */
+export const SHORTCUTS_LABEL = 'Skróty'
+export const SHORTCUTS_KEYS = 'F1'

@@ -1,0 +1,272 @@
+// @vitest-environment jsdom
+/**
+ * Karta wydarzenia całodniowego – klik obok (B4, D563 P4; zmienia D405): zapisuje, gdy tytuł jest niepusty; pusty (też z samych spacji)
+ * zamyka bez zapisu; Esc odrzuca; wydarzenie bez zmian zamyka bez zapisu; błędne daty zostawiają kartę otwartą (nic nie ginie).
+ */
+import { act, createElement } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { rdFrom } from '@shared/model/rd'
+import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
+import { AllDayCard } from '@renderer/features/allday/AllDayCard'
+import { installEscape } from '@renderer/lib/escape'
+import { askFreeDays, setFreeDays } from '@renderer/features/allday/freeDays'
+import { saveAllDay } from '@renderer/store/allDay'
+import { useData } from '@renderer/store/data'
+
+vi.mock('@renderer/store/allDay', async (orig) => ({
+  ...(await orig<typeof import('@renderer/store/allDay')>()),
+  saveAllDay: vi.fn(async (e: AllDayEvent) => e)
+}))
+
+vi.mock('@renderer/features/allday/freeDays', async (orig) => ({
+  ...(await orig<typeof import('@renderer/features/allday/freeDays')>()),
+  askFreeDays: vi.fn(async () => [] as string[]),
+  setFreeDays: vi.fn(async () => ({ change: null, duringDay: null, asked: false, saved: true, unreadable: [] }))
+}))
+
+let root: Root | null = null
+let host: HTMLElement | null = null
+const onClose = vi.fn()
+beforeAll(() => {
+  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  installEscape()
+  Element.prototype.scrollIntoView = () => undefined
+})
+beforeEach(() => vi.clearAllMocks())
+afterEach(() => {
+  useData.setState({ rd: rdFrom(undefined) })
+  document.body.removeEventListener('pointerdown', reached)
+  document.body.removeEventListener('click', reached)
+  act(() => root?.unmount())
+  host?.remove()
+  root = host = null
+})
+
+async function card(event: AllDayEvent, base: AllDayEvent | null) {
+  host = document.createElement('div')
+  document.body.append(host)
+  root = createRoot(host)
+  await act(async () => {
+    root!.render(createElement(AllDayCard, { event, base, today: '2026-11-18', place: { left: 0, top: 0 }, brightness: 1, onClose, onRemoved: () => undefined, onFree: () => undefined }))
+  })
+}
+const fresh = (): AllDayEvent => allDayDraft('k1', '2026-11-18')
+const saved = (extra: Partial<AllDayEvent> = {}): AllDayEvent => ({ ...fresh(), title: 'Konferencja', ...extra })
+const type = (value: string) =>
+  act(async () => {
+    const input = host!.querySelector<HTMLInputElement>('[data-testid="allday-title"]')!
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+/** What a press and its click would start below the card (another event's bar, a cell of the strip) – a probe on the page. */
+const reached = vi.fn()
+const probe = () => {
+  document.body.addEventListener('pointerdown', reached)
+  document.body.addEventListener('click', reached)
+}
+const press = (init: { button?: number; target?: Element } = {}) =>
+  act(async () => {
+    const e = new Event('pointerdown', { bubbles: true, cancelable: true }) as Event & { button: number }
+    e.button = init.button ?? 0
+    ;(init.target ?? document.body).dispatchEvent(e)
+    ;(init.target ?? document.body).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }))
+  })
+const clickAway = () => act(async () => void document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })))
+
+describe('klik obok karty wydarzenia całodniowego (D563 P4)', () => {
+  it('nowe wydarzenie z tytułem: zapisuje się i karta się zamyka', async () => {
+    await card(fresh(), null)
+    await type('Konferencja')
+    await clickAway()
+    expect(saveAllDay).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(saveAllDay).mock.calls[0]).toMatchObject([{ id: 'k1', title: 'Konferencja' }, null])
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('tytuł z samych spacji albo pusty: zamyka bez zapisu', async () => {
+    await card(fresh(), null)
+    await type('   ')
+    await clickAway()
+    expect(saveAllDay).not.toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('istniejące wydarzenie ze zmienionym tytułem: zapis względem tego, co było', async () => {
+    const base = saved()
+    await card(base, base)
+    await type('Inaczej')
+    await clickAway()
+    expect(vi.mocked(saveAllDay).mock.calls[0]).toMatchObject([{ id: 'k1', title: 'Inaczej' }, { title: 'Konferencja' }])
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('istniejące wydarzenie bez zmian: zamyka bez zapisu', async () => {
+    const base = saved()
+    await card(base, base)
+    await clickAway()
+    expect(saveAllDay).not.toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('Esc odrzuca wpisany tytuł – nic się nie zapisuje', async () => {
+    await card(fresh(), null)
+    await type('Konferencja')
+    await act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(saveAllDay).not.toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('daty „do” przed „od”: karta zostaje i mówi, co nie tak – nic nie ginie po cichu', async () => {
+    await card(saved({ endDate: '2026-11-17' }), null)
+    await clickAway()
+    expect(saveAllDay).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(host!.querySelector('[data-testid="allday-dates-problem"]')).not.toBeNull()
+  })
+
+  it('klik w samą kartę nic nie zamyka ani nie zapisuje', async () => {
+    await card(fresh(), null)
+    await type('Konferencja')
+    await act(async () => void host!.querySelector('[data-testid="allday-card"]')!.dispatchEvent(new Event('pointerdown', { bubbles: true })))
+    expect(saveAllDay).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+  it('błędne daty: klik obok jest wstrzymany – nic pod nim się nie otwiera (inaczej nowa karta odmontowałaby tę i zmiany zginęłyby)', async () => {
+    reached.mockClear()
+    probe()
+    await card(saved({ endDate: '2026-11-17' }), null)
+    await press()
+    expect(reached).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('zapis, który pyta o „Wolne”: klik obok wstrzymany, pytanie zostaje w karcie; następny klik obok to „Nie” i idzie dalej', async () => {
+    reached.mockClear()
+    probe()
+    vi.mocked(askFreeDays).mockResolvedValueOnce(['2026-11-19'])
+    await card(saved({ free: true }), null)
+    await press()
+    expect(saveAllDay).toHaveBeenCalledTimes(1)
+    expect(host!.querySelector('[data-testid="allday-free-ask"]')).not.toBeNull()
+    expect(reached).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    await press()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(reached).toHaveBeenCalled()
+  })
+
+  it('dymek (role=status) i prawy przycisk to nie „klik obok”', async () => {
+    await card(saved(), saved())
+    const toast = document.createElement('div')
+    toast.setAttribute('role', 'status')
+    document.body.append(toast)
+    await press({ target: toast })
+    await press({ button: 2 })
+    toast.remove()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(saveAllDay).not.toHaveBeenCalled()
+  })
+  it('zawieszony zapis nie zamraża okna (D72): pierwszy klik obok czeka, drugi zamyka kartę', async () => {
+    reached.mockClear()
+    probe()
+    vi.mocked(saveAllDay).mockImplementationOnce(() => new Promise(() => undefined))
+    await card(saved(), null)
+    await act(async () => host!.querySelector<HTMLElement>('[data-testid="allday-save"]')!.click())
+    reached.mockClear() // the click on „Zapisz” itself bubbles to the probe
+    await press()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(reached).not.toHaveBeenCalled()
+    await press()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(reached).toHaveBeenCalled()
+  })
+
+  it('w trakcie „Tak” na pytanie „Wolne” klik obok nie zamyka karty od razu (pytanie nie ginie), kolejny zamyka', async () => {
+    vi.mocked(askFreeDays).mockResolvedValueOnce(['2026-11-19'])
+    vi.mocked(setFreeDays).mockImplementationOnce(() => new Promise(() => undefined))
+    await card(saved({ free: true }), null)
+    await act(async () => host!.querySelector<HTMLElement>('[data-testid="allday-save"]')!.click())
+    await act(async () => host!.querySelector<HTMLElement>('[data-testid="allday-free-yes"]')!.click())
+    await press()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(host!.querySelector('[data-testid="allday-free-ask"]')).not.toBeNull()
+    await press()
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+  /** The save of the card that waits until `finish` is called (a folder that answers late). */
+  const slowSave = () => {
+    let finish!: (v: AllDayEvent | null) => void
+    vi.mocked(saveAllDay).mockImplementationOnce(() => new Promise((r) => (finish = r)))
+    return (v: AllDayEvent | null) => finish(v)
+  }
+  const pressSave = () => act(async () => host!.querySelector<HTMLElement>('[data-testid="allday-save"]')!.click())
+
+  it('zapis, który kończy się po zamknięciu karty, nie zamyka karty otwartej w międzyczasie (stare onClose po odmontowaniu)', async () => {
+    const finish = slowSave()
+    await card(saved(), null)
+    await pressSave()
+    await press()
+    await press()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    // The window now shows another card (its seq is new); the old card is gone with its pending save.
+    act(() => root!.unmount())
+    await act(async () => finish(saved()))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('w trakcie zapisu pola karty są tylko do odczytu (nic nie da się dopisać po „Zapisz”)', async () => {
+    useData.setState({ rd: rdFrom({ calendars: [{ id: 'praca', name: 'Praca', order: 1 }] }) })
+    const finish = slowSave()
+    await card(saved(), null)
+    const q = (id: string) => host!.querySelector<HTMLInputElement>(`[data-testid="${id}"]`)!
+    expect(q('allday-title').readOnly).toBe(false)
+    await pressSave()
+    expect(q('allday-title').readOnly).toBe(true)
+    expect(q('allday-start').readOnly).toBe(true)
+    expect(q('allday-end').readOnly).toBe(true)
+    expect(q('allday-free').disabled).toBe(true)
+    expect(q('allday-calendar').disabled).toBe(true)
+    expect(q('allday-color-teal').disabled).toBe(true)
+    expect(host!.querySelector('[contenteditable="true"]')).toBeNull()
+    await act(async () => finish(saved()))
+    expect(q('allday-title').readOnly).toBe(false)
+  })
+
+  it('drugi klik obok w trakcie zapisu zamyka kartę i nie woła drugiego zapisu', async () => {
+    slowSave()
+    await card(saved(), null)
+    await pressSave()
+    await press()
+    await press()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(saveAllDay).toHaveBeenCalledTimes(1)
+  })
+
+  it('wstrzymanie zeruje się po zapisie, który skończył się od razu: następny zawieszony zapis znów wstrzymuje pierwszy klik', async () => {
+    await card(saved({ free: true }), null)
+    // The click that starts a save (it asks nothing here: no days) ends in the same tick; the card stays in this harness.
+    await press()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    slowSave()
+    await pressSave()
+    reached.mockClear()
+    probe()
+    await press()
+    expect(reached).not.toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('klik, który sam zaczął zapis z pytaniem „Wolne”, zużywa wstrzymanie: następny klik w trakcie zapisu zamyka kartę', async () => {
+    reached.mockClear()
+    probe()
+    slowSave()
+    await card(saved({ free: true }), null)
+    await press()
+    expect(onClose).not.toHaveBeenCalled()
+    reached.mockClear()
+    await press()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(reached).toHaveBeenCalled()
+  })
+})

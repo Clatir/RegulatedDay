@@ -1,21 +1,27 @@
 /**
  * A subcategory in „Kategorie” (D510): the row it always had – name, class, cost, „więcej” (its category, place, colour, calendar, the
- * properties the rules read, „Usuń” = the archive) – and under „więcej” its variants (`VariantRows`). Name, colour, category and archive apply
+ * properties the rules read, „Usuń” = the archive; one whose addition still waits for its date goes whole – `removeSubcategory`, T2353) –
+ * and under „więcej” its variants (`VariantRows`). Name, colour, category and archive apply
  * at once (rd.json), class, cost, place and properties are dated settings (`save`).
  */
+import { plDate } from '@shared/format'
 import type { CategoryRules } from '@shared/model/categories'
 import { calendarOfCategory, setCategoryCalendarRaw } from '@shared/model/calendars'
 import { groupOfCategory, setCategoryGroupRaw, type CategoryGroup } from '@shared/model/categoryTree'
 import type { RdFile } from '@shared/model/rd'
 import type { RulesSettings } from '@shared/model/settings'
+import { plannedAddition } from '@shared/model/settingsWithdraw'
 import { blockFill } from '@shared/theme'
 import { Choice, TextField } from '../../components/fields'
 import { Toggle, cx } from '../../components/ui'
+import { useBusy } from '../../lib/busy'
+import { useData } from '../../store/data'
 import { useMachine } from '../../store/machine'
 import { CLASS_NAMES, blockColor } from '../plan/blockView'
 import { saveCalendars } from './calendarEdits'
 import { ColorSwatches, CostNumbers, FLAGS, PLACE_OPTIONS, setMeta } from './categoryFields'
 import { saveTree } from './categoryTreeEdits'
+import { removeSubcategory } from './plannedWithdraw'
 import { VariantRows } from './VariantRows'
 
 export function CategoryRow({
@@ -43,6 +49,10 @@ export function CategoryRow({
   const brightness = useMachine((x) => x.prefs.brightness)
   const meta = rd.categories[id]
   const color = blockColor(id, { rd, settings })
+  const today = useData((x) => x.view?.today ?? '')
+  const [removing, run] = useBusy()
+  // Its addition still waits for its date (T2353): „Usuń” takes it whole, not to the archive – said on the button.
+  const added = open && !meta?.archived && today ? plannedAddition(id, rd.settings, today) : null
   // Its category as rd.json has it, also one in the archive (T1423): without the archive the row stands in „Inne”, but the list says where the
   // file puts it – „Inne” chosen writes the move, so bringing the category back does not take the subcategory with it.
   const groupId = groupOfCategory(rd, id, { archived: true })
@@ -94,8 +104,14 @@ export function CategoryRow({
             ))}
           </div>
           <VariantRows categoryId={id} rules={c} showArchived={showArchived} />
-          <button type="button" className="self-start text-[12px] text-muted hover:text-fg" onClick={() => void setMeta(id, { archived: !meta?.archived })} data-testid={meta?.archived ? 'category-restore' : 'category-remove'}>
-            {meta?.archived ? 'Przywróć z archiwum' : 'Usuń podkategorię (znika z wyboru, zostaje w historii)'}
+          <button
+            type="button"
+            className="self-start text-[12px] text-muted hover:text-fg"
+            disabled={removing}
+            onClick={() => void run(async () => void (meta?.archived ? await setMeta(id, { archived: false }) : await removeSubcategory(id)))}
+            data-testid={meta?.archived ? 'category-restore' : 'category-remove'}
+          >
+            {meta?.archived ? 'Przywróć z archiwum' : added ? `Usuń podkategorię (dodana od ${plDate(added.from)}, jeszcze nie obowiązuje – znika całkiem)` : 'Usuń podkategorię (znika z wyboru, zostaje w historii)'}
           </button>
         </div>
       )}

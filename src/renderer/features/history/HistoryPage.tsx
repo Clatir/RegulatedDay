@@ -5,22 +5,25 @@
  * (never keys, ids, UTC or milliseconds), and „Przywróć” makes it the record again (an edit: the version replaced goes to
  * the history too).
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { HistoryRecord, HistoryVersion } from '@shared/api'
 import { diffRecords } from '@shared/data/merge'
-import { countLabel, plDate } from '@shared/format'
+import { countLabel, plDate, plDateTime } from '@shared/format'
 import { personName } from '@shared/model/rd'
 import { settingsOn } from '@shared/model/settings'
+import { fold } from '@shared/search'
 import { SERIES_MARK } from '@shared/seriesText'
+import { FilterBar, useFilters, type FilterOption } from '../../components/FilterBar'
 import { EmptyState, cx } from '../../components/ui'
 import { fieldText, keyOf, valueText } from '../../lib/recordText'
 import { useBusy } from '../../lib/busy'
 import { rawRecord, reloadData, useData } from '../../store/data'
-import { toast } from '../../store/ui'
+import { closeToast, takePick, takeFoundPick, toast, useUi } from '../../store/ui'
 import { blockName } from '../plan/blockView'
 import { seriesBlockOf } from '../series/seriesForm'
 
 const KIND_NAMES: Record<string, string> = { settings: 'Ustawienia', template: 'Szablony', series: 'Serie', schedule: 'Plan wykładów', day: 'Plany dni', request: 'Sprawy', routine: 'Rutyny', allDay: 'Wydarzenia', attachment: 'Załączniki' }
+const READ_FAILED_TEXT = 'Nie udało się odczytać historii – spróbuj za chwilę.'
 const REASONS: Record<string, string> = { edit: 'przed edycją', delete: 'przed usunięciem', merge: 'przed scaleniem', conflict: 'wersja z konfliktu', restore: 'przed przywróceniem' }
 
 /** The record chosen, by its key, from the list as it is now – after „Przywróć” no longer „usunięty” (A7-10). */
@@ -32,19 +35,71 @@ export function HistoryPage() {
   const [chosen, setChosen] = useState<string | null>(null)
   const selected = chosenRecord(records, chosen)
   const stamp = useData((s) => s.stamp)
+  const nameOf = useRecordName()
+  // UX18 (E7): the kinds to show (`FilterBar`, remembered on this computer) and the words searched in a record's name and kind.
+  const [chosenKinds, setChosenKinds] = useFilters('history')
+  const [query, setQuery] = useState('')
+  // A read that fails is no „empty” history and no „no versions”: said as it is (UX18) – the screen and a message – and a record picked waits for nothing.
+  const [failed, setFailed] = useState(false)
+  const failedToast = useRef<number | null>(null)
   useEffect(() => {
-    void window.rd.historyList().then(setRecords).catch(() => setRecords([]))
+    void window.rd
+      .historyList()
+      .then((r) => {
+        if (failedToast.current != null) closeToast(failedToast.current)
+        failedToast.current = null
+        setFailed(false)
+        setRecords(r)
+      })
+      .catch(() => {
+        takePick((x) => x.kind === 'history')
+        failedToast.current = toast(READ_FAILED_TEXT, 'error')
+        setFailed(true)
+      })
   }, [stamp])
-  if (!records) return <div className="p-6 text-muted">Czytam historię…</div>
+  // A record picked by a message („Historia” by a broken file, UX3, A9; „Historia” beside a record, UX18): chosen once the list is read; one without
+  // versions – said, never left waiting. The filters and the search are cleared then: the record chosen is never hidden by them.
+  const pick = useUi((s) => s.pick)
+  useEffect(() => {
+    if (!records) return
+    const p = takeFoundPick((x) => x.kind === 'history', (x) => !!chosenRecord(records, x.id), 'Ten rekord nie ma jeszcze wersji w historii.')
+    if (!p) return
+    setChosen(p.id)
+    if (chosenKinds.length) setChosenKinds([])
+    setQuery('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `setChosenKinds` is a new function at every render; only a new pick or list matters
+  }, [pick, records])
+  if (!records) return failed ? <EmptyState why={READ_FAILED_TEXT} /> : <div className="p-6 text-muted">Czytam historię…</div>
   if (!records.length) return <EmptyState why="Historia jest pusta: wersje zapisują się, gdy zmieniasz albo usuwasz plan, szablon, sprawę, rutynę czy ustawienia." />
-  const kinds = [...new Set(records.map((r) => r.kind))].filter((k) => KIND_NAMES[k])
+  // Only the records the list has a name for (the counter, the filters and the list say the same); a day is found by its ISO date too.
+  const known = records.filter((r) => KIND_NAMES[r.kind])
+  const kinds = [...new Set(known.map((r) => r.kind))]
+  const words = fold(query.trim()).text.split(/\s+/).filter(Boolean)
+  const found = words.length
+    ? known.filter((r) => {
+        const text = fold(r.kind === 'day' ? `${nameOf(r)} ${r.id}` : nameOf(r)).text
+        return words.every((w) => text.includes(w))
+      })
+    : known
+  const options: FilterOption[] = kinds.map((k) => ({ id: k, label: KIND_NAMES[k]!, count: found.filter((r) => r.kind === k).length }))
+  const active = chosenKinds.filter((k) => kinds.includes(k))
+  const shown = active.length ? found.filter((r) => active.includes(r.kind)) : found
   return (
     <div className="flex min-h-0 flex-1" data-testid="history">
       <div className="flex w-[300px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-line p-3">
-        {kinds.map((k) => (
+        <input type="search" className="input" value={query} placeholder="Szukaj w historii" aria-label="Szukaj w historii" onChange={(e) => setQuery(e.currentTarget.value)} data-testid="history-search" />
+        <FilterBar listKey="history" options={options} shown={shown.length} total={known.length} />
+        {!shown.length && (
+          <p className="text-[12.5px] text-muted" data-testid="history-none">
+            Nic nie pasuje – zmień szukane słowa albo wyczyść filtry.
+          </p>
+        )}
+        {kinds
+          .filter((k) => shown.some((r) => r.kind === k))
+          .map((k) => (
           <div key={k} className="flex flex-col gap-1">
             <span className="text-[11.5px] text-muted">{KIND_NAMES[k]}</span>
-            {records
+            {shown
               .filter((r) => r.kind === k)
               .map((r) => (
                 <button
@@ -54,9 +109,9 @@ export function HistoryPage() {
                   className={cx('flex flex-col rounded border px-2.5 py-1.5 text-left', selected?.id === r.id && selected.kind === r.kind ? 'border-lamp bg-lamp-soft' : 'border-line hover:bg-hover')}
                   data-testid="history-record"
                 >
-                  <RecordName r={r} />
+                  <span>{nameOf(r)}</span>
                   <span className="text-[11.5px] text-muted">
-                    {countLabel(r.versions, 'wersja', 'wersje', 'wersji')} · {new Date(r.last).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', dateStyle: 'short', timeStyle: 'short' })}
+                    {countLabel(r.versions, 'wersja', 'wersje', 'wersji')} · {plDateTime(r.last)}
                     {r.exists ? '' : ' · usunięty'}
                   </span>
                 </button>
@@ -69,27 +124,30 @@ export function HistoryPage() {
   )
 }
 
-function RecordName({ r }: { r: HistoryRecord }) {
+/** The names of the records as the list shows them – also what the search looks in: a function over the data as it is now. */
+function useRecordName(): (r: HistoryRecord) => string {
   const { templates, requests, routines, lectures, series, allDay, attachments, rd } = useData()
   const today = useData((s) => s.view?.today ?? '')
-  if (r.kind === 'settings') return <span>Ustawienia wspólne</span>
-  if (r.kind === 'day') return <span>Plan dnia {plDate(r.id)}</span>
-  if (r.kind === 'template') return <span>{templates.find((t) => t.id === r.id)?.name ?? 'Szablon'}</span>
-  if (r.kind === 'series') {
-    const s = series.find((t) => t.id === r.id)
-    // The series by its block's name, as the list in „Szablony” has it.
-    return <span>{s ? `${SERIES_MARK} ${blockName(seriesBlockOf(s, today), { rd, settings: settingsOn(rd.settings, today), routines, requests })}` : 'Seria'}</span>
+  return (r) => {
+    if (r.kind === 'settings') return 'Ustawienia wspólne'
+    if (r.kind === 'day') return `Plan dnia ${plDate(r.id)}`
+    if (r.kind === 'template') return templates.find((t) => t.id === r.id)?.name ?? 'Szablon'
+    if (r.kind === 'series') {
+      const s = series.find((t) => t.id === r.id)
+      // The series by its block's name, as the list in „Szablony” has it.
+      return s ? `${SERIES_MARK} ${blockName(seriesBlockOf(s, today), { rd, settings: settingsOn(rd.settings, today), routines, requests })}` : 'Seria'
+    }
+    if (r.kind === 'routine') return routines.find((t) => t.id === r.id)?.name ?? 'Rutyna'
+    if (r.kind === 'allDay') return allDay.find((t) => t.id === r.id)?.title ?? 'Wydarzenie'
+    if (r.kind === 'attachment') return attachments.find((t) => t.id === r.id)?.name ?? 'Załącznik'
+    if (r.kind === 'schedule') return lectures.find((t) => t.id === r.id)?.name || 'Wykład'
+    if (r.kind === 'request') {
+      const q = requests.find((t) => t.id === r.id)
+      // A task by its title, a request by its person and note (D383).
+      return q ? (q.kind === 'task' ? `Zadanie: ${q.title}` : `Prośba: ${personName(rd, q.person)}${q.note ? ` – ${q.note}` : ''}`) : 'Sprawa'
+    }
+    return 'Rekord'
   }
-  if (r.kind === 'routine') return <span>{routines.find((t) => t.id === r.id)?.name ?? 'Rutyna'}</span>
-  if (r.kind === 'allDay') return <span>{allDay.find((t) => t.id === r.id)?.title ?? 'Wydarzenie'}</span>
-  if (r.kind === 'attachment') return <span>{attachments.find((t) => t.id === r.id)?.name ?? 'Załącznik'}</span>
-  if (r.kind === 'schedule') return <span>{lectures.find((t) => t.id === r.id)?.name || 'Wykład'}</span>
-  if (r.kind === 'request') {
-    const q = requests.find((t) => t.id === r.id)
-    // A task by its title, a request by its person and note (D383).
-    return <span>{q ? (q.kind === 'task' ? `Zadanie: ${q.title}` : `Prośba: ${personName(rd, q.person)}${q.note ? ` – ${q.note}` : ''}`) : 'Sprawa'}</span>
-  }
-  return <span>Rekord</span>
 }
 
 function Versions({ r }: { r: HistoryRecord }) {
@@ -157,7 +215,7 @@ function Versions({ r }: { r: HistoryRecord }) {
         return (
           <div key={v.file} className="flex flex-col gap-1.5 rounded border border-line bg-panel p-3 text-[12.5px]" data-testid="history-version">
             <div className="flex items-center gap-2">
-              <span className="font-medium">{new Date(v.savedAt).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', dateStyle: 'medium', timeStyle: 'short' })}</span>
+              <span className="font-medium">{plDateTime(v.savedAt)}</span>
               <span className="text-muted">
                 {REASONS[v.reason] ?? 'wersja'} · {computer(v.savedBy)}
               </span>

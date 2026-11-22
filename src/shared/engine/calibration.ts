@@ -19,6 +19,7 @@ import { anchorEffect } from './energy'
 import { OPEN, ranMinutes } from './facts'
 import { blockEvidence } from './game'
 import { idxOf } from './grid'
+import { liveEnergyEvent } from './clickUndo'
 
 export const CALIBRATION_DAYS = 14
 export const CALIBRATION_MAX_DAYS = 28
@@ -138,7 +139,7 @@ export function costsOfKey(settings: RulesSettings, key: string): Costs | null {
 export function costEvidence(ctx: DayContext, state: DayState, energyOn: boolean): CostEvidence | null {
   if (!energyOn) return null
   const g = state.grid
-  const events = ctx.events.filter((e): e is EnergyEvent & AnyEvent => isKnown(e) && e.dom === 'energy').sort(compareEvents)
+  const events = ctx.events.filter((e): e is EnergyEvent & AnyEvent => isKnown(e) && e.dom === 'energy' && liveEnergyEvent(e, state.facts.undone)).sort(compareEvents)
   const checkins = events.filter((e) => e.k === 'energy.checkin').map((e) => idxOf(g, e.at))
   if (!checkins.length) return null
   const from = Math.min(...checkins)

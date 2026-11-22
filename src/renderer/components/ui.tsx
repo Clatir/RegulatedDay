@@ -5,31 +5,61 @@
  */
 import type { ReactNode } from 'react'
 import { ofLabel } from '@shared/format'
+import { FIELD_TERMS } from '../features/help/glossary'
+import { FIELD_HINTS } from '../lib/fieldHints'
+import { HelpMark } from './HelpMark'
+
+/**
+ * The width of the panel at the right of the axis (D9): „Dziś” beside the plan (the side panel and the block's panel) and „Szablony”
+ * (the block's panel) – one width, so the axis does not jump when a block is opened. A whole class: Tailwind reads it here.
+ */
+export const SIDE_PANEL_WIDTH = 'w-[320px]'
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')
 }
 
-export function Field({ label, children, hint, labelWidth = 180 }: { label: ReactNode; children: ReactNode; hint?: ReactNode; labelWidth?: number }) {
+/**
+ * The row of a field; the `data-testid` of the settings' fields is the id the search of the settings and Ctrl K scroll to (UX14).
+ * Its description (UX15, E3) is the `hint` given or, without one, the table `FIELD_HINTS` by that id – marked `data-hint`, which
+ * the test of the page looks for; a field with a concept of „Jak to działa” (`FIELD_TERMS`) has a „?” after its label.
+ */
+export function Field({ label, children, hint, labelWidth = 180, ...rest }: { label: ReactNode; children: ReactNode; hint?: ReactNode; labelWidth?: number; 'data-testid'?: string }) {
+  const id = rest['data-testid']
+  const term = id ? FIELD_TERMS[id] : undefined
+  const text = hint ?? (id ? FIELD_HINTS[id] : undefined)
   return (
-    <div className="grid items-center gap-x-3 gap-y-0.5" style={{ gridTemplateColumns: `${labelWidth}px minmax(0,1fr)` }}>
-      <span className="text-[12.5px] leading-snug text-muted">{label}</span>
+    <div className="grid items-center gap-x-3 gap-y-0.5" data-testid={id} style={{ gridTemplateColumns: `${labelWidth}px minmax(0,1fr)` }}>
+      <span className="text-[12.5px] leading-snug text-muted">
+        {label}
+        {term && <HelpMark term={term} />}
+      </span>
       <div className="min-w-0">{children}</div>
-      {hint && <div className="col-start-2 text-[12px] leading-snug text-muted">{hint}</div>}
+      {text && (
+        <div className="col-start-2 text-[12px] leading-snug text-muted" data-hint="">
+          {text}
+        </div>
+      )}
     </div>
   )
 }
 
-export function Toggle({ checked, onChange, label, disabled, ...rest }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; disabled?: boolean; 'data-testid'?: string }) {
+/**
+ * A switch. `once`: the second click of a double click does nothing (C8) – for a switch whose first click changes what it shows
+ * from elsewhere (the main process), so the second would undo it; a key (detail 0) always acts.
+ * `aria-label`: the name of the switch when its visible label is only its state („tak / nie”, „włączony”).
+ */
+export function Toggle({ checked, onChange, label, disabled, once, ...rest }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; disabled?: boolean; once?: boolean; 'data-testid'?: string; 'aria-label'?: string }) {
   return (
     <label className={cx('inline-flex cursor-default items-center gap-2', disabled && 'opacity-50')}>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={rest['aria-label']}
         disabled={disabled}
         data-testid={rest['data-testid']}
-        onClick={() => onChange(!checked)}
+        onClick={(e) => (!once || e.detail <= 1) && onChange(!checked)}
         className={cx('relative h-[18px] w-[32px] rounded-full border transition-colors duration-150', checked ? 'border-lamp bg-lamp-soft' : 'border-line-strong bg-bg')}
       >
         <span className={cx('absolute top-[3px] h-[10px] w-[10px] rounded-full transition-all duration-150', checked ? 'left-[17px] bg-lamp' : 'left-[3px] bg-muted')} />
@@ -109,10 +139,22 @@ export function EmptyState({ why, action, ...rest }: { why: ReactNode; action?: 
   )
 }
 
-export function Section({ title, children, ...rest }: { title: ReactNode; children: ReactNode; 'data-testid'?: string }) {
+/** The mark of a section of the settings whose changes work at once, without a date (UX14, E2). */
+export function NowTag() {
   return (
-    <section className="rounded-lg border border-line bg-panel" data-testid={rest['data-testid']}>
-      <h2 className="border-b border-line px-4 py-2.5 text-[13px] font-medium text-fg">{title}</h2>
+    <span className="rounded border border-line px-1.5 text-[11px] font-normal text-muted" title="Zmiana działa od razu, bez daty." data-testid="now-tag">
+      od razu
+    </span>
+  )
+}
+
+export function Section({ title, tag, children, ...rest }: { title: ReactNode; tag?: ReactNode; children: ReactNode; 'data-testid'?: string }) {
+  return (
+    <section className="scroll-mt-[4.5rem] rounded-lg border border-line bg-panel" data-testid={rest['data-testid']}>
+      <h2 className="flex items-center gap-2 border-b border-line px-4 py-2.5 text-[13px] font-medium text-fg">
+        {title}
+        {tag}
+      </h2>
       <div className="flex flex-col gap-3 px-4 py-3">{children}</div>
     </section>
   )

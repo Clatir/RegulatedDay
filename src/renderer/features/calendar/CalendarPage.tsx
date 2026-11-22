@@ -8,7 +8,7 @@
  * „Wczytaj PDF zjazdów” (D357) reads a schedule into a preview you correct; only „Zapisz” writes the days, its toast has
  * „Cofnij”.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { groupCount, groupLineText } from '@shared/groupText'
 import type { RawRecord, ZjazdSaveResult, ZjazdUndoDay } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
@@ -19,10 +19,10 @@ import { zjazdTypeRaw } from '@shared/import/zjazdDay'
 import { paths } from '@shared/data/paths'
 import { sessionShiftMin, sessionWindow } from '@shared/engine/createDay'
 import { knownSessionDefs } from '@shared/model/templateSessions'
-import { logicalClock } from '@shared/format'
+import { logicalClock, plDate } from '@shared/format'
 import type { ZjazdDay } from '@shared/import/zjazdy'
 import { eventsOn } from '@shared/model/allDay'
-import { dayFileFrom } from '@shared/model/plan'
+import { dayFileFrom, type Template } from '@shared/model/plan'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn, type DayTypeId } from '@shared/model/settings'
 import { blockFill } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
@@ -41,13 +41,21 @@ import { showGroupLine } from '../../store/groupLine'
 import { movedDay, type WeekPushedDay } from '../../store/weekPush'
 import { useMonthView } from '../../store/horizon'
 import { useMachine } from '../../store/machine'
-import { openDay, toast, undoToast } from '../../store/ui'
+import { openDay, setBlockDraft, setMemory, toast, undoToast, useUi } from '../../store/ui'
+import { useNewShortcut } from '../../lib/escape'
+import { usePeriodKeys } from '../../lib/periodKeys'
+import { NewBlockPopover } from '../week/NewBlockPopover'
+import { NEW_BLOCK_WIDTH, popoverPlace } from '../week/weekLayout'
+import { dayWakeMin, freeHourStart, newBlockDay, NO_NEW_DAY_TEXT, type BusySpan } from '../week/weekNew'
+import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
+import { logicalMinuteOf } from '@shared/time/day'
 import { setWakeOnDays } from '../today/dayActions'
 import { DAY_TYPE_COLORS, holidayMarks } from './dayTypes'
 import { emptyMonthDay, monthCellView, visibleMonthDay } from './monthCellView'
 import { gridDates, MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from './MonthGrid'
 import { questionsText, savedText, skippedLines, undoneText, unchangedText } from './zjazdyDraft'
 import { undoDayEdits } from './dayGroup'
+import { useApplyFlow } from '../templates/ApplyTemplate'
 import { dayMenu, type MenuDay } from './dayMenu'
 import { runInTurn } from './zjazdyRun'
 import { closeZjazdy, keepZjazdy, openZjazdy, useZjazdy } from './zjazdyStore'
@@ -67,9 +75,18 @@ export function CalendarPage() {
   const { rd, seriesPlans, stamp, routines, requests, templates } = useData()
   const today = useData((s) => s.view?.today ?? '')
   const brightness = useMachine((s) => s.prefs.brightness)
-  const [month, setMonth] = useState(monthOf(today))
+  // The month is the session's (D2, UX8: `useUi.memory` – coming back from a day of „Dziś” finds it); null – the current one.
+  const thisMonth = monthOf(today)
+  const month = useUi((s) => s.memory.month) ?? thisMonth
+  const setMonth = (m: string) => setMemory({ month: m === thisMonth ? null : m })
   const [files, setFiles] = useState<Record<string, RawRecord | null>>({})
   const importing = useZjazdy((s) => s.preview != null)
+  // The small window of a new block (Ctrl+N, below): while it is open the keys of the month wait.
+  // The blocks of a day outside the month's view are being read for the window (Ctrl+N, below): the keys of the month wait for the answer too.
+  const [asking, setAsking] = useState(false)
+  const [fresh, setFresh] = useState<{ seq: number; date: string; startMin: number; place: { left: number; top: number } } | null>(null)
+  // PgUp / PgDn / Home (D6, P8): the month before, the next, the current one.
+  usePeriodKeys({ prev: () => setMonth(shiftMonth(month, -1)), next: () => setMonth(shiftMonth(month, 1)), today: () => setMonth(thisMonth) }, !importing && !fresh && !asking)
   const [wake, setWake] = useState<number | null>(null)
   const dates = useMemo(() => gridDates(month), [month])
   // The selection of days (D527): kept across months (a day of another month stays selected), Ctrl+A takes the days of the month shown.
@@ -115,7 +132,51 @@ export function CalendarPage() {
     }
   }, [dates, stamp])
   const fileOf = (d: string) => (files[d] ? dayFileFrom(files[d], d) : null)
-  const [busy, run] = useBusy()
+  const [saving, run] = useBusy()
+  // UX19 (P28): „Zastosuj szablon ▸” of the menu – the flow of „Zastosuj do…” (its windows stand here, the menu is gone by then).
+  const apply = useApplyFlow()
+  const busy = saving || apply.busy
+  // Ctrl+N (D6, P9): the small window of a new block today – or on the first day of the grid from today – at the nearest free hour, beside its cell.
+  const root = useRef<HTMLDivElement>(null)
+  const freshSeq = useRef(0)
+  const askSeq = useRef(0)
+  // What the screen shows now – an answer that comes late looks at it (the month moved by a button, an import opened).
+  const shown = useRef({ month, importing })
+  useLayoutEffect(() => {
+    shown.current = { month, importing }
+  })
+  useNewShortcut(() => {
+    if (importing || fresh || asking) return
+    // Today when it is on the grid (also in a neighbouring month's cells); else the first day of the month shown from today (the other days of the grid have events only).
+    const date = dates.includes(today) ? today : newBlockDay(monthDates, today)
+    if (!date) return void toast(NO_NEW_DAY_TEXT)
+    const open = (blocks: readonly BusySpan[]) => {
+      const own = fileOf(date)
+      const wakeMin = dayWakeMin(settingsOn(rd.settings, date), date, { wakeMin: own?.wakeMin ?? null, dayType: own?.dayType ?? null })
+      const startMin = freeHourStart(blocks, { isToday: date === today, nowMin: logicalMinuteOf(date, Date.now()), wakeMin }, DEFAULT_NEW_BLOCK_MIN)
+      const box = root.current?.getBoundingClientRect()
+      const at = root.current?.querySelector(`[data-testid="day-${date}"]`)?.getBoundingClientRect()
+      const place = box && at ? popoverPlace({ gridWidth: box.width, colLeft: at.left - box.left, colRight: at.right - box.left, top: at.top - box.top, width: NEW_BLOCK_WIDTH }) : { left: 0, top: 0 }
+      setFresh({ seq: ++freshSeq.current, date, startMin, place })
+    }
+    // The blocks as counted for the month (before the calendar filter); a day of another month is not in that view – its blocks are read as the week's are.
+    const known = monthView?.days.find((d) => d.date === date)?.blocks
+    if (known) return open(known)
+    const seq = ++askSeq.current
+    const asked = month
+    setAsking(true)
+    // `Promise.resolve().then`: a call that throws at once is a failed read too (no blocks), never a wait that does not end.
+    void Promise.resolve()
+      .then(() => window.rd.daysView([date], { energy: false }))
+      .then((v) => v.days[0]?.blocks ?? [])
+      .catch((): BusySpan[] => [])
+      .then((blocks) => {
+        setAsking(false)
+        // The month moved on (the button), an import opened, the page left: the day is not on the screen – no window for it.
+        if (root.current && seq === askSeq.current && shown.current.month === asked && !shown.current.importing) open(blocks)
+      })
+  })
+  const namesOf = (d: string) => ({ rd, settings: settingsOn(rd.settings, d), routines, requests })
   /** The menu opens once the files of its days are known: the ✓ and „—” are of the days as they are, whichever month they are in. */
   const openMenu = (ids: readonly string[], at: { x: number; y: number }) => {
     const asked = ++menuAsked.current
@@ -189,8 +250,20 @@ export function CalendarPage() {
     // Two days or more changed: the line of the group with its „Cofnij” (D529) – the days left out counted with their reasons.
     if (isSaved(out) && days.length >= 2) showGroupLine('calendar', { text: groupLineText({ n: days.length, kind: 'day', skipped: all.filter((d) => d <= today).map((d) => (d === today ? 'dzisiejszy' : 'miniony')) }), undo: () => undoDayEdits(days) })
     else said()
+    // One day: no line of a group, the toast with its „Cofnij” instead (D563 – the same `undoDayEdits`: the type back and the classes of a „zjazd” the change took away).
+    if (isSaved(out) && days.length === 1) undoToast(`Typ dnia ${plDate(days[0]!.date)}: ${t ? DAY_TYPE_NAMES[t] : 'z tygodnia'}`, () => void undoOneDay(days))
     if (!isSaved(out)) return
     selection.clear()
+  }
+
+  /** „Cofnij” of the toast of one day's type: what stayed (changed since) is said as the line of a group says it; a write that failed says so. */
+  const undoOneDay = async (days: readonly WeekPushedDay[]) => {
+    try {
+      const kept = await undoDayEdits(days)
+      if (kept) toast(kept, 'info', 6000)
+    } catch {
+      toast('Nie cofnięto – zapis się nie udał.', 'error', 8000)
+    }
   }
 
   const setWakeOf = async (v: number | null, from: readonly string[] = selection.selected) => {
@@ -201,9 +274,19 @@ export function CalendarPage() {
   }
 
   // The actions of the menu are always the page's latest (the items live in a memo).
-  const actions = useRef({ setType, setWakeOf })
-  actions.current = { setType, setWakeOf }
-  const menuActions = useMemo(() => ({ setType: (t: DayTypeId | null, ids: readonly string[]) => void actions.current.setType(t, ids), setWake: (v: number | null, ids: readonly string[]) => void actions.current.setWakeOf(v, ids) }), [])
+  // UX19: after the template is really written (not when a window of the flow opens) the days are done with, as after „Typ dnia” – but only while the
+  // selection is still those very days (a window that stood open may have seen it changed).
+  const latestSelection = useRef(selection)
+  latestSelection.current = selection
+  const applyTo = (t: Template, ids: readonly string[]) =>
+    apply.start(t, ids, () => {
+      const now = latestSelection.current
+      const same = now.selected.length === ids.length && ids.every((d) => now.isSelected(d))
+      if (same) now.clear()
+    })
+  const actions = useRef({ setType, setWakeOf, apply: applyTo })
+  actions.current = { setType, setWakeOf, apply: applyTo }
+  const menuActions = useMemo(() => ({ setType: (t: DayTypeId | null, ids: readonly string[]) => void actions.current.setType(t, ids), setWake: (v: number | null, ids: readonly string[]) => void actions.current.setWakeOf(v, ids), applyTemplate: (t: Template, ids: readonly string[]) => void actions.current.apply(t, ids) }), [])
   /** What each day of the menu is, from the grid's files and the ones read for the menu – once per change, not per item. */
   const menuDays = useMemo(() => {
     if (!menu) return null
@@ -215,7 +298,7 @@ export function CalendarPage() {
       })
     )
   }, [menu, files, rd])
-  const menuEntries = useMemo(() => (menu && menuDays ? dayMenu(menu.dates, menuDays, today, busy, menuActions) : null), [menu, menuDays, today, busy, menuActions])
+  const menuEntries = useMemo(() => (menu && menuDays ? dayMenu(menu.dates, menuDays, today, busy, menuActions, templates) : null), [menu, menuDays, today, busy, menuActions, templates])
 
   /** „Wczytaj PDF zjazdów”: a file picked in the dialog of Windows, read into the preview; nothing is saved (D357). */
   const readPdf = () =>
@@ -276,7 +359,7 @@ export function CalendarPage() {
 
   const [y, m] = month.split('-')
   return (
-    <div className="flex flex-col gap-3 p-4" data-testid="calendar" data-counted={monthView ? 'true' : undefined}>
+    <div ref={root} className="relative flex flex-col gap-3 p-4" data-testid="calendar" data-counted={monthView ? 'true' : undefined}>
       {importing && <ZjazdyPreviewPanel busy={busy} onSave={(days) => void saveImport(days)} onCancel={closeZjazdy} />}
       {!importing && (
         <>
@@ -290,7 +373,8 @@ export function CalendarPage() {
             <button type="button" className="btn" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Następny miesiąc" data-testid="month-next">
               ›
             </button>
-            <button type="button" className="btn" onClick={() => setMonth(monthOf(today))}>
+            {/* One rule of „dziś” on every screen of periods (D6): always there, off where you already are. */}
+            <button type="button" className="btn" disabled={month === thisMonth} onClick={() => setMonth(thisMonth)} data-testid="month-today">
               Dziś
             </button>
             <button type="button" className="btn" disabled={busy} onClick={() => void readPdf()} data-testid="calendar-zjazdy">
@@ -351,7 +435,28 @@ export function CalendarPage() {
           </div>
         </>
       )}
+      {fresh && !importing && (
+        <NewBlockPopover
+          key={fresh.seq}
+          dates={[fresh.date]}
+          startMin={fresh.startMin}
+          durationMin={DEFAULT_NEW_BLOCK_MIN}
+          dragged={false}
+          today={today}
+          namesOf={namesOf}
+          place={fresh.place}
+          onClose={() => setFresh(null)}
+          onDates={() => undefined}
+          onMore={(block) => {
+            // The full editing of the day, the block not saved yet (the draft of „Dziś”, D461).
+            setBlockDraft(fresh.date, block, true)
+            setFresh(null)
+            openDay(fresh.date)
+          }}
+        />
+      )}
       {menu && menuEntries && <ContextMenu title={`Zmień ${groupCount(menu.dates.length, 'day')}`} at={menu.at} items={menuEntries} onClose={() => setMenu(null)} testId="calendar-menu" />}
+      {apply.dialogs}
     </div>
   )
 }

@@ -5,7 +5,7 @@
  * list (all-day events on top, blocks with hour, name, length, category; a day with nothing says „nic”; a click opens the day).
  * The hooks that count the views are the main process's – here they give a fixed answer.
  */
-import { act, createElement } from 'react'
+import { act, createElement, StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DataView } from '@shared/api'
@@ -15,7 +15,7 @@ import { weekStart } from '@shared/time/day'
 import { WeekPage } from '@renderer/features/week/WeekPage'
 import { useDaysView, useWeekView } from '@renderer/store/horizon'
 import { useData } from '@renderer/store/data'
-import { useUi } from '@renderer/store/ui'
+import { NO_MEMORY, useUi } from '@renderer/store/ui'
 
 vi.mock('@renderer/store/horizon', () => ({ useWeekView: vi.fn(), useDaysView: vi.fn(), useGoalsView: vi.fn(() => ({ view: null, failed: false })), useMonthView: vi.fn() }))
 
@@ -56,7 +56,7 @@ const click = async (id: string) => act(async () => q(id)!.click())
 beforeEach(() => {
   localStorage.clear()
   useData.setState({ view: { today: TODAY, allDay: [], computers: [] } as unknown as DataView, allDay: [] })
-  useUi.setState({ page: 'week', day: null, pick: null, toasts: [] })
+  useUi.setState({ page: 'week', day: null, pick: null, toasts: [], from: null, memory: NO_MEMORY })
   vi.mocked(useWeekView).mockImplementation((date) => {
     const week = weekStart(date)
     return { view: weekViewOf(week, TODAY, weekDates(week).map((d) => day(d, blocksOf(d)))), failed: false }
@@ -221,5 +221,81 @@ describe('„Agenda” (D418)', () => {
     await mountAgenda()
     expect(q('agenda-allday-e9')!.textContent).toContain('Urlop')
     expect(q('agenda-unknown-2026-11-19')!.textContent).toBe('nie da się teraz odczytać')
+  })
+})
+
+describe('oś przy otwarciu widoku (D563, P6)', () => {
+  /** The page in a box that scrolls; every write of its scroll position is counted. */
+  async function mountScrolling(): Promise<number[]> {
+    const writes: number[] = []
+    host = document.createElement('div')
+    host.style.overflowY = 'auto'
+    Object.defineProperty(host, 'scrollTop', { get: () => 0, set: (v: number) => void writes.push(v), configurable: true })
+    document.body.append(host)
+    root = createRoot(host)
+    // A wake on every day: the axis has something to be put by.
+    vi.mocked(useWeekView).mockImplementation((date) => {
+      const week = weekStart(date)
+      return { view: weekViewOf(week, TODAY, weekDates(week).map((d) => ({ ...day(d, blocksOf(d)), wakeMin: 8 * 60 }))), failed: false }
+    })
+    vi.mocked(useDaysView).mockImplementation((dates) => ({ view: daysViewOf(dates, TODAY, dates.map((d) => ({ ...day(d, blocksOf(d)), wakeMin: 8 * 60 }))), failed: false }))
+    await act(async () => root!.render(createElement(WeekPage)))
+    return writes
+  }
+
+  it('oś ustawia się raz na otwarcie widoku: nie przy strzałkach, ale po powrocie z Agendy i po zmianie widoku', async () => {
+    const writes = await mountScrolling()
+    expect(writes).toHaveLength(1)
+    await click('week-next')
+    await click('week-prev')
+    expect(writes).toHaveLength(1)
+    // „Agenda” has no axis; „Tydzień” again opens its axis anew.
+    await click('week-mode-agenda')
+    expect(writes).toHaveLength(1)
+    await click('week-mode-week')
+    expect(writes).toHaveLength(2)
+    // Another view with an axis: its own opening; its arrows leave it.
+    await click('week-mode-3days')
+    expect(writes).toHaveLength(3)
+    await click('three-next')
+    expect(writes).toHaveLength(3)
+  })
+
+  it('efekt uruchomiony dwa razy (StrictMode) albo zdjęty przed działaniem: śledzenie treści dalej działa, oś ustawia się znowu', async () => {
+    const live: Array<{ cb: () => void; disconnected: boolean }> = []
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        rec: { cb: () => void; disconnected: boolean } = { cb: () => undefined, disconnected: false }
+        constructor(cb: () => void) {
+          this.rec.cb = cb
+          live.push(this.rec)
+        }
+        observe(): void {}
+        disconnect(): void {
+          this.rec.disconnected = true
+        }
+      }
+    )
+    try {
+      const writes: number[] = []
+      host = document.createElement('div')
+      host.style.overflowY = 'auto'
+      Object.defineProperty(host, 'scrollTop', { get: () => 0, set: (v: number) => void writes.push(v), configurable: true })
+      document.body.append(host)
+      root = createRoot(host)
+      vi.mocked(useWeekView).mockImplementation((date) => {
+        const week = weekStart(date)
+        return { view: weekViewOf(week, TODAY, weekDates(week).map((d) => ({ ...day(d, blocksOf(d)), wakeMin: 8 * 60 }))), failed: false }
+      })
+      await act(async () => root!.render(createElement(StrictMode, null, createElement(WeekPage))))
+      // Both runs put the axis; the one that stays follows the content.
+      expect(writes).toHaveLength(2)
+      expect(live.at(-1)!.disconnected).toBe(false)
+      await act(async () => live.at(-1)!.cb())
+      expect(writes).toHaveLength(3)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

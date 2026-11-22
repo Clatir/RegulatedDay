@@ -26,6 +26,19 @@ import type { DayModel } from '../../store/day'
 import { blockColor, blockKind, blockMarks, blockName, type Names } from './blockView'
 import type { EnergyTrack, TimelineItem, TimelineMarker } from './Timeline'
 
+/**
+ * The lines of the boundary (approved – solid; else the proposal – dashed) and of the maximum. At the same hour they are one line with one
+ * label – „propozycja · maksimum 19:00” – instead of two labels over each other (D5 of the UX review). `lm`: the engine's minute on the axis.
+ */
+export function boundaryMarkers(b: { proposal: number | null; approved: number | null; max: number }, lm: (n: number) => number): TimelineMarker[] {
+  const at = b.approved ?? b.proposal
+  const max: TimelineMarker = { at: lm(b.max), label: `maksimum ${logicalClock(lm(b.max))}`, tone: 'rose', dashed: true }
+  if (at == null) return [max]
+  const approved = b.approved != null
+  if (lm(at) === lm(b.max)) return [{ at: lm(at), label: `${approved ? 'granica' : 'propozycja'} · maksimum ${logicalClock(lm(at))}`, tone: 'lamp', also: 'maksimum', ...(approved ? {} : { dashed: true as const }) }]
+  return [{ at: lm(at), label: `${approved ? 'granica' : 'propozycja granicy'} ${logicalClock(lm(at))}`, tone: 'lamp', ...(approved ? {} : { dashed: true as const }) }, max]
+}
+
 export interface DayAxis {
   items: TimelineItem[]
   markers: TimelineMarker[]
@@ -160,10 +173,7 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
   }
   const markers: TimelineMarker[] = []
   markers.push({ at: lm(state.wake), label: `pobudka ${logicalClock(lm(state.wake))}`, tone: 'muted' })
-  const b = state.boundary
-  if (b.approved != null) markers.push({ at: lm(b.approved), label: `granica ${logicalClock(lm(b.approved))}`, tone: 'lamp' })
-  else if (b.proposal != null) markers.push({ at: lm(b.proposal), label: `propozycja granicy ${logicalClock(lm(b.proposal))}`, tone: 'lamp', dashed: true })
-  markers.push({ at: lm(b.max), label: `maksimum ${logicalClock(lm(b.max))}`, tone: 'rose', dashed: true })
+  markers.push(...boundaryMarkers(state.boundary, lm))
   if (!state.hardEnd.unreachable && state.hardEnd.at < state.bedtime.forecast) markers.push({ at: lm(state.hardEnd.at), label: `twardy koniec ${logicalClock(lm(state.hardEnd.at))}`, tone: 'sea', dashed: true })
   markers.push({ at: lm(state.bedtime.forecast), label: `pora snu ${logicalClock(lm(state.bedtime.forecast))}`, tone: 'muted' })
   if (nowIdx != null && nowIdx >= 0 && nowIdx <= g.length) markers.push({ at: lm(nowIdx), label: `teraz ${logicalClock(lm(nowIdx))}`, tone: 'fg', now: true })
@@ -187,10 +197,23 @@ function taskPriority(r: RequestRecord | undefined): { priority?: Priority } {
 
 /** The day's numbers in words (the plan's summary). */
 export function daySummary(model: DayModel): string[] {
+  return daySummaryParts(model).map((p) => p.text)
+}
+
+/** What each part of the line over the axis means (D7: a hint under the pointer). */
+export const DAY_SUMMARY_HINTS = {
+  budget: 'Praca zaplanowana i już zrobiona tego dnia wobec dziennego budżetu pracy typu dnia.',
+  minimum: 'Tyle regeneracji musi zmieścić się przed porą snu.',
+  pool: 'Ile czasu na projekty zostało: mniejsza z dwóch wartości – dzienny limit projektów pomniejszony o to, co już zrobiłeś, i czas do twardego końca bez zaplanowanej regeneracji i bloków życia.'
+} as const
+
+/** The parts of the day's summary, each with its hint. */
+export function daySummaryParts(model: DayModel): Array<{ text: string; hint: string }> {
   const s = model.state
-  const out: string[] = []
-  out.push(`budżet pracy ${durationLabel(s.budgetUsedMin + s.budget.forecastMin)} z ${durationLabel(s.budget.limitMin)}`)
-  out.push(`minimum regeneracji ${durationLabel(s.regen.requiredMin)}`)
-  if (!s.hardEnd.unreachable) out.push(`pula projektów ${durationLabel(Math.max(0, s.pool.min))}`)
+  const out: Array<{ text: string; hint: string }> = [
+    { text: `budżet pracy ${durationLabel(s.budgetUsedMin + s.budget.forecastMin)} z ${durationLabel(s.budget.limitMin)}`, hint: DAY_SUMMARY_HINTS.budget },
+    { text: `minimum regeneracji ${durationLabel(s.regen.requiredMin)}`, hint: DAY_SUMMARY_HINTS.minimum }
+  ]
+  if (!s.hardEnd.unreachable) out.push({ text: `pula projektów ${durationLabel(Math.max(0, s.pool.min))}`, hint: DAY_SUMMARY_HINTS.pool })
   return out
 }

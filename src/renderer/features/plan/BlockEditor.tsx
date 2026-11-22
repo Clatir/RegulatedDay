@@ -30,11 +30,13 @@ import { olderComputers } from '@shared/model/note'
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { forecastEndText } from '@shared/blockEnd'
 import { Choice, DurationField, EndField, TextField, TimeField } from '../../components/fields'
-import { Field, Segmented } from '../../components/ui'
+import { HistoryButton } from '../../components/HistoryButton'
+import { cx, Field, Segmented, SIDE_PANEL_WIDTH } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
 import { useData, type SaveAnswer } from '../../store/data'
 import { useAttachDrop } from '../attachments/attachDrop'
 import { AttachmentsSection } from '../attachments/AttachmentsSection'
+import { blockHistoryRel } from '../history/historyTarget'
 import { NoteEditor } from '../note/NoteEditor'
 import { anchorCandidates, blockName, groupedCategoryOptions, type Names } from './blockView'
 import { EditCategoryDialog, EditRoutineDialog, EditVariantDialog, useSettingsNow } from './EditThingDialogs'
@@ -71,8 +73,11 @@ export function BlockEditor({
   newBlock,
   focusName,
   forecastEnd,
+  forecastStart,
   onEscape,
-  day
+  day,
+  dayNotes,
+  historyOf
 }: {
   block: PlanBlock
   plan: readonly PlanBlock[]
@@ -101,13 +106,16 @@ export function BlockEditor({
   /**
    * A new block not saved yet (before „Dodaj”): the cursor starts in „Nazwa” (D430), Enter there adds it as „Dodaj” does, with
    * the name typed (`add`, D431; `false` – refused, a save running: the cursor stays, T1028). Left out – an existing block:
-   * Enter only commits the name.
+   * Enter only commits the name. `discards: false` – Esc would not throw it away (a field touched, a save started: `escapeDraft`), the
+   * line under the heading then says only that it saves itself (D4).
    */
-  newBlock?: { add: (name: string | null) => boolean | void }
+  newBlock?: { add: (name: string | null) => boolean | void; discards?: boolean }
   /** A block just made and saved at once (a click or a range on the axis of „Szablony”): the cursor starts in „Nazwa” too (D431). */
   focusName?: boolean
   /** Where the forecast ends a block that follows another („po bloku”, D464): its „Koniec” says „ok. HH:MM”; left out – no forecast (templates, series). */
   forecastEnd?: number | null
+  /** Where the forecast starts a block that follows another (A2): „o godzinie” after „po bloku” keeps the block there; left out – 9:00. A day's axis and a template's give it. */
+  forecastStart?: number | null
   /** Esc (the second one, after a field's own): left out – `onClose`. A new block not saved yet throws itself away by it (D461), „Zamknij” saves it. */
   onEscape?: () => void
   /**
@@ -115,6 +123,13 @@ export function BlockEditor({
    * category. Left out – the day of `place`, else none (a template, a series: used from today on).
    */
   day?: string
+  /**
+   * What the side panel says of the day (the warnings, a routine waiting – D3, D8) while this panel stands in its place: under the heading;
+   * left out – nothing (templates, series).
+   */
+  dayNotes?: ReactNode
+  /** The file of the record „Historia” opens when the place does not say it (a series: the part edited – `series/<id>.json`, UX18); a day's block has its day's plan. */
+  historyOf?: string
 }) {
   useEscapeLayer(true, onEscape ?? onClose)
   const owner = place ? ownerToAdd(block, place) : null
@@ -136,6 +151,7 @@ export function BlockEditor({
   const [making, setMaking] = useState<'routine' | 'variant' | 'category' | null>(null)
   const today = useData((s) => s.view?.today ?? '')
   const blockDay = day ?? (place?.scope === 'day' ? place.date : null)
+  const historyRel = newBlock ? null : (historyOf ?? blockHistoryRel(place, day))
   // A variant and a category are made „od dziś”: a day gone by would not have them (T1067).
   const newDated = blockDay == null || (today !== '' && blockDay >= today)
   const newOption = (dated: boolean) => (readOnly || (dated && !newDated) ? [] : [NEW_OPTION])
@@ -162,13 +178,22 @@ export function BlockEditor({
   // D480: the routine and its length – its steps are never copied (the block shows the routine's while it has none of its own).
   const pickRoutine = (r: Routine | undefined) => void set({ routine: r ? r.id : null, ...(r && routineMinutes(r) > 0 ? { durationMin: routineMinutes(r) } : {}) })
   return (
-    <aside className="flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3" data-testid="block-editor" {...drop.bind}>
+    <aside className={cx('flex shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3', SIDE_PANEL_WIDTH)} data-testid="block-editor" {...drop.bind}>
       <div className="flex items-center gap-2">
-        <h3 className="min-w-0 flex-1 truncate text-[14px] font-medium">{blockName(block, names)}</h3>
+        {/* D4: a new block not saved yet is a draft – the heading says so (it is the block's name once saved). */}
+        <h3 className="min-w-0 flex-1 truncate text-[14px] font-medium">{newBlock ? 'Nowy blok' : blockName(block, names)}</h3>
+        {/* UX18 (E7): the history of the record the block is in (its day, template or series); a block not saved yet has none. */}
+        {historyRel && <HistoryButton rel={historyRel} className="text-[12px] text-muted hover:text-fg" />}
         <button type="button" className="text-[12px] text-muted hover:text-fg" onClick={onClose} data-testid="block-editor-close">
           Zamknij
         </button>
       </div>
+      {newBlock && (
+        <p className="-mt-1 text-[11.5px] text-muted" data-testid="block-draft-hint">
+          {newBlock.discards === false ? 'Zapisze się, gdy opuścisz panel' : 'Zapisze się, gdy opuścisz panel · Esc – odrzuć'}
+        </p>
+      )}
+      {dayNotes}
       {/* D430: its own name, as the title of an event; empty – named as before (the placeholder says how). */}
       <Field label="Nazwa" labelWidth={92}>
         <TextField
@@ -221,7 +246,7 @@ export function BlockEditor({
               { value: 'at', label: 'o godzinie' },
               { value: 'after', label: 'po bloku', disabled: anchors.length === 0 }
             ]}
-            onChange={(v) => (v === 'at' ? set({ anchor: null, startMin: block.startMin ?? 9 * 60 }) : set({ anchor: anchors[0]!.value, startMin: null }))}
+            onChange={(v) => (v === 'at' ? set({ anchor: null, startMin: block.startMin ?? forecastStart ?? 9 * 60 }) : set({ anchor: anchors[0]!.value, startMin: null }))}
             aria-label="Początek"
           />
           {block.anchor ? (

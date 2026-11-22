@@ -1,7 +1,8 @@
 /**
  * The window „Do skrzynki” (D385, D402) with Electron faked: hidden at the start and never shown by anything but the
- * shortcut's callback – then over the other windows with the focus; hidden (Esc, saved, the focus gone) it is no longer on
- * top. The shortcut: registered once, again on a change, off – given back; refused by Windows – „zajęty”.
+ * shortcut's callback and the desktop bar's „+ Skrzynka” (`openFromBar`, D564 P15) – then over the other windows with the
+ * focus; hidden (Esc, saved, the focus gone) it is no longer on top. The shortcut: registered once, again on a change,
+ * off – given back; refused by Windows – „zajęty”.
  */
 import { describe, expect, it, vi } from 'vitest'
 
@@ -103,6 +104,19 @@ describe('okienko „Do skrzynki”', () => {
     expect([win.visible, win.onTop]).toEqual([false, false])
     // The focus gone: hidden as well.
     pressed.get('Super+Alt+N')!()
+    win.handlers.get('blur')!()
+    expect([win.visible, win.onTop]).toEqual([false, false])
+  })
+
+  it('„+ Skrzynka” paska pulpitu (D564 P15): to samo okienko co skrót – na wierzchu z fokusem, także bez skrótu; ukryte – już nie na wierzchu', () => {
+    const logs: string[] = []
+    const { q, win } = make({ logs })
+    q.setShortcut(null)
+    calls.length = 0
+    q.openFromBar()
+    expect([win.visible, win.onTop]).toEqual([true, true])
+    expect(calls).toEqual(['onTop true', 'show', 'focus', 'send rd:onQuickShown'])
+    expect(logs).toContain('okienko „Do skrzynki” otwarte przyciskiem „+ Skrzynka” paska pulpitu')
     win.handlers.get('blur')!()
     expect([win.visible, win.onTop]).toEqual([false, false])
   })

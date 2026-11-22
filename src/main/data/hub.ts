@@ -1061,7 +1061,7 @@ export class DataHub {
     if (click.probe) return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
     this.changed()
     if (r.ok) void this.service?.tick()
-    return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}) }
+    return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}), ...(r.wrote ? { wrote: r.wrote } : {}) }
   }
 
   /**

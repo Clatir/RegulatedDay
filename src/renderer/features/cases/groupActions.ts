@@ -130,10 +130,10 @@ export const carriedBy = (selected: readonly CaseItem[], id: string): CaseItem[]
 /**
  * The sprawy of the panel dropped on the axis of `model`'s day at `startMin` (D530; `copy` – Ctrl, copies): one after another from the minute,
  * the first there – a change of the day's file with its line „Zaplanowano 3 · najniższa energia 52 → 44 · Cofnij” in the line of „Dziś” (T1541:
- * no line of the bar). Returns what the change did.
+ * no line of the bar; UX19: the panel beside „Tydzień” has it in `view` 'week'). Returns what the change did.
  */
-export async function planGroupDrop(model: DayModel, today: string, items: readonly CaseItem[], startMin: number, copy = false): Promise<GroupAxisResult> {
+export async function planGroupDrop(model: DayModel, today: string, items: readonly CaseItem[], startMin: number, copy = false, view: GroupView = 'today'): Promise<GroupAxisResult> {
   const r = await planGroupOnAxis(model, today, items, startMin, copy)
-  showCasesLine('today', copy ? CASE_VERB.copied : CASE_VERB.planned, r, r.energy)
+  showCasesLine(view, copy ? CASE_VERB.copied : CASE_VERB.planned, r, r.energy)
   return r
 }

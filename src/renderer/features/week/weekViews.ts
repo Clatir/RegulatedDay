@@ -7,7 +7,7 @@ import { mayMoveBetween } from '@shared/engine/calendarViews'
 import { groupEndMin, groupRootOf, PARALLEL_SAME_TEXT, parallelDrop, parallelFullText, parallelJoinText } from '@shared/engine/parallel'
 import type { HorizonBlock } from '@shared/engine/week'
 import type { AgendaBlock } from '@shared/engine/calendarViews'
-import { durationLabel } from '@shared/format'
+import { durationLabel, plDayMonth } from '@shared/format'
 import { categoryName } from '@shared/model/rd'
 import { DRAG_STEP_MIN, type PlanBlock } from '@shared/model/plan'
 import { addDays, weekday } from '@shared/time/zone'
@@ -47,6 +47,48 @@ export function rememberWeekMode(mode: WeekMode): void {
     localStorage.setItem(MODE_KEY, mode)
   } catch {
     // No storage: the page opens with „Tydzień” again.
+  }
+}
+
+const GOALS_KEY = 'rd.goalsFolded'
+
+/** Whether this computer folded the goals panel over the columns (UX19, P28): unfolded until it is. Storage that cannot be read is no memory. */
+export function goalsFolded(): boolean {
+  try {
+    return localStorage.getItem(GOALS_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** Remembers the goals panel folded or unfolded. */
+export function rememberGoalsFolded(folded: boolean): void {
+  try {
+    if (folded) localStorage.setItem(GOALS_KEY, '1')
+    else localStorage.removeItem(GOALS_KEY)
+  } catch {
+    // No storage: the panel opens unfolded again.
+  }
+}
+
+const CASES_KEY = 'rd.weekCases'
+
+/** Whether this computer left the panel „Sprawy” beside the columns open (UX19, P27): folded until it is opened. */
+export function casesOpen(): boolean {
+  try {
+    return localStorage.getItem(CASES_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** Remembers the panel „Sprawy” open or folded. */
+export function rememberCasesOpen(open: boolean): void {
+  try {
+    if (open) localStorage.setItem(CASES_KEY, '1')
+    else localStorage.removeItem(CASES_KEY)
+  } catch {
+    // No storage: the panel is folded again.
   }
 }
 
@@ -138,7 +180,7 @@ export const DENIED_TEXT = 'dzień minął'
 
 /** The first line of a day of „Agenda”: „Dziś · środa 18.11”, „Jutro · czwartek 19.11”, else „piątek 20.11”. */
 export function agendaHeading(date: string, today: string): string {
-  const day = `${WEEKDAY_FULL[weekday(date) - 1]} ${Number(date.slice(8, 10))}.${date.slice(5, 7)}`
+  const day = `${WEEKDAY_FULL[weekday(date) - 1]} ${plDayMonth(date)}`
   if (date === today) return `Dziś · ${day}`
   return date === addDays(today, 1) ? `Jutro · ${day}` : day
 }

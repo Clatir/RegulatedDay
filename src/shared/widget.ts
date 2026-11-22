@@ -11,6 +11,11 @@ import { ALL_DAY_COLOR_HEX, ENGINE_TONE_SET, iconColor, TONE_SETS, toneColor, ty
  */
 export const UNDO_LINE_MS = 15 * 60_000
 
+/** „<akcja> · Cofnij” of a click of the bar (D564 P18) stays this long; the leader registers no descent to the reserve from a signal this young. */
+export const CLICK_UNDO_MS = 10_000
+/** The write of a „Cofnij” clicked at the end of those 10 s – the leader's hold of a descent waits that much longer. */
+export const CLICK_UNDO_WRITE_MS = 5_000
+
 /** A button of a line: its id goes back to the main process with the line's (`line` action, `<line>|<action>`). */
 export interface BarAction {
   id: string
@@ -31,6 +36,8 @@ export interface BarLine {
 /** Which of the bar's own buttons stand now (spec „Cisza”: Dalej, Pauza, Przedłuż, Koniec pracy, Odcinam się; Skończyłem in a session). */
 export interface BarButtons {
   next: boolean
+  /** The block „Dalej” begins now (D564 P20: „Dalej: <nazwa>”), null – it begins nothing (the last of the plan, its group goes on). */
+  nextName: string | null
   pause: boolean
   extend: boolean
   workEnd: boolean
@@ -105,8 +112,6 @@ export interface WidgetView {
   iconColor: string
   dot: boolean
   drop: boolean
-  /** The sound was skipped (the muted sign). */
-  muted: boolean
   block: { name: string; className: string; endsAt: number | null } | null
   /** „Dalej?” has its fixed place at the start of the bar. */
   question: BarLine | null
@@ -120,6 +125,11 @@ export interface WidgetView {
   tooltip: string
   /** Why the desktop bar is hidden although it is on (the panel, the main window and the settings say it, D270). */
   barNote: string | null
+  /**
+   * The desktop bar hidden by its „×”, the panel's „Pasek pulpitu: schowaj” or the icon's menu (D559, D564 P13, P16) – until
+   * shown again, and only while it is on in the settings; the main process sets it (`widgetView`), the engine's view never knows it.
+   */
+  barClosed: boolean
   /** The bar's own buttons now. */
   buttons: BarButtons
   /** Blocks in the background with „Zakończ teraz” and „Przedłuż” (in „⋯”). */
@@ -223,15 +233,51 @@ export interface BarVariants {
    * `details` – the changes said one by one under the label (the changes of order, D374).
    */
   open: Array<{ id: string; label: string; details?: string[] }> | null
+  /**
+   * The window whose click opened the panel (while the main process holds it – also when the view hides it, „Odcinam się”);
+   * absent – no panel. The icon's panel closes only its own at its next opening (C8): one panel for every window.
+   */
+  by?: 'main' | 'panel' | 'bar'
 }
 
 export const NO_REQUESTS: BarRequests = { people: [], running: null, interrupted: null }
 export const NO_VARIANTS: BarVariants = { marker: false, open: null }
 
-export const ALL_BUTTONS: BarButtons = { next: true, pause: true, extend: true, workEnd: true, finished: false, cutOff: true, start: null }
+export const ALL_BUTTONS: BarButtons = { next: true, nextName: null, pause: true, extend: true, workEnd: true, finished: false, cutOff: true, start: null }
+
+/** „Dalej” with the block it begins (D564 P20) – the bar's button and the answer of „Dalej?”. */
+export const nextLabel = (name: string | null): string => (name ? `Dalej: ${name}` : 'Dalej')
+
+/** The signals of „Sygnały ▸” as the bar names them (its buttons and the line „Sygnał: … · Cofnij”, D564 P18). */
+export const SIGNAL_TEXT = { glasses: 'okulary', earplugs: 'zatyczki', rocking: 'więcej bujania', questions: 'drażnią pytania' } as const
+/** A pool's assessment of „Sygnały ▸”: worse, the same, better. */
+export const ASSESS_TEXT = { '-10': 'gorzej', '0': 'tak samo', '10': 'lepiej' } as const
+
+/**
+ * One name for the way to the main window (C7, D564 P13): the icon's menu, the panel's footer, the desktop bar's „↗” and the
+ * line of the bar without a data folder.
+ */
+export const OPEN_MAIN_TEXT = 'Otwórz okno główne'
+/** One name for the end of the app (D564 P13, P20): the icon's menu and the panel's footer. */
+export const QUIT_APP_TEXT = 'Zakończ aplikację'
 
 export const BAR_NOTE_HELPER = 'Pasek pulpitu ukryty: pomocnik nie działa'
 export const BAR_NOTE_FAILED = 'Paska pulpitu nie udało się położyć pod oknami (inny program trzyma okno na dole)'
+/** The way back of a desktop bar not on the screen – beside its note (D270) and beside the bar hidden by its „×” (D564 P16). */
+export const SHOW_BAR_TEXT = 'Pokaż pasek'
+/** The line of the bar hidden by its „×” (D564 P16): in the icon's panel and in the settings, with „Pokaż pasek”. */
+export const BAR_CLOSED_TEXT = 'Pasek pulpitu schowany'
+/** Its button while the widget is hidden („Odcinam się”): the „×” goes at once, the bar comes back after „Wracam”. */
+export const SHOW_BAR_AFTER_BACK_TEXT = 'Pokaż po „Wracam”'
+/** The item of the icon's menu (P16): always there, ticked by your choice (`barChosen`). */
+export const BAR_MENU_TEXT = 'Pasek pulpitu'
+
+/**
+ * The desktop bar by your choice, not by what is on the screen now (D564 P13, P16): on in the settings and not hidden by its
+ * „×” – also while a rule, the helper or a full screen keeps it away. The panel's „schowaj”, the tick of „Pasek pulpitu” in the
+ * icon's menu and the settings' switch say it.
+ */
+export const barChosen = (desktopBar: boolean, closed: boolean): boolean => desktopBar && !closed
 
 /**
  * The bar without a data folder (the first start before the wizard, OneDrive not ready yet – D327, in place of the trial,
@@ -250,15 +296,15 @@ export function noFolderView(status: 'none' | 'opening' | 'failed' = 'none'): Wi
     iconColor: iconColor('brak', 'none', false, false, tones),
     dot: false,
     drop: false,
-    muted: false,
     block: null,
     question: null,
-    lines: [{ id: NO_FOLDER_LINE, text, actions: status === 'opening' ? [] : [{ id: 'open', label: 'Otwórz okno' }], dot: false }],
+    lines: [{ id: NO_FOLDER_LINE, text, actions: status === 'opening' ? [] : [{ id: 'open', label: OPEN_MAIN_TEXT }], dot: false }],
     session: false,
     stateLine: null,
     tooltip: status === 'none' ? 'Brak folderu danych – otwórz okno główne' : text,
     barNote: null,
-    buttons: { ...ALL_BUTTONS, next: false, pause: false, extend: false, workEnd: false, finished: false, cutOff: false, start: null },
+    barClosed: false,
+    buttons: { ...ALL_BUTTONS, next: false, nextName: null, pause: false, extend: false, workEnd: false, finished: false, cutOff: false, start: null },
     background: [],
     autos: { groups: [], items: [] },
     fewer: false,
@@ -280,11 +326,12 @@ export function noFolderView(status: 'none' | 'opening' | 'failed' = 'none'): Wi
   }
 }
 
-/** The id of the line of the bar without a data folder (its „Otwórz okno” opens the main window). */
+/** The id of the line of the bar without a data folder (its „Otwórz okno główne” opens the main window). */
 export const NO_FOLDER_LINE = 'nofolder'
 
 /**
  * The lines whose sighting is written (the panel, the window in front, a click of the bar or of a notification): the
- * questions and the reserve's message (D231, D241). One place for the main process and the windows.
+ * questions, the reserve's message (D231, D241) and the reminders (UX13: a reminder seen is not notified again – A4-07). One
+ * place for the main process and the windows.
  */
-export const SEEN_LINE = /^(next|next2|workEnd|return|absence|shutdown|reserve):\d{4}-\d{2}-\d{2}:/
+export const SEEN_LINE = /^(next|next2|workEnd|return|absence|shutdown|reserve|remind):\d{4}-\d{2}-\d{2}:/

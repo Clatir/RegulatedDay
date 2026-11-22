@@ -4,7 +4,9 @@
  * is there); of „Wolne” – the days that still stand as it left them (`undoFreeLine`: a day not readable now stays on the line).
  */
 import { allDayRemovedText } from '@shared/model/allDay'
+import { UNDO_LINE_MS } from '@shared/widget'
 import { useBusy } from '../../lib/busy'
+import { undoMark } from '../../lib/undoKey'
 import { allDayRel, restoreAllDay } from '../../store/allDay'
 import { dropAllDayLine, linesOf, useAllDayLines, type AllDayLine, type AllDayLinePage } from '../../store/allDayLine'
 import { rawRecord } from '../../store/data'
@@ -38,7 +40,7 @@ function LineView({ line }: { line: AllDayLine }) {
   return (
     <div className="flex items-center gap-2 rounded border border-line bg-raised px-3 py-1.5 text-[12.5px]" role="status" data-testid={line.kind === 'removed' ? 'allday-removed' : 'allday-free-set'}>
       <span>{line.kind === 'removed' ? allDayRemovedText(line.title) : freeLineText(line.change.days.length)}</span>
-      <button type="button" className="btn" disabled={busy} onClick={() => void undo()} data-testid="allday-line-undo">
+      <button type="button" className="btn" disabled={busy} onClick={() => void undo()} {...undoMark(line.until - UNDO_LINE_MS)} data-testid="allday-line-undo">
         Cofnij
       </button>
     </div>

@@ -4,7 +4,8 @@
  * change from the list is the whole series from today (T709: `{ seriesId }`, scope „Cała seria”) – the days gone by, and the
  * occurrences changed on their own day, stay. A series that has ended is only shown.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
+import { paths } from '@shared/data/paths'
 import type { Series } from '@shared/model/series'
 import { settingsOn } from '@shared/model/settings'
 import { plDate } from '@shared/format'
@@ -16,6 +17,7 @@ import { changeSeriesListSteps } from '../../store/steps'
 import { StepsEditor } from '../steps/StepsEditor'
 import { blockName, type Names } from '../plan/blockView'
 import { SeriesFields } from './SeriesFields'
+import type { RuleGuard } from './UnsavedRuleDialog'
 import { removeTarget, useDeleteResolver } from '../../lib/deleteKey'
 import { changeSeries, endSeries, removeSeries } from './seriesActions'
 import { draftOf, draftPatch, draftProblem, isEmptyPatch, occurrenceRuleText, seriesBlockOf, seriesBlockPatch, type SeriesDraft } from './seriesForm'
@@ -26,7 +28,7 @@ export function useSeriesNames(today: string): Names {
   return useMemo(() => ({ rd, settings: settingsOn(rd.settings, today), routines, requests }), [rd, today, routines, requests])
 }
 
-export function SeriesEditor({ series, today, onClosed }: { series: Series; today: string; onClosed: () => void }) {
+export function SeriesEditor({ series, today, onClosed, onRemoved, guard }: { series: Series; today: string; onClosed: () => void; onRemoved?: () => void; guard?: MutableRefObject<RuleGuard | null> }) {
   const { seriesPlans } = useData()
   const view = useData((s) => s.view)!
   const names = useSeriesNames(today)
@@ -48,10 +50,21 @@ export function SeriesEditor({ series, today, onClosed }: { series: Series; toda
       if (isEmptyPatch(patch)) return
       await changeSeries({ seriesId: series.id }, 'all', patch, 'Seria zmieniona')
     })
+  // D563 P5: the list asks before another item replaces this form while a complete rule is written but not saved (an incomplete one is
+  // not offered for saving – its message stands under the fields, as the button is off).
+  const mine = useRef<RuleGuard | null>(null)
+  if (guard) {
+    mine.current = guard.current = {
+      unsaved: () => !ended && !isEmptyPatch(patch) && problem == null,
+      save: async () => (await changeSeries({ seriesId: series.id }, 'all', patch, 'Seria zmieniona')) === true
+    }
+  }
+  // Gone with the form – unless the next series' form (rendered before this one is cleaned up) has already put its own.
+  useEffect(() => () => void (guard && guard.current === mine.current && (guard.current = null)), [guard])
   const end = () => run(async () => void (await endSeries(series.id, addDays(today, -1), `Seria zakończona: ${name}`)))
   const remove = () =>
     run(async () => {
-      if ((await removeSeries({ seriesId: series.id }, 'all', `Usunięta seria: ${name}`)) === true) onClosed()
+      if ((await removeSeries({ seriesId: series.id }, 'all', `Usunięta seria: ${name}`)) === true) (onRemoved ?? onClosed)()
     })
   // D462: Del on the selected series (its row of the list, clicked) removes it, as „Usuń serię” does.
   useDeleteResolver('series', (id) => (id === series.id ? removeTarget(name, remove) : null))
@@ -100,6 +113,8 @@ export function SeriesEditor({ series, today, onClosed }: { series: Series; toda
         computers={view.computers}
         inSeries
         place={{ scope: 'series', root: series.root }}
+        // A series split in two has a file for each part: the history of the part edited here, not of the root's.
+        historyOf={paths.record('series', series.id)}
         readOnly={ended}
         onChange={(p) => {
           const b = seriesBlockPatch(p)

@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { costText } from '@shared/costText'
-import { durationLabel, logicalClock, plDate } from '@shared/format'
+import { durationLabel, plDate } from '@shared/format'
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
 import { freedByEdit } from '@shared/engine/gaps'
 import { detectLateWake, lateWakeSeenId } from '@shared/engine/lateWake'
@@ -21,16 +21,16 @@ import type { StepOp } from '@shared/model/steps'
 import { DAY_TYPE_NAMES, RANGES } from '@shared/model/settings'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
-import { atOf } from '@shared/engine/grid'
 import { TimeField } from '../../components/fields'
-import { EmptyState, cx } from '../../components/ui'
+import { EmptyState, SIDE_PANEL_WIDTH, cx } from '../../components/ui'
 import { commitActiveField } from '../../lib/commit'
 import { useOutsidePointer } from '../../lib/outside'
 import { useNow } from '../../lib/clock'
 import { useNewShortcut } from '../../lib/escape'
+import { usePeriodKeys } from '../../lib/periodKeys'
 import { isSaved, saveAnswer, useData, type SaveAnswer, type SendState } from '../../store/data'
 import { dayUsable, useDay, type DayModel } from '../../store/day'
-import { dropSavedDraft, onLeaveBlockDraft, openDay, patchBlockDraft, setBlockDraft, takePick, toast, useUi } from '../../store/ui'
+import { dropSavedDraft, navigate, onLeaveBlockDraft, openDay, patchBlockDraft, setBlockDraft, takePick, toast, useUi } from '../../store/ui'
 import { useMachine } from '../../store/machine'
 import { attachTransfer } from '../attachments/attachDrop'
 import { dayPlace as placeOfDay, withAttachCounts } from '../attachments/attachView'
@@ -49,7 +49,7 @@ import { seriesFirst } from '../series/seriesScope'
 import { occurrenceRuleText } from '../series/seriesForm'
 import { saveTileCosts } from '../plan/costSave'
 import { blockName, type Names } from '../plan/blockView'
-import { dayAxis, daySummary } from '../plan/dayItems'
+import { dayAxis } from '../plan/dayItems'
 import { menuCtxOf, type MenuState } from '../plan/groupMenu'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { useAxisGroup, type AxisTile } from '../plan/useAxisGroup'
@@ -58,7 +58,8 @@ import { rememberNewBlockCategory } from '../plan/lastCategory'
 import { edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
 import { Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
-import { EnergyLegend, LANES_WIDTH } from '../plan/EnergyLanes'
+import { useAxisOpening, type PlacedDay } from './axisOpening'
+import { EnergyLegendHelp, LANES_WIDTH } from '../plan/EnergyLanes'
 import { hasEnergy } from '../plan/energyDraw'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
@@ -79,6 +80,10 @@ import { planOnAxis } from '../cases/planOnAxis'
 import { useCaseDrag } from '../cases/useCaseDrag'
 import { draftTile } from './blockDraft'
 import { escapeDraft, firstSave } from './draftSave'
+import { DayMenu } from './DayMenu'
+import { DayNumbers, DaySummary } from './DayNumbers'
+import { BlockDayNotes } from './DayNotes'
+import { DayWarnings, dayWarningTexts } from './DayWarnings'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
@@ -109,12 +114,14 @@ export function TodayPage() {
   const today = view?.today ?? ''
   const date = chosen ?? today
   const model = useDay(date)
+  // The day the axis was put for: DayView is mounted anew with each day (the page says „Liczę dzień…” between), this stays.
+  const placed: PlacedDay = useRef(undefined)
   if (!view || view.status !== 'open') return <EmptyState why="Folder danych nie jest jeszcze otwarty." />
   if (!model) return <div className="p-6 text-muted">Liczę dzień…</div>
-  return <DayView model={model} today={today} />
+  return <DayView model={model} today={today} placed={placed} />
 }
 
-function DayView({ model, today }: { model: DayModel; today: string }) {
+function DayView({ model, today, placed }: { model: DayModel; today: string; placed: PlacedDay }) {
   const { rd, routines, requests, series } = useData()
   const view = useData((s) => s.view)!
   const brightness = useMachine((s) => s.prefs.brightness)
@@ -160,7 +167,6 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   // The exchange asked for a block of another day is no longer asked.
   useEffect(() => setExchange(null), [date])
   const [dialog, setDialog] = useState<null | 'type' | 'copy' | { move: PlanBlock } | 'addType'>(null)
-  const [menu, setMenu] = useState(false)
   // D365: the bottom edge of a running block dropped past the boundary – its cost waits for „Potwierdź” or „Anuluj” for 10 s,
   // nothing is written meanwhile; the confirmation is the same click again (`confirm`) to the same instant.
   const [pending, setPending] = useState<{ id: string; to: number; endMin: number; text: string; seq: number } | null>(null)
@@ -227,6 +233,9 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const nextPlace = (lengthMin?: number) => nextFreeStart(model.state, { isToday, nowMin: logicalMinuteOf(date, Date.now()), wakeMin: model.ctx.wakeMin }, lengthMin)
   const newHere = () => create(nextPlace(), undefined, true)
   useNewShortcut(newHere)
+  // PgUp / PgDn / Home (D6, P8): the day before, the day after, today – as the arrows and „Dziś” of the heading.
+  usePeriodKeys({ prev: () => openDay(addDays(date, -1)), next: () => openDay(addDays(date, 1)), today: () => (isToday ? undefined : openDay(null)) })
+  const from = useUi((s) => s.from)
   // D384: a sprawa of the panel beside the axis put on it – dropped at a minute, or in the nearest free place from now. A day
   // gone is history: no panel there (as no pushing, D367).
   const casesOn = date >= today
@@ -244,7 +253,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     else planCaseOne(id, minute, copy)
   }
   const planCaseNext = (x: CaseItem) => planCaseOne(x.record.id, nextPlace(x.estimateMin))
-  const { drag: caseDrag, grab: grabCase } = useCaseDrag(planCaseAt)
+  const { drag: caseDrag, grab: grabCase, started: caseDragStarted } = useCaseDrag(planCaseAt)
   const draggedCase = caseDrag?.target != null ? requests.find((x) => x.id === caseDrag.id) : undefined
   const draggedGroup = caseDrag ? carriedBy(panelSelected.current, caseDrag.id) : null
   const ghost: BlockSpan | null = draggedCase && caseDrag?.target != null ? { startMin: caseDrag.target, endMin: caseDrag.target + (draggedGroup ? groupBlockMinutes(draggedGroup.map((x) => x.record)) : estimateOf(draggedCase)) } : null
@@ -254,7 +263,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   // it does, the panel of the block opens (a day gone by too). One that is no longer on the day says so.
   const pick = useUi((s) => s.pick)
   useEffect(() => {
-    if (pick?.kind === 'command' && pick.id === 'newBlock' && isToday) {
+    // The search's command is today's; one with a day (the empty day of „Agenda”) is that day's.
+    if (pick?.kind === 'command' && pick.id === 'newBlock' && (pick.date ? pick.date === date : isToday)) {
       takePick((p) => p.kind === 'command' && p.id === 'newBlock')
       newHere()
     } else if (pick?.kind === 'block' && pick.date === date) {
@@ -338,6 +348,9 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
     window.addEventListener('focus', report)
     return () => window.removeEventListener('focus', report)
   }, [lateSeenId])
+  // D563 (P6): the axis put at its hour (`axisOpening.ts`); the ritual's own scroll below ends its following of the content.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const stopFollowing = useAxisOpening(scrollRef, useUi((u) => u.day), placed)
   // The ritual (D318): today after the end of work (a day without work: any time), a day before from the ritual's first
   // day while it is not frozen (the morning's „Popraw” opens it, D320).
   const ritualFrom = rd.ritualFrom
@@ -346,6 +359,8 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   const ritualRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (focus !== 'ritual' || !ritualRef.current) return
+    // The scroll to the ritual is the last word: the axis does not follow the content back over it.
+    stopFollowing()
     ritualRef.current.scrollIntoView({ block: 'start' })
     useUi.setState({ focus: null })
   }, [focus, ritual])
@@ -585,8 +600,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   leaving.current = leaveDraft
   // A change of the screen or the day first leaves it (`store/ui`), then a click anywhere outside the panel does.
   useEffect(() => {
-    onLeaveBlockDraft(() => void leaving.current(true))
-    return () => onLeaveBlockDraft(null)
+    return onLeaveBlockDraft(() => void leaving.current(true))
   }, [])
   useOutsidePointer(draft != null, DRAFT_OWN, () => void leaving.current())
 
@@ -594,6 +608,12 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
   return (
     <div className={cx('flex min-h-0 flex-1 flex-col', caseDrag?.copy && '[&_*]:cursor-copy!')} data-testid="today">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2">
+        {/* A day opened from „Tydzień” or the calendar (D2, UX8): back to it, where it was. */}
+        {from && (
+          <button type="button" className="btn h-[26px]" onClick={() => navigate(from)} data-testid="day-back">
+            {from === 'week' ? '← Tydzień' : '← Kalendarz'}
+          </button>
+        )}
         <button type="button" className="btn h-[26px] px-2" onClick={() => openDay(addDays(date, -1))} aria-label="Poprzedni dzień" data-testid="day-prev">
           ‹
         </button>
@@ -604,11 +624,10 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
         <button type="button" className="btn h-[26px] px-2" onClick={() => openDay(addDays(date, 1))} aria-label="Następny dzień" data-testid="day-next">
           ›
         </button>
-        {!isToday && (
-          <button type="button" className="btn h-[26px]" onClick={() => openDay(null)} data-testid="day-today">
-            Dziś
-          </button>
-        )}
+        {/* One rule of „dziś” on every screen of periods (D6): always there, off where you already are. */}
+        <button type="button" className="btn h-[26px]" disabled={isToday} onClick={() => openDay(null)} data-testid="day-today">
+          Dziś
+        </button>
         <button
           type="button"
           className="ml-2 inline-flex h-[26px] items-center rounded border px-2 text-[12.5px]"
@@ -635,34 +654,24 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
         <button type="button" className="btn h-[26px]" onClick={newHere} data-testid="day-add">
           + Blok
         </button>
-        <div className="relative">
-          <button type="button" className="btn h-[26px] px-2" onClick={() => setMenu(!menu)} aria-label="Więcej" data-testid="day-menu">
-            ⋯
-          </button>
-          {menu && (
-            <div className="absolute right-0 z-30 mt-1 flex w-[220px] flex-col rounded border border-line-strong bg-raised py-1 text-[12.5px]" onMouseLeave={() => setMenu(false)}>
-              <button type="button" className="px-3 py-1.5 text-left hover:bg-hover" onClick={() => (setMenu(false), setDialog('copy'))} data-testid="day-copy">
-                Skopiuj ten dzień do…
-              </button>
-              {isToday && model.state.facts.snapshots.some((s) => s.reason === 'type') && (
-                <button type="button" className="px-3 py-1.5 text-left hover:bg-hover" onClick={() => (setMenu(false), setDialog('addType'))}>
-                  Dodaj bloki typu {DAY_TYPE_NAMES[currentType].toLowerCase()}…
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <DayMenu
+          items={[
+            { label: 'Skopiuj ten dzień do…', onPick: () => setDialog('copy'), testId: 'day-copy' },
+            ...(isToday && model.state.facts.snapshots.some((s) => s.reason === 'type')
+              ? [{ label: `Dodaj bloki typu ${DAY_TYPE_NAMES[currentType].toLowerCase()}…`, onPick: () => setDialog('addType'), testId: 'day-add-type' }]
+              : [])
+          ]}
+        />
       </div>
       <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto">
+        <div className="min-w-0 flex-1 overflow-y-auto" ref={scrollRef} data-testid="day-scroll">
           <div className="flex flex-col gap-3 p-4">
             <AllDayLines page="today" />
             {lateWake && lateShown && <LateWakeCard model={model} lw={lateWake} names={names} />}
             {isToday && ritualFrom && <UnclosedDays />}
             {isToday && <MorningPlan model={model} names={names} />}
-            {isToday && <RoutineCards model={model} names={names} />}
             {ritual && (
-              <div ref={ritualRef}>
+              <div ref={ritualRef} data-prompt-card="true">
                 <RitualPanel key={date} model={model} names={names} onClosed={isToday ? undefined : () => openDay(null)} />
               </div>
             )}
@@ -674,10 +683,9 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             {!model.data.complete && !model.data.unknown && <p className="text-[12px] text-rose">Nie wszystkie logi tego dnia dało się teraz odczytać – dzień może być niepełny.</p>}
             <CalendarChips hiddenCount={axisItems.hiddenCount + hiddenEvents} />
             <div className="flex items-center justify-between gap-3">
-              <span className="text-[12px] text-muted" data-testid="day-summary">
-                {daySummary(model).join(' · ')}
-              </span>
-              {hasEnergy(axis.energy) && <EnergyLegend reserve={axis.energy.reserve} />}
+              <DaySummary model={model} />
+              {/* D563 P10: the legend of the energy folded under „?”. */}
+              {hasEnergy(axis.energy) && <EnergyLegendHelp reserve={axis.energy.reserve} />}
             </div>
             <GroupLine view="today" />
             {group.line}
@@ -809,16 +817,19 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             names={names}
             computers={view.computers}
             onChange={(patch) => changeBlock(block, patch, draft != null)}
+            // D3, D8, D563 P10: what the side panel says of the day stands in the panel of the block, which replaces it – the warnings and a routine waiting.
+            dayNotes={<BlockDayNotes model={model} names={names} today={today} onShow={closePanel} />}
             // „Zamknij” leaves a new block – saved as it stands, a bare click of the axis untouched thrown away (D461, T1045); Esc
             // throws away only an untouched one whose save has not started, any other it leaves as „Zamknij” does (T1080).
             onClose={closePanel}
             onEscape={draft ? () => (escapeDraft(firstSave.of(draft.id) != null, touchedNow(draft.id)) === 'discard' ? setDraft(null) : closePanel()) : undefined}
             forecastEnd={axis.items.find((i) => i.id === block.id)?.endMin}
+            forecastStart={axis.items.find((i) => i.id === block.id)?.startMin}
             inSeries={!draft && block.origin === 'series'}
             // D430, D431, D461: „+ Blok” (Ctrl+N, a range on the axis, „Więcej” of „Tydzień”) – the cursor in „Nazwa”, Enter there
             // saves the block with the name just typed (the draft of this render does not have it yet; a name that was changed
             // is committed by the blur and has started the save already). A save running: the cursor stays in the field (T1028).
-            newBlock={draft ? { add: (name) => (firstSave.of(draft.id) ? false : void changeBlock(draft, { name }, true)) } : undefined}
+            newBlock={draft ? { add: (name) => (firstSave.of(draft.id) ? false : void changeBlock(draft, { name }, true)), discards: escapeDraft(firstSave.of(draft.id) != null, stored?.touched ?? false) === 'discard' } : undefined}
             steps={
               <StepsEditor
                 steps={routineList?.steps ?? block.steps}
@@ -864,7 +875,7 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
             }
           />
         ) : (
-          <SidePanel model={model} names={names} onSelect={setSelected} onMove={(b) => setDialog({ move: b })} cases={casesOn ? <CasesPanel drag={caseDrag} grab={grabCase} onPlan={planCaseNext} onSelected={(s) => void (panelSelected.current = s)} /> : undefined} />
+          <SidePanel model={model} names={names} routines={isToday} past={date < today} onSelect={setSelected} onMove={(b) => setDialog({ move: b })} cases={casesOn ? <CasesPanel drag={caseDrag} grab={grabCase} started={caseDragStarted} onPlan={planCaseNext} onSelected={(s) => void (panelSelected.current = s)} /> : undefined} />
         )}
       </div>
       {exchange && (
@@ -896,35 +907,16 @@ function DayView({ model, today }: { model: DayModel; today: string }) {
 export const AXIS_HINT = 'Przeciągnij po osi, żeby dodać blok w tych godzinach, albo użyj „+ Blok” (Ctrl+N – w najbliższym wolnym miejscu).'
 
 /** Beside the plan when no block is selected: the warnings, the parked blocks, what the engine says of the day. */
-function SidePanel({ model, names, onSelect, onMove, cases }: { model: DayModel; names: Names; onSelect: (id: string) => void; onMove: (b: PlanBlock) => void; cases?: ReactNode }) {
+export function SidePanel({ model, names, routines, past, onSelect, onMove, cases }: { model: DayModel; names: Names; routines: boolean; past: boolean; onSelect: (id: string) => void; onMove: (b: PlanBlock) => void; cases?: ReactNode }) {
   const s = model.state
   const parked = model.ctx.plan.filter((b) => s.facts.blocks.get(b.id)?.parkedAt != null)
-  const lm = (idx: number) => logicalClock(logicalMinuteOf(model.date, atOf(s.grid, idx)))
   return (
-    <aside className="flex w-[300px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3 text-[12.5px]" data-testid="day-side">
+    <aside className={cx('flex shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3 text-[12.5px]', SIDE_PANEL_WIDTH)} data-testid="day-side">
+      {/* D563 P10: the cards of the routines begun (they ask for ticks) – here, not over the axis. */}
+      {routines && <RoutineCards model={model} names={names} />}
       {cases}
-      <h3 className="text-[13px] font-medium">Dzień w liczbach</h3>
-      <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
-        <dt className="text-muted">Granica</dt>
-        <dd className="num" data-testid="side-boundary">
-          {s.boundary.approved != null ? `${lm(s.boundary.approved)} (zatwierdzona)` : s.boundary.proposal != null ? `${lm(s.boundary.proposal)} (propozycja)` : s.noWorkDay ? 'dzień bez pracy' : '—'}
-        </dd>
-        <dt className="text-muted">Maksimum</dt>
-        <dd className="num">{lm(s.boundary.max)}</dd>
-        <dt className="text-muted">Koniec pracy (prognoza)</dt>
-        <dd className="num">{s.forecastWorkEnd != null ? lm(s.forecastWorkEnd) : '—'}</dd>
-        <dt className="text-muted">Twardy koniec projektów</dt>
-        <dd className="num">{s.hardEnd.unreachable ? 'nie mieści się' : lm(s.hardEnd.at)}</dd>
-        <dt className="text-muted">Pora snu</dt>
-        <dd className="num">{lm(s.bedtime.forecast)}</dd>
-      </dl>
-      {s.warnings.length > 0 && (
-        <ul className="flex flex-col gap-1 rounded border border-rose/40 bg-rose-soft px-2 py-1.5" data-testid="side-warnings">
-          {s.warnings.map((w) => (
-            <li key={w}>{w}</li>
-          ))}
-        </ul>
-      )}
+      <DayNumbers model={model} />
+      <DayWarnings warnings={dayWarningTexts(model, past)} />
       {parked.length > 0 && (
         <div className="flex flex-col gap-1.5">
           <h4 className="text-[12px] text-muted">Zaparkowane</h4>

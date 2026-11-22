@@ -9,7 +9,7 @@
  * stays on the page for 15 min, or until the template changes again. Below the templates: the list of series (D381, D401) –
  * each with its rule in words, edited and ended there (`SeriesEditor`); Ctrl K finds a series as one record.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RawRecord } from '@shared/api'
 import { deepEqual } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
@@ -19,18 +19,21 @@ import { durationLabel, logicalClock, plDate, WEEKDAY_SHORT } from '@shared/form
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { templateJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
-import { planBlock, templateFrom, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
+import { freeWeekday, idAfter, planBlock, templateClashes, templateFrom, templateUnused, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { currentSeries } from '@shared/model/series'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn } from '@shared/model/settings'
 import { SERIES_MARK, seriesText } from '@shared/seriesText'
 import { addDays } from '@shared/time/zone'
 import { UNDO_LINE_MS } from '@shared/widget'
 import { DateField, TextField } from '../../components/fields'
+import { HistoryButton } from '../../components/HistoryButton'
 import { EmptyState, Field, Segmented, cx } from '../../components/ui'
 import { isSaved, saveRecord, storedAnswer, tryUpdateRecord, updateRecord, useData, type SaveAnswer, type SendState } from '../../store/data'
+import { useBusy } from '../../lib/busy'
+import { THING_KINDS_HINT } from '../../lib/thingKinds'
 import { useNewShortcut } from '../../lib/escape'
 import { removeTarget, useDeleteResolver, useDeleteSelected } from '../../lib/deleteKey'
-import { takeFoundPick, useUi } from '../../store/ui'
+import { takeFoundPick, undoToast, useUi } from '../../store/ui'
 import { attachTransfer } from '../attachments/attachDrop'
 import { withAttachCounts } from '../attachments/attachView'
 import { GroupLine } from '../../components/GroupLine'
@@ -44,6 +47,7 @@ import { dayAxis } from '../plan/dayItems'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { Timeline } from '../plan/Timeline'
 import { SeriesEditor, useSeriesNames } from '../series/SeriesEditor'
+import { UnsavedRuleDialog, type RuleGuard } from '../series/UnsavedRuleDialog'
 import { seriesBlockOf } from '../series/seriesForm'
 import { StepsEditor } from '../steps/StepsEditor'
 import { stepsAnswer } from '../steps/stepsUi'
@@ -53,11 +57,13 @@ import { templateBlockPatch } from '@shared/model/templateSessions'
 import { axisSources } from './sessionChoices'
 import { sampleDay, templateDayOf, versionFrom } from './templateDay'
 import { SessionFields } from './SessionFields'
-import { templateAdd, templateCopy, templateDrag, withTemplateChange, type TemplateChange } from './templatePush'
+import { templateAdd, templateCopy, templateDrag, templateStartAt, withTemplateChange, type TemplateChange } from './templatePush'
 import { copyTemplateBlock } from '../plan/blockCopy'
 import { dragTemplateGroup, templateDragPreview } from '../plan/groupDrag'
+import { undoMark } from '../../lib/undoKey'
 import { COPY_SPAN_ID } from '../today/dayPush'
-import { freshAfter, removeTemplate, removeTemplateBlock } from './templateActions'
+import { losesText, winsText } from './clashText'
+import { freshAfter, removeTemplate, removeTemplateBlock, undoAddedBlock } from './templateActions'
 
 export function TemplatesPage() {
   const templates = useData((s) => s.templates)
@@ -68,25 +74,53 @@ export function TemplatesPage() {
   const [selected, setSelectedTemplate] = useState<string | null>(null)
   // One thing is open on the right: a template or a series of the list.
   const [selectedSeries, setSelectedSeries] = useState<string | null>(null)
-  const setSelected = (id: string | null) => {
-    setSelectedTemplate(id)
-    if (id != null) setSelectedSeries(null)
-  }
-  const openSeries = (id: string | null) => {
+  // D563 P5: another item chosen while the series' rule is written but not saved asks first (`UnsavedRuleDialog`); the form tells the page.
+  const rule = useRef<RuleGuard | null>(null)
+  const [leaving, setLeaving] = useState<(() => void) | null>(null)
+  const [leavingBusy, setLeavingBusy] = useState(false)
+  const leave = (go: () => void) => (rule.current?.unsaved() ? setLeaving(() => go) : go())
+  const setSelected = (id: string | null) =>
+    leave(() => {
+      setSelectedTemplate(id)
+      if (id != null) setSelectedSeries(null)
+    })
+  const openSeriesNow = (id: string | null) => {
     setSelectedSeries(id)
     if (id != null) setSelectedTemplate(null)
+  }
+  // The same series again changes nothing; closing it (`null`: removed, ended) has no rule left to keep.
+  const openSeries = (id: string | null) => (id == null || id === selectedSeries ? openSeriesNow(id) : leave(() => openSeriesNow(id)))
+  const answerLeaving = async (save: boolean) => {
+    const go = leaving
+    if (!go || leavingBusy) return
+    if (save) {
+      setLeavingBusy(true)
+      const ok = await rule.current?.save().catch(() => false)
+      setLeavingBusy(false)
+      // A save that did not go through (its reason is in a toast) stays on the series with the rule written.
+      if (!ok) return setLeaving(null)
+    }
+    setLeaving(null)
+    go()
   }
   const listed = useMemo(() => currentSeries(series, today), [series, today])
   const [showArchivedState, setShowArchived] = useState(false)
   // A copy starts in the archive: the one selected is shown even then.
   const showArchived = showArchivedState || templates.some((t) => t.id === selected && t.archived)
-  const create = async () => {
-    const id = newId()
-    const hasDefault = templates.some((t) => t.dayType === 'zwykly' && !t.weekdays.length && !t.archived)
-    const t: Template = { id, name: 'Nowy szablon', dayType: 'zwykly', weekdays: hasDefault ? [1] : [], versions: [{ from: addDays(today, 1), blocks: [], budgetMin: null, maxMin: null }], archived: false }
-    await saveRecord(paths.record('template', id), null, templateJson(t))
-    setSelected(id)
-  }
+  const [busy, run] = useBusy()
+  const create = () =>
+    // One at a time (A5): a second click or Ctrl+N while this still saves would make a second template.
+    run(async () => {
+      // D563 P3: a new template never takes the days of an older one: its id is never smaller than theirs (`templateFor` lets the smaller id win,
+      // quietly – that rule stays). Beside the type's default it also starts on the first weekday no template of the type has; with none free,
+      // without days (a second default of the type, which then loses until you give it days), and without a default – as the default itself.
+      const id = idAfter(templates.map((x) => x.id), newId())
+      const hasDefault = templates.some((t) => t.dayType === 'zwykly' && !t.weekdays.length && !t.archived)
+      const day = hasDefault ? freeWeekday(templates, 'zwykly') : null
+      const t: Template = { id, name: 'Nowy szablon', dayType: 'zwykly', weekdays: day != null ? [day] : [], versions: [{ from: addDays(today, 1), blocks: [], budgetMin: null, maxMin: null }], archived: false }
+      await saveRecord(paths.record('template', id), null, templateJson(t))
+      setSelected(id)
+    })
   useNewShortcut(() => void create())
   // A template (or one of its blocks) picked in the search (Ctrl K): opened once; one that is gone is said so.
   const pick = useUi((s) => s.pick)
@@ -116,7 +150,7 @@ export function TemplatesPage() {
   return (
     <div className="flex min-h-0 flex-1" data-testid="templates">
       <div className="flex w-[260px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-line p-3">
-        <button type="button" className="btn btn-accent" onClick={() => void create()} data-testid="template-new">
+        <button type="button" className="btn btn-accent" onClick={() => void create()} disabled={busy} data-testid="template-new">
           + Szablon
         </button>
         {DAY_TYPES.map((type) => {
@@ -135,38 +169,48 @@ export function TemplatesPage() {
                   data-testid="template-item"
                 >
                   <span>{t.name}</span>
-                  <span className="text-[11.5px] text-muted">{t.weekdays.length ? t.weekdays.map((d) => WEEKDAY_SHORT[d - 1]).join(', ') : 'domyślny dla typu'}</span>
+                  <span className="text-[11.5px] text-muted">
+                    {t.weekdays.length ? t.weekdays.map((d) => WEEKDAY_SHORT[d - 1]).join(', ') : 'domyślny dla typu'}
+                    {templateUnused(templates, t) && (
+                      <span title="Inny szablon tego typu ma te same dni i wygrywa – z tego nie powstaje żaden dzień." data-testid="template-unused">
+                        {' · nieużywany'}
+                      </span>
+                    )}
+                  </span>
                 </button>
               ))}
             </div>
           )
         })}
-        {listed.length > 0 && (
-          <div className="flex flex-col gap-1" data-testid="series-list">
-            <span className="text-[11.5px] text-muted">Serie</span>
-            {listed.map((s) => {
-              const ended = (seriesPlans.find((p) => p.series.id === s.id)?.last ?? s.until ?? today) < today
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => openSeries(s.id)}
-                  data-del={`series:${s.id}`}
-                  className={cx('flex flex-col rounded border px-2.5 py-1.5 text-left', selectedSeries === s.id ? 'border-lamp bg-lamp-soft' : 'border-line hover:bg-hover', ended && 'border-dashed text-muted')}
-                  data-testid="series-item"
-                >
-                  <span>
-                    {SERIES_MARK} {blockName(seriesBlockOf(s, today), names)}
-                  </span>
-                  <span className="text-[11.5px] text-muted">
-                    {seriesText(s, today)}
-                    {ended ? ' · zakończona' : ''}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        )}
+        <div className="flex flex-col gap-1" data-testid="series-list">
+          <span className="text-[11.5px] text-muted">Serie</span>
+          {listed.length === 0 && (
+            <span className="text-[12px] text-muted" data-testid="series-empty">
+              Nie ma jeszcze serii. Serię zakładasz w panelu bloku, w polu „Powtarzaj”.
+            </span>
+          )}
+          {listed.map((s) => {
+            const ended = (seriesPlans.find((p) => p.series.id === s.id)?.last ?? s.until ?? today) < today
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => openSeries(s.id)}
+                data-del={`series:${s.id}`}
+                className={cx('flex flex-col rounded border px-2.5 py-1.5 text-left', selectedSeries === s.id ? 'border-lamp bg-lamp-soft' : 'border-line hover:bg-hover', ended && 'border-dashed text-muted')}
+                data-testid="series-item"
+              >
+                <span>
+                  {SERIES_MARK} {blockName(seriesBlockOf(s, today), names)}
+                </span>
+                <span className="text-[11.5px] text-muted">
+                  {seriesText(s, today)}
+                  {ended ? ' · zakończona' : ''}
+                </span>
+              </button>
+            )
+          })}
+        </div>
         {templates.some((t) => t.archived) && (
           <button type="button" className="text-left text-[12px] text-muted hover:text-fg" onClick={() => setShowArchived(!showArchived)}>
             {showArchived ? 'Ukryj archiwum' : 'Pokaż archiwum'}
@@ -175,20 +219,22 @@ export function TemplatesPage() {
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         {currentSeriesRecord ? (
-          <SeriesEditor key={currentSeriesRecord.id} series={currentSeriesRecord} today={today} onClosed={() => openSeries(null)} />
+          <SeriesEditor key={currentSeriesRecord.id} series={currentSeriesRecord} today={today} onClosed={() => leave(() => openSeriesNow(null))} onRemoved={() => openSeriesNow(null)} guard={rule} />
         ) : current ? (
           <Editor key={current.id} template={current} today={today} openBlock={openBlock} onBlockOpened={() => setOpenBlock(null)} onCopied={setSelected} onRemoved={() => setSelected(null)} />
         ) : (
-          <EmptyState why={templates.length ? 'Wybierz szablon z listy.' : 'Nie ma jeszcze szablonów. Szablon to plan dnia danego typu, z którego powstaje każdy taki dzień.'} action={{ label: '+ Szablon', run: () => void create() }} />
+          <EmptyState why={templates.length ? 'Wybierz szablon z listy.' : `Nie ma jeszcze szablonów. ${THING_KINDS_HINT}`} action={{ label: '+ Szablon', run: () => void create() }} />
         )}
       </div>
+      {leaving && <UnsavedRuleDialog title="Zapisać zmianę serii?" busy={leavingBusy} onSave={() => void answerLeaving(true)} onDiscard={() => void answerLeaving(false)} onClose={() => !leavingBusy && setLeaving(null)} />}
     </div>
   )
 }
 
 function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved }: { template: Template; today: string; openBlock: string | null; onBlockOpened: () => void; onCopied: (id: string) => void; onRemoved: () => void }) {
-  const { rd, lectures, routines, requests } = useData()
+  const { rd, lectures, routines, requests, templates } = useData()
   const view = useData((s) => s.view)!
+  const clash = useMemo(() => templateClashes(templates, template), [templates, template])
   const tomorrow = addDays(today, 1)
   const [from, setFrom] = useState(tomorrow)
   const [selected, setSelected] = useState<string | null>(null)
@@ -219,7 +265,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const saveVersion = (patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)) => change((t) => withVersion(t, patch))
 
   // D367, D372: the blocks a change of the axis pushed apart – the template before and after it, for „Cofnij”.
-  const [pushed, setPushed] = useState<{ text: string; before: RawRecord; after: RawRecord } | null>(null)
+  const [pushed, setPushed] = useState<{ text: string; before: RawRecord; after: RawRecord; at: number } | null>(null)
   useEffect(() => {
     if (!pushed) return
     const t = setTimeout(() => setPushed(null), UNDO_LINE_MS)
@@ -230,9 +276,11 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const pushedShown = pushed != null && deepEqual(pushedMade, template)
   /**
    * A change of the axis (a block dragged, an edge, a new block) as one edit of the template, with the blocks it pushes
-   * apart; when it pushed some, „Przesunięto N bloków · Cofnij”. Saved – true.
+   * apart; when it pushed some, „Przesunięto N bloków · Cofnij”. Saved – true. `added` (the id of a block made on the empty axis, D366): one that
+   * pushed none says „Dodano blok · Cofnij” (D563) – its undo takes that block out by id (`undoAddedBlock`), whatever was changed in the template
+   * since (the name typed in the panel); one that pushed some has the line.
    */
-  const saveChange = async (c: TemplateChange): Promise<boolean> => {
+  const saveChange = async (c: TemplateChange, added: string | null = null): Promise<boolean> => {
     const made: { before: RawRecord | null; after: RawRecord | null } = { before: null, after: null }
     const out = await tryUpdateRecord(rel, (raw) => {
       const t = templateFrom(raw)
@@ -242,7 +290,12 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
       return made.after
     })
     const saved = isSaved(out)
-    if (saved && c.pushed > 0 && made.before && made.after) setPushed({ text: pushedText(c.pushed), before: made.before, after: made.after })
+    if (saved && c.pushed > 0 && made.before && made.after) setPushed({ text: pushedText(c.pushed), before: made.before, after: made.after, at: Date.now() })
+    // Only when the add changed the template (`made`): a record gone or unreadable answers with nothing to write – nothing was added to take back.
+    else if (saved && added && made.before && made.after) {
+      const done = { before: made.before, after: made.after }
+      undoToast('Dodano blok', () => void undoAddedBlock(template.id, added, done))
+    }
     return saved
   }
   /** „Cofnij”: the template as it was before the push – what changed on another computer since stays a question. */
@@ -273,6 +326,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     return withAttachCounts(own, (id) => blocks.get(id) ?? null, attachPlace, attachments)
   }, [axis, byPlanId, version.blocks, attachPlace, attachments])
   const block = version.blocks.find((b) => b.id === selected) ?? null
+  const shownStart = block ? items.find((i) => i.id === block.id)?.startMin : undefined
+  const forecastStart = block && shownStart != null ? templateStartAt(model, block, shownStart) : undefined
   // D527, D528: the selection of many blocks of the version (Ctrl+click, Shift+click, Shift+arrows, Ctrl+A, the menu of the right button – without the
   // day's actions); only the template's own blocks are selected (the sessions and lectures of the sample day are no blocks of it); scope: the version.
   const menuCtx = useMemo(() => menuCtxOf(names, true), [names])
@@ -309,7 +364,8 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   }
 
   const copy = async () => {
-    const id = newId()
+    // As a new template: its id is never smaller than an older one's, so the copy never takes its days quietly (D563 P3).
+    const id = idAfter(templates.map((x) => x.id), newId())
     const c = copiedTemplate(template, id, `Kopia: ${template.name}`.slice(0, 80))
     await saveRecord(paths.record('template', id), null, templateJson(c))
     onCopied(id)
@@ -333,6 +389,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           <div className="flex flex-wrap items-center gap-2">
             <TextField value={template.name} onCommit={(name) => void saveTemplate({ name })} required max={80} shellClassName="max-w-[260px]" aria-label="Nazwa szablonu" data-testid="template-name" />
             <span className="flex-1" />
+            <HistoryButton rel={rel} />
             <button type="button" className="btn" onClick={() => void copy()} data-testid="template-copy">
               Skopiuj szablon
             </button>
@@ -374,6 +431,20 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
               ))}
             </div>
           </Field>
+          {(clash.loses.length > 0 || clash.wins.length > 0) && (
+            <div className="flex flex-col gap-0.5 rounded border border-line-strong bg-raised px-3 py-2 text-[12.5px]" role="status" data-testid="template-clash">
+              {losesText(clash.loses).map((x) => (
+                <span key={x} data-testid="template-clash-loses">
+                  Ten sam dzień ma też inny szablon – {x}.
+                </span>
+              ))}
+              {winsText(clash.wins).map((x) => (
+                <span key={x} data-testid="template-clash-wins">
+                  {x}.
+                </span>
+              ))}
+            </div>
+          )}
           <Field label="Zmiany od" labelWidth={140} hint={`Wersje: ${template.versions.map((v) => `od ${plDate(v.from)}`).join(', ') || 'brak'}. Dni przed tą datą się nie zmieniają.`}>
             <div className="flex items-center gap-2">
               <DateField today={today} value={from} onCommit={(d) => setFrom(d < tomorrow ? tomorrow : d)} shellClassName="w-[120px]" aria-label="Zmiany od" data-testid="template-from" />
@@ -401,7 +472,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           {pushedShown && (
             <div className="flex items-center gap-2 self-start rounded border border-line bg-raised px-3 py-1.5 text-[12.5px]" role="status" data-testid="template-pushed">
               <span>{pushed.text}</span>
-              <button type="button" className="btn" onClick={() => void undoPushed()} data-testid="template-pushed-undo">
+              <button type="button" className="btn" onClick={() => void undoPushed()} {...undoMark(pushed.at)} data-testid="template-pushed-undo">
                 Cofnij
               </button>
             </div>
@@ -470,7 +541,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
             onCreate={(min, durationMin = DEFAULT_NEW_BLOCK_MIN) => {
               // D366; D367: on a taken place it pushes the flexible blocks after it apart.
               const b = planBlock({ id: newId(10), categoryId: 'inne', startMin: min, durationMin, origin: 'template' })
-              void saveChange(templateAdd(model, b)).then((saved) => {
+              void saveChange(templateAdd(model, b), b.id).then((saved) => {
                 if (!saved) return
                 setFresh(b.id)
                 open(b.id)
@@ -493,6 +564,9 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           sessions={settings.sessions}
           place={attachPlace}
           focusName={fresh === block.id}
+          // A2: „o godzinie” after „po bloku” starts where the axis of the sample day puts the block (its forecast) – in the template's
+          // hours (`templateStartAt`: the axis keeps the day's wake of a week the sessions start earlier, UX1 T1979).
+          forecastStart={forecastStart}
           // D511: a block given a category of sessions becomes a session (and stops being one with another category).
           onChange={(patch) => patchBlock(block.id, templateBlockPatch(block, patch, settings.categories, version.blocks))}
           session={<SessionFields block={block} blocks={version.blocks} kind={settings.categories[block.categoryId]?.kind} weekdays={template.weekdays} onChange={(patch) => void patchBlock(block.id, patch)} />}

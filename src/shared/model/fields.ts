@@ -47,7 +47,7 @@ export const TOGGLE_FIELDS: readonly ToggleField[] = [
   }
 ]
 
-export type FieldGroup = 'dayTypes' | 'sleep' | 'boundary' | 'plan' | 'energy' | 'reminders' | 'timer' | 'care' | 'cases'
+export type FieldGroup = 'dayTypes' | 'sleep' | 'boundary' | 'plan' | 'energy' | 'accuracy' | 'reminders' | 'timer' | 'care' | 'cases'
 
 export const FIELD_GROUP_NAMES: Record<FieldGroup, string> = {
   dayTypes: 'Typy dni',
@@ -56,6 +56,8 @@ export const FIELD_GROUP_NAMES: Record<FieldGroup, string> = {
   // Parallel blocks (D476): how many at once.
   plan: 'Plan dnia',
   energy: 'Energia',
+  // The tolerance of the accuracy (UX14, E6): its own section, read by the game and by the reviews, not a question of the day.
+  accuracy: 'Trafność planu',
   reminders: 'Przypomnienia',
   timer: 'Pytania w ciągu dnia',
   care: 'Przerwy, woda i samotność',
@@ -103,11 +105,11 @@ export const NUMBER_FIELDS: readonly NumberField[] = [
   { key: 'reminders.ritualBeforeBedMin', scope: 'dated', path: ['reminders', 'ritualBeforeBedMin'], label: 'Rytuał przed porą snu', kind: 'duration', range: RANGES.reminder, group: 'reminders', hint: '0 wyłącza przypomnienie.' },
   { key: 'idleThresholdMin', scope: 'dated', path: ['idleThresholdMin'], label: 'Próg bezczynności', kind: 'duration', range: RANGES.idleThresholdMin, group: 'timer' },
   { key: 'absenceQuestionMin', scope: 'dated', path: ['absenceQuestionMin'], label: 'Pytanie o nieobecność po', kind: 'duration', range: RANGES.absenceQuestionMin, group: 'timer' },
-  { key: 'accuracyTolerancePct', scope: 'dated', path: ['accuracyTolerancePct'], label: 'Tolerancja trafności', kind: 'integer', range: RANGES.accuracyTolerancePct, unit: '%', group: 'timer', hint: 'Nie mniej niż 5 min.' },
+  { key: 'accuracyTolerancePct', scope: 'dated', path: ['accuracyTolerancePct'], label: 'Tolerancja trafności', kind: 'integer', range: RANGES.accuracyTolerancePct, unit: '%', group: 'accuracy', hint: 'Nie mniej niż 5 min.' },
   { key: 'waterEveryMin', scope: 'general', path: ['waterEveryMin'], label: 'Woda co', kind: 'duration', range: GENERAL_RANGES.waterEveryMin, group: 'care', hint: 'Przy przejściu między blokami po 2/3 odstępu.' },
   { key: 'breakAfterMin', scope: 'general', path: ['breakAfterMin'], label: 'Przerwa po ciągłej pracy', kind: 'duration', range: GENERAL_RANGES.breakAfterMin, offAllowed: true, group: 'care', hint: '0 wyłącza propozycję.' },
   { key: 'breakMin', scope: 'general', path: ['breakMin'], label: 'Długość przerwy', kind: 'duration', range: GENERAL_RANGES.breakMin, group: 'care' },
-  { key: 'solitudeAfterMin', scope: 'general', path: ['solitudeAfterMin'], label: 'Samotność po kontakcie dłuższym niż', kind: 'duration', range: GENERAL_RANGES.solitudeAfterMin, offAllowed: true, group: 'care', hint: '0 wyłącza sugestię.' },
+  { key: 'solitudeAfterMin', scope: 'general', path: ['solitudeAfterMin'], label: 'Samotność po kontakcie dłuższym niż', kind: 'duration', range: GENERAL_RANGES.solitudeAfterMin, offAllowed: true, group: 'care', hint: 'Po tak długim kontakcie z ludźmi aplikacja sugeruje chwilę samotności; 0 wyłącza sugestię.' },
   { key: 'parallelMax', scope: 'general', path: ['parallelMax'], label: 'Najwięcej bloków naraz', kind: 'integer', range: GENERAL_RANGES.parallelMax, group: 'plan', hint: 'Blok przeciągnięty na inny biegnie razem z nim; ponad tę liczbę staje zaraz po grupie.' },
   { key: 'deadlineDays', scope: 'general', path: ['deadlineDays'], label: 'Ostrzegaj o terminie na', kind: 'integer', range: GENERAL_RANGES.deadlineDays, unit: 'dni', group: 'cases', hint: 'Plan poranny pokazuje sprawy po terminie i z terminem do tylu dni naprzód (2 – dziś, jutro i pojutrze).' }
 ]

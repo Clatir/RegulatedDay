@@ -6,7 +6,7 @@
  */
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { DataView, EditEntry, RawRecord, RdApi } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
 import { paths } from '@shared/data/paths'
@@ -19,6 +19,7 @@ import { addDays } from '@shared/time/zone'
 import { CasesPage } from '@renderer/features/cases/CasesPage'
 import { statusParts } from '@renderer/features/cases/casesLogic'
 import { answerTask, changeCase, moveCase, nextTaskText, undoCase } from '@renderer/store/cases'
+import { installEscape } from '@renderer/lib/escape'
 import { useData } from '@renderer/store/data'
 import { closeToast, useUi } from '@renderer/store/ui'
 
@@ -28,6 +29,8 @@ beforeAll(() => {
 const data = useData.getState()
 let root: Root | null = null
 let host: HTMLElement | null = null
+/** The rows of „Sprawy” are one line (UX17, P25): their buttons „Terminy”, „Powtarzaj” … stand under „▸”. */
+const expandRows = () => act(async () => host!.querySelectorAll<HTMLElement>('[data-testid="case-expand"]').forEach((b) => b.click()))
 afterEach(() => {
   act(() => root?.unmount())
   host?.remove()
@@ -153,6 +156,7 @@ describe('wiersz zadania: pole „Powtarzaj” i reguła słowami (D465)', () =>
   it('przycisk „Powtarzaj” obok „Terminy”: reguły serii bez „W dni szczególne”; „Zapisz powtarzanie” wysyła regułę; przy zadaniu – „↻ codziennie”', async () => {
     const { sent, set } = stub([newTask('t2', Date.now(), TODAY, { title: 'Raz', list: 'week' })!])
     await render()
+    await expandRows()
     const row = host!.querySelector<HTMLElement>('[data-case="t2"]')!
     const button = q('case-repeat-open', row)!
     expect(button.textContent).toBe('Powtarzaj')
@@ -179,6 +183,7 @@ describe('wiersz zadania: pole „Powtarzaj” i reguła słowami (D465)', () =>
     const t = newTask('t2', Date.now(), TODAY, { title: 'Raz', list: 'week', doDate: addDays(TODAY, 3) })!
     const { sent, set } = stub([t])
     await render()
+    await expandRows()
     const row = () => host!.querySelector<HTMLElement>('[data-case="t2"]')!
     await act(async () => q('case-repeat-open', row())!.click())
     const pick = async (v: string) =>
@@ -208,6 +213,7 @@ describe('wiersz zadania: pole „Powtarzaj” i reguła słowami (D465)', () =>
     const t = newTask('t2', Date.now(), TODAY, { title: 'Raz', list: 'week', doDate: addDays(TODAY, 3) })!
     const { set } = stub([t])
     await render()
+    await expandRows()
     const row = () => host!.querySelector<HTMLElement>('[data-case="t2"]')!
     await act(async () => q('case-repeat-open', row())!.click())
     // „Wykonać” moved with the form open and untouched: its defaults count from the new date.
@@ -235,5 +241,177 @@ describe('wiersz zadania: pole „Powtarzaj” i reguła słowami (D465)', () =>
     expect(statusParts(x!, TODAY)).toContain('↻ codziennie')
     const [d] = caseItems([requestFrom(listedRaw(t, 'done', Date.now()))!], TODAY, () => null)
     expect(statusParts(d!, TODAY).some((p) => p.startsWith('↻'))).toBe(false)
+  })
+})
+
+describe('niezapisane powtarzanie sprawy przy zamykaniu pola „Powtarzaj” (D563 P5)', () => {
+  let removeEscape: (() => void) | null = null
+  beforeAll(() => void (removeEscape = installEscape()))
+  afterAll(() => removeEscape?.())
+  const render = async () => {
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(createElement(CasesPage)))
+  }
+  const q = (sel: string, el: ParentNode = document.body) => el.querySelector<HTMLElement>(`[data-testid="${sel}"]`)
+  const row = () => host!.querySelector<HTMLElement>('[data-case="t2"]')!
+  const toggle = () => act(async () => q('case-repeat-open', row())!.click())
+  const pick = (v: string) =>
+    act(async () => {
+      const rule = q('series-rule', row()) as HTMLSelectElement
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(rule, v)
+      rule.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  const open = async () => {
+    const out = stub([newTask('t2', Date.now(), TODAY, { title: 'Raz', list: 'week' })!])
+    await render()
+    await expandRows()
+    await toggle()
+    return out
+  }
+
+  it('bez zmiany pole zamyka się od razu, bez pytania', async () => {
+    await open()
+    await toggle()
+    expect(q('rule-unsaved')).toBeNull()
+    expect(q('case-repeat-form', row())).toBeNull()
+  })
+
+  it('zmiana + zamknięcie: okno „Zapisać zmianę powtarzania?”, pole i wpisana reguła zostają, nic nie zapisano', async () => {
+    const { sent } = await open()
+    await pick('workdays')
+    await toggle()
+    expect(q('rule-unsaved')!.textContent).toContain('Zapisać zmianę powtarzania?')
+    expect(q('case-repeat-form', row())).not.toBeNull()
+    expect(sent).toEqual([])
+  })
+
+  it('„Odrzuć”: pole się zamyka bez zapisu; otwarte znowu pokazuje zapisane powtarzanie (brak)', async () => {
+    const { sent } = await open()
+    await pick('workdays')
+    await toggle()
+    await act(async () => q('rule-unsaved-discard')!.click())
+    expect(q('rule-unsaved')).toBeNull()
+    expect(q('case-repeat-form', row())).toBeNull()
+    expect(sent).toEqual([])
+    await toggle()
+    expect((q('series-rule', row()) as HTMLSelectElement).value).toBe('none')
+  })
+
+  it('„Zapisz”: zapisuje regułę i zamyka pole', async () => {
+    const { sent } = await open()
+    await pick('workdays')
+    await toggle()
+    await act(async () => q('rule-unsaved-save')!.click())
+    expect(sent[0]![0]!.edits.find((x) => x.path.join('.') === 'repeat')!.value).toMatchObject({ rule: { kind: 'workdays' } })
+    expect(q('rule-unsaved')).toBeNull()
+    expect(q('case-repeat-form', row())).toBeNull()
+  })
+
+  it('Esc w oknie: zostaje na polu z wpisaną regułą', async () => {
+    await open()
+    await pick('workdays')
+    await toggle()
+    await act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(q('rule-unsaved')).toBeNull()
+    expect((q('series-rule', row()) as HTMLSelectElement).value).toBe('workdays')
+    expect(q('case-repeat-save', row())).not.toBeNull()
+  })
+  const listWrites = (sent: Array<Array<{ rel: string; edits: Array<{ path: string[]; value: unknown }> }>>) => sent.flat().flatMap((e) => e.edits).filter((ed) => ed.path[0] === 'list').map((ed) => ed.value)
+  const move = (to: string) =>
+    act(async () => {
+      const list = q('case-list', row()) as HTMLSelectElement
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(list, to)
+      list.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+
+  it('przeniesienie sprawy na inną listę (i „Zrobione”) przy niezapisanej regule pyta, zamiast ją zgubić; Esc zostawia sprawę i regułę', async () => {
+    const { sent } = await open()
+    await pick('workdays')
+    await move('today')
+    expect(q('rule-unsaved')!.textContent).toContain('Zapisać zmianę powtarzania?')
+    expect(listWrites(sent)).toEqual([])
+    await act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(q('rule-unsaved')).toBeNull()
+    expect(listWrites(sent)).toEqual([])
+    expect((q('series-rule', row()) as HTMLSelectElement).value).toBe('workdays')
+    // „Zrobione” asks the same.
+    await act(async () => q('case-done', row())!.click())
+    expect(q('rule-unsaved')).not.toBeNull()
+    expect(listWrites(sent)).toEqual([])
+  })
+
+  it('przeniesienie: „Zapisz” zapisuje regułę i przenosi; „Odrzuć” przenosi bez reguły', async () => {
+    const saved = await open()
+    await pick('workdays')
+    await move('today')
+    await act(async () => q('rule-unsaved-save')!.click())
+    expect(saved.sent[0]![0]!.edits.find((x) => x.path.join('.') === 'repeat')!.value).toMatchObject({ rule: { kind: 'workdays' } })
+    expect(listWrites(saved.sent)).toEqual(['today'])
+    expect(q('rule-unsaved')).toBeNull()
+    act(() => root?.unmount())
+    host?.remove()
+    const discarded = await open()
+    await pick('workdays')
+    await move('someday')
+    await act(async () => q('rule-unsaved-discard')!.click())
+    expect(discarded.sent.flat().flatMap((e) => e.edits).some((ed) => ed.path[0] === 'repeat')).toBe(false)
+    expect(listWrites(discarded.sent)).toEqual(['someday'])
+  })
+
+  const rightClick = (el: Element) => act(async () => void el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 60, clientY: 80 })))
+
+  it('menu prawego przycisku wiersza („Zrobione”, „Przenieś na listę”) też pyta o niezapisaną regułę; „Odrzuć” przenosi', async () => {
+    const { sent } = await open()
+    await pick('workdays')
+    await rightClick(row())
+    await act(async () => q('cases-menu-done')!.click())
+    expect(q('rule-unsaved')!.textContent).toContain('Zapisać zmianę powtarzania?')
+    expect(sent).toEqual([])
+    await act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(q('rule-unsaved')).toBeNull()
+    await rightClick(row())
+    await act(async () => q('cases-menu-list')!.click())
+    await act(async () => q('cases-menu-list-today')!.click())
+    expect(q('rule-unsaved')).not.toBeNull()
+    expect(sent).toEqual([])
+    await act(async () => q('rule-unsaved-discard')!.click())
+    await act(async () => void (await new Promise((r) => setTimeout(r, 0))))
+    expect(listWrites(sent)).toEqual(['today'])
+  })
+
+  it('wybór listy, na której sprawa już jest, niczego nie pyta ani nie gubi reguły', async () => {
+    const { sent } = await open()
+    await pick('workdays')
+    await move('week')
+    expect(q('rule-unsaved')).toBeNull()
+    expect(sent).toEqual([])
+    // The same from the menu „…” (the list of the sprawa has the ✓).
+    await act(async () => q('case-menu', row())!.click())
+    await act(async () => q('case-menu-list')!.click())
+    await act(async () => q('case-menu-list-week')!.click())
+    expect(q('rule-unsaved')).toBeNull()
+    expect(sent).toEqual([])
+    expect((q('series-rule', row()) as HTMLSelectElement).value).toBe('workdays')
+  })
+
+  it('bez zmiany w regule przeniesienie idzie od razu, bez pytania', async () => {
+    const { sent } = await open()
+    await move('today')
+    expect(q('rule-unsaved')).toBeNull()
+    expect(listWrites(sent)).toEqual(['today'])
+  })
+
+  it('w trakcie zapisu przyciski okna są wyłączone (jak w „Szablonach”)', async () => {
+    await open()
+    let finish!: () => void
+    ;(window as unknown as { rd: Partial<RdApi> }).rd.edit = (entries) => new Promise((r) => (finish = () => r(entries.map(() => ({ status: 'applied' as const })))))
+    await pick('workdays')
+    await toggle()
+    await act(async () => q('rule-unsaved-save')!.click())
+    expect((q('rule-unsaved-save') as HTMLButtonElement).disabled).toBe(true)
+    expect((q('rule-unsaved-discard') as HTMLButtonElement).disabled).toBe(true)
+    await act(async () => finish())
   })
 })

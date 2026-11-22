@@ -15,6 +15,8 @@ import { DEFAULT_GENERAL, rdFrom } from '../../src/shared/model/rd'
 import { DEFAULT_SETTINGS } from '../../src/shared/model/settings'
 import { defaultTemplates, firstComputerRecords } from '../../src/shared/model/defaults'
 import { previousMonth } from '../../src/shared/model/goals'
+import { newTask } from '../../src/shared/model/requests'
+import { logicalMinuteOf } from '../../src/shared/time/day'
 import { launch, logicalToday, withMainLog } from './app'
 
 const shots = process.env.RD_E2E_SHOTS
@@ -60,9 +62,11 @@ test('Tydzień (D356): siedem kolumn, strzałki tygodni, cel miesięczny z post�
       await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
       await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
       // The menu: „Tydzień” with its shortcut (right after the calendar, D361).
-      await expect(page.getByTestId('nav-week')).toHaveAttribute('title', 'Tydzień (Ctrl 3)')
+      await expect(page.getByTestId('nav-week')).toHaveAttribute('title', 'Tydzień (Ctrl+3)')
       await page.getByTestId('nav-week').click()
       await expect(page.getByTestId('week')).toBeVisible()
+      // D10 (UX9): the gestures of the grid are said over it.
+      await expect(page.getByTestId('week-hint')).toContainText('Kliknij pustą godzinę')
       // Seven columns, today's among them marked; today's own block on the common axis.
       const days = page.locator('[data-testid^="week-day-"]')
       await expect(days).toHaveCount(7)
@@ -70,6 +74,17 @@ test('Tydzień (D356): siedem kolumn, strzałki tygodni, cel miesięczny z post�
       await expect(page.getByTestId(`week-day-${today}`)).toHaveAttribute('aria-current', 'date')
       await expect(page.getByTestId(`week-block-${today}-w1`)).toBeVisible({ timeout: 30_000 })
       await expect(page.getByTestId(`week-regen-${today}`)).toContainText('min')
+      // D563 (P6): the page opens with the current hour on the axis in view, under the sticky heading.
+      const hourNow = Math.floor(logicalMinuteOf(today, Date.now()) / 60) * 60
+      if ((await page.getByTestId(`week-hour-${hourNow}`).count()) > 0) {
+        await expect
+          .poll(async () => {
+            const head = await page.getByTestId('week-head').boundingBox()
+            const label = await page.getByTestId(`week-hour-${hourNow}`).boundingBox()
+            return head != null && label != null && label.y >= head.y + head.height - 8 && label.y < (page.viewportSize()?.height ?? 860)
+          })
+          .toBe(true)
+      }
       await shot(page, 'e10-01-week')
       // The arrows: a week on, the day-of-today gone from the columns, „Ten tydzień” back.
       const week = (await page.getByTestId('week-title').getAttribute('data-week'))!
@@ -172,13 +187,14 @@ test('krok „Cele na <miesiąc>” (D360): „Pomiń” chowa go na cały miesi
 })
 
 const dayFileOf = (dir: string, date: string): string => join(dir, 'days', date.slice(0, 4), `${date}.json`)
-type PlanFileBlock = { id: string; categoryId: string; startMin: number; durationMin: number; name?: string | null }
+type PlanFileBlock = { id: string; categoryId: string; startMin: number; durationMin: number; name?: string | null; task?: string | null }
 const planOf = (dir: string, date: string): PlanFileBlock[] => (existsSync(dayFileOf(dir, date)) ? (JSON.parse(readFileSync(dayFileOf(dir, date), 'utf8')) as { blocks: PlanFileBlock[] }).blocks : [])
 const plusDays = (date: string, n: number): string => new Date(Date.parse(`${date}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
 
-/** „Tydzień” one week on (every day of it ahead – none gone by); the dates of its Tuesday, Wednesday and Thursday. */
+/** „Tydzień” one week on (every day of it ahead – none gone by); the dates of its Tuesday, Wednesday and Thursday. The page remembers its week (D2, UX8): it is set to this week first. */
 async function nextWeek(page: Page): Promise<{ tue: string; wed: string; thu: string }> {
   await page.getByTestId('nav-week').click()
+  if (await page.getByTestId('week-today').isEnabled()) await page.getByTestId('week-today').click()
   await page.getByTestId('week-next').click()
   const monday = (await page.getByTestId('week-title').getAttribute('data-week'))!
   await expect(page.getByTestId(`week-col-${plusDays(monday, 1)}`)).toBeVisible({ timeout: 30_000 })
@@ -254,6 +270,7 @@ test('Tydzień (D366, D461): klik w pusty wtorek – okienko, Enter w nazwie zap
       await expect(small).toHaveAttribute('data-date', tue)
       await expect(small).toHaveAttribute('data-start', String(h1))
       await expect(small).toContainText(clockOf(h1))
+      await expect(page.getByTestId('week-new-hint')).toContainText('Esc – odrzuć')
       await expect(page.getByTestId('week')).toBeVisible()
       // The block waiting is drawn in its column; nothing is saved yet.
       await expect(page.getByTestId('week-range-waiting')).toContainText(`${clockOf(h1)}–${clockOf(h1 + 60)}`)
@@ -1009,6 +1026,57 @@ test('Miesiąc (D429): po bloku stałym paski mają nazwy bloków elastycznych p
   }
 })
 
+test('Tydzień (D461, szkice): okienko „Nowy blok” z wpisaną nazwą przy Ctrl 1 i przy wyborze w Ctrl K zapisuje blok jak klik obok; nietknięte znika bez zapisu', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-week-new-leave-'))
+  seed(dataDir)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      const { tue, wed, thu } = await nextWeek(page)
+      const small = page.getByTestId('week-new')
+      // Touched (a name typed): Ctrl 1 changes the screen and the block is saved, as by a click outside.
+      const h1 = await freeHour(page, tue, 120)
+      await page.mouse.click(await centreOf(page, tue), await hourY(page, h1))
+      await expect(small).toBeVisible()
+      await page.getByTestId('week-new-name').fill('Z Ctrl 1')
+      await page.keyboard.press('Control+1')
+      await expect(page.getByTestId('today')).toBeVisible()
+      await expect(small).toHaveCount(0)
+      await expect.poll(() => planOf(dataDir, tue).map((b) => [b.name, b.startMin, b.durationMin]), { timeout: 15_000 }).toEqual([['Z Ctrl 1', h1, 60]])
+
+      // The same through the search (Ctrl K, Enter on a screen).
+      await nextWeek(page)
+      const h2 = await freeHour(page, wed, 120)
+      await page.mouse.click(await centreOf(page, wed), await hourY(page, h2))
+      await expect(small).toBeVisible()
+      await page.getByTestId('week-new-name').fill('Z Ctrl K')
+      await page.keyboard.press('Control+K')
+      await page.getByTestId('search-input').fill('Rutyny')
+      await page.getByTestId('search-input').press('Enter')
+      await expect(page.getByTestId('routines')).toBeVisible()
+      await expect(small).toHaveCount(0)
+      await expect.poll(() => planOf(dataDir, wed).map((b) => [b.name, b.startMin, b.durationMin]), { timeout: 15_000 }).toEqual([['Z Ctrl K', h2, 60]])
+
+      // Untouched (a bare click of the grid): the window goes with the screen, nothing is saved.
+      await nextWeek(page)
+      const h3 = await freeHour(page, thu, 120)
+      await page.mouse.click(await centreOf(page, thu), await hourY(page, h3))
+      await expect(small).toBeVisible()
+      await page.keyboard.press('Control+1')
+      await expect(page.getByTestId('today')).toBeVisible()
+      await expect(small).toHaveCount(0)
+      await page.getByTestId('nav-week').click()
+      await expect(small).toHaveCount(0)
+      expect(planOf(dataDir, thu)).toEqual([])
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('Miesiąc (SNT1, D418, D422): w komórce dnia do trzech pasków stałych bloków, „+N” za resztę i kropka obciążenia ze zdaniem', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-month-'))
   seed(dataDir)
@@ -1036,7 +1104,7 @@ test('Miesiąc (SNT1, D418, D422): w komórce dnia do trzech pasków stałych bl
       await expect(bars.nth(0)).toHaveAttribute('title', /06:30–07:30/)
       await expect(bars.nth(2)).toHaveAttribute('title', /08:30–09:30/)
       // Everything else the day holds – the two flexible blocks and whatever its template brings – is „+N”.
-      await expect(page.getByTestId(`month-more-${next}`)).toHaveText(/^\+([2-9]|\d{2,})$/)
+      await expect(page.getByTestId(`month-more-${next}`)).toHaveText(/^\+([2-9]|\d{2,}) (bloki|bloków|pozycje|pozycji|sesje|sesji)$/)
       // The dot of the load: a level and the sentence about the work and the budget.
       const dot = page.getByTestId(`month-load-${next}`)
       await expect(dot).toHaveAttribute('data-level', /^(low|mid|high)$/)
@@ -1045,6 +1113,124 @@ test('Miesiąc (SNT1, D418, D422): w komórce dnia do trzech pasków stałych bl
       // The colour of the day and the selection stay: a click with Ctrl selects the day.
       await page.getByTestId(`day-${next}`).click({ modifiers: ['Control'] })
       await expect(page.getByTestId(`day-${next}`)).toHaveAttribute('aria-pressed', 'true')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Pamięć okresu i klawisze (UX8, D2, D6): następny tydzień → dzień → „← Tydzień” wraca na ten tydzień; PgDn / PgUp / Home; Ctrl+N otwiera okienko; „Dziś” wyłączony na bieżącym okresie', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-ux8-'))
+  seed(dataDir)
+  const today = logicalToday()
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      // „Dziś” on today: the button is there and off, no way back (the day was not opened from a screen of periods).
+      await expect(page.getByTestId('day-today')).toBeDisabled()
+      await expect(page.getByTestId('day-back')).toHaveCount(0)
+      await page.getByTestId('nav-week').click()
+      await expect(page.getByTestId('week-today')).toBeDisabled()
+      const week = (await page.getByTestId('week-title').getAttribute('data-week'))!
+      // PgDn / PgUp / Home move the week (the focus is not in a field).
+      await page.keyboard.press('PageDown')
+      await expect(page.getByTestId('week-title')).not.toHaveAttribute('data-week', week)
+      const next = (await page.getByTestId('week-title').getAttribute('data-week'))!
+      await page.keyboard.press('PageDown')
+      await page.keyboard.press('PageUp')
+      await expect(page.getByTestId('week-title')).toHaveAttribute('data-week', next)
+      // Ctrl+N: the window of a new block on the first day of that week, at an hour after the wake.
+      await expect(page.getByTestId(`week-day-${next}`)).toBeVisible({ timeout: 30_000 })
+      await page.keyboard.press('Control+n')
+      await expect(page.getByTestId('week-new')).toBeVisible()
+      await expect(page.getByTestId('week-new')).toHaveAttribute('data-date', next)
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('week-new')).toHaveCount(0)
+      // A day of that week opens „Dziś” with the way back: the week is the same, whatever the day's arrows did.
+      await page.getByTestId(`week-day-${next}`).click()
+      await expect(page.getByTestId('page-today')).toBeVisible()
+      await expect(page.getByTestId('day-back')).toHaveText('← Tydzień')
+      await page.getByTestId('day-next').click()
+      await expect(page.getByTestId('day-back')).toBeVisible()
+      // The day is counted (the page says „Liczę dzień…” until then and has no keys): PgUp goes a day back, Home to today.
+      await expect(page.getByTestId('day-add')).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByTestId('day-today')).toBeEnabled()
+      await page.keyboard.press('Home')
+      await expect(page.getByTestId('day-today')).toBeDisabled({ timeout: 30_000 })
+      await page.keyboard.press('PageUp')
+      await expect(page.getByTestId('day-today')).toBeEnabled({ timeout: 30_000 })
+      await page.keyboard.press('Home')
+      await expect(page.getByTestId('day-today')).toBeDisabled()
+      await page.getByTestId('day-back').click()
+      await expect(page.getByTestId('week')).toBeVisible()
+      await expect(page.getByTestId('week-title')).toHaveAttribute('data-week', next)
+      await page.keyboard.press('Home')
+      await expect(page.getByTestId('week-title')).toHaveAttribute('data-week', week)
+      // The calendar remembers its month too; a day opened from it goes back to it.
+      await page.getByTestId('nav-calendar').click()
+      await expect(page.getByTestId('month-today')).toBeDisabled()
+      await page.keyboard.press('PageDown')
+      await expect(page.getByTestId('month-today')).toBeEnabled()
+      const title = await page.getByTestId('month-title').textContent()
+      await page.getByTestId('nav-week').click()
+      await page.getByTestId('nav-calendar').click()
+      await expect(page.getByTestId('month-title')).toHaveText(title!)
+      await page.getByTestId('month-today').click()
+      await expect(page.getByTestId(`day-${today}`)).toBeVisible()
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Panel „Sprawy” przy „Tygodniu” (UX19, P27, P29): zwinięty; sprawa z panelu upuszczona na środę pokazuje pasmo i zapisuje blok o tej godzinie; Ctrl+Z cofa; panel celów się zwija', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-week-cases-'))
+  seed(dataDir)
+  const today = logicalToday()
+  mkdirSync(join(dataDir, 'requests'), { recursive: true })
+  writeFileSync(join(dataDir, 'requests', 'e2e-task.json'), JSON.stringify(newTask('e2e-task', Date.now(), today, { title: 'Zadanie z panelu', estimateMin: 30 })))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1500, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      const { wed } = await nextWeek(page)
+      // The panel of goals folds to its title; the fold stays.
+      await expect(page.getByTestId('goals-edit')).toBeVisible()
+      await page.getByTestId('goals-fold').click()
+      await expect(page.getByTestId('goals-edit')).toHaveCount(0)
+      await page.getByTestId('goals-fold').click()
+      await expect(page.getByTestId('goals-edit')).toBeVisible()
+      // The panel „Sprawy” is folded until opened.
+      await expect(page.getByTestId('week-cases-toggle')).toHaveAttribute('aria-expanded', 'false')
+      await expect(page.getByTestId('cases-panel')).toHaveCount(0)
+      await page.getByTestId('week-cases-toggle').click()
+      await expect(page.getByTestId('case-chip')).toContainText('Zadanie z panelu', { timeout: 30_000 })
+      const h = await freeHour(page, wed, 30, 12 * 60)
+      const y = (await hourY(page, h)) + 1
+      const chip = (await page.getByTestId('case-chip').boundingBox())!
+      const from = { x: chip.x + 30, y: chip.y + chip.height / 2 }
+      await page.mouse.move(from.x, from.y)
+      await page.mouse.down()
+      await page.mouse.move(from.x - 12, from.y + 4, { steps: 3 })
+      await page.mouse.move(await centreOf(page, wed), y, { steps: 8 })
+      // Held over the column: where the block would stand.
+      const band = page.getByTestId('week-case-drop')
+      await expect(band).toHaveAttribute('data-date', wed)
+      await expect(band).toHaveAttribute('data-start', String(h))
+      await page.mouse.up()
+      await expect.poll(() => planOf(dataDir, wed).find((b) => b.task === 'e2e-task')?.startMin, { timeout: 15_000 }).toBe(h)
+      await expect(page.getByTestId('week-case-drop')).toHaveCount(0)
+      // Ctrl+Z takes back the last „Cofnij” on the screen: the toast of the drop.
+      await expect(page.getByTestId('toast-action')).toHaveText('Cofnij')
+      await page.mouse.move(5, 5)
+      await page.keyboard.press('Control+KeyZ')
+      await expect.poll(() => planOf(dataDir, wed).some((b) => b.task === 'e2e-task'), { timeout: 15_000 }).toBe(false)
+      await expect(page.getByTestId('toast-action')).toHaveCount(0)
     })
     expect(errors).toEqual([])
   } finally {

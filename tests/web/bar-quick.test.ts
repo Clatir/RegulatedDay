@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * „+” of the quick capture in the bar (D402: always, T763): also while the bar has no day (no data folder, a day not
- * counted now) – and a field unfolded with a title typed stays as it is when the day goes from the view (a file read for
- * a moment unknown never takes your text).
+ * „+ Skrzynka” of the quick capture in the bar (D402: always, T763; D564 P15): also while the bar has no day (no data folder,
+ * a day not counted now) – and a field unfolded with a title typed stays as it is when the day goes from the view (a file
+ * read for a moment unknown never takes your text).
  */
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -173,11 +173,10 @@ describe('pole szybkiego zapisu: tekst tylko przez zmianę układu (T767)', () =
   })
 })
 
-describe('panel otwarty „+” paska pulpitu (T771, T772)', () => {
-  let target: ((t: { line: string | null; day: string | null; quick?: boolean } | null) => void) | null = null
+describe('pole „+ Skrzynka” w panelu ikony przy „Odcinam się” (T771, T772)', () => {
   const hadObserver = 'ResizeObserver' in globalThis
   beforeEach(() => {
-    const rd: Partial<RdApi> = { quickToday: () => Promise.resolve(MAIN_DAY), onPanelTarget: (cb) => ((target = cb), () => undefined), panelTouch: () => undefined, panelClose: () => undefined, barLayout: () => undefined }
+    const rd: Partial<RdApi> = { quickToday: () => Promise.resolve(MAIN_DAY), onPanelTarget: () => () => undefined, panelTouch: () => undefined, panelClose: () => undefined, barLayout: () => undefined }
     ;(window as unknown as { rd: Partial<RdApi> }).rd = rd
     if (!hadObserver)
       (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
@@ -193,47 +192,21 @@ describe('panel otwarty „+” paska pulpitu (T771, T772)', () => {
     delete (window as unknown as { rd?: unknown }).rd
     if (!hadObserver) delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver
   })
-
-  it('każde nowe otwarcie daje fokus polu – także gdy już jest otwarte; flaga nie zostaje na później', async () => {
-    host = document.createElement('div')
-    document.body.append(host)
-    root = createRoot(host)
-    const other = document.createElement('button')
-    document.body.append(other)
-    try {
-      await act(async () => root!.render(createElement(Bar, { view: dayView(), mode: 'panel', quickAt: { n: 1 } })))
-      expect(document.activeElement).toBe(field())
-      other.focus()
-      await act(async () => root!.render(createElement(Bar, { view: dayView(), mode: 'panel', quickAt: { n: 2 } })))
-      expect(document.activeElement).toBe(field())
-      other.focus()
-      // A change of layout afterwards: the focus stays where it is.
-      const same = { n: 3 }
-      await act(async () => root!.render(createElement(Bar, { view: dayView(), mode: 'panel', quickAt: same })))
-      other.focus()
-      await act(async () => root!.render(createElement(Bar, { view: noFolderView('failed'), mode: 'panel', quickAt: same })))
-      expect(document.activeElement).toBe(other)
-    } finally {
-      other.remove()
-    }
-  })
-
-  it('panel: „Odcinam się” w trakcie – ten sam pasek (tekst zostaje), otwarcie nie wraca ani nie zabiera fokusu', async () => {
+  async function panel() {
     act(() => useWidget.setState({ view: dayView() }))
     host = document.createElement('div')
     document.body.append(host)
     root = createRoot(host)
+    await act(async () => root!.render(createElement(PanelApp)))
+  }
+
+  it('„Odcinam się” w trakcie – ten sam pasek (tekst zostaje), widok nie zabiera fokusu', async () => {
+    await panel()
     const other = document.createElement('button')
     document.body.append(other)
     try {
-      await act(async () => root!.render(createElement(PanelApp)))
-      await act(async () => target!({ line: null, day: null, quick: true }))
+      await openWith('abc')
       expect(document.activeElement).toBe(field())
-      await act(async () => {
-        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
-        set.call(field()!, 'abc')
-        field()!.dispatchEvent(new Event('input', { bubbles: true }))
-      })
       other.focus()
       await act(async () => useWidget.setState({ view: { ...dayView(), hidden: true, stateLine: 'Odcinam się od 10:00' } }))
       expect(field()?.value).toBe('abc')
@@ -247,31 +220,15 @@ describe('panel otwarty „+” paska pulpitu (T771, T772)', () => {
   })
 
   it('„Odcinam się”: rozwinięte „⋯” zwija się (panel nie zostaje „rozwinięty”) i nie wraca po „Wracam”; pole szybkiego zapisu zostaje', async () => {
-    act(() => useWidget.setState({ view: dayView() }))
-    host = document.createElement('div')
-    document.body.append(host)
-    root = createRoot(host)
-    await act(async () => root!.render(createElement(PanelApp)))
+    await panel()
     await act(async () => host!.querySelector<HTMLButtonElement>('[data-testid="bar-group-more"]')!.click())
-    expect(host.querySelector('[data-testid="bar-unfold-more"]')).not.toBeNull()
+    expect(host!.querySelector('[data-testid="bar-unfold-more"]')).not.toBeNull()
     await act(async () => useWidget.setState({ view: { ...dayView(), hidden: true, stateLine: 'Odcinam się od 10:00' } }))
     await act(async () => useWidget.setState({ view: dayView() }))
-    expect(host.querySelector('[data-testid="bar-unfold-more"]')).toBeNull()
+    expect(host!.querySelector('[data-testid="bar-unfold-more"]')).toBeNull()
     // The quick field survives „Odcinam się” (its text) – and is the only unfold that does.
-    await act(async () => target!({ line: null, day: null, quick: true }))
+    await openWith('x')
     await act(async () => useWidget.setState({ view: { ...dayView(), hidden: true, stateLine: 'Odcinam się od 10:00' } }))
-    expect(field()).not.toBeNull()
-  })
-
-  it('„+” przed pierwszym widokiem paska: pole otwiera się, gdy widok przyjdzie (otwarcie nie przepada)', async () => {
-    host = document.createElement('div')
-    document.body.append(host)
-    root = createRoot(host)
-    await act(async () => root!.render(createElement(PanelApp)))
-    await act(async () => target!({ line: null, day: null, quick: true }))
-    expect(field()).toBeNull()
-    await act(async () => useWidget.setState({ view: dayView() }))
-    expect(field()).not.toBeNull()
-    expect(document.activeElement).toBe(field())
+    expect(field()?.value).toBe('x')
   })
 })

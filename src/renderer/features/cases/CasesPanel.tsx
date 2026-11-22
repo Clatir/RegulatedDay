@@ -2,7 +2,8 @@
  * The panel of „Sprawy” beside the axis of „Dziś” (D384): the list „Dziś” (with the sum of its estimates, D402) and
  * „Skrzynka”. A row is dragged onto the axis – the block it makes stands where it is dropped – or put in the nearest free place
  * with „Zaplanuj”. A sprawa that is „zaplanowane” already says where; planned again, its old block (if it has not begun)
- * goes. The week has no such panel (D384).
+ * goes. „Tydzień” and „3 dni” have the same panel, folded by default (UX19, P27 – it replaces the „no panel in the week” of D384): its row is dragged onto
+ * the column of a day (`week/WeekCasesPanel`, which says its `view`, its hint and where „Zaplanuj” puts the sprawa).
  */
 import { useEffect, useMemo, useRef } from 'react'
 import { durationLabel } from '@shared/format'
@@ -17,16 +18,16 @@ import { DEL_RING, deleteMark, useDeleteResolver } from '../../lib/deleteKey'
 import { caseTitle, sectionsOf, statusParts } from './casesLogic'
 import { DueMark } from './DueMark'
 import { PriorityMark } from './PriorityMark'
-import type { CaseDragState } from './useCaseDrag'
+import type { GroupView } from '../../store/groupLine'
 import { carriedBy } from './groupActions'
 import { useCasesGroup } from './useCasesGroup'
-import { ownControl } from './usePointerDrag'
+import { ownControl, type PointerDragState } from './usePointerDrag'
 
 /**
  * `onSelected` hears the selection of the panel whenever it changes (in the order shown): the page of the axis, which holds the drag, asks it at the
  * drop and for the ghost what a drag of a sprawa carries (`carriedBy` – the one rule).
  */
-export function CasesPanel({ drag, grab, onPlan, onSelected }: { drag: CaseDragState | null; grab: (id: string, e: React.PointerEvent) => void; onPlan: (item: CaseItem) => void; onSelected?: (selected: readonly CaseItem[]) => void }) {
+export function CasesPanel({ drag, grab, started, onPlan, onSelected, view = 'today', hint = 'Przeciągnij sprawę na oś albo kliknij „Zaplanuj”.', planTitle = 'Postaw w najbliższym wolnym miejscu osi' }: { drag: PointerDragState<unknown> | null; grab: (id: string, e: React.PointerEvent) => void; started?: { current: boolean }; onPlan: (item: CaseItem) => void; onSelected?: (selected: readonly CaseItem[]) => void; view?: GroupView; hint?: string; planTitle?: string }) {
   const rd = useData((s) => s.rd)
   const { items, today } = useCases()
   // Requests belong to their module (spec „Moduły”): switched off, the panel holds the tasks' alone, as the page does.
@@ -36,7 +37,12 @@ export function CasesPanel({ drag, grab, onPlan, onSelected }: { drag: CaseDragS
   // D527: the selection of the panel (its two lists; Shift and Ctrl+A go within one) – the keys are the panel's only with the focus in it.
   const panel = useRef<HTMLElement>(null)
   const lists = useMemo(() => sections.map((s) => s.items.map((x) => x.record.id)), [sections])
-  const group = useCasesGroup({ view: 'today', items, lists, enabled: true, when: () => panel.current?.contains(document.activeElement) === true, today })
+  const group = useCasesGroup({ view, items, lists, enabled: true, when: () => panel.current?.contains(document.activeElement) === true, dragStarted: () => {
+      // The click that follows a gesture that started answers once (as on the card of the matrix).
+      const was = started?.current === true
+      if (started) started.current = false
+      return was
+    }, today })
   // D530: a selected sprawa dragged carries the whole selection (the page of the axis hears which – `onSelected`).
   const heard = useRef(onSelected)
   heard.current = onSelected
@@ -71,7 +77,7 @@ export function CasesPanel({ drag, grab, onPlan, onSelected }: { drag: CaseDragS
           </span>
           {badge && <DueMark badge={badge} />}
           <span className="num shrink-0 text-[11.5px] text-muted">{durationLabel(x.estimateMin)}</span>
-          <button type="button" className="shrink-0 text-[11.5px] text-lamp hover:underline" onClick={() => onPlan(x)} data-testid="case-plan" title="Postaw w najbliższym wolnym miejscu osi">
+          <button type="button" className="shrink-0 text-[11.5px] text-lamp hover:underline" onClick={() => onPlan(x)} data-testid="case-plan" title={planTitle}>
             Zaplanuj
           </button>
         </div>
@@ -93,7 +99,7 @@ export function CasesPanel({ drag, grab, onPlan, onSelected }: { drag: CaseDragS
           {s.items.length ? <ul className="flex flex-col gap-1">{s.items.map(row)}</ul> : <p className="text-[11.5px] text-muted">Pusto.</p>}
         </div>
       ))}
-      <p className="text-[11.5px] text-muted">Przeciągnij sprawę na oś albo kliknij „Zaplanuj”.</p>
+      <p className="text-[11.5px] text-muted">{hint}</p>
       <button type="button" className="self-start text-[12px] text-lamp hover:underline" onClick={() => navigate('requests')} data-testid="cases-open">
         Wszystkie sprawy…
       </button>

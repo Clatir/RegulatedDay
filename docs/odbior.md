@@ -274,11 +274,90 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] PX1 Panel ikony: „×” zamyka panel, aplikacja zostaje w zasobniku (1.31.0)
    - [ ] PX2 Panel ikony: „×” z Shift zamyka aplikację (1.31.0)
    - [ ] PX3 Panel ikony: kliknięcie w wolne pole otwiera okno główne (1.31.0)
-   - [ ] PX4 Pasek pulpitu: „×” chowa pasek, „Pokaż pasek pulpitu” w menu ikony go przywraca (1.32.0)
+   - [ ] PX4 Pasek pulpitu: „×” chowa pasek, „Pasek pulpitu” w menu ikony go przywraca (1.32.0; od 1.34.0 – UX11.4)
    - [ ] PX5 Pasek pulpitu: „×” z Shift zamyka aplikację (1.32.0)
    - [ ] PX6 Dwuklik ikony i panelu otwiera okno główne (1.32.0)
    - [ ] PX7 Dwuklik paska pulpitu otwiera okno główne (1.33.0)
    - [ ] PX8 Pasek schowany „×” wraca po minimalizacji i zamknięciu okna głównego, przełącznik w Ustawieniach (1.33.0)
+   - [ ] UX1.1 Blok „po bloku” → „o godzinie” zostaje o swojej godzinie (1.34.0)
+   - [ ] UX1.2 Menu „⋯” w „Dziś”: Esc, klik obok, strzałki (1.34.0)
+   - [ ] UX1.3 „Przenieś na…” liczy od dziś, z datą w podpisie (1.34.0)
+   - [ ] UX1.4 Jedna szerokość paneli, słowa w oknie usuwania, „Zgadza się” (1.34.0)
+   - [ ] UX2.1 Przytrzymany Ctrl+N i dwuklik „+ Szablon” – jeden rekord (1.34.0)
+   - [ ] UX2.2 Okienko „Nowy blok” w „Tygodniu” zapisuje się przy zmianie ekranu (1.34.0)
+   - [ ] UX2.3 Ten sam dymek nie dubluje się (1.34.0)
+   - [ ] UX3.1 Komunikaty prowadzą na miejsce: Historia, Dane, kreator (1.34.0)
+   - [ ] UX3.2 Ctrl K: „Plan dnia”, „Kalendarze”, „Nowe zadanie” (1.34.0)
+   - [ ] UX4.1 „Zamknij dzień” w rytuale ma „Cofnij” (1.34.0)
+   - [ ] UX4.2 Enter i Esc w polach godziny rytuału (1.34.0)
+   - [ ] UX4.3 Przyciski rytuału z wielkiej litery, „Zatwierdź” rano i wieczorem (1.34.0)
+   - [ ] UX5.1 Typ jednego dnia w Kalendarzu ma „Cofnij” (1.34.0)
+   - [ ] UX5.2 Klik w pustą oś Szablonu – „Dodano blok · Cofnij” (1.34.0)
+   - [ ] UX5.3 Dwa szablony na ten sam dzień – ostrzeżenie i „nieużywany” (1.34.0)
+   - [ ] UX6.1 Check-in i „Pomiń” zostają po zmianie ekranu (1.34.0)
+   - [ ] UX6.2 Karta wydarzenia całodniowego – klik obok zapisuje (1.34.0)
+   - [ ] UX6.3 Niezapisana reguła serii i powtarzania – pytanie (1.34.0)
+   - [ ] UX7.1 Oś „Dziś” po otwarciu – „teraz” widać bez przewijania (1.34.0)
+   - [ ] UX7.2 Inny dzień i „3 dni” – oś od godziny przed pobudką (1.34.0)
+   - [ ] UX7.3 Granica i maksimum o tej samej godzinie – jeden napis (1.34.0)
+   - [ ] UX7.4 „+N” w miesiącu mówi, co kryje (1.34.0)
+   - [ ] UX16.1 Daty DD.MM.RRRR i pola dat – „3.01”, osiem cyfr, „-”, „/” (1.34.0)
+   - [ ] UX16.2 Historia i Pokój – jeden zapis daty i godziny (1.34.0)
+   - [ ] UX16.3 Liczniki „x z y” i skróty „Ctrl+K” (1.34.0)
+   - [ ] UX16.4 Szablony, serie, rutyny – puste stany i „Używana w…” (1.34.0)
+   - [ ] UX16.5 „Skopiuj ten dzień do…” – okno dni z Od/Do (1.34.0)
+   - [ ] UX10.1 „↗” na pasku pulpitu otwiera okno główne jednym kliknięciem (1.34.0)
+   - [ ] UX10.2 Panel ikony – nagłówek i stopka (1.34.0)
+   - [ ] UX10.3 „Pasek pulpitu: schowaj / pokaż” w stopce panelu (1.34.0)
+   - [ ] UX10.4 „+ Skrzynka” na pasku pulpitu – okienko „Do skrzynki” (1.34.0)
+   - [ ] UX10.5 Dwuklik w przycisk paska działa raz, panel otwiera się zwinięty (1.34.0)
+   - [ ] UX8.1 Powrót do tygodnia „← Tydzień” na zapamiętany okres (1.34.0)
+   - [ ] UX8.2 PgUp / PgDn / Home na każdym widoku okresów (1.34.0)
+   - [ ] UX8.3 Ctrl+N w „Tygodniu”, „3 dniach” i Kalendarzu (1.34.0)
+   - [ ] UX8.4 Przycisk „dziś” i pusty dzień Agendy (1.34.0)
+   - [ ] UX17.1 Wiersz sprawy w jednym wierszu, „▸” i „…” (1.34.0)
+   - [ ] UX17.2 Macierz z klawiatury i myszy (1.34.0)
+   - [ ] UX17.3 „Pokaż wszystkie” w filtrze kalendarzy (1.34.0)
+   - [ ] UX17.4 Del przy jednym bloku zaznaczonym w „Tygodniu” (1.34.0)
+   - [ ] UX14.1 Ustawienia – spis i grupy (1.34.0)
+   - [ ] UX14.2 „Od razu”, jeden pasek „od jutra” i zaplanowane zmiany (1.34.0)
+   - [ ] UX14.3 Szukanie pól w Ustawieniach i Ctrl K (1.34.0)
+   - [ ] UX14.4 Pola paska przy wyłączonym pasku, bez duplikatów (1.34.0)
+   - [ ] UX14.5 „Wycofaj” zaplanowanej zmiany (1.34.0)
+   - [ ] UX14.6 Wycofanie na dwóch komputerach (1.34.0)
+   - [ ] UX11.1 Panel mówi, że pasek jest schowany (1.34.0)
+   - [ ] UX11.2 Ustawienia – „schowany” i jedno kliknięcie (1.34.0)
+   - [ ] UX11.3 Wybór miejsca paska pokazuje schowany (1.34.0)
+   - [ ] UX11.4 Menu ikony – „Pasek pulpitu” z ptaszkiem zawsze (1.34.0)
+   - [ ] UX9.1 Ostrzeżenia dnia w panelu bocznym i panelu bloku, rutyna czekająca (1.34.0)
+   - [ ] UX9.2 „Zatwierdź” w nagłówku planu porannego (1.34.0)
+   - [ ] UX9.3 Panel nowego bloku jako szkic, podpisy Esc i gestów (1.34.0)
+   - [ ] UX9.4 Legenda energii pod „?” i jednostka kosztu (1.34.0)
+   - [ ] UX9.5 Karty rutyn w panelu bocznym, „Zakończ rutynę (N z M)” (1.34.0)
+   - [ ] UX18.1 „Historia” z panelu bloku (1.34.0)
+   - [ ] UX18.2 „Historia” sprawy, szablonu, rutyny i serii (1.34.0)
+   - [ ] UX18.3 Filtr i szukanie w Historii (1.34.0)
+   - [ ] UX18.4 Dymek błędu do zamknięcia „×” (1.34.0)
+   - [ ] UX15.1 Opis przy każdym polu Ustawień i „?” przy pojęciach (1.34.0)
+   - [ ] UX15.2 Okno „Jak to działa” z Ctrl K i „?” (1.34.0)
+   - [ ] UX15.3 Lista skrótów pod F1 i „Skróty” w menu (1.34.0)
+   - [ ] UX15.4 Kreator – „Zakończ z domyślnymi” i podsumowanie z krokami (1.34.0)
+   - [ ] UX15.5 Pokój i lista „Pierwszy dzień” (1.34.0)
+   - [ ] UX19.1 Ctrl+Z cofa ostatnią zmianę z „Cofnij” (1.34.0)
+   - [ ] UX19.2 Panel Spraw przy „Tygodniu” i przeciąganie na dzień (1.34.0)
+   - [ ] UX19.3 „Zastosuj szablon ▸” z menu dni (1.34.0)
+   - [ ] UX19.4 Szybkie wybory dni i zwijane cele (1.34.0)
+   - [ ] UX13.1 Tolerancja trafności zmienia ocenę „Trafne szacowanie” (1.34.0)
+   - [ ] UX13.2 Statystyki piszą Twoją tolerancję (1.34.0)
+   - [ ] UX13.3 Przypomnienie planu porannego (1.34.0)
+   - [ ] UX13.4 Przypomnienie rytuału (1.34.0)
+   - [ ] UX13.5 Wyłączanie przypomnień (1.34.0)
+   - [ ] UX12.1 Wiersz bloku pracy w jednym wierszu (1.34.0)
+   - [ ] UX12.2 „Dalej?” bez powtórzonych przycisków (1.34.0)
+   - [ ] UX12.3 „<akcja> · Cofnij” po kliknięciu na pasku (1.34.0)
+   - [ ] UX12.4 Koszt z „Potwierdź · Anuluj” (1.34.0)
+   - [ ] UX12.5 Podpowiedź „×” i uchwyt ⠿ (1.34.0)
+   - [ ] UX12.6 Trwająca prośba „Prośba: <osoba>” (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -2995,7 +3074,8 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 
 ### PX – „×” paska pulpitu i dwuklik (1.32.0, D559)
 
-#### PX4 „×” chowa pasek pulpitu, „Pokaż pasek pulpitu” go przywraca
+#### PX4 „×” chowa pasek pulpitu, „Pasek pulpitu” w menu ikony go przywraca
+- **Od 1.34.0:** pozycja „Pokaż pasek pulpitu” zastąpiona przez „Pasek pulpitu” z ptaszkiem (UX11.4) – w krokach niżej czytaj „Pasek pulpitu”.
 - [ ] Odebrane
 - **Automatycznie:** `tests/web/bar-close.test.ts`, `tests/unit/bar-close.test.ts`, E2E „„×” paska pulpitu (D559)” w `smoke.spec.ts` (504 px, schowanie, powrót po włączeniu w ustawieniach). **Tylko Ty:** menu ikony i wygląd na pulpicie.
 - **Jak sprawdzić:** spójrz na prawy górny róg paska pulpitu, kliknij „×”. Prawy przycisk na ikonie przy zegarze → „Pokaż pasek pulpitu”.
@@ -3031,6 +3111,574 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** kliknij „×” na pasku pulpitu, otwórz okno główne (dwuklik ikony), zminimalizuj je. Powtórz z zamknięciem okna „×”. Potem w Ustawieniach wyłącz „Pasek wraca z oknem głównym” i powtórz.
 - **Oczekiwany efekt:** przy włączonym przełączniku pasek wraca w tym samym miejscu po minimalizacji i po zamknięciu okna; przy wyłączonym zostaje schowany do „Pokaż pasek pulpitu” w menu ikony; przełącznik pamięta się po ponownym uruchomieniu.
 - **Nie przechodzi, gdy:** pasek nie wraca przy włączonym przełączniku; wraca przy wyłączonym; wraca w innym miejscu; przełącznika nie ma w Ustawieniach przy włączonym pasku.
+
+### UX – ciąg poprawek użytkowych (1.34.0, D561–D565)
+
+#### UX1.1 Blok „po bloku” przełączony na „o godzinie” zostaje o swojej godzinie
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux1-start.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” otwórz blok ustawiony „po bloku” (np. prognoza 15:20) i przełącz początek na „o godzinie”. To samo w Szablonie.
+- **Oczekiwany efekt:** pole godziny pokazuje 15:20 (godzinę z prognozy osi), blok nie skacze na 9:00.
+- **Nie przechodzi, gdy:** blok przeskakuje na 9:00 albo inną godzinę niż ta, w której stał na osi; w Szablonie zachowuje się inaczej niż w „Dziś”.
+
+#### UX1.2 Menu „⋯” w „Dziś”: Esc, klik obok, strzałki
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/day-menu.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” otwórz „⋯”; zamknij Esc; otwórz znowu i kliknij obok; otwórz i przejdź strzałkami, Enter.
+- **Oczekiwany efekt:** Esc i klik obok zamykają menu, fokus wraca na „⋯”; strzałki przesuwają zaznaczenie, Enter wykonuje pozycję; drugi klik w „⋯” zamyka menu.
+- **Nie przechodzi, gdy:** menu zostaje otwarte po Esc albo kliknięciu obok; strzałki nic nie robią; Esc zamyka razem z menu inne okno.
+
+#### UX1.3 „Przenieś na…” liczy od dziś, z datą w podpisie
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/move-shortcuts.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** otwórz w „Dziś” dzień za tydzień, przy bloku „Przenieś na…”.
+- **Oczekiwany efekt:** „Jutro”, „Pojutrze”, „Za tydzień” liczone od dzisiejszej daty, z dniem tygodnia i datą w podpisie (np. „Jutro (nd 22.11)”); skrót na oglądany dzień jest wyłączony z podpowiedzią dlaczego.
+- **Nie przechodzi, gdy:** „Jutro” przenosi na dzień po oglądanym; brak daty w podpisie; skrót na ten sam dzień działa i nic nie zmienia.
+
+#### UX1.4 Jedna szerokość paneli, słowa w oknie usuwania i „Zgadza się”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux1-labels.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” otwórz blok i zamknij go, patrząc na oś; usuń dowolny rekord; w rytuale najedź na „✓”.
+- **Oczekiwany efekt:** oś nie zmienia szerokości przy otwarciu bloku (panel bloku tak szeroki jak panel boczny); okno usuwania mówi „Enter – <słowo przycisku>, Esc – anuluj”; „✓” ma podpowiedź „Zgadza się”.
+- **Nie przechodzi, gdy:** oś skacze przy otwarciu bloku; okno usuwania mówi „Enter – tak” przy innym słowie przycisku; „✓” bez podpowiedzi.
+
+#### UX2.1 Przytrzymany Ctrl+N i dwuklik „+ Szablon” dają jeden rekord
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/new-double.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Szablonach przytrzymaj Ctrl+N przez sekundę; kliknij dwa razy szybko „+ Szablon”. To samo w Rutynach.
+- **Oczekiwany efekt:** za każdym razem powstaje jeden nowy szablon (rutyna).
+- **Nie przechodzi, gdy:** na liście pojawia się kilka nowych rekordów naraz.
+
+#### UX2.2 Okienko „Nowy blok” w „Tygodniu” zapisuje się przy zmianie ekranu
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/week-new-leave.test.ts`, E2E `week.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Tygodniu” kliknij w siatkę, wpisz nazwę i bez zamykania okienka naciśnij Ctrl 1 (albo wybierz inny ekran z menu). Powtórz z okienkiem, w którym nic nie wpisałeś.
+- **Oczekiwany efekt:** blok z wpisaną nazwą jest zapisany w tym dniu; nietknięte okienko znika bez bloku.
+- **Nie przechodzi, gdy:** wpisany blok ginie; pusty klik zostawia blok „Inne”; okienko zostaje na innym ekranie.
+
+#### UX2.3 Ten sam dymek nie dubluje się
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/toast-dedupe.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** wywołaj dwa razy ten sam komunikat bez przycisku (np. dwa razy ta sama nieudana operacja).
+- **Oczekiwany efekt:** jeden dymek, jego czas odlicza się od nowa; dymki z „Cofnij” dalej są osobne.
+- **Nie przechodzi, gdy:** dwa identyczne dymki jeden pod drugim; dymek „Cofnij” znika, bo przyszedł drugi podobny.
+
+#### UX3.1 Komunikaty prowadzą na miejsce
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux3-routes.test.ts`. Ty: rzut oka, gdy któryś komunikat się pokaże.
+- **Jak sprawdzić:** przy pytaniu o uszkodzony plik kliknij „Historia”; przy banerze kopii kliknij jego przycisk; w Ustawieniach przy „Folder danych: Nie wybrano” kliknij „Otwórz kreator”.
+- **Oczekiwany efekt:** „Historia” otwiera historię tego rekordu; baner kopii przewija Ustawienia do sekcji „Dane”; „Otwórz kreator” otwiera kreator.
+- **Nie przechodzi, gdy:** przycisku nie ma; otwiera się góra Ustawień albo cała Historia zamiast rekordu.
+
+#### UX3.2 Ctrl K: „Plan dnia”, „Kalendarze”, „Nowe zadanie”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/search-settings-sections.test.ts`, `tests/web/search-palette.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** Ctrl K, wpisz „plan dnia”, potem „kalendarze”, potem „nowe zadanie”.
+- **Oczekiwany efekt:** dwie pierwsze przewijają Ustawienia do swojej sekcji, nagłówek sekcji widać w całości pod paskiem „od jutra”; „Nowe zadanie” otwiera nowe zadanie w Sprawach.
+- **Nie przechodzi, gdy:** brak wyniku; nagłówek sekcji schowany pod paskiem; „Nowe zadanie” otwiera prośbę.
+
+#### UX4.1 „Zamknij dzień” w rytuale ma „Cofnij”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ritual-close-undo.test.ts`, E2E `screens.spec.ts` (rytuał zamknięcia). Ty: rzut oka wieczorem.
+- **Jak sprawdzić:** wieczorem w rytuale kliknij „Zamknij dzień”, w dymku kliknij „Cofnij”.
+- **Oczekiwany efekt:** dymek „Zamknięto <dzień>: po rytuale · Cofnij” przez ok. 10 s (jak rano przy niezamkniętych dniach); „Cofnij” wraca do rytuału z dniem niezamkniętym.
+- **Nie przechodzi, gdy:** brak dymku; „Cofnij” nic nie zmienia albo dzień zostaje zamknięty; dymek pojawia się, choć dzień się nie zamknął.
+
+#### UX4.2 Enter i Esc w polach godziny rytuału
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ritual-time-keys.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w rytuale otwórz „Pracowałem do …” (albo „Zaznacz odcinek”), wpisz godzinę i naciśnij Enter. Otwórz znowu, wpisz coś i naciśnij Esc dwa razy. To samo rano w „Niezamkniętych dniach”.
+- **Oczekiwany efekt:** Enter zapisuje jak „Zapisz” (w odcinku – z pola „Od” i „Do”); pierwszy Esc wyrzuca wpisany tekst, drugi zamyka edytor bez zapisu i nie zamyka niczego innego.
+- **Nie przechodzi, gdy:** Enter nic nie robi; Esc zamyka cały rytuał albo panel; po drugim Esc edytor dalej otwarty.
+
+#### UX4.3 Przyciski rytuału z wielkiej litery, „Zatwierdź” rano i wieczorem
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ritual-close-undo.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** przejrzyj przyciski rytuału i planu porannego.
+- **Oczekiwany efekt:** „Zostaw”, „Usuń”, „Rozwiń”, „Anuluj”, „Otwórz jutro”, „Zaznacz odcinek” – z wielkiej litery; przycisk zatwierdzenia granicy to „Zatwierdź” rano i wieczorem.
+- **Nie przechodzi, gdy:** któryś przycisk rytuału z małej litery; rano dalej „Zatwierdź plan”.
+
+#### UX5.1 Typ jednego dnia w Kalendarzu ma „Cofnij”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/calendar-day-undo.test.ts`, E2E `zjazdy.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Kalendarzu zmień typ jednego dnia (np. dzień zjazdu na „Wolne”), w dymku kliknij „Cofnij”.
+- **Oczekiwany efekt:** dymek „Typ dnia <data>: Wolne · Cofnij”; „Cofnij” przywraca poprzedni typ i zajęcia zjazdu.
+- **Nie przechodzi, gdy:** brak dymku przy jednym dniu; po „Cofnij” brakuje zajęć zjazdu albo typ zostaje.
+
+#### UX5.2 Klik w pustą oś Szablonu – „Dodano blok · Cofnij”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/template-undo-added.test.ts`, E2E `template-apply.spec.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Szablonach kliknij w puste miejsce osi, wpisz nazwę bloku, potem w dymku kliknij „Cofnij”.
+- **Oczekiwany efekt:** blok „Inne” 1 h dodany od razu i dymek „Dodano blok · Cofnij”; „Cofnij” usuwa ten blok bez pytania o konflikt, także po wpisaniu nazwy; szablon wraca do stanu sprzed kliknięcia.
+- **Nie przechodzi, gdy:** brak dymku; „Cofnij” pyta o konflikt albo zostawia blok; po „Cofnij” szablon ma nową pustą wersję.
+
+#### UX5.3 Dwa szablony na ten sam dzień – ostrzeżenie i „nieużywany”
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/template-clash.test.ts`, `tests/web/template-clash.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** ustaw dwóm szablonom tego samego typu ten sam dzień tygodnia; otwórz oba. Potem przy istniejącym szablonie domyślnym kliknij „+ Szablon”.
+- **Oczekiwany efekt:** w edytorze ramka z nazwą szablonu, który wygrywa (u przegrywającego „…wygrywa – tych dni ten szablon nie tworzy”); na liście „· nieużywany” przy przegrywającym na wszystkich dniach; nic nie jest zablokowane; nowy szablon zaczyna od wolnego dnia tygodnia i nie przejmuje dni istniejącego.
+- **Nie przechodzi, gdy:** brak ostrzeżenia; „nieużywany” przy szablonie, który tworzy dni; nowy szablon od razu z poniedziałkiem zajętym przez inny.
+
+#### UX6.1 Check-in i „Pomiń” zostają po zmianie ekranu
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/morning-checkin.test.ts`, `tests/web/unclosed-undo.test.ts`. Ty: rzut oka rano.
+- **Jak sprawdzić:** rano odpowiedz na kilka pytań check-inu, przejdź do „Spraw” i wróć. Osobno: „Pomiń” check-in albo niezamknięte dni, zmień ekran i wróć.
+- **Oczekiwany efekt:** odpowiedzi są tam, gdzie je zostawiłeś; pominięte zostaje pominięte do końca dnia; następnego dnia wszystko od nowa.
+- **Nie przechodzi, gdy:** odpowiedzi giną po zmianie ekranu; pominięty check-in wraca w tym samym dniu.
+
+#### UX6.2 Karta wydarzenia całodniowego – klik obok zapisuje
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/allday-card-away.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** otwórz kartę nowego wydarzenia całodniowego, wpisz tytuł i kliknij obok. Potem otwórz pustą kartę i kliknij obok; potem wpisz tytuł i naciśnij Esc.
+- **Oczekiwany efekt:** z tytułem – wydarzenie zapisane; pusta karta – zamyka się bez wydarzenia; Esc – odrzuca. Przy błędnych datach karta zostaje z komunikatem.
+- **Nie przechodzi, gdy:** wpisany tytuł ginie po kliknięciu obok; pusta karta tworzy wydarzenie; Esc zapisuje.
+
+#### UX6.3 Niezapisana reguła serii i powtarzania – pytanie
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/series-unsaved.test.ts`, `tests/web/cases-repeat.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Szablonach zmień regułę serii (bez „Zapisz zmianę serii”) i wybierz inną serię albo zamknij panel. W Sprawach zmień powtarzanie i zamknij „Powtarzaj”.
+- **Oczekiwany efekt:** okno „Zapisać zmianę serii?” (albo „…powtarzania?”) z „Zapisz” i „Odrzuć”; „Zapisz” zapisuje i przechodzi dalej, „Odrzuć” porzuca zmianę.
+- **Nie przechodzi, gdy:** zmiana ginie po cichu; okno pojawia się bez żadnej zmiany; „Zapisz” nie zapisuje.
+
+
+#### UX7.1 Oś „Dziś” po otwarciu – „teraz” widać bez przewijania
+- [ ] Odebrane
+- **Tylko Ty:** `tests/web/axis-scroll.test.ts` i `tests/web/axis-opening.test.ts` liczą przewinięcie, ale wygląd o późnej godzinie widzisz tylko Ty (wieczorem, po 18:00).
+- **Jak sprawdzić:** otwórz „Dziś”, przejdź na „Tydzień” i wróć. Osobno: z otwartym planem porannym niezatwierdzonym albo kartą „Wstałeś później?” otwórz „Dziś”.
+- **Oczekiwany efekt:** linia „teraz” widoczna bez przewijania, mniej więcej na 1/3 wysokości; karta-prośba nad osią zostaje widoczna od góry (wtedy „teraz” może być niżej); po pierwszym przewinięciu albo kliknięciu oś już sama nie skacze.
+- **Nie przechodzi, gdy:** trzeba przewijać do „teraz”; karta planu porannego albo rytuału jest schowana nad widokiem; oś skacze po kliknięciu albo przewinięciu.
+
+#### UX7.2 Inny dzień i „3 dni” – oś od godziny przed pobudką
+- [ ] Odebrane
+- **Tylko Ty:** wygląd przewinięcia.
+- **Jak sprawdzić:** w „Dziś” kliknij „‹” (wczoraj); potem otwórz „3 dni” zakresu bez dziś, wróć do „Tygodnia”, przejdź na „Agendę” i z powrotem.
+- **Oczekiwany efekt:** oś zaczyna się godzinę przed pobudką; przy wczesnej pobudce karty nad osią zostają; po powrocie z „Agendy” oś znów stoi na „teraz” (tydzień z dziś); strzałki tygodni nie przewijają osi.
+- **Nie przechodzi, gdy:** oś startuje od północy; po „Agendzie” oś stoi na przypadkowej godzinie.
+
+#### UX7.3 Granica i maksimum o tej samej godzinie – jeden napis
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/day-axis.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** dzień, w którym propozycja granicy równa się maksimum (albo zatwierdź granicę o godzinie maksimum).
+- **Oczekiwany efekt:** jedna linia „propozycja · maksimum 19:00” (po zatwierdzeniu „granica · maksimum 19:00”).
+- **Nie przechodzi, gdy:** dwa napisy nachodzą na siebie; maksimum znika bez śladu w napisie.
+
+#### UX7.4 „+N” w miesiącu mówi, co kryje
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/month-cells.test.ts`, `tests/unit/engine/multi-day.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Kalendarzu (miesiąc) dzień z wieloma sesjami albo blokami.
+- **Oczekiwany efekt:** „+2 sesje”, „+1 blok”; przy kilku rodzajach „+3 pozycje”, a po najechaniu – rozbicie.
+- **Nie przechodzi, gdy:** samo „+2”; liczba nie zgadza się z tym, czego nie widać.
+
+
+#### UX16.1 Daty DD.MM.RRRR i pola dat – „3.01”, osiem cyfr, „-”, „/”
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/ux16-formats.test.ts`, `tests/unit/date-input.test.ts`, `tests/web/ux16-screens.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** „Zastosuj do… → Wybierz dni…” w Szablonach: w „Od” wpisz `3.01`, potem `03012027`, `3-01-2027`, `3/01/2027`; w „Do” zacznij pisać datę i zatrzymaj się w połowie.
+- **Oczekiwany efekt:** każda postać daje 03.01.2027 i zaznaczony dzień w siatce; pole w połowie wpisywania jest czerwone, zaznaczenie znika, przycisk zatwierdzenia nieaktywny; siatka ma nagłówki „pn wt śr cz pt sb nd”.
+- **Nie przechodzi, gdy:** pola pokazują datę z myślnikami; „3.01” nie działa; przy czerwonym polu przycisk zatwierdza stare zaznaczenie.
+
+#### UX16.2 Historia i Pokój – jeden zapis daty i godziny
+- [ ] Odebrane
+- **Tylko Ty:** wygląd ekranów z prawdziwymi danymi.
+- **Jak sprawdzić:** otwórz Historię (lista i porównanie wersji) i Pokój („Ostatnie dni”, kaseta tygodnia); nagłówek „Tygodnia”.
+- **Oczekiwany efekt:** chwile jako „21.11.2026 14:30”, krótkie daty z zerem („26.10–01.11”, „02–08.11.2026”).
+- **Nie przechodzi, gdy:** „21 lis 2026”; „1.11” obok „01.11” na jednym ekranie.
+
+#### UX16.3 Liczniki „x z y” i skróty „Ctrl+K”
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/ux16-formats.test.ts`, `tests/web/ux16-screens.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** panel bloku z krokami, kafelek tego bloku, plan poranny z wydarzeniem kilkudniowym, menu boczne.
+- **Oczekiwany efekt:** panel „✓ 1 z 3”, kafelek dalej „✓ 1/3”, wydarzenie „(2 z 3)”; skróty zapisane „Ctrl+K”.
+- **Nie przechodzi, gdy:** panel „1/3”; menu „Ctrl K”.
+
+#### UX16.4 Szablony, serie, rutyny – puste stany i „Używana w…”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux16-screens.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** „Szablony” bez żadnej serii; edytor rutyny użytej w szablonie albo serii (także w części serii od przyszłego miesiąca).
+- **Oczekiwany efekt:** lista „Serie” widoczna z podpowiedzią o „Powtarzaj”; jedno zdanie, czym różni się szablon, seria i rutyna; rutyna mówi „Używana w szablonach … · w seriach …”, każda seria raz.
+- **Nie przechodzi, gdy:** lista serii znika; rutyna użyta tylko w przyszłej części serii jest „nieużyta”; ta sama definicja dwa razy.
+
+#### UX16.5 „Skopiuj ten dzień do…” – okno dni z Od/Do
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux16-screens.test.ts`, E2E `screens` (kopia dnia). Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” menu „⋯” → „Skopiuj ten dzień do…”; wpisz Od/Do, zaznacz też dzisiejszy dzień; spróbuj zakresu dłuższego niż rok.
+- **Oczekiwany efekt:** to samo okno co „Zastosuj do…”, z polami Od/Do; dzień kopiowany się nie liczy; licznik „(już trwały: N)” przy dniach do dziś i ostrzeżenie przy kopii; zakres dłuższy niż 366 dni – „Zakres dłuższy niż 366 dni”.
+- **Nie przechodzi, gdy:** kopia trafia na dni, których pola już nie pokazują; licznik nie zgadza się z ostrzeżeniem.
+
+
+#### UX10.1 „↗” na pasku pulpitu otwiera okno główne jednym kliknięciem
+- [ ] Odebrane
+- **Tylko Ty:** kolejność okien sprawdza CI na Windows (`tests/e2e/bar-windows.spec.ts`), ale wygląd i Twój pulpit – tylko Ty.
+- **Jak sprawdzić:** okno główne schowane w zasobniku; jedno kliknięcie „↗” nad „×” w prawym pasie paska pulpitu.
+- **Oczekiwany efekt:** okno główne na pierwszym planie; pasek pulpitu dalej pod oknami; „↗” nie zasłania przycisków.
+- **Nie przechodzi, gdy:** trzeba dwukliku; pasek wychodzi nad inne okna; „↗” zasłania przycisk.
+
+#### UX10.2 Panel ikony – nagłówek i stopka
+- [ ] Odebrane
+- **Automatycznie:** E2E `smoke` („role powierzchni”), `tests/web/bar-roles.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** kliknij ikonę w zasobniku; potem kliknij tuż obok przycisku w stopce (w odstęp albo „·”).
+- **Oczekiwany efekt:** nagłówek „Regulated Day ×”, pasek jak dotąd, stopka „↗ Otwórz okno główne · ▣ Pasek pulpitu: pokaż / schowaj · ⏻ Zakończ aplikację”; klik obok przycisku w stopce nic nie robi; menu ikony mówi „Otwórz okno główne” i „Zakończ aplikację”.
+- **Nie przechodzi, gdy:** brak stopki przy „Odcinam się”; klik obok przycisku stopki otwiera okno główne.
+
+#### UX10.3 „Pasek pulpitu: schowaj / pokaż” w stopce panelu
+- [ ] Odebrane
+- **Automatycznie:** E2E `smoke`, `tests/web/bar-roles.test.ts`, `tests/unit/bar-close.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w stopce „schowaj”, potem „pokaż”; osobno wyłącz pasek w Ustawieniach i kliknij „pokaż”.
+- **Oczekiwany efekt:** „schowaj” chowa pasek jak „×”, „pokaż” go przywraca, przy pasku wyłączonym w Ustawieniach – włącza go na tym komputerze; napis zmienia się od razu.
+- **Nie przechodzi, gdy:** dwuklik chowa i od razu pokazuje; napis się nie zmienia; „pokaż” nic nie robi przy pasku schowanym „×”.
+
+#### UX10.4 „+ Skrzynka” na pasku pulpitu – okienko „Do skrzynki”
+- [ ] Odebrane
+- **Automatycznie:** E2E `quick`, fokus i kolejność – CI na Windows (`bar-windows`). Ty: rzut oka.
+- **Jak sprawdzić:** kliknij „+ Skrzynka” na pasku pulpitu, wpisz tytuł, Enter; drugi raz – Esc.
+- **Oczekiwany efekt:** okienko „Do skrzynki” jak po Win+Alt+N, z kursorem w polu; Enter zapisuje do Skrzynki; Esc chowa okienko. W oknie głównym i panelu „+ Skrzynka” dalej rozwija pole w pasku.
+- **Nie przechodzi, gdy:** otwiera się panel; okienko bez fokusu; zostaje na wierzchu po Esc.
+
+#### UX10.5 Dwuklik w przycisk paska działa raz, panel otwiera się zwinięty
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/bar-roles.test.ts`, `tests/unit/panel-open.test.ts`. Ty: blok w toku.
+- **Jak sprawdzić:** dwuklik w „Dalej” w panelu i na pasku pulpitu; dwuklik w „Skończył się o…”; rozwiń „Prośba ▸”, schowaj panel i otwórz go znowu.
+- **Oczekiwany efekt:** jedno „Dalej”; dwuklik w „Skończył się o…” nie zmienia godziny o −5; ponownie otwarty panel bez rozwiniętego „Prośba ▸” ani „±5”; kliknięcie powiadomienia przy otwartym panelu nie czyści wpisanego tekstu.
+- **Nie przechodzi, gdy:** dwa bloki przeskoczone; rozwinięcie wraca po ponownym otwarciu; wpisany tekst ginie.
+
+
+#### UX8.1 Powrót do tygodnia „← Tydzień” na zapamiętany okres
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux8-pages.test.ts`, E2E `week`. Ty: rzut oka.
+- **Jak sprawdzić:** „Tydzień” → następny tydzień → klik bloku → „← Tydzień”; osobno Kalendarz → inny miesiąc → dzień → „← Kalendarz”; potem w „Dziś” Ctrl K → „Jutro”.
+- **Oczekiwany efekt:** wracasz na ten sam następny tydzień (miesiąc), oś ustawiona jak przy otwarciu; Ctrl K na „Dziś” nie zabiera „← Tydzień”; wejście z menu bocznego nie pokazuje przycisku.
+- **Nie przechodzi, gdy:** wraca bieżący tydzień; brak przycisku po kliknięciu bloku; przycisk prowadzi do złego tygodnia.
+
+#### UX8.2 PgUp / PgDn / Home na każdym widoku okresów
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux8-pages.test.ts`, `tests/web/ux8-keys-new.test.ts`, E2E `week`. Ty: Agenda i Kalendarz.
+- **Jak sprawdzić:** PgDn, PgUp, Home w „Dziś”, „Tygodniu”, „3 dniach”, Agendzie, Kalendarzu; potem w polu tekstowym i przy otwartym okienku nowego bloku.
+- **Oczekiwany efekt:** okres zmienia się jak strzałką (Agenda o 7 dni, nie przed dziś), Home wraca do dziś; w polu i przy otwartym okienku nic się nie dzieje; lista skrótów ma nowe klawisze.
+- **Nie przechodzi, gdy:** klawisz przewija stronę zamiast zmienić okres; działa w polu; przy otwartym okienku zmienia miesiąc.
+
+#### UX8.3 Ctrl+N w „Tygodniu”, „3 dniach” i Kalendarzu
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux8-calendar.test.ts`, `tests/web/ux8-keys-new.test.ts`, E2E `week`. Ty: rzut oka.
+- **Jak sprawdzić:** Ctrl+N w „Tygodniu”, „3 dniach” i Kalendarzu (także z ukrytym kalendarzem, który ma blok o najbliższej godzinie); potem w widoku samych minionych dni.
+- **Oczekiwany efekt:** okienko nowego bloku dziś (albo w pierwszym dniu od dziś) o najbliższej wolnej godzinie, z pominięciem bloków ukrytych kalendarzy; w widoku minionym dymek „W tym widoku nie ma dnia od dziś – wróć do bieżącego okresu (Home).”
+- **Nie przechodzi, gdy:** okienko się nie otwiera; stoi na zajętej godzinie albo w rogu okna; brak dymku w widoku minionym.
+
+#### UX8.4 Przycisk „dziś” i pusty dzień Agendy
+- [ ] Odebrane
+- **Tylko Ty:** wygląd.
+- **Jak sprawdzić:** przycisk „dziś” na każdym ekranie okresów w bieżącym i innym okresie; „+ Blok” przy pustym dniu Agendy.
+- **Oczekiwany efekt:** przycisk „dziś” zawsze widoczny, wyłączony w bieżącym okresie; „+ Blok” otwiera ten dzień z nowym blokiem.
+- **Nie przechodzi, gdy:** przycisk znika albo jest aktywny w bieżącym okresie; „+ Blok” otwiera inny dzień.
+
+
+#### UX17.1 Wiersz sprawy w jednym wierszu, „▸” i „…”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/cases-ux17.test.ts`, E2E `cases`. Ty: wygląd.
+- **Jak sprawdzić:** Sprawy → Listy, zadanie z terminem i priorytetem; „▸” i „…”; potem otwórz „Powtarzaj”, zmień regułę bez zapisu i przenieś sprawę na inną listę (z „…” i prawym przyciskiem).
+- **Oczekiwany efekt:** jeden wiersz (tytuł, szacunek, termin, „P1”, „Zaplanuj…”, „…”); „▸” pokazuje resztę i zostaje rozwinięte po przeniesieniu; przy niezapisanej regule pada pytanie „Zapisać zmianę powtarzania?”.
+- **Nie przechodzi, gdy:** wiersz w dwóch liniach; „…” nie zamyka się Esc; reguła ginie po cichu przy przeniesieniu.
+
+#### UX17.2 Macierz z klawiatury i myszy
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/cases-ux17.test.ts`, `tests/unit/engine/cases-priority.test.ts`, E2E `cases`. Ty: wygląd fokusu.
+- **Jak sprawdzić:** Macierz: Tab, strzałki, Enter, prawy przycisk; przeciągnij kartę i wróć nią na miejsce.
+- **Oczekiwany efekt:** strzałki chodzą po kartach i polach w swoją stronę; Enter/klik otwiera wiersz w Listach rozwinięty, z fokusem na tytule; prawy przycisk daje „Priorytet ▸”; przeciągnięcie (także wycofane) nie otwiera wiersza.
+- **Nie przechodzi, gdy:** ← przesuwa w prawo; przeciągnięcie przełącza na Listy; karta bez widocznego fokusu.
+
+#### UX17.3 „Pokaż wszystkie” w filtrze kalendarzy
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/calendars-chips.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** odznacz kalendarz, kliknij „Pokaż wszystkie (1)”, uruchom aplikację ponownie.
+- **Oczekiwany efekt:** wszystkie kalendarze włączone, przycisk znika, bloki wracają, po restarcie nadal wszystkie.
+- **Nie przechodzi, gdy:** po restarcie ukrycie wraca; przycisk widać bez odznaczonego kalendarza.
+
+#### UX17.4 Del przy jednym bloku zaznaczonym w „Tygodniu”
+- [ ] Odebrane
+- **Automatycznie:** E2E `group-select`, `tests/web/week-select.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w „Tygodniu” Ctrl+klik jednego bloku, Del.
+- **Oczekiwany efekt:** „Usunąć „<nazwa>”?”; Esc zostawia, „Usuń” usuwa tylko ten blok.
+- **Nie przechodzi, gdy:** Del nic nie robi; usuwa inne bloki.
+
+
+#### UX14.1 Ustawienia – spis i grupy
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/settings-layout.test.ts`, `tests/web/settings-page.test.ts`, E2E `screens`. Ty: wygląd.
+- **Jak sprawdzić:** otwórz Ustawienia, kliknij kolejno każdą pozycję spisu po lewej; zwęź okno.
+- **Oczekiwany efekt:** każda sekcja jednym kliknięciem, grupy: Dzień i energia · Kategorie i kalendarze · Sprawy i szablony · Pasek i powiadomienia · Dane i kopie · O aplikacji; w wąskim oknie spis nad sekcjami.
+- **Nie przechodzi, gdy:** sekcja nieosiągalna ze spisu; spis zasłania treść.
+
+#### UX14.2 „Od razu”, jeden pasek „od jutra” i zaplanowane zmiany
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/settings-planned.test.ts`, E2E `screens`. Ty: rzut oka.
+- **Jak sprawdzić:** zmień budżet w „Typach dni” (od jutra) i przełącz moduł.
+- **Oczekiwany efekt:** jeden pasek „od jutra” nad sekcjami z datą; „Moduły”, „Pasek pulpitu”, „Ten komputer” ze znacznikiem „od razu”; „Zaplanowane zmiany” pokazują pole, wartość i datę.
+- **Nie przechodzi, gdy:** pasek stoi nad „Dane”; lista bez wartości; moduł bez „od razu”.
+
+#### UX14.3 Szukanie pól w Ustawieniach i Ctrl K
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/settings-index.test.ts`, E2E `search`, `screens`. Ty: rzut oka.
+- **Jak sprawdzić:** wpisz „rezerwa” w polu „Szukaj w ustawieniach”, potem to samo w Ctrl K.
+- **Oczekiwany efekt:** „Rezerwa energii” przewija się na środek i jest obwiedziona przez ok. 2 s.
+- **Nie przechodzi, gdy:** brak wyniku; obwódka nie znika; wynik prowadzi do złej sekcji.
+
+#### UX14.4 Pola paska przy wyłączonym pasku, bez duplikatów
+- [ ] Odebrane
+- **Tylko Ty:** wygląd.
+- **Jak sprawdzić:** wyłącz pasek pulpitu; przejrzyj całe Ustawienia.
+- **Oczekiwany efekt:** pola paska widoczne, szare, z jednym wyjaśnieniem; jedna „Wersja”, jeden „Folder danych” (w „Dane”, razem z kopiami); „Tolerancja trafności” w „Trafność planu”.
+- **Nie przechodzi, gdy:** pole paska znika albo daje się przełączyć; dubel etykiety; kopie w dwóch miejscach.
+
+#### UX14.5 „Wycofaj” zaplanowanej zmiany
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/settings-withdraw.test.ts`, `tests/fs/settings-withdraw.test.ts`, `tests/web/settings-withdraw.test.ts`, E2E `screens`. Ty: rzut oka.
+- **Jak sprawdzić:** zmień „Rezerwę energii” (od jutra) → „Zaplanowane zmiany” → „Wycofaj”, potem „Cofnij”; dodaj podkategorię od jutra i kliknij przy niej „Usuń”.
+- **Oczekiwany efekt:** wiersz znika, pole ma poprzednią wartość, dymek „Wycofano zaplanowaną zmianę od …” z „Cofnij”, które przywraca wiersz; podkategoria z zaplanowanym dodaniem znika całkiem; przy późniejszej zmianie tej samej listy – „wycofaj najpierw ją”.
+- **Nie przechodzi, gdy:** wiersz zostaje; „Cofnij” dodaje drugi wiersz; po „Wycofano” wartość dalej obowiązuje od tej daty.
+
+#### UX14.6 Wycofanie na dwóch komputerach
+- [ ] Odebrane
+- **Tylko Ty:** synchronizacja OneDrive.
+- **Jak sprawdzić:** zmiana od jutra na A; po synchronizacji „Wycofaj” na B.
+- **Oczekiwany efekt:** po synchronizacji wiersza nie ma na A ani na B, bez pytania o konflikt.
+- **Nie przechodzi, gdy:** pytanie o konflikt; wiersz wraca; znika inna zmiana zrobiona w tym czasie na A.
+
+
+#### UX11.1 Panel mówi, że pasek jest schowany
+- [ ] Odebrane
+- **Automatycznie:** E2E `smoke`, `tests/web/bar-roles.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** „×” paska → klik ikony; potem „Odcinam się” i znowu panel.
+- **Oczekiwany efekt:** nad stopką „Pasek pulpitu schowany · Pokaż pasek”, klik pokazuje pasek; przy „Odcinam się” – „Pokaż po „Wracam””, pasek wraca po „Wracam”.
+- **Nie przechodzi, gdy:** brak linii; klik nic nie robi albo otwiera okno główne; linia zostaje przy widocznym pasku.
+
+#### UX11.2 Ustawienia – „schowany” i jedno kliknięcie
+- [ ] Odebrane
+- **Automatycznie:** E2E `smoke`, `tests/web/bar-switch.test.ts`. Ty: wygląd.
+- **Jak sprawdzić:** „×” paska → Ustawienia → Pasek pulpitu; kliknij przełącznik (osobno dwuklik) albo „Pokaż pasek”.
+- **Oczekiwany efekt:** przełącznik „schowany” bez zaznaczenia i linia pod nim; jeden klik pokazuje pasek; dwuklik nie wyłącza paska.
+- **Nie przechodzi, gdy:** dalej „włączony”; trzeba wyłączyć i włączyć; dwuklik wyłącza pasek.
+
+#### UX11.3 Wybór miejsca paska pokazuje schowany
+- [ ] Odebrane
+- **Tylko Ty:** kolejność okien sprawdza CI na Windows (`bar-windows`), Twój pulpit – Ty.
+- **Jak sprawdzić:** „×” paska → w Ustawieniach kliknij inne miejsce w makiecie monitorów.
+- **Oczekiwany efekt:** pasek wraca od razu w nowym miejscu, pod oknami innych aplikacji.
+- **Nie przechodzi, gdy:** zostaje schowany; miga w starym miejscu; leży nad oknami.
+
+#### UX11.4 Menu ikony – „Pasek pulpitu” z ptaszkiem zawsze
+- [ ] Odebrane
+- **Tylko Ty:** prawdziwe menu zasobnika.
+- **Jak sprawdzić:** prawy klik ikony przy pasku widocznym, po „×” i po wyłączeniu paska w Ustawieniach; kliknij pozycję.
+- **Oczekiwany efekt:** pozycja „Pasek pulpitu” zawsze; ptaszek przy pasku włączonym i nieschowanym; klik chowa albo pokazuje (wyłączony – włącza). Zastępuje „Pokaż pasek pulpitu” z PX4.
+- **Nie przechodzi, gdy:** pozycji brak; ptaszek niezgodny ze stanem; klik nic nie robi.
+
+
+#### UX9.1 Ostrzeżenia dnia w panelu bocznym i panelu bloku, rutyna czekająca
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux9-today.test.ts`. Ty: z prawdziwym planem.
+- **Jak sprawdzić:** ustaw plan dłuższy niż budżet pracy; otwórz blok, który przekracza budżet, i zmień go; zacznij rutynę i otwórz inny blok.
+- **Oczekiwany efekt:** ostrzeżenia (z godziną maksimum i liczbami budżetu) w panelu bocznym i w panelu bloku – widać je od razu po zmianie, w planie porannym ich nie ma; na minionym dniu bez rad; panel bloku mówi „Rutyna „X” czeka na kroki”, „Pokaż kartę” odsłania kartę.
+- **Nie przechodzi, gdy:** ostrzeżenie znika przy otwartym bloku; minimum regeneracji opisane błędnie; brak linii o rutynie.
+
+#### UX9.2 „Zatwierdź” w nagłówku planu porannego
+- [ ] Odebrane
+- **Automatycznie:** E2E `screens`, `tests/web/ux9-today.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** rano z propozycją granicy – kliknij „Zatwierdź” w nagłówku karty planu.
+- **Oczekiwany efekt:** plan zatwierdzony bez przewijania karty; dwuklik w oba „Zatwierdź” – jedno zatwierdzenie.
+- **Nie przechodzi, gdy:** trzeba przewinąć kartę; dwa zatwierdzenia w logu.
+
+#### UX9.3 Panel nowego bloku jako szkic, podpisy Esc i gestów
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux9-today.test.ts`, E2E `week`, `note`. Ty: rzut oka.
+- **Jak sprawdzić:** „+ Blok”, potem wpisz nazwę; okienko nowego bloku w „Tygodniu”; notatka zwykła i powiększona.
+- **Oczekiwany efekt:** nagłówek „Nowy blok”; nietknięty szkic „Zapisze się, gdy opuścisz panel · Esc – odrzuć”, ruszony – bez „Esc – odrzuć”; „Tydzień” ma linię gestów; notatka „Esc – cofnij zmiany”, w „Powiększ” „Esc – pomniejsz”.
+- **Nie przechodzi, gdy:** ruszony szkic obiecuje „Esc – odrzuć”; powiększona notatka obiecuje cofnięcie zmian.
+
+#### UX9.4 Legenda energii pod „?” i jednostka kosztu
+- [ ] Odebrane
+- **Tylko Ty:** wygląd.
+- **Jak sprawdzić:** kliknij „?” przy linii nad osią; kliknij koszt na kafelku; najedź na liczby „Dzień w liczbach”.
+- **Oczekiwany efekt:** legenda zwinięta na starcie, ma „koszt na godzinę, od −5 do 5; 1 = 3 punkty energii”; to samo zdanie w okienku kosztu, okienko nie ucięte; podpowiedzi przy liczbach.
+- **Nie przechodzi, gdy:** dwa różne sformułowania; legenda otwarta na starcie; okienko wychodzi poza okno.
+
+#### UX9.5 Karty rutyn w panelu bocznym, „Zakończ rutynę (N z M)”
+- [ ] Odebrane
+- **Automatycznie:** E2E `screens`, `routine-steps`. Ty: rzut oka.
+- **Jak sprawdzić:** rano z rutyną; zaznacz część kroków.
+- **Oczekiwany efekt:** karta rutyny w panelu bocznym (nie nad osią), przycisk „Zakończ rutynę (3 z 5)”.
+- **Nie przechodzi, gdy:** karta nad osią; przycisk bez licznika.
+
+
+#### UX18.1 „Historia” z panelu bloku
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/history-ux18.test.ts`. Ty: z prawdziwym dniem.
+- **Jak sprawdzić:** otwórz blok w „Dziś”, kliknij „Historia” w nagłówku panelu.
+- **Oczekiwany efekt:** ekran Historii z planem tego dnia wybranym i jego wersjami; nowy, niezapisany blok nie ma przycisku.
+- **Nie przechodzi, gdy:** lista pusta mimo wersji; wybrany inny rekord.
+
+#### UX18.2 „Historia” sprawy, szablonu, rutyny i serii
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/history-ux18.test.ts`, E2E `screens`, `cases`. Ty: rzut oka.
+- **Jak sprawdzić:** „…” → „Historia” przy sprawie; „Historia” w edytorze szablonu i rutyny; seria podzielona „od dziś” – „Historia” w panelu jej bloku; rekord bez wersji.
+- **Oczekiwany efekt:** właściwy rekord wybrany (w serii – edytowana część); rekord bez wersji – Historia z dymkiem „Ten rekord nie ma jeszcze wersji w historii.”.
+- **Nie przechodzi, gdy:** rekord ukryty filtrem; seria otwiera starszą część; brak przycisku.
+
+#### UX18.3 Filtr i szukanie w Historii
+- [ ] Odebrane
+- **Automatycznie:** E2E `screens`, `tests/web/history-ux18.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Historii wpisz dwa słowa nazwy (bez ogonków), potem datę dnia „2026-11-21”; przełącz rodzaje w filtrze.
+- **Oczekiwany efekt:** licznik „x z y”, liczby przy rodzajach, szukanie zawęża listę po każdym słowie; przy błędzie odczytu – „Nie udało się odczytać historii – spróbuj za chwilę.”.
+- **Nie przechodzi, gdy:** licznik nie idzie za filtrem; szukanie rozróżnia „ł” i „l”; błąd odczytu mówi „nie ma wersji”.
+
+#### UX18.4 Dymek błędu do zamknięcia „×”
+- [ ] Odebrane
+- **Tylko Ty:** prawdziwe błędy zapisu i folderu.
+- **Jak sprawdzić:** wywołaj błąd zapisu albo folderu (np. folder chwilowo niedostępny); osobno błąd pola (budżet „17h”); przy kilku błędach usuń coś (dymek „Cofnij”).
+- **Oczekiwany efekt:** błąd zapisu stoi do „×”, ten sam się nie dubluje; błąd pola znika sam po kilku sekundach; „Cofnij” nie znika przez nadmiar dymków.
+- **Nie przechodzi, gdy:** błąd zapisu znika sam; „×” zamyka szkic otwartego bloku; „Cofnij” wypchnięte przed czasem.
+
+
+#### UX15.1 Opis przy każdym polu Ustawień i „?” przy pojęciach
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux15-hints.test.ts` (każde pole ze spisu ma opis). Ty: czytelność.
+- **Jak sprawdzić:** przejrzyj każdą sekcję Ustawień; kliknij „?” przy rezerwie, buforze, maksimum.
+- **Oczekiwany efekt:** pod każdym polem zdanie, co robi; „?” otwiera „Jak to działa” na tym pojęciu.
+- **Nie przechodzi, gdy:** pole ma tylko nazwę; „?” nic nie otwiera; opis kreatora i Ustawień różni się słowami.
+
+#### UX15.2 Okno „Jak to działa” z Ctrl K i „?”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux15-help.test.ts`. Ty: treść.
+- **Jak sprawdzić:** Ctrl K → „twardy koniec”, Enter; potem „Jak to działa” z Ctrl K.
+- **Oczekiwany efekt:** okno otwiera się na tym pojęciu (podświetlone); są pule G·E·B·C, rezerwa, granica, maksimum, pula projektów, twardy koniec, nuty, dzień ochronny, „bez danych”; Esc zamyka.
+- **Nie przechodzi, gdy:** okno otwiera się na górze listy; brakuje pojęcia; Ctrl K nie ma grupy „Pojęcia”.
+
+#### UX15.3 Lista skrótów pod F1 i „Skróty” w menu
+- [ ] Odebrane
+- **Automatycznie:** E2E `search` (F1, „Skróty” w menu, Esc). Ty: rzut oka.
+- **Jak sprawdzić:** F1; drugi raz F1; „Skróty (F1)” u dołu menu bocznego; F1 przy otwartym oknie dialogowym.
+- **Oczekiwany efekt:** lista skrótów (także PgUp/PgDn, Home, F1, Del, Shift+×), drugi F1 zamyka; przy otwartym oknie dialogowym nic; w Ustawieniach listy już nie ma.
+- **Nie przechodzi, gdy:** F1 otwiera listę nad dialogiem albo kreatorem; brakuje skrótu.
+
+#### UX15.4 Kreator – „Zakończ z domyślnymi” i podsumowanie z krokami
+- [ ] Odebrane
+- **Automatycznie:** E2E `wizard`, `tests/web/ux15-wizard.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** kreator na nowym folderze: folder → „to pierwszy komputer” → „Zakończ z domyślnymi”; osobno przejdź do podsumowania i kliknij „Zmień · Osoby”.
+- **Oczekiwany efekt:** dane zapisane z domyślnymi, „Dziś” otwarte; „Zmień · <krok>” wraca do kroku; „Zajęcia stacjonarne” i „Przypnij w OneDrive” brzmią jak w Ustawieniach.
+- **Nie przechodzi, gdy:** przycisk już na kroku folderu; nic nie zapisuje albo zapisuje dwa razy; link prowadzi do złego kroku.
+
+#### UX15.5 Pokój i lista „Pierwszy dzień”
+- [ ] Odebrane
+- **Tylko Ty:** pierwszy start po kreatorze.
+- **Jak sprawdzić:** po kreatorze pierwszego komputera; w Pokoju najedź na dzień „Ostatnich dni”.
+- **Oczekiwany efekt:** lista „Pierwszy dzień” z czterema drogami, „Zamknij” ją chowa; w Pokoju nota o nutach z „?”, po najechaniu – znaczenie statusu dnia.
+- **Nie przechodzi, gdy:** lista wraca po „Zamknij”; kolejny komputer ją dostaje; „?” w nocie nic nie otwiera.
+
+
+#### UX19.1 Ctrl+Z cofa ostatnią zmianę z „Cofnij”
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux19-undo.test.ts`. Ty: z prawdziwym dniem.
+- **Jak sprawdzić:** usuń blok w „Dziś”, naciśnij Ctrl+Z; potem wpisz coś w pole nazwy i naciśnij Ctrl+Z; przy dwóch liniach „Cofnij” naraz – Ctrl+Z.
+- **Oczekiwany efekt:** blok wraca, dymek znika; w polu cofa się wpis w polu, nie blok; przy dwóch liniach cofa się nowsza zmiana.
+- **Nie przechodzi, gdy:** Ctrl+Z działa spod otwartego okna albo w polu; „Cofnij” widać, a klawisz nic nie robi; cofa starszą zmianę.
+
+#### UX19.2 Panel Spraw przy „Tygodniu” i przeciąganie na dzień
+- [ ] Odebrane
+- **Automatycznie:** E2E `week` („UX19”), `tests/web/ux19-week-cases.test.ts`. Ty: „3 dni” i Ctrl.
+- **Jak sprawdzić:** „Sprawy ▸” w „Tygodniu”; przeciągnij sprawę na kolumnę dnia (także z Ctrl – kopia) i nad nagłówek dnia; przeciągnij na dzień miniony.
+- **Oczekiwany efekt:** panel zwinięty przy pierwszym otwarciu; pasmo miejsca pod wskaźnikiem; po puszczeniu blok i „Cofnij”; nad nagłówkiem i na dniu minionym nic się nie zapisuje.
+- **Nie przechodzi, gdy:** panel otwarty domyślnie; zapis na dniu minionym albo pod nagłówkiem; pasmo stoi inaczej niż blok.
+
+#### UX19.3 „Zastosuj szablon ▸” z menu dni
+- [ ] Odebrane
+- **Automatycznie:** E2E `template-apply` („UX19”), `tests/web/ux19-apply.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w Kalendarzu zaznacz dni i prawy przycisk; w „Tygodniu” prawy przycisk na nagłówku dnia.
+- **Oczekiwany efekt:** „Zastosuj szablon ▸” z listą szablonów (bez zarchiwizowanych); dziś albo dzień miniony pyta o godziny; po zapisie zaznaczenie znika.
+- **Nie przechodzi, gdy:** podmenu pokazuje zarchiwizowane; dziś zapisuje bez pytania.
+
+#### UX19.4 Szybkie wybory dni i zwijane cele
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/ux19-quick.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** w oknie dni „pn–pt tego miesiąca” i „każdy: wt”; zwiń cele nad „Tygodniem” i przejdź na inny tydzień.
+- **Oczekiwany efekt:** zaznaczone dni miesiąca pokazanego w oknie; zwinięcie celów zostaje.
+- **Nie przechodzi, gdy:** wybór bierze dni innego miesiąca; zwinięcie znika po zmianie tygodnia.
+
+
+#### UX13.1 Tolerancja trafności zmienia ocenę „Trafne szacowanie”
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/game.test.ts` (25 % od daty ustawienia, „od dziś”). Ty: rzut oka w Pokoju.
+- **Jak sprawdzić:** Ustawienia → Trafność planu → 25 „od dziś”; blok 60 min skończony po 72 min.
+- **Oczekiwany efekt:** blok liczy się jako trafny od daty ustawienia; dni wcześniejsze bez zmian.
+- **Nie przechodzi, gdy:** blok 72/60 min nietrafny przy 25 %; zmiana działa wstecz.
+
+#### UX13.2 Statystyki piszą Twoją tolerancję
+- [ ] Odebrane
+- **Automatycznie:** E2E `stats` (25 %), `tests/web/stats-view.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** po zmianie tolerancji otwórz Statystyki.
+- **Oczekiwany efekt:** nota „w granicach 25% planu”; okres z dwoma ustawieniami – zakres.
+- **Nie przechodzi, gdy:** dalej „15%”; okres z dwoma ustawieniami bez zakresu.
+
+#### UX13.3 Przypomnienie planu porannego
+- [ ] Odebrane
+- **Tylko Ty:** prawdziwe powiadomienie Windows.
+- **Jak sprawdzić:** rano bez zatwierdzonego planu, po czasie z „Przypomnień” po pobudce.
+- **Oczekiwany efekt:** linia „Plan poranny czeka · Otwórz · nie dziś” na końcu paska i jedno ciche powiadomienie; „Otwórz” – „Dziś”; po zatwierdzeniu planu albo check-inie linia znika.
+- **Nie przechodzi, gdy:** dźwięk; okno wychodzi samo; powiadomienie drugi raz.
+
+#### UX13.4 Przypomnienie rytuału
+- [ ] Odebrane
+- **Tylko Ty:** wieczorem.
+- **Jak sprawdzić:** przed porą snu o czas z „Przypomnień”.
+- **Oczekiwany efekt:** „Pora snu o HH:MM – rytuał zamknięcia · Rytuał · nie dziś” i ciche powiadomienie; po zamknięciu dnia znika.
+- **Nie przechodzi, gdy:** przychodzi w ciszy nocnej albo w sesji; zostaje po zamknięciu dnia.
+
+#### UX13.5 Wyłączanie przypomnień
+- [ ] Odebrane
+- **Tylko Ty:** ustawienia i powiadomienia.
+- **Jak sprawdzić:** 0 w „Przypomnieniach”; osobno przełącznik „przypomnienia: plan poranny i rytuał” w powiadomieniach.
+- **Oczekiwany efekt:** przy 0 nic nie przychodzi; przy wyłączonym przełączniku linia zostaje, powiadomienia nie ma.
+- **Nie przechodzi, gdy:** przy 0 coś przychodzi; przy wyłączonym przełączniku jest powiadomienie.
+
+
+#### UX12.1 Wiersz bloku pracy w jednym wierszu
+- [ ] Odebrane
+- **Automatycznie:** CI na Windows `bar-windows` (100 % i 125 %, zrzuty), `tests/web/bar-row.test.ts`. Ty: Twoja skala ekranu.
+- **Jak sprawdzić:** blok pracy z następnym blokiem – spójrz na pasek pulpitu; otwórz „⋯”.
+- **Oczekiwany efekt:** „Dalej: <nazwa>”, Pauza, Przedłuż, Koniec pracy, „+ Skrzynka”, „⋯” w jednym wierszu; „Odcinam się”, „Prośba ▸”, „Sygnały ▸” na początku „⋯”; w nocy „Prośba ▸” w wierszu.
+- **Nie przechodzi, gdy:** wiersz łamie się na dwa; nazwa wchodzi pod „↗ / ×”; brak „Prośba ▸” w nocy.
+
+#### UX12.2 „Dalej?” bez powtórzonych przycisków
+- [ ] Odebrane
+- **Tylko Ty:** blok mijający planowany koniec.
+- **Jak sprawdzić:** pozwól blokowi minąć planowany koniec.
+- **Oczekiwany efekt:** pytanie „Dalej: X · Przedłuż (· Koniec pracy)”, w wierszu pod nim tych przycisków nie ma (Pauza, + Skrzynka, ⋯ zostają).
+- **Nie przechodzi, gdy:** „Dalej” albo „Przedłuż” stoi dwa razy; znika koszt „Przedłuż”.
+
+#### UX12.3 „<akcja> · Cofnij” po kliknięciu na pasku
+- [ ] Odebrane
+- **Automatycznie:** `tests/fs/widget.test.ts`, `tests/unit/engine/click-undo.test.ts`, CI Windows `bar-windows` (prawdziwe „Dalej” i „Cofnij”). Ty: z prawdziwym dniem.
+- **Jak sprawdzić:** kliknij na pasku „Dalej” albo „Skończyłem”, potem „Cofnij” w 10 s; osobno sygnał z „Sygnały ▸”.
+- **Oczekiwany efekt:** linia „Skończono: … · Cofnij” (sygnał: „Sygnał: … · Cofnij”); po „Cofnij” blok biegnie dalej, następny się nie zaczął, sygnał nie liczy się w energii; po ok. 10 s linia znika.
+- **Nie przechodzi, gdy:** linii nie ma; stoi wyraźnie dłużej niż 10 s; „Cofnij” zostawia blok skończony albo następny zaczęty.
+
+#### UX12.4 Koszt z „Potwierdź · Anuluj”
+- [ ] Odebrane
+- **Tylko Ty:** start za granicą.
+- **Jak sprawdzić:** start albo „Dalej” do bloku za granicą; „Anuluj”, a osobno „Potwierdź”.
+- **Oczekiwany efekt:** „… · Potwierdź · Anuluj”; „Anuluj” zdejmuje koszt od razu i niczego nie zaczyna; po „Potwierdź” linia „Cofnij” mówi też o starcie.
+- **Nie przechodzi, gdy:** „Anuluj” coś zaczyna; koszt zostaje po „Anuluj”.
+
+#### UX12.5 Podpowiedź „×” i uchwyt ⠿
+- [ ] Odebrane
+- **Tylko Ty:** kursor nad paskiem pulpitu.
+- **Jak sprawdzić:** najedź kursorem na „×” paska pulpitu; spójrz na uchwyt ⠿ bez najechania.
+- **Oczekiwany efekt:** napis „Schowaj pasek · Shift+× – zakończ aplikację” w samym pasku, pasek nie zmienia wysokości; uchwyt ⠿ widoczny, przygaszony, jaśniejszy po najechaniu.
+- **Nie przechodzi, gdy:** osobne okienko podpowiedzi; pasek „skacze”; uchwytu nie widać bez najechania.
+
+#### UX12.6 Trwająca prośba „Prośba: <osoba>”
+- [ ] Odebrane
+- **Automatycznie:** E2E `screens` (prośby), `tests/web/bar-row.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** „⋯” → „Prośba ▸” → „Zrobione teraz: <osoba>”.
+- **Oczekiwany efekt:** w miejscu bloku „Prośba: <osoba> · 0:0x · Koniec”.
+- **Nie przechodzi, gdy:** stoi „Zrobione teraz · …”; „Koniec” nie kończy prośby.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 

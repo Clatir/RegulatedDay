@@ -1,7 +1,7 @@
 /**
  * „Zastosuj do…” i „Odwołaj w…” szablonu (D540–D545): jutro z własnym blokiem na miejscu pierwszego bloku szablonu – pytanie, „Uzupełnij luki”
  * dodaje tylko drugi; kolejne „Zastosuj” na jutro nie pyta (dzień ma już bloki szablonu); „Wybierz dni…” z datą wpisaną ośmioma cyframi
- * (pole pokazuje DD-MM-RRRR) i zakresem dwóch dni → „Nadpisz plan” odwołuje własny blok, oba dni mają cały szablon; „Cofnij” w linii przywraca;
+ * (pole pokazuje DD.MM.RRRR) i zakresem dwóch dni → „Nadpisz plan” odwołuje własny blok, oba dni mają cały szablon; „Cofnij” w linii przywraca;
  * „Odwołaj w…” → „Jutro” zdejmuje bloki szablonu. Wieczór po 22:30 – po każdej sesji, nic nie zależy od godziny testu.
  * „Dziś” (D546–D548): okno godzin i minionych z domyślnymi wyborami, „Anuluj”; wg planu – bloki minione jako zrealizowane (start „według
  * planu” i koniec zrobiony w logu dnia), „Cofnij” cofa fakty i bloki; od teraz – pierwszy blok zaczyna się teraz (poza początkiem i końcem
@@ -14,7 +14,7 @@ import { expect, test } from '@playwright/test'
 import { paths } from '../../src/shared/data/paths'
 import { templateBlockId } from '../../src/shared/engine/createDay'
 import { templateJson } from '../../src/shared/model/defaults'
-import { dayFileFrom, planBlock, type Template } from '../../src/shared/model/plan'
+import { dayFileFrom, planBlock, templateFrom, type Template } from '../../src/shared/model/plan'
 import { logicalMinuteOf } from '../../src/shared/time/day'
 import { addDays } from '../../src/shared/time/zone'
 import { launch, logicalToday, withMainLog } from './app'
@@ -34,7 +34,7 @@ const write = (dir: string, rel: string, value: unknown) => {
 }
 const fileOf = (dir: string, date: string) => dayFileFrom(readJson(join(dir, paths.day(date))) ?? {}, date)
 const ddmmyyyy = (iso: string) => `${iso.slice(8, 10)}${iso.slice(5, 7)}${iso.slice(0, 4)}`
-const dashed = (iso: string) => `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`
+const dotted = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`
 
 const training: Template = {
   id: 'trening',
@@ -97,12 +97,12 @@ test('szablon: Zastosuj do jutra (pytanie, luki), bez pytania drugi raz, zakres 
       await expect(page.getByText('Nic nie dodano')).toBeVisible()
       await expect(page.getByTestId('template-apply-mode')).toHaveCount(0)
 
-      // Wybierz dni: osiem cyfr → DD-MM-RRRR, zakres jutro–pojutrze; jutro ma już szablon (luki), pojutrze pyta → „Nadpisz plan”.
+      // Wybierz dni: osiem cyfr → DD.MM.RRRR, zakres jutro–pojutrze; jutro ma już szablon (luki), pojutrze pyta → „Nadpisz plan”.
       await page.getByTestId('template-apply').click()
       await page.getByTestId('template-apply-pick').click()
       const dialog = page.getByTestId('template-apply-days')
       await dialog.getByTestId('template-apply-days-from').fill(ddmmyyyy(tomorrow))
-      await expect(dialog.getByTestId('template-apply-days-from')).toHaveValue(dashed(tomorrow))
+      await expect(dialog.getByTestId('template-apply-days-from')).toHaveValue(dotted(tomorrow))
       await dialog.getByTestId('template-apply-days-to').fill(ddmmyyyy(after))
       await expect(dialog.getByTestId('template-apply-days-count')).toContainText('Wybrane: 2 dni')
       await expect(dialog.getByTestId(`day-${tomorrow}`)).toHaveAttribute('aria-pressed', 'true')
@@ -243,6 +243,120 @@ test('szablon: Zastosuj do dziś – okno godzin i minionych (domyślnie wg plan
       expect(r1).toBeLessThanOrEqual(after)
       expect(starts()[id('r2')]).toBe(r1 + 15)
       expect(facts()).toHaveLength(4)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('szablon: klik w pustą oś zapisuje blok od razu i mówi „Dodano blok · Cofnij” (D563 P2) – „Cofnij” zdejmuje blok', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-template-axis-undo-'))
+  seedAwake(dataDir, [])
+  const empty: Template = { id: 'pusty', name: 'Pusty', dayType: 'zwykly', weekdays: [7], archived: false, versions: [{ from: '2026-01-01', budgetMin: null, maxMin: null, blocks: [] }] }
+  write(dataDir, paths.record('template', empty.id), templateJson(empty))
+  const blocksOf = () => {
+    const t = templateFrom(readJson(join(dataDir, paths.record('template', empty.id))))
+    return t ? t.versions.flatMap((v) => v.blocks).length : -1
+  }
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-templates').click()
+      await page.getByTestId('template-item').filter({ hasText: 'Pusty' }).click()
+      const hours = page.getByTestId('template-timeline').getByTestId('timeline-hours')
+      await hours.scrollIntoViewIfNeeded()
+      const box = (await hours.boundingBox())!
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+      await expect(page.getByTestId('block-editor')).toBeVisible({ timeout: 15_000 })
+      const toast = page.getByRole('status').filter({ hasText: 'Dodano blok' })
+      await expect(toast).toBeVisible()
+      await expect.poll(blocksOf).toBe(1)
+      await toast.getByTestId('toast-action').click()
+      await expect.poll(blocksOf).toBe(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('szablon: „Cofnij” dodanego bloku po wpisaniu nazwy usuwa blok i nie pyta o konflikt z własną zmianą (D563 P2)', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-template-axis-undo2-'))
+  seedAwake(dataDir, [])
+  const empty: Template = { id: 'pusty', name: 'Pusty', dayType: 'zwykly', weekdays: [7], archived: false, versions: [{ from: '2026-01-01', budgetMin: null, maxMin: null, blocks: [] }] }
+  write(dataDir, paths.record('template', empty.id), templateJson(empty))
+  const blocks = () => {
+    const t = templateFrom(readJson(join(dataDir, paths.record('template', empty.id))))
+    return t ? t.versions.flatMap((v) => v.blocks) : []
+  }
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-templates').click()
+      await page.getByTestId('template-item').filter({ hasText: 'Pusty' }).click()
+      const hours = page.getByTestId('template-timeline').getByTestId('timeline-hours')
+      await hours.scrollIntoViewIfNeeded()
+      const box = (await hours.boundingBox())!
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+      await expect(page.getByTestId('block-editor')).toBeVisible({ timeout: 15_000 })
+      const toast = page.getByRole('status').filter({ hasText: 'Dodano blok' })
+      await expect(toast).toBeVisible()
+      // The name typed before „Cofnij” is a change of the template after the add – „Cofnij” takes the block out all the same.
+      await page.keyboard.type('Plan tygodnia')
+      await page.keyboard.press('Enter')
+      await expect.poll(() => blocks().map((b) => b.name)).toEqual(['Plan tygodnia'])
+      await toast.getByTestId('toast-action').click()
+      await expect.poll(() => blocks().length).toBe(0)
+      await expect(page.getByTestId('template-timeline').locator('[data-block-title="Plan tygodnia"]')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('szablon (UX19, P28): „Zastosuj szablon ▸” w menu zaznaczonych dni Kalendarza zapisuje bez pytań; okno dni ma szybkie wybory „pn–pt” i „każdy <dzień>”', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-template-menu-'))
+  const { today } = seedAwake(dataDir, [])
+  const d1 = addDays(today, 3)
+  const d2 = addDays(today, 4)
+  write(dataDir, paths.record('template', training.id), templateJson(training))
+  const id = (date: string, b: string) => templateBlockId(date, 'trening', b)
+  const ids = (date: string) => fileOf(dataDir, date).blocks.map((b) => b.id)
+
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      // The quick picks of the window of days: every Monday of the month shown is chosen, with the count.
+      await page.getByTestId('nav-templates').click()
+      await page.getByTestId('template-item').filter({ hasText: 'Trening' }).click()
+      await page.getByTestId('template-apply').click()
+      await page.getByTestId('template-apply-pick').click()
+      const dialog = page.getByTestId('template-apply-days')
+      await dialog.getByTestId('template-apply-days-quick-weekday-1').click()
+      await expect(dialog.getByTestId('template-apply-days-count')).toContainText('Wybrane:')
+      await dialog.getByTestId('template-apply-days-quick-workdays').click()
+      await expect(dialog.getByTestId('template-apply-days-ok')).toContainText('Zastosuj (')
+      await page.keyboard.press('Escape')
+      await expect(dialog).toHaveCount(0)
+
+      // The menu of the selected days of the Calendar: the template on both days, no question (the days are empty).
+      await page.getByTestId('nav-calendar').click()
+      await page.getByTestId(`day-${d1}`).click({ modifiers: ['Control'] })
+      await page.getByTestId(`day-${d2}`).click({ modifiers: ['Control'] })
+      await page.getByTestId(`day-${d2}`).click({ button: 'right' })
+      await expect(page.getByTestId('calendar-menu')).toHaveAttribute('aria-label', 'Zmień 2 dni')
+      await page.getByTestId('calendar-menu-apply').click()
+      await page.getByTestId('calendar-menu-apply-trening').click()
+      await expect.poll(() => ids(d1)).toEqual(expect.arrayContaining([id(d1, 'x1'), id(d1, 'x2')]))
+      await expect.poll(() => ids(d2)).toEqual(expect.arrayContaining([id(d2, 'x1'), id(d2, 'x2')]))
     })
     expect(errors).toEqual([])
   } finally {

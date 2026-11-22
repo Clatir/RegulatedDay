@@ -20,7 +20,7 @@ import { parseBlockKey, type GroupAction } from '@renderer/features/plan/groupMe
 import { WeekPage } from '@renderer/features/week/WeekPage'
 import { useData } from '@renderer/store/data'
 import { useDaysView, useWeekView } from '@renderer/store/horizon'
-import { useUi } from '@renderer/store/ui'
+import { NO_MEMORY, useUi } from '@renderer/store/ui'
 
 // The change of a pick: caught (the screens call `runBlockGroup` of `groupRun.ts`).
 const { runs } = vi.hoisted(() => ({ runs: [] as Array<{ view: string; ids: readonly string[]; action: unknown }> }))
@@ -73,7 +73,7 @@ beforeEach(() => {
   offDel = installDeleteKey()
   runs.length = 0
   useData.setState({ rd: rdFrom({ schema: 1 }), view: { today: TODAY, allDay: [], computers: [] } as unknown as DataView, allDay: [] })
-  useUi.setState({ page: 'week', day: null, pick: null, toasts: [] })
+  useUi.setState({ page: 'week', day: null, pick: null, toasts: [], from: null, memory: NO_MEMORY })
   vi.mocked(useWeekView).mockImplementation((date) => {
     const w = weekStart(date)
     return { view: weekViewOf(w, TODAY, weekDates(w).map((d) => day(d, blocksOf(d)))), failed: false }
@@ -208,11 +208,24 @@ describe('menu prawego przycisku i Del na blokach kolumn (D528)', () => {
     expect(runs).toEqual([{ view: 'week', ids: [K(MON, 'm1'), K(MON, 'm2'), K(WED, 'w1')], action: { kind: 'park' } }])
   })
 
+  it('Del przy jednym zaznaczonym bloku (UX17, F8): pytanie z nazwą bloku, `remove` tego jednego; Esc anuluje bez zapisu', async () => {
+    await mount()
+    await click(cell(MON, 'm1'), { ctrlKey: true })
+    expect(marked()).toEqual([K(MON, 'm1')])
+    key(document.body, 'Delete')
+    expect(q('delete-ask')).not.toBeNull()
+    expect(q('delete-ask')!.textContent).toMatch(/Usunąć „[^”]+”\?/)
+    key(document.body, 'Escape')
+    await act2(() => undefined)
+    expect(runs).toEqual([])
+    key(document.body, 'Delete')
+    await click(q('delete-ask-yes')!)
+    expect(runs).toEqual([{ view: 'week', ids: [K(MON, 'm1')], action: { kind: 'remove' } }])
+  })
+
   it('Del przy zaznaczeniu ≥ 2: jedno pytanie „Usunąć N bloków?”, `remove` dla wszystkich', async () => {
     await mount()
     await click(cell(MON, 'm1'), { ctrlKey: true })
-    key(document.body, 'Delete')
-    expect(q('delete-ask')).toBeNull()
     await click(cell(TUE, 't1'), { ctrlKey: true })
     await click(cell(WED, 'w1'), { ctrlKey: true })
     key(document.body, 'Delete')

@@ -12,11 +12,11 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { proposeExchange, type ExchangeProposal } from '@shared/engine/exchange'
 import { rdFrom } from '@shared/model/rd'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
-import { NewBlockPopover, TODAY_WAIT_MS, TODAY_UNCOUNTED_TEXT } from '@renderer/features/week/NewBlockPopover'
+import { EXCHANGE_UNASKED_TEXT, NewBlockPopover, TODAY_WAIT_MS, TODAY_UNCOUNTED_TEXT } from '@renderer/features/week/NewBlockPopover'
 import { addWeekBlocks } from '@renderer/features/week/weekActions'
 import { installEscape } from '@renderer/lib/escape'
 import { useDay, type DayModel } from '@renderer/store/day'
-import { closeToast, useUi } from '@renderer/store/ui'
+import { closeToast, navigate, openDay, openPick, openRitual, useUi } from '@renderer/store/ui'
 
 vi.mock('@renderer/features/week/weekActions', async (orig) => ({ ...(await orig<typeof import('@renderer/features/week/weekActions')>()), addWeekBlocks: vi.fn(async () => ({ saved: ['2026-11-18'], failed: [], pending: [], unknown: false, push: null })) }))
 vi.mock('@renderer/store/day', async (orig) => ({ ...(await orig<typeof import('@renderer/store/day')>()), useDay: vi.fn(() => null) }))
@@ -58,17 +58,17 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-const props = (onClose: () => void) => ({ dates: [TODAY], startMin: 9 * 60, durationMin: 60, today: TODAY, namesOf: () => names, place: { left: 0, top: 0 }, dragged: true, onClose, onDates: () => undefined, onMore: () => undefined })
-const mount = async () => {
+const props = (onClose: () => void, over: { dragged?: boolean; dates?: string[] } = {}) => ({ dates: [TODAY], startMin: 9 * 60, durationMin: 60, today: TODAY, namesOf: () => names, place: { left: 0, top: 0 }, dragged: true, onClose, onDates: () => undefined, onMore: () => undefined, ...over })
+const mount = async (over: { dragged?: boolean } = {}) => {
   const onClose = vi.fn()
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
-  await act(async () => root!.render(createElement(NewBlockPopover, props(onClose))))
+  await act(async () => root!.render(createElement(NewBlockPopover, props(onClose, over))))
   return {
     onClose,
     /** Today counted again (the day's model comes or changes): the window renders anew. */
-    recount: async () => act(async () => root!.render(createElement(NewBlockPopover, props(onClose))))
+    recount: async () => act(async () => root!.render(createElement(NewBlockPopover, props(onClose, over))))
   }
 }
 /** A press and its click on the grid, outside the window (a click of the pointer: `detail` 1 – a keyboard's click, 0, is never held). */
@@ -76,6 +76,7 @@ const clickOutside = async () => {
   await act(async () => void grid!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true })))
   await act(async () => void grid!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })))
 }
+const click = async (el: Element | null) => act(async () => void (el as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })))
 const shown = (id: string) => document.querySelector(`[data-testid="${id}"]`) != null
 
 describe('okienko „Nowy blok”: klik poza nim nic nie gubi (D461, T1049)', () => {
@@ -121,5 +122,83 @@ describe('okienko „Nowy blok”: klik poza nim nic nie gubi (D461, T1049)', ()
     const src = readFileSync('src/renderer/features/week/NewBlockPopover.tsx', 'utf8')
     expect(src).toContain('by Enter in „Nazwa”')
     expect(src).not.toMatch(/by Enter in\s*\n?\s*\*?\s*a field/)
+  })
+})
+
+/** A name typed into the field and committed (blur): the window is touched, as by a typed name before Ctrl 1. */
+const typeName = async (text: string) => {
+  const input = document.querySelector<HTMLInputElement>('[data-testid="week-new-name"]')!
+  await act(async () => {
+    input.focus()
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+describe('okienko „Nowy blok”: zmiana ekranu albo dnia zapisuje je jak klik poza nim (szkice, UX2 A4)', () => {
+  const leaves: Array<[string, () => void]> = [
+    ['navigate (Ctrl 1…9, menu)', () => navigate('today')],
+    ['openDay (klik dnia w Kalendarzu)', () => openDay('2026-11-19')],
+    ['openPick (Enter w Ctrl K)', () => openPick({ page: 'routines' }, { kind: 'routine', id: 'r1' } as never)],
+    ['openRitual (pasek)', () => openRitual()]
+  ]
+  for (const [name, leave] of leaves) {
+    it(`${name}: tknięte okienko zapisuje się tą samą drogą (addWeekBlocks) z wpisaną nazwą, nietknięte zamyka się bez zapisu`, async () => {
+      vi.mocked(useDay).mockReturnValue(model)
+      // Touched: a name typed (the commit is made by the change of view, like for any active field).
+      const { onClose } = await mount({ dragged: false })
+      await typeName('Z klawiatury')
+      await act(async () => void leave())
+      await act(async () => undefined)
+      expect(addWeekBlocks).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(addWeekBlocks).mock.calls[0]![0].map((e) => [e.date, e.block.name])).toEqual([[TODAY, 'Z klawiatury']])
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
+
+    it(`${name}: nietknięte okienko z gołego kliknięcia siatki zamyka się, nic nie zapisuje`, async () => {
+      vi.mocked(useDay).mockReturnValue(model)
+      const { onClose } = await mount({ dragged: false })
+      await act(async () => void leave())
+      expect(addWeekBlocks).not.toHaveBeenCalled()
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
+  }
+
+  it('wymiana dzisiejszego bloku nie ma kogo zapytać (okno odchodzi z ekranem): nic nie zapisane, dymek to mówi', async () => {
+    vi.mocked(useDay).mockReturnValue(model)
+    vi.mocked(proposeExchange).mockReturnValue(needed)
+    await mount()
+    await act(async () => void navigate('today'))
+    expect(addWeekBlocks).not.toHaveBeenCalled()
+    expect(useUi.getState().toasts.map((t) => t.text)).toEqual([EXCHANGE_UNASKED_TEXT])
+  })
+
+  it('dzień jeszcze nie policzony: dymek jak przy kliknięciu poza oknem, nic nie zapisane', async () => {
+    const { onClose } = await mount()
+    await act(async () => void navigate('today'))
+    expect(addWeekBlocks).not.toHaveBeenCalled()
+    expect(useUi.getState().toasts.map((t) => t.text)).toEqual([TODAY_UNCOUNTED_TEXT])
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('„Więcej” otwiera dzień sam (szkic idzie do „Dziś”): to nie jest opuszczenie okienka, nic się nie zapisuje', async () => {
+    vi.mocked(useDay).mockReturnValue(model)
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    const onMore = vi.fn(() => openDay(TODAY))
+    await act(async () => root!.render(createElement(NewBlockPopover, { ...props(vi.fn()), onMore })))
+    await click(document.querySelector('[data-testid="week-new-more"]'))
+    expect(onMore).toHaveBeenCalledTimes(1)
+    expect(addWeekBlocks).not.toHaveBeenCalled()
+  })
+
+  it('okienko zdjęte z ekranu nie zostaje w nasłuchu: późniejsza zmiana ekranu go nie woła', async () => {
+    vi.mocked(useDay).mockReturnValue(model)
+    await mount()
+    act(() => root?.unmount())
+    root = null
+    await act(async () => void navigate('today'))
+    expect(addWeekBlocks).not.toHaveBeenCalled()
   })
 })

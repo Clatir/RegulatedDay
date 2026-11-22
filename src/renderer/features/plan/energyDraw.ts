@@ -6,6 +6,7 @@
  */
 import type { EnergyTrack } from '@shared/engine/energyTrack'
 import { logicalClock } from '@shared/format'
+import { COST_MAX, COST_MIN, costNumber } from '@shared/model/blockCosts'
 import { POOL_LETTER, type Pool } from '@shared/model/categories'
 
 export const POOLS: readonly Pool[] = ['head', 'emotions', 'senses', 'body']
@@ -17,6 +18,11 @@ export { POOL_LETTER }
 export const RESERVE_COLOR = '#D49A97'
 /** The scale every drawing of the energy names (D500). */
 export const ENERGY_SCALE = 'energia 0–100'
+/**
+ * What the numbers beside a tile are (D7) – one text for the legend and the tile's window: a level of cost an hour, between −5 and 5; a cost k
+ * takes 3·k points of the pool's 0–100 an hour (spec „Koszt na godzinę”).
+ */
+export const COST_SCALE_TEXT = `koszt na godzinę, od ${costNumber(COST_MIN)} do ${COST_MAX}; 1 = 3 punkty energii`
 
 /** A pool's curve: its samples with a value (time, value) and the slope at each one (value a minute). */
 export interface Curve {

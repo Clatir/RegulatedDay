@@ -74,18 +74,18 @@ describe('komunikat pod odrzuconym polem (D347)', () => {
     }
     expect(bad).toEqual([])
     const req = readFileSync(`${dir}/cases/CasesPage.tsx`, 'utf8')
-    // The grid row's title, estimate and note, and the date fields of „Terminy” (D451, T860 – one JSX tag for both).
-    expect(req.match(/errorPlacement="float"/g)).toHaveLength(4)
+    // The row's title, estimate and note (a request's note in the line, a task's under „▸” – UX17), and the date fields of „Terminy” (D451, T860 – one JSX tag for both).
+    expect(req.match(/errorPlacement="float"/g)).toHaveLength(5)
   })
 
   it('CommitField i pole tekstowe z wymaganą wartością pokazują komunikat we wspólnej powłoce, a w rogu zostaje toast', () => {
     const commit = fields.slice(fields.indexOf('export function CommitField'), fields.indexOf('/** A length typed within'))
     expect(commit).toContain('<FieldShell')
-    expect(commit).toContain("toast(r.refused, 'error', 6000)")
+    expect(commit).toContain("refusalToast(r.refused, 6000)")
     expect(commit).toContain('aria-describedby')
     const text = fields.slice(fields.indexOf('export function TextField'))
     expect(text).toContain('<FieldShell')
-    expect(text).toContain("toast('To pole nie może być puste.'")
+    expect(text).toContain("refusalToast('To pole nie może być puste.'")
   })
 
   it('godzina odpowiedzi o dniu (dayTime) idzie przez to samo pole', () => {

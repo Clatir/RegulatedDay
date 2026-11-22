@@ -22,6 +22,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `model/ids.ts` (losowe i wyliczane identyfikatory).
 - `engine/createDay.ts` – deterministyczna migawka dnia (szablon, ustawienia daty, wykłady, sesje ze strefy NY ze
   skróceniem, przesunięcie pobudki) i `dayPlan` (migawka + plik dnia).
+- Wybór szablonu dnia (`templateFor`: typ + dzień tygodnia, inaczej domyślny typu; przy kilku pasujących wygrywa mniejsze id – cicho) i jego opis (D563 P3, D72 – bez blokady): `templateClashes` / `templateUnused` / `freeWeekday` w `model/plan.ts` (domyślny i szablon dnia tygodnia się nie zderzają; archiwum i inny typ – nie; wersje nieczytane); okno: ramka `template-clash` w edytorze (`templates/clashText.ts`), „· nieużywany” na liście, „+ Szablon” przy domyślnym zaczyna od `freeWeekday`, id nowego szablonu przez `idAfter` (nigdy mniejsze od istniejących – nowy nie wygrywa po cichu). Testy `template-clash.test.ts` (unit i web).
 - Sesje w szablonach (D511, D515, T1340–T1359, T1400–T1419, T1450–T1461): wpis = blok szablonu z `PlanBlock.session` i własną godziną
   (`isSessionEntry` w `model/plan.ts` – jedna reguła, bez kategorii; `zone`, `markets`, `days` – 7 odpowiedzi, `id` – sesji,
   `sessionIdOf`); godzina polska „jak zwykle”. `model/templateSessions.ts` – `daySettingsOf` (wpisy bez „nie” w dniu tygodnia
@@ -76,7 +77,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `withoutZjazd`, `zjazdTypeRaw`, `classImport`, `sameDayFile`); bloki `origin: 'zjazd'` i zajęcia zdalne w dniu zjazdu
   (`blockInfos(…, routines, typeAt)`, D359) są `lectureOrCommute`; `PlanBlock.name` – nowe pole bloku dopisz w `planBlock()`,
   `planBlockFrom` i literale w `blockInfos`. `RULES_VERSION` 7 od 1.4.0 (`block.shorten`, D365), 8 – serie w `day.create` (T716), 9 – bez drugiej
-  zmiany (D467), 10 – bloki bez komputera same, zamiana przy „Zacznij” (D475, D478) i grupy w prognozie (T1162), 11 – timer grupy (D493), 12 – przejęcie przodu grupy (T1259), 13 – koszt zaczętego bloku od minuty (`block.cost`, dziedzina timera, bierne – `PASSIVE`; D501), 14 – koszt rutyny (`Routine.costs`, `planned.routineCosts`; D512, reguły `koszt.md`), 15 – sesje w szablonach (D511, D515), 16 – pula „ciało” (D520, T1524), 17 – bloki poza komputerem jednym ciągiem (D553, T1968).
+  zmiany (D467), 10 – bloki bez komputera same, zamiana przy „Zacznij” (D475, D478) i grupy w prognozie (T1162), 11 – timer grupy (D493), 12 – przejęcie przodu grupy (T1259), 13 – koszt zaczętego bloku od minuty (`block.cost`, dziedzina timera, bierne – `PASSIVE`; D501), 14 – koszt rutyny (`Routine.costs`, `planned.routineCosts`; D512, reguły `koszt.md`), 15 – sesje w szablonach (D511, D515), 16 – pula „ciało” (D520, T1524), 17 – bloki poza komputerem jednym ciągiem (D553, T1968), 18 – tolerancja trafności z ustawienia dnia (UX13).
 - Serie (OPS1, D381, D382, D401, D404, T700–T719): `model/series.ts` (rekord, `ruleFallsOn`, `seriesVersionOn`,
   `specialOutcome`, licznik `countedBefore`/`seriesLast`, `seriesPlans` – `SeriesPlan { series, last }`, `countDatesToRead`,
   `seriesOfBlock`, `currentSeries` – lista), `engine/series.ts` (`seriesBlocks` w `createDay`, `pushedBySeries` – rozsuwanie

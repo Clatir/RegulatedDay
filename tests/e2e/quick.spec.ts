@@ -1,12 +1,14 @@
 /**
  * Szybki zapis (OPS2, D385, D402): the window „Do skrzynki” exists hidden and never comes up by itself – not at the
  * start, not with the bar's refreshes; its field saves a task of your own into „Skrzynka” on Enter and hides, Esc hides
- * it without saving (shown here from the test, as the shortcut would). „+” of the main window's bar unfolds the same
- * field in the bar; „+” of the desktop bar (it takes no keys) opens the icon's panel with it (T756).
+ * it without saving (shown here from the test, as the shortcut would). „+ Skrzynka” of the main window's bar unfolds the
+ * same field in the bar; „+ Skrzynka” of the desktop bar (it takes no keys) brings up the window itself, as the shortcut does
+ * (D564 P15).
  * The shortcut itself – Win+Alt+N pressed for real, the window over the others with the focus, not on top after – only
  * in CI on Windows (`quick-windows.spec.ts`).
  */
 import { readdirSync, readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { addDays } from '../../src/shared/time/zone'
@@ -87,7 +89,7 @@ test('„Do skrzynki”: nie wychodzi sam; Enter zapisuje zadanie w Skrzynce i c
   }
 })
 
-test('„+” w pasku okna głównego rozwija pole – Enter zapisuje do Skrzynki; „+” paska pulpitu otwiera panel z polem (T756)', async () => {
+test('„+ Skrzynka” w pasku okna głównego rozwija pole – Enter zapisuje do Skrzynki; „+ Skrzynka” paska pulpitu otwiera okienko „Do skrzynki” (D564 P15)', async () => {
   const { app, page, userData, errors } = await launch({ data: true })
   try {
     await withMainLog(userData, async () => {
@@ -101,15 +103,20 @@ test('„+” w pasku okna głównego rozwija pole – Enter zapisuje do Skrzynk
       await expect.poll(() => tasks(app)).toEqual([expect.objectContaining({ title: 'Sprawdzić błąd w kodzie', list: 'inbox' })])
       await expect(bar.getByTestId('bar-quick-field')).toHaveCount(0)
 
-      const desktop = await viewPage(app, 'bar')
-      await desktop.getByTestId('bar-quick').click()
-      const panel = await viewPage(app, 'panel')
-      await expect(panel.getByTestId('bar-quick-title')).toBeFocused()
-      await panel.getByTestId('bar-quick-title').fill('Zadzwonić do ubezpieczyciela')
-      await panel.getByTestId('bar-quick-title').press('Enter')
-      await expect.poll(async () => (await tasks(app)).map((t) => t.title).sort()).toEqual(['Sprawdzić błąd w kodzie', 'Zadzwonić do ubezpieczyciela'])
-      // The okienko „Do skrzynki” never came up for it.
       expect(await quickWindow(app)).toMatchObject({ visible: false, onTop: false })
+      // The desktop bar takes no keys: its „+ Skrzynka” brings up the window „Do skrzynki”, on top with the focus – no panel.
+      const desktop = await viewPage(app, 'bar')
+      await expect(desktop.getByTestId('bar-quick')).toHaveText('+ Skrzynka')
+      await desktop.getByTestId('bar-quick').click()
+      await expect.poll(() => quickWindow(app)).toMatchObject({ visible: true, onTop: true })
+      const q = await quickPage(app)
+      await expect(q.getByTestId('quick-title')).toBeFocused()
+      await q.getByTestId('quick-title').fill('Zadzwonić do ubezpieczyciela')
+      await q.getByTestId('quick-title').press('Enter')
+      await expect.poll(async () => (await tasks(app)).map((t) => t.title).sort()).toEqual(['Sprawdzić błąd w kodzie', 'Zadzwonić do ubezpieczyciela'])
+      await expect.poll(() => quickWindow(app)).toMatchObject({ visible: false, onTop: false })
+      expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – panel' && w.isVisible()))).toBe(false)
+      await expect.poll(() => readFile(join(userData, 'logs', 'main.log'), 'utf8')).toContain('okienko „Do skrzynki” otwarte przyciskiem „+ Skrzynka” paska pulpitu')
     })
     expect(errors).toEqual([])
   } finally {

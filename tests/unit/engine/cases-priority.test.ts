@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { caseCompare, caseGroupOf, caseItems, listedRaw, morningCases, patchedRaw, type CaseItem } from '@shared/engine/cases'
-import { dropPatch, MATRIX_FILTERS, MATRIX_ROWS, matrixCounts, matrixOf, priorityLine, priorityWithoutPlace } from '@shared/engine/casePriority'
+import { dropPatch, MATRIX_FILTERS, MATRIX_ROWS, matrixCounts, matrixMove, matrixOf, type MatrixField, priorityLine, priorityWithoutPlace } from '@shared/engine/casePriority'
 import { newRequest, newTask, NO_PRIORITY_NAME, PRIORITIES, PRIORITY_NAMES, priorityFrom, requestFrom, type NewTask, type RequestRecord } from '@shared/model/requests'
 import { placeLogical } from '@shared/time/day'
 
@@ -223,5 +223,53 @@ describe('plan poranny: linia spraw „Ważne i pilne” bez miejsca w planie (D
 
   it('„Kiedyś / Może” z datą wykonania w przyszłości zostaje poza linią', () => {
     expect(line([p1('a', { list: 'someday', doDate: '2026-12-01' })])).toBeNull()
+  })
+})
+
+describe('strzałki w macierzy (UX17, F8)', () => {
+  const cells = (o: Partial<Record<MatrixField, string[]>>): Record<MatrixField, string[]> => ({ p1: [], p2: [], p3: [], p4: [], none: [], ...o })
+  const full = cells({ p1: ['a', 'b'], p2: ['c'], p3: ['d', 'e'], p4: ['f'], none: ['g'] })
+
+  it('↑ ↓ idą po polu, a za jego końcem do najbliższego pola w tej samej kolumnie (do „Bez priorytetu” na samym dole)', () => {
+    expect(matrixMove(full, 'a', 'ArrowDown')).toBe('b')
+    expect(matrixMove(full, 'b', 'ArrowDown')).toBe('d')
+    expect(matrixMove(full, 'e', 'ArrowDown')).toBe('g')
+    expect(matrixMove(full, 'c', 'ArrowDown')).toBe('f')
+    expect(matrixMove(full, 'f', 'ArrowDown')).toBe('g')
+    expect(matrixMove(full, 'g', 'ArrowDown')).toBeNull()
+    expect(matrixMove(full, 'e', 'ArrowUp')).toBe('d')
+    expect(matrixMove(full, 'd', 'ArrowUp')).toBe('b')
+    expect(matrixMove(full, 'f', 'ArrowUp')).toBe('c')
+    expect(matrixMove(full, 'a', 'ArrowUp')).toBeNull()
+    // From the field below all: the left column first, its last card.
+    expect(matrixMove(full, 'g', 'ArrowUp')).toBe('e')
+  })
+
+  it('puste pola są pomijane', () => {
+    const gaps = cells({ p1: ['a'], p3: [], p4: [], none: ['g'] })
+    expect(matrixMove(gaps, 'a', 'ArrowDown')).toBe('g')
+    expect(matrixMove(gaps, 'g', 'ArrowUp')).toBe('a')
+  })
+
+  it('← → przechodzą do sąsiada w wierszu na to samo miejsce (najniżej, jak jest), pole „Bez priorytetu” nie ma boków', () => {
+    expect(matrixMove(full, 'b', 'ArrowRight')).toBe('c')
+    expect(matrixMove(full, 'a', 'ArrowRight')).toBe('c')
+    expect(matrixMove(full, 'c', 'ArrowLeft')).toBe('a')
+    expect(matrixMove(full, 'e', 'ArrowRight')).toBe('f')
+    expect(matrixMove(full, 'f', 'ArrowLeft')).toBe('d')
+    expect(matrixMove(full, 'g', 'ArrowLeft')).toBeNull()
+    expect(matrixMove(full, 'g', 'ArrowRight')).toBeNull()
+    expect(matrixMove(cells({ p1: ['a'] }), 'a', 'ArrowRight')).toBeNull()
+  })
+
+  it('na krawędzi wiersza strzałka nigdzie nie idzie: ← z lewego pola i → z prawego to nie skok do drugiego pola', () => {
+    expect(matrixMove(full, 'a', 'ArrowLeft')).toBeNull()
+    expect(matrixMove(full, 'c', 'ArrowRight')).toBeNull()
+    expect(matrixMove(full, 'd', 'ArrowLeft')).toBeNull()
+    expect(matrixMove(full, 'f', 'ArrowRight')).toBeNull()
+  })
+
+  it('nieznana karta – nigdzie', () => {
+    expect(matrixMove(full, 'zzz', 'ArrowDown')).toBeNull()
   })
 })

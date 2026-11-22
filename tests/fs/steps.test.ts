@@ -69,7 +69,7 @@ async function computer(id: string, clock: { now: number }, edit?: (entries: Edi
     seen: async () => 0,
     clickedApp: () => undefined,
     modePrefs: () => ({ sessionMode: true, classMode: true }),
-    notices: () => ({ start5: true, hardEnd: true, reserve: true }),
+    notices: () => ({ start5: true, hardEnd: true, reserve: true, reminders: true }),
     notify: (n) => (shown.push(n), true),
     showMain: () => undefined,
     emit: () => undefined,

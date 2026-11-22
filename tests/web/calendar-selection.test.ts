@@ -14,7 +14,7 @@ import { installEscape } from '@renderer/lib/escape'
 import { clearGroupLine, useGroupLine } from '@renderer/store/groupLine'
 import { useData } from '@renderer/store/data'
 import { useMonthView } from '@renderer/store/horizon'
-import { useUi } from '@renderer/store/ui'
+import { NO_MEMORY, useUi } from '@renderer/store/ui'
 
 vi.mock('@renderer/store/horizon', () => ({ useWeekView: vi.fn(), useDaysView: vi.fn(), useGoalsView: vi.fn(() => ({ view: null, failed: false })), useMonthView: vi.fn() }))
 
@@ -64,7 +64,7 @@ beforeEach(() => {
     dataView: async () => undefined
   }
   useData.setState({ rd: rdFrom({ schema: 1 }), view: { today: TODAY, allDay: [], computers: [] } as unknown as DataView, allDay: [] })
-  useUi.setState({ page: 'calendar', day: null, pick: null, toasts: [] })
+  useUi.setState({ page: 'calendar', day: null, pick: null, toasts: [], from: null, memory: NO_MEMORY })
   offEsc = installEscape()
 })
 afterEach(() => {
@@ -150,7 +150,7 @@ describe('przykład ze specyfikacji: Ctrl+klik 7.12, Shift+klik 13.12, prawy prz
     expect(q('group-line-calendar')).toBeNull()
   })
 
-  it('pasek działań dalej działa i też mówi linią grupy; jeden dzień – bez linii (jak dotąd)', async () => {
+  it('pasek działań dalej działa i też mówi linią grupy; jeden dzień – bez linii, dymek z „Cofnij” (UX5)', async () => {
     await mount()
     await press(dateOf(9), { ctrlKey: true })
     await press(dateOf(10), { ctrlKey: true })
@@ -189,7 +189,8 @@ describe('przykład ze specyfikacji: Ctrl+klik 7.12, Shift+klik 13.12, prawy prz
     await press('2026-11-20', { ctrlKey: true })
     await pick('calendar-type-wolne')
     expect(q('group-line-calendar')).toBeNull()
-    expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['Dni minione mają typ z planu z rana – zmieniają się tylko dni od jutra.'])
+    // The days left out are said once (no line of a group); the one day changed has its toast with „Cofnij” (UX5).
+    expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['Dni minione mają typ z planu z rana – zmieniają się tylko dni od jutra.', 'Typ dnia 20.11.2026: Wolne'])
   })
 })
 

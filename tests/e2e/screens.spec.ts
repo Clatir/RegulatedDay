@@ -74,6 +74,15 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       // Dziś: the morning plan – the check-in skipped, the boundary approved.
       await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
       await expect(page.getByTestId('morning-plan')).toBeVisible()
+      // D563 (P6, przegląd): the axis put at „teraz” never goes past a card that asks you something – the top of the morning plan not approved stays in view.
+      await expect(page.getByTestId('morning-plan')).toHaveAttribute('data-prompt-card', 'true')
+      await expect
+        .poll(async () => {
+          const box = await page.getByTestId('day-scroll').boundingBox()
+          const plan = await page.getByTestId('morning-plan').boundingBox()
+          return box != null && plan != null && plan.y >= box.y - 1 && plan.y < box.y + box.height
+        })
+        .toBe(true)
       await shot(page, 'e3-01-today')
       // On Monday „Strona B tygodnia” comes first (spec „Plan poranny”): its table, then „Dalej”.
       if (new Date(`${logicalToday()}T12:00:00Z`).getUTCDay() === 1) {
@@ -85,19 +94,33 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.getByTestId('goals-skip').click()
       await page.getByTestId('checkin-skip').click()
       await expect(page.getByTestId('queue-pick')).toContainText('Mama')
-      await page.getByTestId('boundary-approve').click()
+      // D8 (UX9): „Zatwierdź” stands in the card's header – the plan is approved without scrolling its steps; the warnings are not in the card (P10).
+      await expect(page.getByTestId('morning-plan').getByTestId('day-warnings')).toHaveCount(0)
+      await page.getByTestId('morning-approve').click()
       await expect(page.getByTestId('boundary')).toContainText('Plan zatwierdzony')
+      await expect(page.getByTestId('morning-approve')).toHaveCount(0)
       await shot(page, 'e3-02-approved')
       // „Cofnij zatwierdzenie” (A6-11): the card says „do zrobienia” again and offers the approval; approved once more.
       await page.getByTestId('boundary-undo').click()
       await expect(page.getByTestId('boundary-approve')).toBeVisible()
+      await expect(page.getByTestId('morning-approve')).toBeVisible()
       await expect(page.getByTestId('morning-plan')).toContainText('do zrobienia')
       await page.getByTestId('boundary-approve').click()
       await expect(page.getByTestId('boundary')).toContainText('Plan zatwierdzony')
       await expect(page.getByTestId('morning-plan')).toContainText('zatwierdzony')
       // A work block added after the approval, beyond the boundary: the exchange, „Dodaj bez wymiany”.
+      // UX1 (A3): the „⋯” menu closes with Esc; (D9) the side panel and the block's panel are one width.
+      await page.getByTestId('day-menu').click()
+      await expect(page.getByTestId('day-copy')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('day-copy')).toHaveCount(0)
+      const sideWidth = (await page.getByTestId('day-side').boundingBox())!.width
       await page.getByTestId('day-add').click()
       await expect(page.getByTestId('block-editor')).toBeVisible()
+      expect((await page.getByTestId('block-editor').boundingBox())!.width).toBe(sideWidth)
+      // D4 (UX9): the panel of a new block says it is a draft.
+      await expect(page.getByTestId('block-editor').locator('h3')).toHaveText('Nowy blok')
+      await expect(page.getByTestId('block-draft-hint')).toHaveText('Zapisze się, gdy opuścisz panel · Esc – odrzuć')
       await page.getByTestId('block-start').fill('3:30')
       // D461: the start committed saves the new block – a work block after the approval asks for the exchange at once.
       await page.getByTestId('block-start').press('Enter')
@@ -238,6 +261,18 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await page.keyboard.press('Escape')
       await page.getByTestId('day-today').click()
 
+      // D563 (P6): „Dziś” opened again (another page and back) has „teraz” in the visible part of the axis, whatever the hour.
+      await page.getByTestId('nav-calendar').click()
+      await page.getByTestId('nav-today').click()
+      await expect(page.getByTestId('marker-teraz')).toHaveCount(1)
+      await expect
+        .poll(async () => {
+          const box = await page.getByTestId('day-scroll').boundingBox()
+          const line = await page.getByTestId('marker-teraz').boundingBox()
+          return box != null && line != null && line.y >= box.y && line.y < box.y + box.height
+        })
+        .toBe(true)
+
       // Kalendarz: today keeps its type here – it changes in „Dziś” (A7-03).
       await page.getByTestId('nav-calendar').click()
       await expect(page.getByTestId('calendar')).toBeVisible()
@@ -339,6 +374,20 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       expect(Math.abs(apply.y - (await page.getByTestId('template-revoke').boundingBox())!.y)).toBeLessThan(12)
       await shot(page, 'e3-07-templates')
 
+      // UX18 (E7): „Historia” in the template's editor – the history with this template chosen and its versions shown.
+      // (the open block's panel in a template has none: the editor's is the only one)
+      await page.getByTestId('template-editor').getByTestId('history-open').click()
+      await expect(page.getByTestId('history-versions')).toBeVisible({ timeout: 15_000 })
+      // The list: the filter of kinds with the counts, the counter „x z y”, the search narrowing it down.
+      await expect(page.getByTestId('filters-history')).toBeVisible()
+      const all = await page.getByTestId('history-record').count()
+      await expect(page.getByTestId('count-history')).toHaveText(`${all} z ${all}`)
+      await page.getByTestId('history-search').fill('qqqqqq')
+      await expect(page.getByTestId('history-record')).toHaveCount(0)
+      await expect(page.getByTestId('count-history')).toHaveText(`0 z ${all}`)
+      await expect(page.getByTestId('history-none')).toBeVisible()
+      await page.getByTestId('history-search').fill('')
+
       // Historia: the request edited – its earlier version, restored.
       await page.getByTestId('nav-history').click()
       await expect(page.getByTestId('history-record').first()).toBeVisible({ timeout: 15_000 })
@@ -349,7 +398,7 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       const budget = page.getByTestId('setting-zwykly-budgetMin')
       await budget.fill('17h')
       await budget.press('Enter')
-      await expect(page.getByRole('status').filter({ hasText: 'Najdłużej 16 h' })).toBeVisible()
+      await expect(page.getByRole('alert').filter({ has: page.getByTestId('toast-close') }).filter({ hasText: 'Najdłużej 16 h' })).toBeVisible()
       await budget.fill('7h')
       await budget.press('Enter')
       await expect(budget).toHaveValue('7 h')
@@ -365,9 +414,36 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await chain.click()
       await expect(chain).toHaveAttribute('aria-checked', 'true')
       await expect.poll(() => (JSON.parse(readFileSync(join(dataDir, 'rd.json'), 'utf8')) as { settings: Array<{ patch: { awayChain?: boolean } }> }).settings.at(-1)!.patch.awayChain).toBe(true)
+      // UX14 (E2): the change waits for tomorrow in „Zaplanowane zmiany” with its field and value; „Wycofaj” takes it out of rd.json (the
+      // field shows what was before it), the toast's „Cofnij” puts it back.
+      const awayChanges = () => (JSON.parse(readFileSync(join(dataDir, 'rd.json'), 'utf8')) as { settings: Array<{ patch: { awayChain?: boolean } }> }).settings.filter((c) => c.patch.awayChain !== undefined).length
+      const chainRow = page.getByTestId('settings-planned').locator('li[data-testid^="settings-planned-"]').filter({ hasText: 'Bloki poza komputerem jednym ciągiem' })
+      await expect(chainRow).toContainText('włączone')
+      await chainRow.getByRole('button', { name: 'Wycofaj' }).click()
+      await expect(chainRow).toHaveCount(0)
+      await expect(chain).toHaveAttribute('aria-checked', 'false')
+      await expect.poll(awayChanges).toBe(0)
+      await page.getByRole('status').filter({ hasText: 'Wycofano zaplanowaną zmianę od' }).getByTestId('toast-action').click()
+      await expect(chainRow).toHaveCount(1)
+      await expect(chain).toHaveAttribute('aria-checked', 'true')
+      await expect.poll(awayChanges).toBe(1)
       // D511: no section „Sesje” – the sessions are entries of the templates (their panel in „Szablony”).
       await expect(page.getByTestId('settings-daytypes')).toBeVisible()
       await expect(page.getByTestId('settings-sessions')).toHaveCount(0)
+      // UX14 (E1, D565 P22): the table of contents – every section one click away, in the window; the box „Szukaj w ustawieniach” takes to a field.
+      await expect(page.getByTestId('settings-toc').locator('[data-testid^="toc-group-"]')).toHaveText(['Dzień i energia', 'Kategorie i kalendarze', 'Sprawy i szablony', 'Pasek i powiadomienia', 'Dane i kopie', 'O aplikacji'])
+      for (const id of ['settings-modules', 'settings-energy', 'settings-accuracy', 'settings-categories', 'settings-cases', 'settings-bar', 'settings-data', 'settings-info']) {
+        await page.getByTestId(`toc-${id}`).click()
+        await expect(page.getByTestId(id)).toBeInViewport()
+      }
+      await page.getByTestId('settings-search').fill('rezerwa')
+      await page.getByTestId('settings-search-hit-field-reserve').click()
+      await expect(page.getByTestId('field-reserve')).toHaveAttribute('data-found', '')
+      await expect(page.getByTestId('field-reserve')).toBeInViewport()
+      // E2/E6: one bar „od jutra” over the sections with a date, none over the data; „od razu” on the sections without one.
+      await expect(page.getByTestId('settings-from')).toHaveCount(1)
+      await expect(page.getByTestId('settings-modules').getByTestId('now-tag')).toBeVisible()
+      await expect(page.getByTestId('settings-energy').getByTestId('now-tag')).toHaveCount(0)
       // D304: the bar's place on the monitors' mock-up – by default the left bottom corner of the primary one.
       await expect(page.getByTestId('bar-place-map')).toBeVisible()
       await expect(page.getByTestId('bar-place-1-bottom-left')).toHaveAttribute('aria-pressed', 'true')
@@ -406,9 +482,12 @@ test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na 
       await expect(page.getByTestId('block-timer-start')).toHaveText('Wznów')
       await page.getByTestId('block-timer-start').click()
       await expect(page.getByTestId('bar-block')).toContainText('Inne obowiązki')
-      // The block stands on the axis where it runs (from now, not at 03:00 of its plan).
-      await expect(page.getByTestId('block-late')).not.toContainText('03:00')
-      await page.getByTestId('bar-next').click()
+      // The block stands on the axis where it runs (from now, not at 03:00 of its plan) – said only when „now” is not 03:00–03:09 itself
+      // (a run at that hour has both on the same minute; seen 22.11 at 03:00).
+      const nowHm = new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit' }).format(new Date())
+      if (!nowHm.startsWith('03:0')) await expect(page.getByTestId('block-late')).not.toContainText('03:00')
+      // Past its plan „Dalej?” stands with its own „Dalej” – the row then has none (C5).
+      await page.locator('[data-testid="bar-main"] :is([data-testid="bar-next"], [data-testid="bar-q-next"])').first().click()
       await expect(page.getByTestId('bar-block')).not.toContainText('Inne obowiązki')
       // „Odcinam się”: the panel shows its line with „Wracam”, which ends it.
       await page.evaluate(() => window.rd.barAction('openPanel'))
@@ -799,6 +878,8 @@ test('rozsuwanie w „Szablonach” (D367, D372): blok przeciągnięty na zajęt
       await expect.poll(() => startsFrom(tomorrow)).toEqual({ a: 19 * 60, b: 20 * 60, c: 21 * 60 })
       expect(startsFrom(SETUP_FROM)).toEqual({ a: 18 * 60, b: 19 * 60, c: 20 * 60 })
       const line = page.getByTestId('template-pushed')
+      // UX19 (P29): Ctrl+Z may press its „Cofnij” – the button carries the instant of the change.
+      await expect(page.getByTestId('template-pushed-undo')).toHaveAttribute('data-undo', /^[0-9]+$/)
       await expect(line).toContainText('Przesunięto 2 bloki')
       await page.getByTestId('template-pushed-undo').click()
       // The template as before the push: no version from tomorrow.
@@ -895,6 +976,11 @@ test('rytuał zamknięcia (D318): po „Koniec pracy” karta w „Dziś” i �
       await expect(page.getByTestId('bar-ritual')).toHaveCount(0)
       const log = readFileSync(join(dataDir, 'log', logicalToday().slice(0, 4), logicalToday(), `${(await page.evaluate(() => window.rd.dataView())).computer}.jsonl`), 'utf8')
       expect(log).toContain('"k":"ritual.close"')
+      // D563 P1: the close says so in a toast „Zamknięto … · Cofnij” (as the morning's list, D468); „Cofnij” opens the day again.
+      await expect(page.getByTestId('toast-action').filter({ hasText: 'Cofnij' })).toBeVisible()
+      await page.getByTestId('toast-action').filter({ hasText: 'Cofnij' }).click()
+      await expect(page.getByTestId('ritual-close')).toBeVisible({ timeout: 10_000 })
+      await expect(page.getByTestId('ritual-left')).not.toContainText('dzień zamknięty o')
     })
     expect(errors).toEqual([])
   } finally {
@@ -1040,26 +1126,30 @@ test('kalibracja (D119): po okresie karta w planie porannym – „Nie teraz” 
   }
 })
 
-test('prośby w pasku (D311, D312): „Prośba ▸” – „Zrobione teraz” z osobą i „Koniec”; „Pilne” z szacunkiem', async () => {
+test('prośby w pasku (D311, D312, D564 P17, P20): „⋯” – „Prośba ▸” – „Zrobione teraz” z osobą, „Prośba: Mama · 0:0x · Koniec”; „Pilne” z szacunkiem', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-requests-'))
   // Without today's sessions: in a session (a quiet mode) „Pilne” starts with 15 min without asking (D311).
   seed(dataDir, { sessions: false })
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
-      // The engine's view; „Prośba ▸” stands at any hour, also in the night's quiet (D346).
+      // The engine's view; „Prośba ▸” is there at any hour – in „⋯” (D564 P17), in the night's quiet in the row (D346).
       await expect.poll(() => page.evaluate(async () => (await window.rd.widget()).day), { timeout: 30_000 }).not.toBeNull()
-      await expect(page.getByTestId('bar-group-request')).toHaveCount(1)
-      await page.getByTestId('bar-group-request').click()
+      const openRequest = async () => {
+        if (!(await page.evaluate(async () => (await window.rd.widget()).night))) await page.getByTestId('bar-main').getByTestId('bar-group-more').click()
+        await expect(page.getByTestId('bar-group-request')).toHaveCount(1)
+        await page.getByTestId('bar-group-request').click()
+      }
+      await openRequest()
       await expect(page.getByTestId('bar-request-group')).toContainText('Zrobione teraz:')
       await page.getByTestId('bar-request-now-mama').click()
-      await expect(page.getByTestId('bar-request')).toContainText('Zrobione teraz · Mama · 0:0')
+      await expect(page.getByTestId('bar-request')).toContainText('Prośba: Mama · 0:0')
       await page.getByTestId('bar-request-end').click()
       await expect(page.getByTestId('bar-request')).toHaveCount(0)
       // A quiet mode (a session waits for „Zacznij” – the session mode): „Pilne” starts
       // with 15 min without asking (D311).
       const quiet = await page.evaluate(async () => (await window.rd.widget()).quiet)
-      await page.getByTestId('bar-group-request').click()
+      await openRequest()
       await page.getByTestId('bar-request-urgent-mama').click()
       if (!quiet) {
         await expect(page.getByTestId('bar-request-estimate-value')).toHaveText('15 min')
@@ -1096,6 +1186,8 @@ test('rutyny (D328): karta w „Dziś” z wersją i krokami; „Kroki ▸” w 
   try {
     await withMainLog(userData, async () => {
       await expect(page.getByTestId('routine-card')).toHaveCount(2, { timeout: 30_000 })
+      // D563 P10 (UX9): the cards of the routines stand in the side panel.
+      await expect(page.getByTestId('day-side').getByTestId('routine-card')).toHaveCount(2)
       // The card: the version „na gorsze dni” (the day's, T1108), its one step ticked – the list whole, the routine saved:
       // the card closes by itself (D474), the tick is the day's.
       const card = page.getByTestId('routine-card').first()
@@ -1131,6 +1223,8 @@ test('rutyny (D328): karta w „Dziś” z wersją i krokami; „Kroki ▸” w 
       const grid = page.getByTestId('copy-dialog')
       if (!(await grid.getByTestId(`day-${yesterday}`).isVisible())) await grid.getByLabel('Poprzedni miesiąc').click()
       await grid.getByTestId(`day-${yesterday}`).click()
+      // The window of days of the templates (D565 P24, F6): the click shows the day in the field „Od”, as DD.MM.RRRR.
+      await expect(grid.getByTestId('copy-dialog-from')).toHaveValue(`${yesterday.slice(8, 10)}.${yesterday.slice(5, 7)}.${yesterday.slice(0, 4)}`)
       await grid.getByTestId('copy-apply').click()
       await expect(grid.getByTestId('copy-warning')).toContainText('Kopia zastąpi plan dnia, który już trwał')
       await expect(grid.getByTestId('copy-ahead')).toBeDisabled()

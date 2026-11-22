@@ -77,7 +77,11 @@ export function useTypedTime() {
   }
 }
 
-export function DayTime({ date, value, onTyped, label, testId }: { date: string; value: TypedTime; onTyped: (t: Typed) => void; label: string; testId?: string }) {
+/**
+ * The field of one time. `onEnter` (UX4, B8): Enter commits the text and – when it is accepted – writes the answer, as „Zapisz” does;
+ * `onEscape`: Esc after the typed text is thrown away (the first Esc) cancels the answer's editor, writing nothing.
+ */
+export function DayTime({ date, value, onTyped, onEnter, onEscape, label, testId }: { date: string; value: TypedTime; onTyped: (t: Typed) => void; onEnter?: () => void; onEscape?: () => void; label: string; testId?: string }) {
   return (
     <>
       <TimeField
@@ -87,6 +91,8 @@ export function DayTime({ date, value, onTyped, label, testId }: { date: string;
         // Taken also when equal to what it shows (typed again after a refusal) – the occurrence picked stays then.
         onAccept={(m) => onTyped({ min: m, pick: m === value.min ? value.pick : 'first' })}
         onReject={(message) => onTyped({ refused: message })}
+        onEnter={onEnter}
+        onEscape={onEscape}
         shellClassName="w-[76px]"
         aria-label={label}
         data-testid={testId}

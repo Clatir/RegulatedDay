@@ -184,7 +184,7 @@ describe('lista „Kroki” w panelu', () => {
   it('ptaszek, licznik „✓ 1/4”; szablon (bez ptaszków) – ani pól, ani licznika', async () => {
     const m = editor({ steps: four(['s1']) })
     await render(m.el)
-    expect(q('steps-counter').textContent).toBe('✓ 1/4')
+    expect(q('steps-counter').textContent).toBe('✓ 1 z 4')
     expect(qa('step-tick').map((x) => (x as HTMLInputElement).checked)).toEqual([true, false, false, false])
     await act(async () => qa('step-tick')[1]!.click())
     expect(m.onTick).toHaveBeenCalledWith('s2', true)
@@ -505,7 +505,8 @@ describe('Sprawy: kroki zadania w wierszu', () => {
     const rows = qa('case-row')
     const taskRow = rows.find((r) => r.getAttribute('data-kind') === 'task')!
     const requestRow = rows.find((r) => r.getAttribute('data-kind') === 'request')
-    expect(taskRow.querySelector('[data-testid="case-steps-toggle"]')!.textContent).toBe('Kroki ✓ 1/4')
+    await act(async () => taskRow.querySelector<HTMLElement>('[data-testid="case-expand"]')!.click())
+    expect(taskRow.querySelector('[data-testid="case-steps-toggle"]')!.textContent).toBe('Kroki ✓ 1 z 4')
     expect(taskRow.querySelector('[data-testid="case-steps"]')).toBeNull()
     expect(requestRow?.querySelector('[data-testid="case-steps-toggle"]') ?? null).toBeNull()
     await act(async () => taskRow.querySelector<HTMLElement>('[data-testid="case-steps-toggle"]')!.click())

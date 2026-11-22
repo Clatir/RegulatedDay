@@ -1,15 +1,14 @@
 /**
  * The buttons „Zastosuj do…” and „Odwołaj w…” of a template (D540–D545): a menu „Dziś” · „Jutro” · „Wybierz dni…”; the window of days is a
  * month (`MonthGrid`: a click – that day, Ctrl+click – one more or one less, Shift+click – the range from the last one, a drag – a range)
- * with the fields „Od” and „Do” (DD-MM-RRRR; eight digits become a date at once – `typedDmy`). „Zastosuj” on days without blocks of the
+ * with the fields „Od” and „Do” (DD.MM.RRRR, „3.01” too; eight digits become a date at once – `typedDmy`; the window is `DaysDialog`, also the one of „Skopiuj ten dzień do…”). „Zastosuj” on days without blocks of the
  * template whose blocks collide with the plan asks once: „Uzupełnij luki” or „Nadpisz plan” (D541); days with blocks of the template
  * fill the gaps without asking. With today or a day gone by among the days the window „Zastosuj „…” do dziś” comes first (D546): the
  * hours of today („Wg planu” / „W czasie rzeczywistym – od teraz”, only with today) and the blocks gone by („Dodaj jako zrealizowane” /
  * „Nie dodawaj minionych”), both at their first choice at each opening; the question of collisions is then asked at the hours chosen.
  */
-import { useRef, useState } from 'react'
-import { daysFromTo, dmy, parseDmy, typedDmy } from '@shared/dateInput'
-import { countLabel, plDate } from '@shared/format'
+import { useRef, useState, type ReactNode } from 'react'
+import { plDate } from '@shared/format'
 import type { Template } from '@shared/model/plan'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
@@ -17,39 +16,42 @@ import { ContextMenu, menuPoint } from '../../components/ContextMenu'
 import { Dialog } from '../../components/Dialog'
 import { useBusy } from '../../lib/busy'
 import { toast } from '../../store/ui'
-import { MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from '../calendar/MonthGrid'
+import { DaysDialog } from '../calendar/DaysDialog'
 import { APPLY_DAYS_MAX, applyToDays, askedDays, asksTiming, DEFAULT_CHOICE, revokeInDays, timingTitle, type ApplyChoice } from './applyDays'
 
 type Kind = 'apply' | 'revoke'
 
 const LABEL: Record<Kind, string> = { apply: 'Zastosuj do…', revoke: 'Odwołaj w…' }
 
-export function TemplateDaysButton({ template, today, kind }: { template: Template; today: string; kind: Kind }) {
-  const button = useRef<HTMLButtonElement>(null)
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
-  const [picking, setPicking] = useState(false)
+/**
+ * „Zastosuj” on the days chosen, with its questions (UX19, P28: one flow for the button of a template and for the menus of days – the Calendar's and the
+ * columns' of „Tydzień”): the window of today's hours (D546) when today or a day gone by is among them, the question of collisions (D541), then the write.
+ * `start` – true: done, or a window of the flow took over (or nothing to do); `onDone` runs only after the write itself went through (by the direct road, by
+ * the window of hours, by the question of collisions – never when a window is opened or closed with „Anuluj”); `dialogs` – the windows, rendered once by the screen that uses it.
+ */
+export function useApplyFlow(): { start: (template: Template, dates: readonly string[], onDone?: () => void) => Promise<boolean | undefined>; busy: boolean; dialogs: ReactNode } {
   // The days of the window of today's hours and the day that was today when it opened (D546) – the engine takes it at the same click.
-  const [timing, setTiming] = useState<{ dates: string[]; today: string } | null>(null)
-  const [asking, setAsking] = useState<{ dates: string[]; asked: string[]; choice: ApplyChoice } | null>(null)
+  const [timing, setTiming] = useState<{ template: Template; dates: string[]; today: string; done?: () => void } | null>(null)
+  const [asking, setAsking] = useState<{ template: Template; dates: string[]; asked: string[]; choice: ApplyChoice; done?: () => void } | null>(null)
   const [busy, run] = useBusy()
-  const tomorrow = addDays(today, 1)
 
   /** „Zastosuj” at the hours chosen: after the question when a day asks it (D541). True – done (or nothing to do), the window may close. */
-  const apply = async (list: string[], choice: ApplyChoice) => {
+  const apply = async (template: Template, list: string[], choice: ApplyChoice, done?: () => void) => {
     const asked = await askedDays(template, list, choice)
     if (asked.length) {
-      setAsking({ dates: list, asked, choice })
+      setAsking({ template, dates: list, asked, choice, done })
       return true
     }
-    return applyToDays(template, list, 'fill', choice)
+    const ok = await applyToDays(template, list, 'fill', choice)
+    if (ok) done?.()
+    return ok
   }
 
   /**
-   * The chosen days: „Odwołaj” at once, „Zastosuj” – with today or a day gone by among them after the window of their hours (D546). Today
-   * is the logical day of the click (as the engine takes it – `timingAt`), not the one the page was drawn with: after 04:00 they agree.
-   * True – done (or nothing to do), the window may close.
+   * The chosen days: with today or a day gone by among them after the window of their hours (D546). Today is the logical day of the click (as the engine
+   * takes it – `timingAt`), not the one the page was drawn with: after 04:00 they agree.
    */
-  const go = (dates: readonly string[]) =>
+  const start = (template: Template, dates: readonly string[], done?: () => void) =>
     run(async () => {
       const list = [...new Set(dates)].sort()
       if (!list.length) return false
@@ -57,15 +59,75 @@ export function TemplateDaysButton({ template, today, kind }: { template: Templa
         toast(`Najwyżej ${APPLY_DAYS_MAX} dni naraz.`, 'error', 6000)
         return false
       }
-      // A day that cannot be read is said by the save (`plannedDay` never throws); the save says its own failures.
-      if (kind === 'revoke') return revokeInDays(template, list)
       const now = logicalDayOf(Date.now())
       if (asksTiming(list, now)) {
-        setTiming({ dates: list, today: now })
+        setTiming({ template, dates: list, today: now, done })
         return true
       }
-      return apply(list, DEFAULT_CHOICE)
+      return apply(template, list, DEFAULT_CHOICE, done)
     })
+
+  const dialogs = (
+    <>
+      {timing && (
+        <TimingDialog
+          name={timing.template.name}
+          dates={timing.dates}
+          today={timing.today}
+          busy={busy}
+          onClose={() => setTiming(null)}
+          onPick={(choice) =>
+            void run(async () => {
+              if (await apply(timing.template, timing.dates, choice, timing.done)) setTiming(null)
+            })
+          }
+        />
+      )}
+      {asking && (
+        <ModeDialog
+          name={asking.template.name}
+          asked={asking.asked}
+          total={asking.dates.length}
+          busy={busy}
+          onClose={() => setAsking(null)}
+          onPick={(mode) =>
+            void run(async () => {
+              if (await applyToDays(asking.template, asking.dates, mode, asking.choice)) {
+                asking.done?.()
+                setAsking(null)
+              }
+            })
+          }
+        />
+      )}
+    </>
+  )
+  return { start, busy, dialogs }
+}
+
+export function TemplateDaysButton({ template, today, kind }: { template: Template; today: string; kind: Kind }) {
+  const button = useRef<HTMLButtonElement>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [picking, setPicking] = useState(false)
+  const flow = useApplyFlow()
+  const [revoking, run] = useBusy()
+  const busy = revoking || flow.busy
+  const tomorrow = addDays(today, 1)
+
+  /** The chosen days: „Odwołaj” at once, „Zastosuj” – through the flow. True – done (or nothing to do), the window may close. */
+  const go = (dates: readonly string[]): Promise<boolean | undefined> => {
+    if (kind === 'apply') return flow.start(template, dates)
+    return run(async () => {
+      const list = [...new Set(dates)].sort()
+      if (!list.length) return false
+      if (list.length > APPLY_DAYS_MAX) {
+        toast(`Najwyżej ${APPLY_DAYS_MAX} dni naraz.`, 'error', 6000)
+        return false
+      }
+      // A day that cannot be read is said by the save (`plannedDay` never throws); the save says its own failures.
+      return revokeInDays(template, list)
+    })
+  }
 
   /** „Dziś” and „Jutro” of the click's logical day (the menu's words are of the page). */
   const items = [
@@ -100,37 +162,11 @@ export function TemplateDaysButton({ template, today, kind }: { template: Templa
           onPick={async (dates) => {
             if (await go(dates)) setPicking(false)
           }}
+          max={APPLY_DAYS_MAX}
           testId={`template-${kind}-days`}
         />
       )}
-      {timing && (
-        <TimingDialog
-          name={template.name}
-          dates={timing.dates}
-          today={timing.today}
-          busy={busy}
-          onClose={() => setTiming(null)}
-          onPick={(choice) =>
-            void run(async () => {
-              if (await apply(timing.dates, choice)) setTiming(null)
-            })
-          }
-        />
-      )}
-      {asking && (
-        <ModeDialog
-          name={template.name}
-          asked={asking.asked}
-          total={asking.dates.length}
-          busy={busy}
-          onClose={() => setAsking(null)}
-          onPick={(mode) =>
-            void run(async () => {
-              if (await applyToDays(template, asking.dates, mode, asking.choice)) setAsking(null)
-            })
-          }
-        />
-      )}
+      {flow.dialogs}
     </>
   )
 }
@@ -234,104 +270,6 @@ function ModeDialog({ name, asked, total, busy, onClose, onPick }: { name: strin
         <li>„Nadpisz plan” – odwołuje kolidujące bloki i dodaje cały szablon (sesje, wykłady, zjazdy i bloki, które już trwały, zostają).</li>
       </ul>
       {others > 0 && <p className="mt-2 text-[12.5px] text-muted">Pozostałe wybrane dni ({others}) mają już bloki tego szablonu albo nic nie koliduje – tam bez pytania uzupełniam luki.</p>}
-    </Dialog>
-  )
-}
-
-/** A field of a date DD-MM-RRRR: eight digits become the date as soon as they are typed. */
-function DmyField({ label, value, onChange, testId }: { label: string; value: string; onChange: (v: string) => void; testId: string }) {
-  const bad = value.trim() !== '' && parseDmy(value) == null
-  return (
-    <label className="flex items-center gap-2 text-[12.5px]">
-      <span className="text-muted">{label}</span>
-      <input
-        className={`input num w-[120px] ${bad ? 'border-rose' : ''}`}
-        value={value}
-        placeholder="DD-MM-RRRR"
-        inputMode="numeric"
-        maxLength={10}
-        aria-label={label}
-        aria-invalid={bad}
-        onChange={(e) => onChange(typedDmy(e.target.value))}
-        data-testid={testId}
-      />
-    </label>
-  )
-}
-
-/** The days of a window: the fields, the month, „Wybrane: N dni”. */
-function DaysDialog({ title, verb, today, busy, onClose, onPick, testId }: { title: string; verb: string; today: string; busy: boolean; onClose: () => void; onPick: (dates: string[]) => void; testId: string }) {
-  const [month, setMonth] = useState(monthOf(today))
-  const [sel, setSel] = useState<Set<string>>(new Set())
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
-  const [tooLong, setTooLong] = useState(false)
-
-  /** The fields typed: both dates – the range, only „Od” – that day; the month shows the first one. */
-  const typed = (f: string, t: string) => {
-    setFrom(f)
-    setTo(t)
-    const a = parseDmy(f)
-    const b = parseDmy(t)
-    setTooLong(false)
-    if (!a || (t.trim() && !b)) return
-    // Counted before the days are listed: a range of centuries is never built.
-    if (Math.abs(Date.parse(b ?? a) - Date.parse(a)) / 86_400_000 + 1 > APPLY_DAYS_MAX) return setTooLong(true)
-    const days = daysFromTo(a, b ?? a)
-    setSel(new Set(days))
-    setMonth(monthOf(days[0]!))
-  }
-  /** The grid picked: the fields show the first and the last day. */
-  const picked = (next: Set<string>) => {
-    setSel(next)
-    setTooLong(false)
-    const list = [...next].sort()
-    setFrom(list.length ? dmy(list[0]!) : '')
-    setTo(list.length > 1 ? dmy(list[list.length - 1]!) : '')
-  }
-  const list = [...sel].sort()
-  const past = list.filter((d) => d < today).length
-  const [y, m] = month.split('-')
-  return (
-    <Dialog
-      title={title}
-      onClose={onClose}
-      wide
-      data-testid={testId}
-      actions={
-        <>
-          <span className="mr-auto text-[12px] text-muted" data-testid={`${testId}-count`}>
-            {tooLong
-              ? `Zakres dłuższy niż ${APPLY_DAYS_MAX} dni – wybierz krótszy.`
-              : list.length
-                ? `Wybrane: ${countLabel(list.length, 'dzień', 'dni', 'dni')}${past ? ` (minione: ${past})` : ''}`
-                : 'Kliknij dzień; Ctrl+klik dodaje, Shift+klik – zakres.'}
-          </span>
-          <button type="button" className="btn" onClick={onClose}>
-            Anuluj
-          </button>
-          <button type="button" className="btn btn-accent" disabled={!list.length || busy || tooLong} onClick={() => onPick(list)} data-testid={`${testId}-ok`}>
-            {verb}
-            {list.length ? ` (${list.length})` : ''}
-          </button>
-        </>
-      }
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        <DmyField label="Od" value={from} onChange={(v) => typed(v, to)} testId={`${testId}-from`} />
-        <DmyField label="Do" value={to} onChange={(v) => typed(from, v)} testId={`${testId}-to`} />
-        <span className="flex-1" />
-        <button type="button" className="btn" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Poprzedni miesiąc">
-          ‹
-        </button>
-        <span className="w-[150px] text-center">
-          {MONTH_NAMES[Number(m) - 1]} {y}
-        </span>
-        <button type="button" className="btn" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Następny miesiąc">
-          ›
-        </button>
-      </div>
-      <MonthGrid month={month} today={today} selected={sel} onSelect={picked} cell={() => ({ tone: null, marks: null })} data-testid={`${testId}-month`} />
     </Dialog>
   )
 }

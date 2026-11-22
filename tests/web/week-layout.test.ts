@@ -54,18 +54,18 @@ describe('bloki obok siebie w jednej kolumnie dnia', () => {
 
 describe('miesiąc celów na górze „Tydzień”', () => {
   it('tydzień z dzisiejszym dniem – bieżący miesiąc, także gdy dziś jest w ostatnich dniach miesiąca', () => {
-    // Week 26.10–1.11.2026 holds Sunday 1.11 (the Thursday is in October).
+    // Week 26.10–01.11.2026 holds Sunday 01.11 (the Thursday is in October).
     expect(goalsMonthOfWeek('2026-10-26', '2026-11-01')).toBe('2026-11')
     expect(goalsMonthOfWeek('2026-10-26', '2026-10-26')).toBe('2026-10')
     expect(goalsMonthOfWeek('2026-11-02', '2026-11-09')).toBe('2026-11')
   })
 
   it('inny tydzień – miesiąc jego czwartku (na przełomie ten, do którego należą cztery dni)', () => {
-    // 26.10–1.11: Thursday 29.10 – October, whatever today is.
+    // 26.10–01.11: Thursday 29.10 – October, whatever today is.
     expect(goalsMonthOfWeek('2026-10-26', '2026-11-20')).toBe('2026-10')
-    // 30.11.2026 is a Monday; the week to 6.12 has Thursday 3.12 – December.
+    // 30.11.2026 is a Monday; the week to 06.12 has Thursday 03.12 – December.
     expect(goalsMonthOfWeek('2026-11-30', '2026-11-09')).toBe('2026-12')
-    // 28.12.2026–3.01.2027: Thursday 31.12 – December; the next week's Thursday 7.01 – January.
+    // 28.12.2026–03.01.2027: Thursday 31.12 – December; the next week's Thursday 07.01 – January.
     expect(goalsMonthOfWeek('2026-12-28', '2026-11-09')).toBe('2026-12')
     expect(goalsMonthOfWeek('2027-01-04', '2026-11-09')).toBe('2027-01')
   })

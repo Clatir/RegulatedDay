@@ -80,6 +80,49 @@ test('Ctrl K: dwa słowa z notatki minionego dnia, Enter otwiera ten dzień z pa
       await page.keyboard.press('Enter')
       await expect(page.getByTestId('day-title')).toContainText(plDate(addDays(today, 1)))
       await expect(page.getByTestId('day-title')).not.toContainText('Dziś')
+
+      // UX14: a field of the settings by its label – Enter opens the settings with the field in view and marked.
+      await page.keyboard.press('Control+k')
+      await page.getByTestId('search-input').fill('rezerwa')
+      await expect(page.locator('[data-testid="search-hit"][data-kind="setting"]').first()).toContainText('Rezerwa energii')
+      await page.keyboard.press('Enter')
+      await expect(page.getByTestId('page-settings')).toBeVisible()
+      await expect(page.getByTestId('field-reserve')).toHaveAttribute('data-found', '')
+      await expect(page.getByTestId('field-reserve')).toBeInViewport()
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('pojęcia i skróty (UX15): Ctrl K znajduje „twardy koniec” i otwiera „Jak to działa” na nim; F1 i „Skróty” w menu otwierają listę skrótów, Esc zamyka', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-help-'))
+  seed(dataDir, addDays(logicalToday(), -30))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 860 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.keyboard.press('Control+k')
+      await page.getByTestId('search-input').fill('twardy koniec')
+      const hit = page.locator('[data-testid="search-hit"][data-kind="help"]').first()
+      await expect(hit).toContainText('Twardy koniec projektów')
+      await hit.click()
+      await expect(page.getByTestId('help-concepts')).toBeVisible()
+      await expect(page.getByTestId('concept-hardEnd')).toHaveAttribute('data-current', 'true')
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('help-concepts')).toHaveCount(0)
+
+      await page.keyboard.press('F1')
+      await expect(page.getByTestId('help-shortcuts')).toBeVisible()
+      await expect(page.getByTestId('shortcuts')).toContainText('Ctrl+przeciągnięcie')
+      await page.keyboard.press('F1')
+      await expect(page.getByTestId('help-shortcuts')).toHaveCount(0)
+      await page.getByTestId('nav-shortcuts').click()
+      await expect(page.getByTestId('help-shortcuts')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('help-shortcuts')).toHaveCount(0)
     })
     expect(errors).toEqual([])
   } finally {

@@ -45,7 +45,7 @@ const END = '9999-12-31'
 const hasSessions = (days: readonly SessionChoice[]) => days.some((a) => a !== 'no')
 
 /** A change sets the layer: its sessions or a type's grid. */
-function setsLayer(c: SettingsChange): boolean {
+export function setsLayer(c: SettingsChange): boolean {
   if (c.patch.sessions !== undefined) return true
   const dt = c.patch.dayTypes
   return isPlain(dt) && Object.values(dt).some((x) => isPlain(x) && x.sessions !== undefined)
@@ -212,7 +212,7 @@ export function movedTemplates(templates: readonly Template[], move: Pick<Sessio
 }
 
 /** A change of the move: the first one or one of a later date of the layer (`sesje-w-szablonach-<date>`). */
-const isMoveChange = (c: SettingsChange): boolean => c.id === SESSIONS_CHANGE_ID || c.id.startsWith(`${SESSIONS_CHANGE_ID}-`)
+export const isMoveChange = (c: SettingsChange): boolean => c.id === SESSIONS_CHANGE_ID || c.id.startsWith(`${SESSIONS_CHANGE_ID}-`)
 
 /**
  * The layers the move took, from its changes themselves in their order (T1453 – whatever their instant „od dziś”, which

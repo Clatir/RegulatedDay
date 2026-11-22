@@ -21,7 +21,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
   każdy otwiera się (7–10 plików) – E3.12; `backups\daily\2026-10-27.zip` (9 plików) – E6b.2 do sprawdzenia po
   następnym dniu z aplikacją po 12:00; `main.log` – „kreator zakończony” 27.10 (E3.1), aktualizacje 0.7.0→0.10.1 czyste
   (E6b.1–E7b.1; 0.2.0–0.6.0 przeskoczone, więc E5.1 i E6a.1 tylko „dane całe”).
-- Rejestry decyzji (D308, T535, T840, T857, T935): `docs/decyzje.md` – D; `docs/decyzje-techniczne.md` – T1100 i nowsze, `docs/decyzje-techniczne-T1000-T1099.md` – T1000–T1099 (T1967), `docs/decyzje-techniczne-T700-T999.md` – T700–T999 (T1210),
+- Rejestry decyzji (D308, T535, T840, T857, T935): `docs/decyzje.md` – D; `docs/decyzje-techniczne.md` – T1997 i nowsze, `docs/decyzje-techniczne-T1100-T1999.md` – T1100–T1996 (T1997), `docs/decyzje-techniczne-T1000-T1099.md` – T1000–T1099 (T1967), `docs/decyzje-techniczne-T700-T999.md` – T700–T999 (T1210),
   `docs/decyzje-techniczne-T1-T399.md` – T1–T399, `docs/decyzje-techniczne-T400-T499.md` – T400–T499, `docs/decyzje-techniczne-T500-T599.md` – T500–T599,
   `docs/decyzje-techniczne-T600-T699.md` – T600–T699; zastąpione w całości w `docs/archiwum/decyzje-zastapione.md`. D188
   cofnięta przez T303, ale cytowana w D150 i specyfikacji – zostaje w rejestrze.
@@ -95,8 +95,30 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 15. **Ciąg UX – poprawki użytkowe (D561):** przegląd użytkowy 1.33.0 (20.11; ustalenia z dowodami –
     `docs/przeglad-ux-20.11.md`), 21.11 użytkownik: wdrożyć wszystkie poprawki. Plan – `docs/plan.md`, „Ciąg UX”:
     19 zadań (UX1–UX19) w 8 paczkach, 66–90 h; jedno CI i jedno wydanie 1.34.0 na końcu (D562) – zadania scalane bez CI do
-    gałęzi sesji `claude/dazzling-dijkstra-qat23f`; pytania P1–P29 odpowiedziane 21.11 (D563–D565, rekomendacje poza P19).
-    „Dalej” dane 21.11 – ciąg w toku od paczki 1 (UX1–UX3); stan paczek – tabela niżej.
+    gałęzi `claude/ciag-ux`; pytania P1–P29 odpowiedziane 21.11 (D563–D565, rekomendacje poza P19).
+    „Dalej” dane 21.11. **Gałąź ciągu: `claude/ciag-ux`** (bez PR – CI nie rusza; PR i pełne CI raz na końcu, D562).
+    PR #108 (plan i D561–D565) scalony 21.11, `main` scalony do `claude/ciag-ux`. Sesja przeniesiona 21.11 z chmury na komputer
+    lokalny. Drzewa wykonawców zakłada główna sesja z gałęzi ciągu (T1986 – `isolation: worktree` bierze `origin/main`).
+    - **Paczka 1 (UX1–UX3) – zamknięta 21.11:** T1977–T1985, T1990; szczegóły i uwagi na później – `docs/archiwum/postep-ciag-UX.md`.
+    - **Paczka 2 (UX4–UX6) – zamknięta 21.11:** T1986–T1996 (ostatni kod caf48e3); wpis i uwagi na później – `docs/archiwum/postep-ciag-UX.md`.
+    - **Paczki 3–8 (UX7–UX19) – w toku od 21.11, jednym ciągiem** (użytkownik: „rozpocznij paczki 3-8 jednym ciągiem” – bez pauzy
+      między paczkami; pytania P6–P29 odpowiedziane, D563–D565). Rejestr T1100–T1996 wydzielony (T1997). Trzy strumienie
+      równolegle, każdy we własnym drzewie z `claude/ciag-ux` (T1986, junction `node_modules`), zadania po kolei w strumieniu,
+      scalenie do `claude/ciag-ux` przez główną sesję po testach i `/code-review`; po scaleniu `claude/ciag-ux` wraca do drzew:
+      - **A** `.claude/worktrees/ux-a`, `claude/ux-a`: UX7 → UX8 → UX9 → UX19 (oś, widoki, „Dziś”, „Tydzień”) · `wykonawca-sonnet` · high · T2000–T2099.
+      - **B** `.claude/worktrees/ux-b`, `claude/ux-b`: UX10 → UX11 → UX12 → UX13 (pasek, panel, okna, gra, przypomnienia) · `wykonawca-opus` · xhigh · T2100–T2199.
+      - **C** `.claude/worktrees/ux-c`, `claude/ux-c`: UX16 → UX17 → UX18 → UX14 → UX15 (formaty, Sprawy, Historia, potem Ustawienia i kreator – po UX11/UX13) · `wykonawca-sonnet` (UX14 „Wycofaj” – `wykonawca-opus`) · high · T2200–T2399.
+      Na końcu: `version` 1.34.0, sekcja `CHANGELOG.md`, jeden PR z pełnym CI, wydanie (D562). Stan zadań – tabela niżej.
+
+      | Zadanie | Stan |
+      | --- | --- |
+      | UX7–UX11, UX14–UX18 | scalone 21.11 (szczegóły, rundy przeglądu i uwagi na później – `docs/archiwum/postep-ciag-UX.md`, „Paczki 3–8”) |
+      | UX13 | przeniesione do strumienia C (po UX18) |
+      | UX19 | scalone 22.11: T2070–T2074, odbiór UX19.1–UX19.4; przegląd high 3 rundy; uwagi na później: panel Spraw 280 px zwęża kolumny przy 1024 px; „Zastosuj szablon ▸” w „Tygodniu” na nagłówku dnia (Tydzień zaznacza bloki) |
+      | UX13 | scalone 22.11: T2290–T2297, odbiór UX13.1–UX13.5; przegląd xhigh 4 rundy; `RULES_VERSION` 18 (wspólny z UX12); uwagi na później: „Pomiń” check-inu po restarcie okna z logu, prawdziwe powiadomienia tylko CI |
+      | UX12 | scalone 22.11: T2140–T2148, odbiór UX12.1–UX12.6; przegląd xhigh 4 rundy (cofnięcie kliknięcia paska w silniku dnia); uwagi na później: spóźniony sygnał innego komputera może dać zejście do rezerwy przed cofnięciem, koszt członka grupy przy „Potwierdź” (`groupCost`), późniejsze `undo` / `block.fg` jako zdarzenia zależne cofnięcia, `ROUTINE_UNDO_MS` 60 s vs 10 s linii kliknięć |
+      | Wszystkie UX7–UX19 | scalone; `version` 1.34.0 i `CHANGELOG.md` – 6dff032; testy lokalne zielone (E2E: Ctrl K w `allday` strzałkami do wydarzenia – pola Ustawień w wynikach od UX14; timer E4a bez sprawdzenia 03:00 o tej godzinie – ccca5c6). **PR #109** (22.11 06:04): CI 44987796759 – testy Linux padły na strefie czasu w `ux8-calendar` (`setSystemTime` bez `+01:00`), poprawka i nowe CI. Lokalny instalator `DownloadsRegulated-Day-Setup-1.34.0.exe` (22.11 06:06). Dalej: CI zielone → scalenie → wydanie na `main` → sprzątanie drzew `ux-a..d` (najpierw `cmd /c rmdir node_modules`), `CronDelete` strażnika |
+      | UX9, UX11–UX13, UX15, UX17–UX19 | do zrobienia; szkic CHANGELOG – w raportach wykonawców (scratchpad sesji), sekcja 1.34.0 na końcu |
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
@@ -105,6 +127,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
   `docs/archiwum/odbior-odebrane.md` pod nagłówek swojego etapu (T536).
 
 ## Pytania na później
+- Po UX6 (D563 P5): pytanie „Zapisać zmianę serii?” pada przy wyborze innej pozycji i zamknięciu panelu, ale nie przy
+  wyjściu z „Szablonów” (menu, Ctrl K) ani przy filtrze / przeniesieniu wiersza sprawy – rozszerzyć?
 - Po G1 (1.0.1): czy zamknięcie dnia ma kończyć też zapauzowaną analizę tygodniową i bloki „po końcu pracy jak projekt”
   (dziś – jak „Koniec pracy”, D195 – zostają zapauzowane z kropką do 04:00)? Wyszło w przeglądzie G1, poza szkicem D.
 - Po G1: czy „Koniec pracy?” ma padać po czasie do wyjaśnienia odpowiedzianym „praca” po bloku, który skończył się sam

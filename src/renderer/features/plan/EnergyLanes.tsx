@@ -6,7 +6,7 @@
  */
 import { useId, useMemo, useState, type MouseEvent } from 'react'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
-import { ENERGY_SCALE, hoverText, laneAreaPath, nearestSample, poolCurves, POOL_COLOR, POOL_LETTER, POOL_NAME, POOLS, RESERVE_COLOR, spansAtLeast, valuesAt } from './energyDraw'
+import { COST_SCALE_TEXT, ENERGY_SCALE, hoverText, laneAreaPath, nearestSample, poolCurves, POOL_COLOR, POOL_LETTER, POOL_NAME, POOLS, RESERVE_COLOR, spansAtLeast, valuesAt } from './energyDraw'
 
 /** The width of the column of lanes (the strip of all-day events leaves the same place free over it). */
 export const LANES_WIDTH = 63
@@ -122,6 +122,32 @@ export function EnergyLegend({ reserve }: { reserve: number }) {
         <span className="inline-block h-2.5 w-2.5 rounded-[2px]" style={{ background: POOL_COLOR.head, opacity: BAR_BELOW_OPACITY }} />
         jaśniej – poniżej rezerwy
       </span>
+      {/* D7: the unit and the range of the cost numbers on the tiles. */}
+      <span data-testid="energy-legend-cost">liczby przy kafelku: {COST_SCALE_TEXT}</span>
+    </div>
+  )
+}
+
+/**
+ * The legend folded under „?” (D563 P10): the line over the axis stays short, the legend opens on a click (and closes the same way).
+ * `open` – where it starts (the window does not keep it).
+ */
+export function EnergyLegendHelp({ reserve, open: start = false }: { reserve: number; open?: boolean }) {
+  const [open, setOpen] = useState(start)
+  return (
+    <div className="flex flex-col items-end gap-1" data-testid="energy-legend-help">
+      <button
+        type="button"
+        className="h-[20px] w-[20px] rounded-full border border-line-strong text-[11px] leading-none text-muted hover:bg-hover hover:text-fg"
+        aria-expanded={open}
+        aria-label="Co znaczą pasy energii i liczby kosztu"
+        title="Co znaczą pasy energii i liczby kosztu"
+        onClick={() => setOpen(!open)}
+        data-testid="energy-legend-toggle"
+      >
+        ?
+      </button>
+      {open && <EnergyLegend reserve={reserve} />}
     </div>
   )
 }

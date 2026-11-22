@@ -111,7 +111,7 @@ describe('D417 – przeniesienie bloku na inny dzień', () => {
       [D2, 0]
     ])
     // D422: the line names the block and the day.
-    expect(weekPushLineText(r.push!)).toBe('Przeniesiono: Raport na wt 6.01')
+    expect(weekPushLineText(r.push!)).toBe('Przeniesiono: Raport na wt 06.01')
   })
 
   it('oba dni czytane i liczone obok siebie (jak „Dodaj” w „Tygodniu”)', async () => {
@@ -163,7 +163,7 @@ describe('D417 – przeniesienie bloku na inny dzień', () => {
     expect(blocksOf(s.files[D1], D1).map((b) => [b.id, b.startMin, b.anchor])).toEqual([['y', lm('12:00'), null]])
     expect(dayFileFrom(s.files[D1]!, D1).movedTo).toEqual({ x: D2 })
     expect(blocksOf(s.files[D2], D2).map((b) => b.id)).toEqual(['x'])
-    expect(weekPushLineText(r.push!)).toBe('Przeniesiono: Raport na wt 6.01 · Analiza został – już trwa')
+    expect(weekPushLineText(r.push!)).toBe('Przeniesiono: Raport na wt 06.01 · Analiza został – już trwa')
     await undoWeekPush(r.push!)
     expect(
       blocksOf(s.files[D1], D1)
@@ -197,7 +197,7 @@ describe('D417 – przeniesienie bloku na inny dzień', () => {
       [D1, 0],
       [D2, 2]
     ])
-    expect(weekPushLineText(r.push!)).toBe('Przeniesiono: Raport na wt 6.01 · przesunięto 2 bloki')
+    expect(weekPushLineText(r.push!)).toBe('Przeniesiono: Raport na wt 06.01 · przesunięto 2 bloki')
     // Not today: the bar is not told.
     expect(s.told).toEqual([])
   })
@@ -293,7 +293,7 @@ describe('„Przenieś na…” w panelu bloku – ta sama droga (D424, T951, T9
     // The same words as the line of „Tydzień” (D424, T964), with its „Cofnij” for both days.
     tellMoved(r.push!)
     const t = useUi.getState().toasts.at(-1)!
-    expect(t.text).toBe('Przeniesiono: Raport na wt 6.01 · blok został – już trwa')
+    expect(t.text).toBe('Przeniesiono: Raport na wt 06.01 · blok został – już trwa')
     t.action!.run()
     await vi.waitFor(() => expect(blocksOf(s.files[D1], D1).map((b) => b.id).sort()).toEqual(['x', 'y', 'z']))
     expect(s.files[D2]).toBeNull()
@@ -318,7 +318,7 @@ describe('T965 – dlaczego zakotwiczony został', () => {
     const r = await moveWeekBlock(mv('x', D1, D2, '12:00', 'Raport'), AT)
     expect(r.status).toBe('saved')
     expect(blocksOf(s.files[D1], D1).map((b) => [b.id, b.anchor])).toEqual([['y', null]])
-    expect(weekPushLineText(r.push!)).toBe('Przeniesiono: Raport na wt 6.01 · blok został – zaparkowany')
+    expect(weekPushLineText(r.push!)).toBe('Przeniesiono: Raport na wt 06.01 · blok został – zaparkowany')
   })
 })
 

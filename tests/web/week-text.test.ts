@@ -13,15 +13,15 @@ const day = (o: Partial<HorizonDay>): HorizonDay => ({ ...unknownDay('2026-11-04
 const regen = (towardMin: number, requiredMin: number, reached = towardMin >= requiredMin) => ({ towardMin, requiredMin, reached })
 
 describe('tytuł tygodnia i nagłówki kolumn', () => {
-  it('„3–9.11.2026”; na przełomie miesięcy i lat z obiema datami', () => {
-    expect(weekTitle('2026-11-02')).toBe('2–8.11.2026')
-    expect(weekTitle('2026-11-09')).toBe('9–15.11.2026')
-    expect(weekTitle('2026-10-26')).toBe('26.10–1.11.2026')
-    expect(weekTitle('2026-12-28')).toBe('28.12.2026–3.01.2027')
+  it('„02–08.11.2026”; na przełomie miesięcy i lat z obiema datami', () => {
+    expect(weekTitle('2026-11-02')).toBe('02–08.11.2026')
+    expect(weekTitle('2026-11-09')).toBe('09–15.11.2026')
+    expect(weekTitle('2026-10-26')).toBe('26.10–01.11.2026')
+    expect(weekTitle('2026-12-28')).toBe('28.12.2026–03.01.2027')
   })
 
   it('dzień i data kolumny; nazwa miesiąca', () => {
-    expect(dayHeading('2026-11-03', 1)).toBe('wt 3.11')
+    expect(dayHeading('2026-11-03', 1)).toBe('wt 03.11')
     expect(dayHeading('2026-11-15', 6)).toBe('nd 15.11')
     expect(monthLabel('2026-11')).toBe('listopad 2026')
     expect(monthName('2026-02')).toBe('luty')

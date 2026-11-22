@@ -88,7 +88,9 @@ export function AllDayBar({
   const hiddenCalendars = useCalendarFilter((s) => s.hidden)
   const reveal = useCalendarFilter((s) => s.reveal)
   const told = useRef(false)
+  const current = useRef<number | null>(null)
   const put = (c: Open | null) => {
+    current.current = c?.seq ?? null
     setCard(c)
     told.current = !!c?.revealed
     reveal(c?.revealed ? c.event.id : null)
@@ -357,7 +359,8 @@ export function AllDayBar({
           today={today}
           place={card.place}
           brightness={brightness}
-          onClose={() => put(null)}
+          // Only its own card: a late `onClose` of one that was replaced (a save that ends after the next card opened) leaves the new one.
+          onClose={() => current.current === card.seq && put(null)}
           onRemoved={(title, raw) => showAllDayLine(page, { kind: 'removed', title, raw })}
           onFree={onFree}
         />

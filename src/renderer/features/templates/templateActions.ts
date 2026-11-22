@@ -13,11 +13,12 @@ import { paths } from '@shared/data/paths'
 import { defaultDayType } from '@shared/engine/createDay'
 import { ATTACHMENTS_UNREAD_TEXT, attachmentUndoOf, removalEdits, restoreEdits, sessionAttachmentDates, templateRemovalIds, type AttachmentUndo } from '@shared/model/attachment'
 import { templateJson } from '@shared/model/defaults'
-import { dayFileFrom, templateFor, templateFrom, withTemplateVersion, type PlanBlock, type Template } from '@shared/model/plan'
+import { dayFileFrom, templateFor, templateFrom, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '@shared/model/plan'
 import { settingsOn, type SettingsChange } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
-import { editOf, isSaved, rawRecord, trySaveWith, useData, withOwner } from '../../store/data'
+import { deepEqual, sameContentAs } from '@shared/data/merge'
+import { editNotice, editOf, isSaved, rawRecord, saveAnswer, tryUpdateRecord, trySaveWith, useData, withOwner, type SendState } from '../../store/data'
 import { toast, undoToast } from '../../store/ui'
 
 /** The first day a template still makes (today is made from it already). */
@@ -168,4 +169,64 @@ function done(made: Made, out: Awaited<ReturnType<typeof trySaveWith>>, rel: str
  */
 export function freshAfter(fresh: string | null, selected: string | null, shown: string | null): string | null {
   return fresh != null && selected === fresh && shown !== fresh ? fresh : null
+}
+
+/** What a version holds without its date: blocks, budget, limit and the move of the layer of sessions. */
+const bodyOf = (v: TemplateVersion) => ({ blocks: v.blocks, budgetMin: v.budgetMin, maxMin: v.maxMin, sessionsMoved: v.sessionsMoved ?? null })
+
+/** A version nothing needs: empty with nothing in force before it (`before` – the version before it, none), or what the one in force before it is. */
+function needless(v: TemplateVersion, before: TemplateVersion | undefined): boolean {
+  return deepEqual(bodyOf(v), before ? bodyOf(before) : { blocks: [], budgetMin: null, maxMin: null, sessionsMoved: null })
+}
+
+/**
+ * „Cofnij” of „Dodano blok” (D563 P2) – the inverse of the add (`made`: the template's record before it and right after it, as the page made it).
+ * The template as it still stands as the add left it (`sameContentAs`: the main process stamps `updatedAt` and `updatedBy` on what it writes):
+ * written back as it was before. Changed since (the name typed in the panel, another field, a second add): one rule on the template as it is now –
+ * the block out by its id from every version that has it (also the ones copied later), and each version that lost it out as well when it is
+ * needless now (`needless`: empty with nothing in force before it, or what the one in force before it is – blocks, budget, limit) and was not needless
+ * before the add (or was not there): no version stays that would take the days with an empty plan, and one that was empty before the add stays (a
+ * template without a version makes no day). A version that did not lose the block is left as it is. A block gone already says there is nothing to
+ * take back, a record that cannot be read – that; a question (the queue's notice) or a refusal that the save said itself – nothing more.
+ */
+export async function undoAddedBlock(templateId: string, blockId: string, made: { before: RawRecord; after: RawRecord }): Promise<void> {
+  const rel = paths.record('template', templateId)
+  const state: SendState = { afterSend: false }
+  let read = false
+  let found = false
+  const out = await tryUpdateRecord(
+    rel,
+    (raw) => {
+      const t = templateFrom(raw)
+      if (!t) return raw
+      read = true
+      if (sameContentAs(raw, made.after)) {
+        found = true
+        return made.before
+      }
+      if (!t.versions.some((v) => v.blocks.some((b) => b.id === blockId))) return raw
+      found = true
+      // The versions as they were before the add: one that was needless then stays, whatever it is now.
+      const was = templateFrom(made.before)?.versions ?? []
+      const wasNeedless = (date: string): boolean => {
+        const i = was.findIndex((v) => v.from === date)
+        return i >= 0 && needless(was[i]!, was[i - 1])
+      }
+      const kept: TemplateVersion[] = []
+      for (const v of t.versions) {
+        if (!v.blocks.some((b) => b.id === blockId)) {
+          kept.push(v)
+          continue
+        }
+        const now = { ...v, blocks: v.blocks.filter((b) => b.id !== blockId) }
+        if (!needless(now, kept.at(-1)) || wasNeedless(v.from)) kept.push(now)
+      }
+      return templateJson({ ...t, versions: kept }, raw)
+    },
+    state
+  )
+  if (!read) return void toast('Nie cofnięto – szablonu nie da się teraz odczytać (może go już nie ma).', 'error', 8000)
+  if (!found) return void toast('Tego bloku już nie ma w szablonie – nie ma czego cofać.', 'info', 6000)
+  // A question is the queue's (its notice, the banner); nothing sent was said by the save itself; the rest of a refusal says so here.
+  if (saveAnswer(out, state) === false && out != null && !editNotice(out)) toast('Nie cofnięto – zapis się nie udał.', 'error', 8000)
 }

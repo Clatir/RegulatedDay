@@ -3,18 +3,19 @@
  * the streak and the notes (those still open to corrections „w toku”), the next item, the statuses of the last two
  * weeks and the shelf of cassettes – each closed week's season, its favourite regeneration and the sticker.
  */
-import { plDate, WEEKDAY_SHORT } from '@shared/format'
+import { plDate, plDayMonth, WEEKDAY_SHORT } from '@shared/format'
 import { REGEN_CATEGORY } from '@shared/model/categories'
 import { settingsOn } from '@shared/model/settings'
 import { blockFill, SEASON_COLORS } from '@shared/theme'
 import { weekday } from '@shared/time/zone'
+import { HelpMark } from '../../components/HelpMark'
 import { EmptyState, Section } from '../../components/ui'
 import { useData } from '../../store/data'
 import { openPick } from '../../store/ui'
 import { useGame } from '../../store/game'
 import { useMachine } from '../../store/machine'
 import { RoomArt } from './RoomArt'
-import { gameLine, nextText, SEASON_NAMES, stepText, wayName, weekLabel } from './gameText'
+import { gameLine, nextText, SEASON_NAMES, stepHelp, stepText, wayName, weekLabel } from './gameText'
 
 /** The statuses of this many last days. */
 const STATUS_DAYS = 14
@@ -61,13 +62,20 @@ export function RoomPage() {
       <p className="text-[12.5px] text-muted" data-testid="room-next">
         {next ? `${next}.` : 'Pokój jest pełny.'} Nuty dni jeszcze otwartych na poprawki niczego nie odblokowują – po zamrożeniu nic ich nie odbiera.
       </p>
+      {/* UX15, E8: what the room's own words mean. */}
+      <p className="text-[12.5px] leading-relaxed text-muted" data-testid="room-note">
+        Nuty to punkty za pięć zachowań, które chronią przed przeciążeniem: dotrzymana granica, wykorzystana regeneracja, reakcja na rezerwę, trafne szacowanie i wymiana zamiast dokładania – odblokowują elementy pokoju.
+        <HelpMark term="notes" /> W tygodniu jeden dzień ochronny zastępuje pierwszy niedotrzymany dzień: passa trwa, ale się nie wydłuża.
+        <HelpMark term="protectiveDay" /> Dzień „bez danych” (nie było potwierdzonego końca pracy) nie przerywa passy – najwyżej 2 razy w tygodniu.
+        <HelpMark term="noData" />
+      </p>
       <Section title="Ostatnie dni" data-testid="room-days">
         {steps.length ? (
           <div className="grid grid-cols-7 gap-1.5 text-[12px]">
             {steps.map((s) => (
-              <div key={s.date} className="flex flex-col rounded border border-line px-2 py-1" data-testid={`room-day-${s.date}`}>
+              <div key={s.date} className="flex flex-col rounded border border-line px-2 py-1" title={stepHelp(s.move)} data-testid={`room-day-${s.date}`}>
                 <span className="text-muted">
-                  {WEEKDAY_SHORT[weekday(s.date) - 1]} {plDate(s.date).slice(0, 5)}
+                  {WEEKDAY_SHORT[weekday(s.date) - 1]} {plDayMonth(s.date)}
                 </span>
                 <span>{stepText(s)}</span>
               </div>

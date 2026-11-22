@@ -13,6 +13,7 @@ import { type Activity } from './activity'
 import { REST_FREE, type DayState } from './day'
 import { OPEN, ranMinutes } from './facts'
 import { atOf } from './grid'
+import { liveEnergyEvent } from './clickUndo'
 import { dayOutcome, type BoundaryOutcome } from './outcome'
 
 /** The modules a measure needs (spec „Moduły”): off at any moment of the day – no measure that day. */
@@ -114,7 +115,7 @@ export function dayMeasure(state: DayState, events: readonly AnyEvent[], activit
     const min = Math.max(0, Math.min(r.to === OPEN ? now : r.to, now) - r.from)
     if (min > 0) byPerson[r.person ?? '?'] = (byPerson[r.person ?? '?'] ?? 0) + min
   }
-  const signals = events.filter((e) => isKnown(e) && e.k === 'energy.signal').length
+  const signals = events.filter((e) => isKnown(e) && e.k === 'energy.signal' && liveEnergyEvent(e, state.facts.undone)).length
   return {
     date: state.grid.date,
     disconnects: state.facts.disconnect.length,

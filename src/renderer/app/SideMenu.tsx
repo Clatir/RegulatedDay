@@ -1,12 +1,14 @@
 // adapted from FI src/renderer/app/App.tsx @ de81f2b
 /**
  * The side menu of the main window: one list in the order of PAGES (the settings right under the history, D306) and, at the
- * bottom, „Szukaj” – the visible way into the search palette (D469), with its shortcut shown like the screens' ones.
+ * bottom, „Szukaj” – the visible way into the search palette (D469), with its shortcut shown like the screens' ones – and „Skróty”, the list
+ * of shortcuts (F1, UX15).
  */
 import { navigate, PAGES, type Page } from '../store/ui'
 import { openSearch } from '../features/search/searchStore'
+import { toggleShortcuts } from '../store/help'
 import { cx } from '../components/ui'
-import { PAGE_LABEL, pageKeys, SEARCH_KEYS, SEARCH_LABEL } from './pages'
+import { PAGE_LABEL, pageKeys, SEARCH_KEYS, SEARCH_LABEL, SHORTCUTS_KEYS, SHORTCUTS_LABEL } from './pages'
 
 const ITEM = 'flex h-[36px] w-full shrink-0 items-center gap-2 border-l-2 px-3 text-left transition-colors duration-100'
 
@@ -35,6 +37,16 @@ function SearchItem() {
   )
 }
 
+/** The list of shortcuts (UX15, D565 P23): not a screen either – opens the window like F1 (the same guards). */
+function ShortcutsItem() {
+  return (
+    <button onClick={() => toggleShortcuts()} title={`${SHORTCUTS_LABEL} (${SHORTCUTS_KEYS})`} data-testid="nav-shortcuts" className={cx(ITEM, 'border-transparent text-fg hover:bg-hover')}>
+      <span className="min-w-0 flex-1 truncate">{SHORTCUTS_LABEL}</span>
+      <span className="num text-[11px] text-muted">{SHORTCUTS_KEYS}</span>
+    </button>
+  )
+}
+
 export function SideMenu({ page }: { page: Page }) {
   return (
     <nav className="flex w-[176px] shrink-0 flex-col overflow-y-auto border-r border-line bg-panel" data-testid="side-menu">
@@ -45,6 +57,7 @@ export function SideMenu({ page }: { page: Page }) {
       </div>
       <div className="mt-auto flex flex-col border-t border-line py-1">
         <SearchItem />
+        <ShortcutsItem />
       </div>
     </nav>
   )

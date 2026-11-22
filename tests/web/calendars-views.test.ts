@@ -29,7 +29,7 @@ import { WeekPage } from '@renderer/features/week/WeekPage'
 import { useData } from '@renderer/store/data'
 import { useDaysView, useMonthView, useWeekView } from '@renderer/store/horizon'
 import type { DayModel } from '@renderer/store/day'
-import { useUi } from '@renderer/store/ui'
+import { NO_MEMORY, useUi } from '@renderer/store/ui'
 import { block as block2, Scenario } from '../unit/engine/dsl'
 
 vi.mock('@renderer/store/horizon', () => ({ useWeekView: vi.fn(), useDaysView: vi.fn(), useGoalsView: vi.fn(() => ({ view: null, failed: false })), useMonthView: vi.fn() }))
@@ -93,7 +93,7 @@ beforeEach(() => {
   useCalendarFilter.setState({ hidden: [], revealed: null })
   useData.setState({ rd: RD_TWO })
   setEvents([])
-  useUi.setState({ page: 'week', day: null, pick: null, toasts: [] })
+  useUi.setState({ page: 'week', day: null, pick: null, toasts: [], from: null, memory: NO_MEMORY })
   vi.mocked(useWeekView).mockImplementation((date) => {
     const week = weekStart(date)
     return { view: weekViewOf(week, TODAY, weekDates(week).map((d) => day(d, blocksOf(d)))), failed: false }
@@ -271,7 +271,7 @@ describe('miesiąc w „Kalendarzu” (D419)', () => {
     await mount()
     expect(q('calendar-chips')).not.toBeNull()
     expect(host!.querySelectorAll(`[data-testid="month-bar-${D}"]`)).toHaveLength(3)
-    expect(q(`month-more-${D}`)!.textContent).toBe('+1')
+    expect(q(`month-more-${D}`)!.textContent).toBe('+1 blok')
     expect(hiddenText()).toBeNull()
   })
 

@@ -35,7 +35,7 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
   nieczytelna zostaje jak w pliku, zmieniona/usunięta zabiera czytelne pozycje swojego id – T787), `refusalFor` (pełna lista
   zadania – „w zadaniu”),
   `stepOpFrom` (operacja z okna), `applyStepOp` + `addStepOp` / `moveStepOp` (operacje po
-  id – ta sama na liście bloku i zadania, T790), `stepsCounter` („✓ 3/4”), `firstOpen`, `freshSteps`, `textWithSteps` (Ctrl K).
+  id – ta sama na liście bloku i zadania, T790), `stepsCounter` („✓ 3/4” – kafelek osi i „Tygodnia”, D440), `stepsProgress` („✓ 3 z 4” – panel bloku i wiersz zadania w „Sprawach”, D565 P24), `firstOpen`, `freshSteps`, `textWithSteps` (Ctrl K).
   Nowa wersja serii i szablonu pisze się na surowej wersji, z której powstaje (`sourceVersionKey` w `model/plan.ts`).
 - `model/routineSteps.ts` (D473, T1100–T1103) – kroki rutyny bloku bez własnych: `routineStepsOf` (lista, wersja, `kept`), `shownSteps`
   (własna albo rutyny – panel, licznik osi, pasek), `routineList` (wersja rutyny jako lista: id kroków rutyny, „krok N”, czas),
@@ -97,7 +97,7 @@ dnia – `RULES_VERSION` bez zmian); koniec bloku z nieodhaczonymi o nic nie pyt
   w `facts.ts`, D484, T1121) ma „✓ ” przed nazwą (`block-finished`, D477). „Sprawy”: `taskTickEdits.block.finished` → `tickCaseStep` (T1113).
 - Jedno odhaczenie rutyny (D479, T1108, T1109): odhaczenia tylko w `stepsDone`, wersja tylko w `routineSteps`, `routine.done` = „zapisana”
   (zamyka kartę i linię). Karta (`RoutineCard`) i „Kroki ▸” paska to widoki listy dnia (`routinesDue(…, dayFile)`: `steps`, `version`) –
-  ptaszek karty = `tickBlockStep`, wersja = `pickRoutineVersion`; „Kroki ▸” zaczyna od `RoutineDue.ticked` (obie wersje). Kolejność
+  przycisk częściowego zapisu to „Zakończ rutynę (N z M)” (UX9 D8, dawniej „Zapisz zaznaczone”; karta stoi w panelu bocznym „Dziś”, więc przy otwartym panelu bloku jej nie widać – panel ma te same kroki), ptaszek karty = `tickBlockStep`, wersja = `pickRoutineVersion`; „Kroki ▸” zaczyna od `RoutineDue.ticked` (obie wersje). Kolejność
   końca listy – jedna, `engine/stepsFlow.ts` (T1120): `listWhole` (ostatni ptaszek: `routine.done` ≤ 40 id + `stepsFinish`), `routineSaved`
   (zapis karty/paska: `routineDone` → zmiana odhaczeń względem otwarcia `routineSaveEdits` (`done` / `undone`; „Kroki ▸” – `change`),
   T1112 – → przy całej liście i zapisanych odhaczeniach `stepsFinish`; „Cofnij” rutyny od razu po `routine.done`, T1122), `undoAfterSteps` (koniec najpierw – odmowa zatrzymuje resztę, D482); woła ją okno

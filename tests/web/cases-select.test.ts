@@ -379,6 +379,20 @@ describe('„Od której?” – dzień, godzina i przycisk (D530)', () => {
   })
 })
 
+describe('panel przy osi: klik po przeciągnięciu nie zaznacza (UX17, wspólny `started` z Macierzą)', () => {
+  it('gest, który się zaczął (`started`), nie jest kliknięciem w chip – także gdy wrócił na start; bez gestu klik zaznacza', async () => {
+    stub(five())
+    const started = { current: true }
+    await render(createElement(CasesPanel, { drag: null, grab: () => undefined, started, onPlan: () => undefined }))
+    const chip = document.querySelector<HTMLElement>('[data-testid="case-chip"][data-case="a"]')!
+    await click(chip)
+    expect(chip.getAttribute('data-selected')).toBeNull()
+    started.current = false
+    await click(chip)
+    expect(chip.getAttribute('data-selected')).toBe('true')
+  })
+})
+
 describe('klik w otwarty formularz wiersza i zmiana widoku (D527)', () => {
   it('klik w puste miejsce rozwiniętego formularza („Zaplanuj”) nie zmienia zaznaczenia', async () => {
     stub(five(), { [TODAY]: null })

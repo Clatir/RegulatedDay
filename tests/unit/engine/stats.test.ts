@@ -130,19 +130,34 @@ describe('trafność szacowania', () => {
     const d = counted(estimates())
     expect(d.estimates).toEqual(
       expect.arrayContaining([
-        { category: 'analiza', plannedMin: 60, realMin: 65, accurate: true },
-        { category: 'analiza', plannedMin: 60, realMin: 90, accurate: false },
-        { category: 'nauka', plannedMin: 20, realMin: 30, accurate: false }
+        { category: 'analiza', plannedMin: 60, realMin: 65, accurate: true, tolerancePct: 15 },
+        { category: 'analiza', plannedMin: 60, realMin: 90, accurate: false, tolerancePct: 15 },
+        { category: 'nauka', plannedMin: 20, realMin: 30, accurate: false, tolerancePct: 15 }
       ])
     )
     expect(d.estimates).toHaveLength(3)
     const r = statsOf('all', [d], 0).accuracy
-    expect(r).toMatchObject({ blocks: 3, accurate: 1 })
+    expect(r).toMatchObject({ blocks: 3, accurate: 1, tolerancePct: { min: 15, max: 15 } })
     expect(r.rows).toEqual([
       // The median of 65/60 and 90/60 (1.0833, 1.5) = 1.2917.
       { category: 'analiza', blocks: 2, medianRatio: 1.29, accurate: 1, share: 0.5 },
       { category: 'nauka', blocks: 1, medianRatio: 1.5, accurate: 0, share: 0 }
     ])
+  })
+
+  it('tolerancja dnia z ustawienia (UX13, A1): 25 % – blok 72 z 60 min trafny; okres z dniami 15 % i 25 % podaje zakres tolerancji', () => {
+    const one = (date: string, pct: number) => {
+      const s = new Scenario({ date, plan: [block({ id: 'a', cat: 'analiza', at: '08:00', min: 60 })], settings: { transitionBufferMin: 0, accuracyTolerancePct: pct } })
+      return counted(s.presence('07:30').ran('a', '08:00', '09:12'))
+    }
+    const at15 = one('2026-10-27', 15)
+    const at25 = one(DATE, 25)
+    expect(at15.estimates).toEqual([{ category: 'analiza', plannedMin: 60, realMin: 72, accurate: false, tolerancePct: 15 }])
+    expect(at25.estimates).toEqual([{ category: 'analiza', plannedMin: 60, realMin: 72, accurate: true, tolerancePct: 25 }])
+    expect(statsOf('all', [at25], 0).accuracy.tolerancePct).toEqual({ min: 25, max: 25 })
+    expect(statsOf('all', [at25, at15], 0).accuracy).toMatchObject({ blocks: 2, accurate: 1, tolerancePct: { min: 15, max: 25 } })
+    // No block judged: no tolerance of the period (the screen says the setting of today).
+    expect(statsOf('all', [], 0).accuracy.tolerancePct).toBeNull()
   })
 
   it('mediana nieparzystej liczby bloków to środkowy', () => {
@@ -227,7 +242,7 @@ describe('dni zamrożone i okres', () => {
     expect(empty).toMatchObject({ days: 0, first: null, last: null, unreadable: 0, enough: false })
     expect(empty.energy.checkins).toBe(0)
     expect(empty.energy.byHour.every((x) => x.mean === null)).toBe(true)
-    expect(empty.accuracy).toEqual({ blocks: 0, accurate: 0, rows: [] })
+    expect(empty.accuracy).toEqual({ blocks: 0, accurate: 0, rows: [], tolerancePct: null })
     expect(empty.boundaries).toEqual({ weeks: [], totals: { kept: 0, broken: 0, noData: 0, free: 0 } })
     const some = statsOf('3m', [counted(day(DATE)), counted(day('2026-10-29'))], 2)
     expect(some).toMatchObject({ days: 2, unreadable: 2, enough: false, first: DATE, last: '2026-10-29' })

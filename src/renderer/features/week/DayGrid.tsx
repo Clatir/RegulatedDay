@@ -9,12 +9,13 @@
  * of two and more drags the whole group (D531): every selected block by the same difference of days and minutes, each shown at its new place
  * while it is held (`week-group-drop`), Esc ends it, the drop is `dragDayGroup` (with Ctrl – the group's copy).
  */
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent } from 'react'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import type { Costs } from '@shared/model/categories'
-import { logicalClock } from '@shared/format'
+import { logicalClock, plDate } from '@shared/format'
 import type { DragKey } from '@shared/engine/groupDrag'
 import type { GroupDay } from '@shared/engine/groupEdit'
+import { logicalMinuteOf } from '@shared/time/day'
 import { daysBetween } from '@shared/time/zone'
 import { attachmentsOfBlock, type BlockPlace } from '@shared/model/attachment'
 import { settingsOn, DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
@@ -22,9 +23,13 @@ import { stepsCounter } from '@shared/model/steps'
 import { SERIES_MARK } from '@shared/seriesText'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { weekday } from '@shared/time/zone'
-import { menuBind } from '../../components/ContextMenu'
+import { ContextMenu, menuBind } from '../../components/ContextMenu'
+import { applyTemplateEntry } from '../templates/applyMenu'
+import { useApplyFlow } from '../templates/ApplyTemplate'
 import { cx } from '../../components/ui'
+import { contentTop, followAxis, scrollAxis, scrollParent } from '../../lib/axisScroll'
 import { useDeleteSelected } from '../../lib/deleteKey'
+import { useNewShortcut } from '../../lib/escape'
 import { useData, type SaveAnswer } from '../../store/data'
 import { useMachine } from '../../store/machine'
 import { openDay, openPick, setBlockDraft, toast } from '../../store/ui'
@@ -39,6 +44,7 @@ import { EnergyStrip, STRIP_WIDTH } from './EnergyStrip'
 import { costRoom, TileCost } from '../plan/TileCost'
 import { hasEnergy } from '../plan/energyDraw'
 import { NewBlockPopover } from './NewBlockPopover'
+import { freeHourStart, newBlockDay, NO_NEW_DAY_TEXT, dayWakeMin } from './weekNew'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
 import { saveTileCosts, type CostAsk } from '../plan/costSave'
 import { copyDayBlock, moveWeekBlock } from './weekMove'
@@ -148,7 +154,10 @@ export function DayGrid({
   ppm = WEEK_PPM,
   mode = 'week',
   openCard,
-  onCardOpened
+  onCardOpened,
+  opened,
+  onPicking,
+  allDays
 }: {
   days: HorizonDay[]
   from: number
@@ -158,10 +167,23 @@ export function DayGrid({
   mode?: 'week' | '3days'
   openCard: string | null
   onCardOpened: () => void
+  /**
+   * The view the page has already put at its hour (D563, P6): the grid does it once per opening of a view – not at each week or day an arrow
+   * brings (the grid is keyed by its first day). Left out – the grid never scrolls.
+   */
+  opened?: MutableRefObject<string | null>
+  /** Says whether the small window of a new block is open (the page's keys of the period wait while it is). */
+  onPicking?: (open: boolean) => void
+  /** The days as counted, with the blocks of the unchecked calendars too (`days` has them taken out): the free hour of Ctrl+N is looked for among all. */
+  allDays?: readonly HorizonDay[]
 }) {
-  const { rd, routines, requests } = useData()
+  const { rd, routines, requests, templates } = useData()
+  // UX19 (P28): the right button on a day's heading – „Zastosuj szablon ▸” for that day, through the flow of „Zastosuj do…”.
+  const [dayMenu, setDayMenu] = useState<{ date: string; at: { x: number; y: number } } | null>(null)
+  const apply = useApplyFlow()
   const today = useData((s) => s.view?.today ?? '')
   const bodyRef = useRef<HTMLDivElement>(null)
+  const headRef = useRef<HTMLDivElement>(null)
   const asks = useRef(0)
   const [pick, setPick] = useState<NewPick | null>(null)
   const [held, setHeld] = useState<Held | null>(null)
@@ -169,6 +191,38 @@ export function DayGrid({
   const { lo, hi } = axisRange(from, to)
   const height = axisHeight(lo, hi, ppm)
   const marks = hourMarks(lo, hi)
+  // D563 (P6): a range with today – „teraz” a third of the way down; any other – from an hour before the earliest wake. The sticky heading is not counted in;
+  // what grows over the axis meanwhile (the strip of all-day events in the heading, the goals, the chips) is followed until you act.
+  const axisIn = useRef({ days, lo, hi, ppm })
+  axisIn.current = { days, lo, hi, ppm }
+  useLayoutEffect(() => {
+    if (!opened || opened.current === mode) return
+    const body = bodyRef.current
+    const box = body ? scrollParent(body) : null
+    const content = box?.firstElementChild
+    if (!body || !box || !(content instanceof HTMLElement)) return
+    opened.current = mode
+    const apply = () => {
+      const a = axisIn.current
+      const top = contentTop(body, box)
+      const todayCol = a.days.find((d) => d.when === 'today')
+      const nowMin = todayCol ? logicalMinuteOf(todayCol.date, Date.now()) : null
+      const wakes = a.days.flatMap((d) => (d.wakeMin != null ? [d.wakeMin] : []))
+      scrollAxis(box, {
+        axisTop: top,
+        nowY: nowMin != null && nowMin >= a.lo && nowMin <= a.hi ? top + axisY(nowMin, a.lo, a.ppm) : null,
+        wakeY: wakes.length ? top + axisY(Math.min(...wakes), a.lo, a.ppm) : null,
+        hourPx: 60 * a.ppm,
+        reserved: headRef.current?.offsetHeight ?? 0
+      })
+    }
+    apply()
+    const stop = followAxis(box, content, apply)
+    // Taken down before you acted (the effect run twice in development, a view replaced at once): the next one puts the axis again.
+    return () => {
+      if (stop()) opened.current = null
+    }
+  }, [])
   const namesOf = useMemo(() => (date: string): Names => ({ rd, settings: settingsOn(rd.settings, date), routines, requests }), [rd, routines, requests])
   const cols = { gridTemplateColumns: `${AXIS_PX}px repeat(${days.length}, minmax(0, 1fr))` }
   const dates = useMemo(() => days.map((d) => d.date), [days])
@@ -207,6 +261,27 @@ export function DayGrid({
     setPick({ seq: ++asks.current, dates: idx.map((i) => days[i]!.date), startMin: r.startMin, durationMin: r.endMin - r.startMin, dragged, place })
   }
   const spanHeld = held ? dayIndexes(held.from, held.to) : []
+  const picking = pick != null
+  const onPickingRef = useRef(onPicking)
+  useLayoutEffect(() => {
+    onPickingRef.current = onPicking
+  })
+  useEffect(() => {
+    onPickingRef.current?.(picking)
+    return () => onPickingRef.current?.(false)
+  }, [picking])
+  // Ctrl+N (D6, P9): the window of a new block today – or on the first day shown from today – at the nearest free hour (`weekNew.ts`); one window at a time.
+  useNewShortcut(() => {
+    if (pick) return
+    const date = newBlockDay(dates, today)
+    const i = date ? dates.indexOf(date) : -1
+    const d = days[i]
+    if (!d) return void toast(NO_NEW_DAY_TEXT)
+    const whole = allDays?.find((x) => x.date === d.date) ?? d
+    const wakeMin = dayWakeMin(settingsOn(rd.settings, d.date), d.date, whole)
+    const startMin = freeHourStart(whole.blocks, { isToday: d.date === today, nowMin: logicalMinuteOf(d.date, Date.now()), wakeMin }, DEFAULT_NEW_BLOCK_MIN)
+    pickOn(i, i, { startMin, endMin: startMin + DEFAULT_NEW_BLOCK_MIN }, false)
+  })
 
   // A block dragged (D417): its listeners are the window's (the pointer leaves the block at once), they read what the page has now.
   const latest = useRef({ days, lo, hi, ppm, today, max: rd.general.parallelMax })
@@ -468,11 +543,11 @@ export function DayGrid({
       )}
       {/* The headings stay in view while the axis scrolls. */}
       {/* The strip of all-day events (D405) stays with them, in the same columns. */}
-      <div className="sticky top-0 z-10 border-b border-line bg-bg pb-1">
+      <div className="sticky top-0 z-10 border-b border-line bg-bg pb-1" ref={headRef} data-testid="week-head">
         <div className="grid gap-x-1" style={cols}>
           <span />
           {days.map((d) => (
-            <ColumnHeading key={d.date} day={d} brightness={brightness} />
+            <ColumnHeading key={d.date} day={d} brightness={brightness} onContext={(at) => setDayMenu({ date: d.date, at })} />
           ))}
         </div>
         <div className="mt-1">
@@ -538,11 +613,21 @@ export function DayGrid({
         )}
       </div>
       {group.overlay}
+      {dayMenu && (
+        <ContextMenu
+          title={`Dzień ${plDate(dayMenu.date)}`}
+          at={dayMenu.at}
+          onClose={() => setDayMenu(null)}
+          testId="week-day-menu"
+          items={[applyTemplateEntry(templates, apply.busy, (t) => void apply.start(t, [dayMenu.date]), 'week-day-menu-apply')]}
+        />
+      )}
+      {apply.dialogs}
     </div>
   )
 }
 
-function ColumnHeading({ day, brightness }: { day: HorizonDay; brightness: number }) {
+function ColumnHeading({ day, brightness, onContext }: { day: HorizonDay; brightness: number; onContext: (at: { x: number; y: number }) => void }) {
   const today = day.when === 'today'
   // The weekday of the date, not the place of the column: „3 dni” does not start on a Monday.
   const index = weekday(day.date) - 1
@@ -553,7 +638,8 @@ function ColumnHeading({ day, brightness }: { day: HorizonDay; brightness: numbe
     <button
       type="button"
       onClick={() => openDay(day.date)}
-      title={`${WEEKDAY_FULL[index]} – otwórz plan dnia`}
+      {...menuBind(onContext)}
+      title={`${WEEKDAY_FULL[index]} – otwórz plan dnia (prawy przycisk – szablon na ten dzień)`}
       data-testid={`week-day-${day.date}`}
       data-when={day.when}
       aria-current={today ? 'date' : undefined}
@@ -660,6 +746,11 @@ function DayColumn({
       style={{ height }}
       {...grid.bind}
       data-testid={`week-col-${day.date}`}
+      // UX19 (P27): what a sprawa dragged from the panel „Sprawy” reads to find the day and the hour under the pointer (`weekCaseDrop`).
+      data-week-col={day.date}
+      data-lo={lo}
+      data-hi={hi}
+      data-ppm={ppm}
       aria-label={columnLabel(weekday(day.date) - 1, day.blocks.length)}
     >
       {marks.map((h) => (

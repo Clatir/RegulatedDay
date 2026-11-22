@@ -13,10 +13,11 @@ import { paths } from '@shared/data/paths'
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { HARD_END_TEXT } from '@shared/engineView'
+import { checkinSkipId } from '@shared/engine/reminders'
 import { NO_FOLDER_LINE, noFolderView, type WidgetView } from '@shared/widget'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
-import { arrangedIn, planArrangedIpc, planPushedIpc, pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
+import { arrangedIn, begunOf, planArrangedIpc, planPushedIpc, pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
 import { recordEdit } from '@shared/data/merge'
 import { putBlock } from '@shared/data/dayEdits'
 import { dayFileFrom } from '@shared/model/plan'
@@ -42,7 +43,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }> } = {}) {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; remindersNotice?: boolean; opened?: string[]; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>; openQuick?: () => void; timerHook?: (c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null } = {}) {
   // `now` is the wall clock; setting it moves the monotonic one by the same step (time passes), `jump` moves the wall clock
   // alone (Windows sets the time back or forward – the monotonic clock goes on).
   const clock = {
@@ -70,8 +71,11 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
     new WidgetEngine({
       folder: () => (open ? folder : null),
       timer: async (c) => {
+        // A click the test answers itself (a refusal for a while, a throw).
+        const hooked = o.timerHook?.(c)
+        if (hooked) return hooked
         const r = await folder.timerClick(c as never)
-        return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}) }
+        return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}), ...(r.wrote ? { wrote: r.wrote } : {}) }
       },
       edit: async (entries) => {
         if (editFails) throw new Error('plik jest teraz nieczytelny – zmiana nie została zapisana, spróbuj za chwilę')
@@ -88,7 +92,7 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
         o.during?.()
         return o.modePrefs?.() ?? { sessionMode: true, classMode: true }
       },
-      notices: () => ({ start5: true, hardEnd: o.hardEndNotice ?? true, reserve: true }),
+      notices: () => ({ start5: true, hardEnd: o.hardEndNotice ?? true, reserve: true, reminders: o.remindersNotice ?? true }),
       notify: (n, onFailed) => {
         // Refused at once (an error of Windows): the failure is said before the answer.
         if (o.refuse?.()) {
@@ -102,17 +106,18 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
       },
       ...(o.taken ? { notificationState: async () => (o.taken!() ? 'accepts' : 'presentation') } : {}),
       ...(o.present ? { present: o.present } : {}),
-      showMain: () => undefined,
+      showMain: (page) => void o.opened?.push(page ?? 'today'),
       emit: (v) => views.push(v),
       log: (_level, msg) => void o.logs?.push(msg),
       now: () => clock.now,
       mono: () => clock.mono,
       batterySaver: () => o.batterySaver ?? false,
       backup: () => (o.backupFailed ? { failed: { error: 'plik zajęty' } } : null),
-      ...(o.quickAdd ? { quickAdd: o.quickAdd } : {})
+      ...(o.quickAdd ? { quickAdd: o.quickAdd } : {}),
+      ...(o.openQuick ? { openQuick: o.openQuick } : {})
     })
   const w = build()
-  return { folder, clock, w, build, shown, failLater, views, closeFolder: () => (open = false), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
+  return { folder, clock, w, build, shown, failLater, views, closeFolder: () => (open = false), openFolder: () => (open = true), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
 }
 
 describe('widget w procesie głównym', () => {
@@ -171,6 +176,125 @@ describe('widget w procesie głównym', () => {
     await folder.check()
     await w.refresh()
     expect(shown.map((n) => n.title)).toEqual(['Sesja NY o 15:30'])
+  })
+
+  describe('przypomnienia planu porannego i rytuału (UX13, D565 P21)', () => {
+    const line = `remind:${DAY}:morning`
+    /**
+     * A settled leader (3 min after its start, `settle.ts`) at `until` (06:30 – 30 min after the wake 06:00), the plan not
+     * approved, no check-in; `before` – written before the first check.
+     */
+    async function morning(o: Parameters<typeof make>[0] = {}, until = 6 * 60 + 30, before?: (m: Awaited<ReturnType<typeof make>>) => Promise<void>) {
+      const m = await make({ from: placeLogical(DAY, until - 4), ...o })
+      await before?.(m)
+      await m.folder.check()
+      m.at(until - 1)
+      await m.folder.check()
+      m.at(until)
+      await m.folder.check()
+      // Never true by default: only the leader once settled notifies (a test without it would pass for nothing).
+      expect(m.folder.leader.iLead && m.folder.settle.settled(m.folder.clock.now())).toBe(true)
+      return m
+    }
+
+    it('cicha linia na końcu i jedno ciche powiadomienie prowadzącego; kliknięcie powiadomienia otwiera panel na linii, „Otwórz” – okno główne', async () => {
+      const opened: string[] = []
+      const { w, folder, shown } = await morning({ opened })
+      await w.refresh()
+      expect(shown).toEqual([{ id: `notice:${DAY}:remind:morning`, title: 'Plan poranny', body: 'Plan dnia czeka w oknie głównym.', line, day: DAY }])
+      expect(w.current().lines.at(-1)).toEqual({ id: line, text: 'Plan poranny czeka', actions: [{ id: 'open', label: 'Otwórz' }, { id: 'notToday', label: 'nie dziś' }], dot: false })
+      expect(w.current().dot).toBe(false)
+      // Once: its id in the day's log.
+      await w.refresh()
+      expect(shown).toHaveLength(1)
+      expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'notice.shown').map((e) => (e as unknown as { notice: string }).notice)).toEqual([`notice:${DAY}:remind:morning`])
+      // „Otwórz” opens the main window on „Dziś” (your click – D229), the line stays until the plan is done.
+      await w.act('line', `${line}|open`, 'panel')
+      expect(opened).toEqual(['today'])
+      expect(w.current().lines.some((l) => l.id === line)).toBe(true)
+      // „nie dziś” – the day's answer in the log: the line is gone for the day.
+      await w.act('line', `${line}|notToday`, 'panel')
+      expect(w.current().lines.some((l) => l.id === line)).toBe(false)
+    })
+
+    it('przełącznik tego komputera wyłączony: tylko linia, bez powiadomienia', async () => {
+      const { w, shown } = await morning({ remindersNotice: false })
+      await w.refresh()
+      expect(shown).toEqual([])
+      expect(w.current().lines.some((l) => l.id === line)).toBe(true)
+    })
+
+    it('w „mniej pytań” cicha linia bez powiadomienia (spec „Cisza”)', async () => {
+      const { w, shown } = await morning({}, 6 * 60 + 30, async (m) => {
+        await m.w.refresh()
+        await m.w.act('fewer', undefined, 'bar')
+      })
+      await w.refresh()
+      expect(w.current().fewer).toBe(true)
+      expect(shown).toEqual([])
+      expect(w.current().lines.some((l) => l.id === line)).toBe(true)
+    })
+
+    it('„mniej pytań” w chwili przypomnienia: bez powiadomienia także po „Jest lepiej” (jak twardy koniec, D134)', async () => {
+      const { w, folder, shown, at } = await morning({}, 6 * 60 + 30, async (m) => {
+        await m.w.refresh()
+        await m.w.act('fewer', undefined, 'bar')
+      })
+      await w.refresh()
+      at(6 * 60 + 35)
+      await w.act('better', undefined, 'bar')
+      await folder.check()
+      await w.refresh()
+      expect(w.current().fewer).toBe(false)
+      expect(w.current().lines.some((l) => l.id === line)).toBe(true)
+      expect(shown).toEqual([])
+    })
+
+    it('linia przypomnienia liczy się jako zobaczona (panel, okno, kliknięcie powiadomienia) – zobaczona nie ponawia powiadomienia', async () => {
+      const { w } = await morning()
+      await w.refresh()
+      expect(w.notificationSighting(line)).toEqual([line])
+      expect(w.shownQuestions()).toContain(line)
+    })
+
+    it('nie godziny po czasie: aplikacja włączona 61 min po chwili przypomnienia daje samą linię; 59 min – powiadomienie', async () => {
+      const late = await morning({}, 7 * 60 + 31)
+      await late.w.refresh()
+      expect(late.shown).toEqual([])
+      expect(late.w.current().lines.some((l) => l.id === line)).toBe(true)
+      const inTime = await morning({}, 7 * 60 + 29)
+      await inTime.w.refresh()
+      expect(inTime.shown.map((n) => n.title)).toEqual(['Plan poranny'])
+    })
+
+    const approve = { k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 6 * 60 + 26), boundary: placeLogical(DAY, 17 * 60), auto: false }
+
+    it('plan zatwierdzony przed chwilą przypomnienia (bez check-inu): ani linii, ani powiadomienia – jak „zatwierdzony” karty', async () => {
+      const done = await morning({}, 6 * 60 + 30, (x) => x.folder.userEvents([approve]).then(() => undefined))
+      await done.w.refresh()
+      expect(done.shown).toEqual([])
+      expect(done.w.current().lines.some((l) => l.id.startsWith('remind:'))).toBe(false)
+    })
+
+    /** A day with nothing to approve (a weekend day – no sessions – with a meal only, wake 08:00): the reminder is of the check-in alone. */
+    const noWork = () => writeFileSync(join(dataDir, paths.day(DAY)), JSON.stringify({ schema: 1, date: DAY, dayType: 'weekend', blocks: [{ id: 'm', categoryId: 'posilek', startMin: 9 * 60, durationMin: 30, fixed: false, origin: 'user' }] }))
+
+    it('dzień bez granicy do zatwierdzenia: „Pytania o objawy czekają w oknie głównym.”', async () => {
+      noWork()
+      const m = await morning({}, 8 * 60 + 30)
+      await m.w.refresh()
+      expect(m.shown.map((n) => n.body)).toEqual(['Pytania o objawy czekają w oknie głównym.'])
+    })
+
+    it('„Pomiń” check-inu z okna (zdarzenie `checkinSkipId`) w dniu bez granicy do zatwierdzenia: bez przypomnienia na każdym komputerze', async () => {
+      noWork()
+      const m = await morning({}, 8 * 60 + 30, async (x) => {
+        expect((await x.folder.timerClick({ a: 'mark', question: checkinSkipId(DAY), answer: 'skip', day: DAY } as never)).ok).toBe(true)
+      })
+      await m.w.refresh()
+      expect(m.shown).toEqual([])
+      expect(m.w.current().lines.some((l) => l.id.startsWith('remind:'))).toBe(false)
+    })
   })
 
   it('powiadomienie, którego Windows nie przyjął (pełny ekran): jeszcze raz, gdy przyjmuje i jesteś przy komputerze, póki aktualne (A4-07)', async () => {
@@ -1526,7 +1650,7 @@ describe('widget w procesie głównym', () => {
     }
   })
 
-  it('bez folderu danych: jedna neutralna linia „Brak folderu danych · Otwórz okno”, bez bloku i odliczania (D327)', async () => {
+  it('bez folderu danych: jedna neutralna linia „Brak folderu danych · Otwórz okno główne” (jedna nazwa – C7), bez bloku i odliczania (D327)', async () => {
     const { w, closeFolder } = await make()
     await w.refresh()
     expect(w.current().day).toBe(DAY)
@@ -1534,7 +1658,7 @@ describe('widget w procesie głównym', () => {
     await w.refresh()
     const v = w.current()
     expect(v).toMatchObject({ day: null, block: null, question: null, tone: 'brak', dot: false })
-    expect(v.lines.map((l) => [l.id, l.text, l.actions.map((a) => a.label)])).toEqual([[NO_FOLDER_LINE, 'Brak folderu danych', ['Otwórz okno']]])
+    expect(v.lines.map((l) => [l.id, l.text, l.actions.map((a) => a.label)])).toEqual([[NO_FOLDER_LINE, 'Brak folderu danych', ['Otwórz okno główne']]])
     expect(v.buttons).toMatchObject({ next: false, pause: false, extend: false, workEnd: false, cutOff: false, start: null })
     // A folder chosen but still opening, or failing: said so (the window says the same), never „Brak folderu”.
     expect(noFolderView('opening').lines[0]).toMatchObject({ text: 'Otwieram folder danych…', actions: [] })
@@ -1669,6 +1793,44 @@ describe('warianty w pasku (D313)', () => {
     expect(await blockB(folder)).toMatchObject({ durationMin: 60 })
     expect((await blockB(folder))?.byVariant).toBeUndefined()
     expect(w.current().lines.some((l) => l.id === 'moved:variant')).toBe(false)
+  })
+
+  it('panel wariantów mówi, które okno go otworzyło (C8) – także gdy „Odcinam się” go chowa; zamknięty – nic', async () => {
+    const { w, clock } = await over()
+    await w.act('variants', 'open', 'panel')
+    expect(w.current().variants).toMatchObject({ marker: true, by: 'panel' })
+    expect(w.current().variants.open).not.toBeNull()
+    clock.now += 1_000
+    await w.act('cutOff', undefined, 'main')
+    expect(w.current().hidden).toBe(true)
+    expect(w.current().variants).toMatchObject({ open: null, by: 'panel' })
+    clock.now += 1_000
+    await w.act('variants', 'close', 'panel')
+    expect(w.current().variants).toEqual({ marker: false, open: null })
+    // Opened by the main window's bar: its own.
+    clock.now += 1_000
+    await w.act('back', undefined, 'main')
+    clock.now += 1_000
+    await w.act('variants', 'open', 'main')
+    expect(w.current().variants.by).toBe('main')
+  })
+
+  it('panel wariantów bez policzonego dnia: widok zastępczy mówi, kto go otworzył; „variants|close” przechodzi – po powrocie dnia warianty nie wracają', async () => {
+    const m = await over()
+    await m.w.act('variants', 'open', 'panel')
+    expect(m.w.current().variants.open).not.toBeNull()
+    m.closeFolder()
+    await m.w.refresh()
+    expect(m.w.current().day).toBeNull()
+    expect(m.w.current().variants).toMatchObject({ open: null, by: 'panel' })
+    m.clock.now += 1_000
+    await m.w.act('variants', 'close', 'panel')
+    expect(m.w.current().variants.by).toBeUndefined()
+    m.openFolder()
+    await m.w.refresh()
+    expect(m.w.current().day).not.toBeNull()
+    expect(m.w.current().variants.open).toBeNull()
+    expect(m.w.current().variants.by).toBeUndefined()
   })
 
   it('T623: wariant przyczyny, gdy plan jest już tak zmieniony (drugi komputer) – zamyka przyczynę jak przed J5, bez zapisu i bez uwagi', async () => {
@@ -2541,5 +2703,350 @@ describe('szybki zapis „+” – potwierdzenie w pasku (D470)', () => {
     await w.refresh()
     await w.act('quickAdd', 'Kup mleko !jutro', 'bar')
     expect(w.current().note).toMatchObject({ text: 'Dodano do Skrzynki: Tytuł z folderu', ok: true })
+  })
+})
+
+describe('„+ Skrzynka” paska pulpitu – okienko „Do skrzynki” (D564 P15)', () => {
+  it('tylko z paska pulpitu: quickOpen z okna głównego albo panelu nic nie otwiera (ich „+ Skrzynka” rozwija pole w pasku)', async () => {
+    let opened = 0
+    const { w, clock, closeFolder } = await make({ openQuick: () => void opened++ })
+    await w.refresh()
+    // Each click a second after the one before: never the second click of a double one (0.5 s).
+    for (const from of ['main', 'panel'] as const) {
+      await w.act('quickOpen', undefined, from)
+      clock.now += 1_000
+    }
+    expect(opened).toBe(0)
+    await w.act('quickOpen', undefined, 'bar')
+    expect(opened).toBe(1)
+    // Also without a day counted now (D402: always) – the folder closed.
+    clock.now += 1_000
+    closeFolder()
+    await w.refresh()
+    expect(w.current().day).toBeNull()
+    await w.act('quickOpen', undefined, 'bar')
+    expect(opened).toBe(2)
+  })
+})
+
+describe('„<akcja> · Cofnij” po kliknięciu paska (D564 P18, UX12)', () => {
+  /** A day of two flexible blocks with names of their own (the bar's words say them). */
+  const twoBlocks = (extra: object[] = []) =>
+    writeFileSync(
+      join(dataDir, paths.day(DAY)),
+      JSON.stringify({
+        schema: 1,
+        date: DAY,
+        blocks: [
+          { id: 'a', categoryId: 'inne', name: 'Pisanie', startMin: 10 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'b', categoryId: 'inne', name: 'Raport', startMin: 11 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          ...extra
+        ]
+      })
+    )
+  const undoLine = (w: WidgetEngine) => w.current().lines.find((l) => l.id.startsWith('clickUndo:')) ?? null
+
+  it('„Dalej: Raport” – po kliknięciu „Skończono: Pisanie, zaczęto: Raport · Cofnij” na początku linii; „Cofnij” – Pisanie biegnie dalej, Raport się nie zaczął', async () => {
+    twoBlocks()
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 30)
+    await w.refresh()
+    expect(w.current().buttons).toMatchObject({ next: true, nextName: 'Raport' })
+    await w.act('next', undefined, 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
+    expect(w.current().lines[0]).toEqual({ id: expect.stringMatching(/^clickUndo:next:\d+$/), text: 'Skończono: Pisanie, zaczęto: Raport', actions: [{ id: 'undo', label: 'Cofnij' }], dot: false })
+    clock.now += 2_000
+    await w.act('line', `${undoLine(w)!.id}|undo`, 'bar')
+    const t = await folder.timer(DAY)
+    expect(t.fg?.info.id).toBe('a')
+    expect(t.paused.map((p) => p.info.id)).toEqual([])
+    expect(undoLine(w)).toBeNull()
+  })
+
+  it('linia stoi 10 s; po nich jej nie ma, a blok zostaje skończony', async () => {
+    twoBlocks()
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 30)
+    await w.act('next', undefined, 'main')
+    clock.now += 9_000
+    await w.refresh()
+    expect(undoLine(w)?.id).toMatch(/^clickUndo:next:\d+$/)
+    clock.now += 1_001
+    await w.refresh()
+    expect(undoLine(w)).toBeNull()
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
+  })
+
+  it('„Dalej” z kosztem: koszt startu z „Anuluj”; „Potwierdź” dopisuje start do tej samej linii, a „Cofnij” cofa oba', async () => {
+    twoBlocks()
+    const { w, folder, at, clock } = await make()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 58)
+    await w.act('next', undefined, 'bar')
+    expect(w.current().pending).toMatchObject({ button: 'start' })
+    expect(undoLine(w)?.text).toBe('Skończono: Pisanie')
+    // „Anuluj”: the cost goes at once – nothing begins, the line of „Dalej” stays.
+    clock.now += 1_000
+    await w.act('cancelPending', undefined, 'bar')
+    expect(w.current().pending).toBeNull()
+    expect(undoLine(w)?.text).toBe('Skończono: Pisanie')
+    expect((await folder.timer(DAY)).fg).toBeNull()
+
+    // Again, confirmed this time: the start joins the line of its „Dalej”.
+    clock.now += 1_000
+    await w.act('line', `${undoLine(w)!.id}|undo`, 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+    clock.now += 1_000
+    await w.act('next', undefined, 'bar')
+    clock.now += 2_000
+    await w.act('confirm', undefined, 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
+    expect(undoLine(w)?.text).toBe('Skończono: Pisanie, zaczęto: Raport')
+    clock.now += 1_000
+    await w.act('line', `${undoLine(w)!.id}|undo`, 'bar')
+    const t = await folder.timer(DAY)
+    expect(t.fg?.info.id).toBe('a')
+    expect(t.bg).toEqual([])
+  })
+
+  it('„Koniec pracy”, „Skończyłem” i „Zakończ teraz” mają swoją linię z „Cofnij”; nowe kliknięcie zastępuje poprzednią', async () => {
+    twoBlocks([
+      { id: 'ny', categoryId: 'sesja', startMin: 15 * 60 + 30, durationMin: 60, fixed: true, background: false, origin: 'user' },
+      { id: 'tlo', categoryId: 'inne', name: 'Pranie', startMin: 15 * 60 + 30, durationMin: 60, fixed: false, background: true, origin: 'user' }
+    ])
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 20)
+    await w.act('endWork', undefined, 'bar')
+    expect(undoLine(w)).toMatchObject({ id: expect.stringMatching(/^clickUndo:workEnd:\d+$/), text: 'Koniec pracy' })
+    // The session still ahead makes it a break (D216): the block ended, nothing parked.
+    expect((await folder.timer(DAY)).fg).toBeNull()
+    clock.now += 1_000
+    await w.act('line', `${undoLine(w)!.id}|undo`, 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+    expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'undo')).toHaveLength(2)
+
+    at(15 * 60 + 35)
+    await folder.timerClick({ a: 'start', block: 'ny' })
+    await folder.timerClick({ a: 'start', block: 'tlo' })
+    await w.refresh()
+    await w.act('finished', undefined, 'bar')
+    expect(undoLine(w)).toMatchObject({ id: expect.stringMatching(/^clickUndo:finished:\d+$/), text: 'Skończono: Sesja tradingowa' })
+    clock.now += 1_000
+    await w.act('bgEnd', 'tlo', 'bar')
+    // The newer click's line replaces the older one.
+    expect(w.current().lines.filter((l) => l.id.startsWith('clickUndo:')).map((l) => l.text)).toEqual(['Skończono: Pranie'])
+    clock.now += 1_000
+    await w.act('line', `${undoLine(w)!.id}|undo`, 'bar')
+    expect((await folder.timer(DAY)).bg.map((b) => b.info.id)).toEqual(['tlo'])
+  })
+
+  it('sygnał i ocena puli z „Sygnały ▸”: „Sygnał: okulary · Cofnij”, „Głowa: gorzej · Cofnij” – „Cofnij” zapisuje cofnięcie sygnału', async () => {
+    const { w, folder, clock } = await make()
+    await w.refresh()
+    await w.act('signal', 'glasses', 'bar')
+    expect(undoLine(w)).toMatchObject({ id: expect.stringMatching(/^clickUndo:signal:\d+$/), text: 'Sygnał: okulary' })
+    clock.now += 1_000
+    await w.act('relative', 'head|-10', 'panel')
+    expect(undoLine(w)).toMatchObject({ id: expect.stringMatching(/^clickUndo:signal:\d+$/), text: 'Głowa: gorzej' })
+    clock.now += 1_000
+    await w.act('line', `${undoLine(w)!.id}|undo`, 'panel')
+    const events = (await folder.readDay(DAY)).events
+    const relative = events.find((e) => e.k === 'energy.relative')!
+    expect(events.filter((e) => e.k === 'undo').map((e) => (e as unknown as { target: string }).target)).toEqual([relative.id])
+    expect(undoLine(w)).toBeNull()
+  })
+
+  it('„Cofnij”, którego już nie da się zrobić, mówi dlaczego', async () => {
+    twoBlocks()
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 30)
+    await w.act('next', undefined, 'bar')
+    // Raport paused since (here, in the window): its „Dalej” cannot come back.
+    await folder.timerClick({ a: 'pause' })
+    clock.now += 1_000
+    await w.act('line', `${undoLine(w)!.id}|undo`, 'bar')
+    expect(w.current().note?.text).toBe('tego już nie cofniesz – po kliknięciu zmieniło się coś w dniu')
+    // Refused for good: the line goes.
+    expect(undoLine(w)).toBeNull()
+    expect((await folder.timer(DAY)).paused.map((p) => p.info.id)).toEqual(['b'])
+  })
+
+  it('„Cofnij” odmówione na chwilę albo z wyjątkiem: linia zostaje do ponowienia, czekający koszt „Dalej” znika od razu i nie wraca', async () => {
+    twoBlocks()
+    let hook: ((c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null) | null = null
+    const { w, folder, at, clock } = await make({ timerHook: (c) => hook?.(c) ?? null })
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 58)
+    await w.act('next', undefined, 'bar')
+    expect(w.current().pending).toMatchObject({ button: 'start' })
+    const line = undoLine(w)!.id
+    const busy = 'nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę'
+    hook = (c) => (c.a === 'undoClick' ? Promise.resolve({ ok: false, why: busy, confirm: null }) : null)
+    clock.now += 1_000
+    await w.act('line', `${line}|undo`, 'bar')
+    expect(w.current().note?.text).toBe(busy)
+    expect(undoLine(w)?.id).toBe(line)
+    // The cost went for good at the first „Cofnij” (its „Start” can be clicked again).
+    expect(w.current().pending).toBeNull()
+    hook = (c) => (c.a === 'undoClick' ? Promise.reject(new Error('plik zajęty')) : null)
+    clock.now += 1_000
+    await w.act('line', `${line}|undo`, 'bar')
+    expect(w.current().note?.text).toBe('Nie cofnięto: plik zajęty')
+    expect(undoLine(w)?.id).toBe(line)
+    expect(w.current().pending).toBeNull()
+    hook = null
+    clock.now += 1_000
+    await w.act('line', `${line}|undo`, 'bar')
+    expect(undoLine(w)).toBeNull()
+    expect(w.current().pending).toBeNull()
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+  })
+
+  it('„Cofnij” na linii, którą zastąpiło nowsze kliknięcie, nic nie cofa', async () => {
+    const { w, folder, clock } = await make()
+    await w.refresh()
+    await w.act('signal', 'glasses', 'bar')
+    const old = undoLine(w)!.id
+    clock.now += 1_000
+    await w.act('signal', 'earplugs', 'bar')
+    expect(undoLine(w)!.id).not.toBe(old)
+    clock.now += 1_000
+    await w.act('line', `${old}|undo`, 'bar')
+    expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'undo')).toEqual([])
+    expect(w.current().note?.text).toBe('Ta linia jest już nieaktualna – nic nie cofnięto.')
+    expect(undoLine(w)?.text).toBe('Sygnał: zatyczki')
+  })
+
+  it('„Potwierdź” kosztu „Dalej” nazywa blok, który zaczął (blok kosztu), nie ten z widoku sprzed kliknięcia', async () => {
+    twoBlocks()
+    const { w, folder, at, clock } = await make()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 58)
+    await w.refresh()
+    expect(w.current().buttons.nextName).toBe('Raport')
+    // A block before „Raport” came meanwhile (another computer, the window); this bar has not counted the day since.
+    twoBlocks([{ id: 'c', categoryId: 'inne', name: 'Notatki', startMin: 10 * 60 + 59, durationMin: 30, fixed: false, origin: 'user' }])
+    await w.act('next', undefined, 'bar')
+    expect(w.current().pending).toMatchObject({ button: 'start' })
+    clock.now += 2_000
+    await w.act('confirm', undefined, 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('c')
+    expect(undoLine(w)?.text).toBe('Skończono: Pisanie, zaczęto: Notatki')
+  })
+
+  it('w trakcie „Cofnij” linia mówi „Cofam…”, czekający koszt „Dalej” jest już zdjęty (Potwierdź nic nie zaczyna), drugie kliknięcie nic nie robi', async () => {
+    twoBlocks()
+    let hook: ((c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null) | null = null
+    const { w, folder, at, clock } = await make({ timerHook: (c) => hook?.(c) ?? null })
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 58)
+    await w.act('next', undefined, 'bar')
+    expect(w.current().pending).toMatchObject({ button: 'start' })
+    const line = undoLine(w)!.id
+    let writes = 0
+    let during: { label: string | undefined; pending: unknown } | null = null
+    hook = (c) => {
+      if (c.a !== 'undoClick' || c.probe) return null
+      writes++
+      return (async () => {
+        during = { label: w.current().lines.find((l) => l.id === line)?.actions[0]?.label, pending: w.current().pending }
+        // „Potwierdź” and „Cofnij” once more meanwhile: nothing.
+        clock.now += 1_000
+        await w.act('confirm', undefined, 'bar')
+        clock.now += 1_000
+        await w.act('line', `${line}|undo`, 'bar')
+        const r = await folder.timerClick(c as never)
+        return { ok: r.ok, why: r.ok ? null : r.why, confirm: null, ...(!r.ok && r.code ? { code: r.code } : {}) }
+      })()
+    }
+    clock.now += 1_000
+    await w.act('line', `${line}|undo`, 'bar')
+    expect(during).toEqual({ label: 'Cofam…', pending: null })
+    expect(writes).toBe(1)
+    expect(w.current().pending).toBeNull()
+    expect(undoLine(w)).toBeNull()
+    const t = await folder.timer(DAY)
+    expect(t.fg?.info.id).toBe('a')
+    expect(t.bg).toEqual([])
+  })
+
+  it('wyjątek po zapisie „Cofnij”: koszt znika, linia zostaje – drugie „Cofnij” mówi, że już cofnięte, i ją zdejmuje', async () => {
+    twoBlocks()
+    let hook: ((c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null) | null = null
+    const { w, folder, at, clock } = await make({ timerHook: (c) => hook?.(c) ?? null })
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 58)
+    await w.act('next', undefined, 'bar')
+    const line = undoLine(w)!.id
+    hook = (c) =>
+      c.a === 'undoClick' && !c.probe
+        ? (async () => {
+            await folder.timerClick(c as never)
+            throw new Error('dziennik nie potwierdził zapisu')
+          })()
+        : null
+    clock.now += 1_000
+    await w.act('line', `${line}|undo`, 'bar')
+    expect(w.current().note?.text).toBe('Nie cofnięto: dziennik nie potwierdził zapisu')
+    expect(w.current().pending).toBeNull()
+    expect(undoLine(w)?.id).toBe(line)
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+    hook = null
+    clock.now += 1_000
+    await w.act('line', `${line}|undo`, 'bar')
+    expect(w.current().note?.text).toBe('to kliknięcie jest już cofnięte')
+    expect(undoLine(w)).toBeNull()
+    expect(w.current().pending).toBeNull()
+  })
+
+  it('„Dalej” bez kosztu nazywa blok, który jego kliknięcie zaczęło – nie ten z widoku sprzed kliknięcia', async () => {
+    twoBlocks()
+    const { w, folder, at } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 30)
+    await w.refresh()
+    expect(w.current().buttons.nextName).toBe('Raport')
+    twoBlocks([{ id: 'c', categoryId: 'inne', name: 'Notatki', startMin: 10 * 60 + 40, durationMin: 15, fixed: false, origin: 'user' }])
+    await w.act('next', undefined, 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('c')
+    expect(undoLine(w)?.text).toBe('Skończono: Pisanie, zaczęto: Notatki')
+  })
+
+  it('„Dalej” do bloku grupy: kliknięcie mówi o wszystkich zaczętych (także w tle), linia nazywa blok, w który kliknięto „Dalej”', async () => {
+    twoBlocks([{ id: 'g', categoryId: 'inne', name: 'Muzyka', startMin: 11 * 60, durationMin: 60, fixed: false, origin: 'user', alongside: 'b' }])
+    const { w, folder, at } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 30)
+    await w.refresh()
+    expect(w.current().buttons.nextName).toBe('Raport')
+    const r = await folder.timerClick({ a: 'next' })
+    expect(r.wrote?.begun).toEqual(['b', 'g'])
+    // Taken back by hand, then the bar's own „Dalej”.
+    await folder.timerClick({ a: 'undoClick', ids: r.wrote!.ids })
+    await w.refresh()
+    await w.act('next', undefined, 'bar')
+    expect(undoLine(w)?.text).toBe('Skończono: Pisanie, zaczęto: Raport')
+    // The block clicked toward, wherever its start stands among the ones the click wrote; else the first of them.
+    expect([begunOf('g', ['b', 'g']), begunOf('x', ['b', 'g']), begunOf(undefined, ['b']), begunOf('b', undefined)]).toEqual(['g', 'b', 'b', undefined])
   })
 })

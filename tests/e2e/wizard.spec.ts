@@ -3,7 +3,8 @@
  * computer chooses an empty folder, goes through the steps with their defaults and „Zakończ” writes the shared data –
  * nothing before; the day plans itself from it (today's weekday set to „zwykły” in the week's step, so on a Saturday,
  * Sunday or holiday too – T528). A second computer (another app data) joins the same folder: it writes
- * nothing shared – every file it did not write itself stays byte for byte.
+ * nothing shared – every file it did not write itself stays byte for byte. The desktop bar hidden by its „×” before „Zakończ”
+ * comes back by the corner chosen in the wizard – never by the wizard's own prefs saying `desktopBar: true` (UX11, D564 P16).
  */
 import { createHash } from 'node:crypto'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs'
@@ -11,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { weekday } from '../../src/shared/time/zone'
-import { launch, logicalToday, withMainLog } from './app'
+import { launch, logicalToday, viewPage, withMainLog } from './app'
 
 const shots = process.env.RD_E2E_SHOTS
 async function shot(page: Page, name: string): Promise<void> {
@@ -118,4 +119,60 @@ test('kreator pierwszego komputera: pusty folder, kroki z wartościami domyślny
     expect(after[rel], rel).toBe(hash)
   }
   expect(Object.keys(after).filter((rel) => !(rel in before))).toEqual([])
+})
+
+test('pasek schowany „×” w czasie kreatora (UX11, D564 P16): wraca przez róg wybrany w kreatorze, nie przez zapis jego ustawień', async () => {
+  const oneDrive = mkdtempSync(join(tmpdir(), 'rd-e2e-onedrive-'))
+  const { app, page, userData } = await launch({ env: { OneDrive: oneDrive } })
+  try {
+    await withMainLog(userData, async () => {
+      const barShown = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.getTitle() === 'Regulated Day – pasek' && w.isVisible()))
+      const log = () => readFileSync(join(userData, 'logs', 'main.log'), 'utf8')
+      await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
+      await (await viewPage(app, 'bar')).getByTestId('bar-close').click()
+      await expect.poll(barShown).toBe(false)
+      await expect(page.getByTestId('wizard')).toBeVisible()
+      await page.getByTestId('wizard-first').click()
+      // Every step with its defaults (the bar switched on, its corner – bottom left).
+      for (let i = 0; i < 20 && !(await page.getByTestId('wizard-finish').isVisible()); i++) await page.getByTestId('wizard-next').click()
+      await page.getByTestId('wizard-finish').click()
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await expect.poll(barShown, { timeout: 30_000 }).toBe(true)
+      expect(log()).toContain('pasek pulpitu pokazany ponownie po „×” – miejsce wybrane w kreatorze')
+      // The wizard's prefs (`desktopBar: true` of a bar simply left on) took no „×” off – only the settings' own switch does.
+      expect(log()).not.toContain('pasek pulpitu pokazany ponownie po „×” – włączony')
+    })
+  } finally {
+    await app.close()
+  }
+})
+
+test('kreator (UX15, P23): po kroku folderu „Zakończ z domyślnymi” kończy kreator w dwóch ekranach; lista „Pierwszy dzień” z drogami; dane zapisane z wartościami domyślnymi', async () => {
+  const oneDrive = mkdtempSync(join(tmpdir(), 'rd-e2e-onedrive-'))
+  const folder = join(oneDrive, 'RegulatedDay')
+  const { app, page, userData, errors } = await launch({ env: { OneDrive: oneDrive } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('wizard')).toBeVisible()
+      await expect(page.getByTestId('wizard-finish-defaults')).toHaveCount(0)
+      await page.getByTestId('wizard-first').click()
+      await page.getByTestId('wizard-next').click()
+      await expect(page.getByTestId('wizard-step')).toContainText('2 z 14')
+      expect(existsSync(folder)).toBe(false)
+      await page.getByTestId('wizard-finish-defaults').click()
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      expect(existsSync(join(folder, 'rd.json'))).toBe(true)
+      expect(existsSync(join(folder, 'templates', 'zwykly.json'))).toBe(true)
+      // The list of the first day: the ways, the close.
+      await expect(page.getByTestId('first-day')).toBeVisible()
+      await page.getByTestId('first-day-concepts').click()
+      await expect(page.getByTestId('help-concepts')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await page.getByTestId('first-day-close').click()
+      await expect(page.getByTestId('first-day')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
 })
