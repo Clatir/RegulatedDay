@@ -224,7 +224,8 @@ export const HARD_END_TEXT = 'Twardy koniec projektów – regeneracja do snu'
  * The hard end of projects as a quiet line (D228, D240, D352): while it is current (`hardEndCurrent`, the same as for
  * the notification, which the switch of the notifications does not touch). It waits in the class mode (D355). A text
  * with no buttons and no dot (D240); „mniej pytań” keeps it as it is (the quiet icon, D134); the night and „Odcinam się”
- * are cut off by the caller. Pushed last of the lines: where the bar shows one line only, it never pushes theirs into „⋯”.
+ * are cut off by the caller. Pushed last of the day's lines (only `moved:` and the reminders `remind:` come after it): where
+ * the bar shows one line only, it never pushes theirs into „⋯”.
  */
 function hardEndLines(state: DayState, now: HardEndNow | null, modes: Modes): BarLine[] {
   return now && !modes.classMode ? [{ id: `hardEnd:${state.grid.date}:${now.passed}`, text: HARD_END_TEXT, actions: [], dot: false }] : []
@@ -399,13 +400,13 @@ export function engineView(i: EngineInput): WidgetView {
       if (now >= q.endedAt + TASK_LINE_MIN * MIN) continue
       lines.push({ id: q.id, text: taskLineText(q.title), actions: TASK_ANSWERS.map((a) => ({ id: a.id, label: a.label })), dot: false })
     }
-  // The hard end, a quiet icon with no buttons, stands last of the lines (the window of the main process puts it after
-  // the lines it adds): where the bar shows one line only, it never pushes theirs into „⋯”.
+  // The hard end, a quiet icon with no buttons, stands last of the day's lines – after it only the reminders here, and in the
+  // main process the changes' „Cofnij” (`moved:`) and then the reminders (`linesLast`): it never pushes a day's line into „⋯”.
   if (!hidden && !modes.night) lines.push(...hardEndLines(state, i.hardEnd !== undefined ? i.hardEnd : hardEndCurrent(state, t), modes))
   // The reminders of the morning plan and of the ritual (UX13, D565 P21): quiet lines (no dot), the very last – a reminder
   // never pushes a line of the day into „⋯” (the main process keeps them after its own lines too, `linesLast`).
-  for (const r of remindersDue({ ctx: i.ctx, state, now, modes, ritualFrom: i.ritualFrom ?? null })) {
-    const w = reminderWords(r.kind, state)
+  for (const r of remindersDue({ ctx: i.ctx, state, now, modes, ritualFrom: i.ritualFrom ?? null, energyOn: i.energy?.enabled ?? false, timer: t })) {
+    const w = reminderWords(r, state)
     lines.push({ id: r.line, text: w.text, actions: [{ id: 'open', label: w.open }, { id: 'notToday', label: 'nie dziś' }], dot: false })
   }
 

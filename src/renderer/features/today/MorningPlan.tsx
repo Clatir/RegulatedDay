@@ -39,10 +39,10 @@ import { caseTitle, isMorningChosen, morningChosen, morningDeadlines, morningPri
 import { rememberCasesView, rememberMatrixFilter } from '../cases/casesView'
 import { queueRowText } from '../cases/casesUi'
 import { DueMark } from '../cases/DueMark'
-import { navigate, setCheckinAnswers, skipCheckin, toast, useUi } from '../../store/ui'
+import { navigate, setCheckinAnswers, toast, useUi } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { answerSeries } from '../series/seriesActions'
-import { arrangeDayBlocks, energyOrderCached, energyOrderKey, leaveEnergyOrder, saveDay, skipDeadline, variantStarts } from './dayActions'
+import { arrangeDayBlocks, energyOrderCached, energyOrderKey, leaveEnergyOrder, saveDay, skipCheckinDay, skipDeadline, variantStarts } from './dayActions'
 
 /**
  * What the screen says after „Dodaj do planu” (`planMorning`, D384): nothing made (every chosen sprawa was planned or done meanwhile)
@@ -102,7 +102,7 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
       )}
       {open && (
         <div className="flex flex-col gap-3 border-t border-line px-4 py-3">
-          {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep key={month} month={month} /> : checkinOpen(needCheckin, checkinSkipped, model.date) ? <Checkin model={model} onSkip={() => skipCheckin(model.date)} /> : <Plan model={model} names={names} busy={busy} />}
+          {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep key={month} month={month} /> : checkinOpen(needCheckin, checkinSkipped, model.date) ? <Checkin model={model} onSkip={() => void skipCheckinDay(model.date)} /> : <Plan model={model} names={names} busy={busy} />}
         </div>
       )}
     </section>

@@ -13,6 +13,7 @@ import { paths } from '@shared/data/paths'
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { HARD_END_TEXT } from '@shared/engineView'
+import { checkinSkipId } from '@shared/engine/reminders'
 import { NO_FOLDER_LINE, noFolderView, type WidgetView } from '@shared/widget'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
@@ -231,6 +232,28 @@ describe('widget w procesie głównym', () => {
       expect(w.current().lines.some((l) => l.id === line)).toBe(true)
     })
 
+    it('„mniej pytań” w chwili przypomnienia: bez powiadomienia także po „Jest lepiej” (jak twardy koniec, D134)', async () => {
+      const { w, folder, shown, at } = await morning({}, 6 * 60 + 30, async (m) => {
+        await m.w.refresh()
+        await m.w.act('fewer', undefined, 'bar')
+      })
+      await w.refresh()
+      at(6 * 60 + 35)
+      await w.act('better', undefined, 'bar')
+      await folder.check()
+      await w.refresh()
+      expect(w.current().fewer).toBe(false)
+      expect(w.current().lines.some((l) => l.id === line)).toBe(true)
+      expect(shown).toEqual([])
+    })
+
+    it('linia przypomnienia liczy się jako zobaczona (panel, okno, kliknięcie powiadomienia) – zobaczona nie ponawia powiadomienia', async () => {
+      const { w } = await morning()
+      await w.refresh()
+      expect(w.notificationSighting(line)).toEqual([line])
+      expect(w.shownQuestions()).toContain(line)
+    })
+
     it('nie godziny po czasie: aplikacja włączona 61 min po chwili przypomnienia daje samą linię; 59 min – powiadomienie', async () => {
       const late = await morning({}, 7 * 60 + 31)
       await late.w.refresh()
@@ -241,8 +264,27 @@ describe('widget w procesie głównym', () => {
       expect(inTime.shown.map((n) => n.title)).toEqual(['Plan poranny'])
     })
 
-    it('plan zatwierdzony przed chwilą przypomnienia: ani linii, ani powiadomienia', async () => {
-      const m = await morning({}, 6 * 60 + 30, (x) => x.folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 6 * 60 + 26), boundary: placeLogical(DAY, 17 * 60), auto: false }]).then(() => undefined))
+    const approve = { k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 6 * 60 + 26), boundary: placeLogical(DAY, 17 * 60), auto: false }
+
+    it('plan zatwierdzony i check-in zrobiony przed chwilą przypomnienia: ani linii, ani powiadomienia', async () => {
+      const checkin = { k: 'energy.checkin', day: DAY, at: placeLogical(DAY, 6 * 60 + 26), answers: { head: [1, 1], emotions: [1, 1], senses: [1, 1], body: [1, 1] } }
+      const done = await morning({}, 6 * 60 + 30, (x) => x.folder.userEvents([approve, checkin]).then(() => undefined))
+      await done.w.refresh()
+      expect(done.shown).toEqual([])
+      expect(done.w.current().lines.some((l) => l.id.startsWith('remind:'))).toBe(false)
+    })
+
+    it('sam plan zatwierdzony: przypomnienie o check-inie zostaje', async () => {
+      const approved = await morning({}, 6 * 60 + 30, (x) => x.folder.userEvents([approve]).then(() => undefined))
+      await approved.w.refresh()
+      expect(approved.shown.map((n) => n.body)).toEqual(['Pytania o objawy i plan dnia czekają w oknie głównym.'])
+    })
+
+    it('„Pomiń” check-inu z okna (zdarzenie `checkinSkipId`) przy zatwierdzonym planie: bez przypomnienia na każdym komputerze', async () => {
+      const m = await morning({}, 6 * 60 + 30, async (x) => {
+        await x.folder.userEvents([approve])
+        expect((await x.folder.timerClick({ a: 'mark', question: checkinSkipId(DAY), answer: 'skip', day: DAY } as never)).ok).toBe(true)
+      })
       await m.w.refresh()
       expect(m.shown).toEqual([])
       expect(m.w.current().lines.some((l) => l.id.startsWith('remind:'))).toBe(false)

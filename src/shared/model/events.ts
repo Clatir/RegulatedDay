@@ -63,9 +63,10 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * day or a change of the day's settings it writes – the body of your dated settings (T1532). 17 – blocks away from the computer in one
  * chain (D553–D556, T1962–T1969): with the setting on, an end by the plan (`awayChain`) and the next block's start at once – an older
  * version knows neither (it would end such a block at its limit, undo a start 2 min after a chain end, read the setting as off): it
- * gives way to this one as the leader. 18 – „Trafne szacowanie” by the day's setting „Tolerancja trafności” (UX13, A1): an older
- * version judges every block by 15 % – it would freeze the reward of a day with another tolerance so; it gives way to this one as
- * the leader, and the days it froze in the lookback are graded again.
+ * gives way to this one as the leader. 18 – two changes of one release, each enough alone: (a) „Trafne szacowanie” by the day's
+ * setting „Tolerancja trafności” (UX13, A1) – an older version judges every block by 15 % and would freeze the reward of a day with
+ * another tolerance so; (b) [UX12 – written at the merge]. An older version gives way to this one as the leader, and the days it froze in the lookback are
+ * graded again.
  */
 export const RULES_VERSION = 18
 

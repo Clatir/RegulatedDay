@@ -31,7 +31,7 @@ D160, D170, D176, D200, D241, D244, D269, D272, D275, D301. Decyzje T492–T496.
 ## Pliki
 - `engine/game.ts` – `GAME_RULES` (punkty, minimum 20 min i 5 min trafności, limity tygodnia, numer reguł gry), `dayGame` (co dzień
   zdobył, status, nuty), `blockEvidence` (jak podano start i koniec bloku), `accurateBlocks`, `exchangeOf`,
-  `toleranceOf` (UX13: tolerancja w % to ustawienie dnia `accuracyTolerancePct` z chwili startu bloku – `settingsAtMinute`; nie
+  `toleranceOf` (UX13: tolerancja w % to ustawienie dnia `accuracyTolerancePct` przy starcie bloku – migawka dnia albo ostatni `day.snapshot` przed `block.start` w kolejności zdarzeń; nie
   reguła gry; `EstimatedBlock.tolerancePct` niesie ją do Statystyk – nota `accuracyNote` w `statsView.ts`; `RULES_VERSION` 18),
   `sightingOf` + `reserveMessageId`, `storedGame`, `gameSummary` (passa, dzień ochronny, nuty ostateczne i „w toku”).
 - `engine/progress.ts` – `ROOM_ITEMS` (robocza lista, D301), `roomOf`, `regenWaysOf`/`storedWays`, `cassettesOf`,

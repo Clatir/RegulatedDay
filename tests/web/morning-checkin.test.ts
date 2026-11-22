@@ -11,6 +11,9 @@ import { checkinOpen } from '@renderer/features/today/checkinLogic'
 import { logEvents } from '@renderer/store/data'
 import type { DayModel } from '@renderer/store/day'
 import { skipCheckin, useUi } from '@renderer/store/ui'
+import { skipCheckinDay } from '@renderer/features/today/dayActions'
+import { checkinSkipId } from '@shared/engine/reminders'
+import type { RdApi, TimerIn } from '@shared/api'
 
 vi.mock('@renderer/store/data', async (orig) => ({ ...(await orig<typeof import('@renderer/store/data')>()), logEvents: vi.fn(async () => true) }))
 
@@ -118,5 +121,23 @@ describe('check-in przy zmianie ekranu (B5, D563)', () => {
     expect(checkinOpen(true, skipped, '2026-11-18')).toBe(false)
     expect(checkinOpen(true, skipped, '2026-11-19')).toBe(true)
     expect(checkinOpen(false, null, '2026-11-18')).toBe(false)
+  })
+
+  it('„Pomiń” planu porannego pisze też znacznik dnia dla przypomnienia (UX13): `mark` z `checkinSkipId` – karta pomija check-in od razu, odmowa niczego nie psuje', async () => {
+    const clicks: TimerIn[] = []
+    let refuse = false
+    ;(globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd = {
+      timer: async (click) => {
+        clicks.push(click)
+        if (refuse) throw new Error('folder danych jest niedostępny')
+        return { ok: true, why: null, confirm: null }
+      }
+    }
+    await skipCheckinDay('2026-11-18')
+    expect(useUi.getState().checkinSkipped).toBe('2026-11-18')
+    expect(clicks).toEqual([{ a: 'mark', question: checkinSkipId('2026-11-18'), answer: 'skip', day: '2026-11-18' }])
+    refuse = true
+    await expect(skipCheckinDay('2026-11-19')).resolves.toBeUndefined()
+    expect(useUi.getState().checkinSkipped).toBe('2026-11-19')
   })
 })

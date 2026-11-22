@@ -316,6 +316,7 @@ export const NO_FOLDER_LINE = 'nofolder'
 
 /**
  * The lines whose sighting is written (the panel, the window in front, a click of the bar or of a notification): the
- * questions and the reserve's message (D231, D241). One place for the main process and the windows.
+ * questions, the reserve's message (D231, D241) and the reminders (UX13: a reminder seen is not notified again – A4-07). One
+ * place for the main process and the windows.
  */
-export const SEEN_LINE = /^(next|next2|workEnd|return|absence|shutdown|reserve):\d{4}-\d{2}-\d{2}:/
+export const SEEN_LINE = /^(next|next2|workEnd|return|absence|shutdown|reserve|remind):\d{4}-\d{2}-\d{2}:/

@@ -18,7 +18,7 @@ import { engineView, POOL_TEXT, RESERVE_REGEN_MIN, warnDeadlines } from '@shared
 import { plannedSpan, type BlockInfo } from '@shared/engine/blocks'
 import { reserveMessageId } from '@shared/engine/game'
 import { closeGap, gapId, gapNow, gapsNow, gapText } from '@shared/engine/gaps'
-import { atOf } from '@shared/engine/grid'
+import { atOf, idxOf } from '@shared/engine/grid'
 import { hardEndCurrent, hardEndMessage, type HardEndNow } from '@shared/engine/hardEnd'
 import { classModeEnd, fewerAt, modesOf, type ModePrefs, type Modes } from '@shared/engine/modes'
 import { REMINDER_NOTICE_MIN, reminderWords, remindersDue } from '@shared/engine/reminders'
@@ -841,11 +841,12 @@ export class WidgetEngine {
       }
     }
     // The reminders of the morning plan and of the ritual (D565 P21, UX13): while their line holds (`remindersDue` – none in
-    // a session, a class, the night), within an hour of their moment – never hours late; in „mniej pytań” only the line.
+    // a session, classes, the night), within an hour of their moment – never hours late. „mniej pytań” now or in the minute of
+    // the moment: only the line (as the hard end, D134 – no notification later either).
     if (on.reminders) {
-      for (const r of remindersDue({ ctx: m.ctx, state, now, modes, ritualFrom })) {
-        if (r.quiet || now >= r.at + REMINDER_NOTICE_MIN * MIN) continue
-        const w = reminderWords(r.kind, state)
+      for (const r of remindersDue({ ctx: m.ctx, state, now, modes, ritualFrom, energyOn: m.energy.enabled, timer: t })) {
+        if (r.quiet || fewerAt(m.ctx.events, state.grid, idxOf(state.grid, r.at)) || now >= r.at + REMINDER_NOTICE_MIN * MIN) continue
+        const w = reminderWords(r, state)
         out.push({ id: `notice:${date}:remind:${r.kind}`, title: w.title, body: w.body, line: r.line, day: date })
       }
     }

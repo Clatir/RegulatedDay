@@ -195,6 +195,16 @@ describe('trafne szacowanie (1 nuta za blok, najwyżej 3 dziennie)', () => {
     expect(grade(s).earned.accuracy).toEqual(['y'])
   })
 
+  it('„od dziś” w minucie startu: rozstrzyga kolejność zdarzeń – zmiana zapisana przed startem obowiązuje blok, po nim – nie (UX13)', () => {
+    const snapshot = (s: Scenario) => s.raw({ k: 'day.snapshot', at: s.at('10:00'), dayType: 'zwykly', settings: { ...s.settings, accuracyTolerancePct: 25 }, reason: 'today' }, '10:00')
+    const before = day([work('x', '10:00', 60)])
+    snapshot(before).ran('x', '10:00', '11:12').workEnd('11:12')
+    expect(grade(before).earned.accuracy).toEqual(['x'])
+    const after = day([work('x', '10:00', 60)])
+    snapshot(after.start('x', '10:00')).end('x', '11:12').workEnd('11:12')
+    expect(grade(after).earned.accuracy).toEqual([])
+  })
+
   it('najwyżej 3 nuty dziennie', () => {
     const s = day(plan).ran('x', '08:00', '09:00').ran('y', '10:00', '11:00').ran('z', '12:00', '13:00').ran('q', '14:00', '15:00').workEnd('15:00')
     const g = grade(s)

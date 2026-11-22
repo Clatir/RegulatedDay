@@ -33,7 +33,8 @@ import type { DaySnapshot } from '@shared/model/events'
 import { attachmentUndoOf, ownAttachmentIds, removalEdits, restoreEdits, type AttachmentUndo } from '@shared/model/attachment'
 import { dayFilesNow, editOf, isSaved, trySaveWith, useData, withOwner, type SendState } from '../../store/data'
 import { countedDay, dayUsable, type DayModel } from '../../store/day'
-import { toast, undoToast } from '../../store/ui'
+import { skipCheckin, toast, undoToast } from '../../store/ui'
+import { checkinSkipId } from '@shared/engine/reminders'
 import { MOVE_GONE_TEXT, movedDay, stayedOf, type Stayed, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
 
 /** The edit of a day's file `before` (null: none yet, it is made) by `next` – null when it changes nothing. */
@@ -305,6 +306,16 @@ export async function tellFreed(date: string, freed: Freed | null): Promise<void
   } catch {
     // The plan is saved; only the bar's question about the gap is missing.
   }
+}
+
+/**
+ * „Pomiń” of the morning's check-in: the card's own skip stays the window's (D563 B5, `skipCheckin`), and the day's log gets its
+ * mark (`checkinSkipId`, the timer's `mark`) – the morning plan's reminder counts the check-in as done on every computer
+ * (UX13). A mark refused (given before, the folder away) changes nothing in the window: the reminder may only stay.
+ */
+export async function skipCheckinDay(date: string): Promise<void> {
+  skipCheckin(date)
+  await timerClick({ a: 'mark', question: checkinSkipId(date), answer: 'skip', day: date })
 }
 
 /** A click of the timer whose failure (the IPC throws) is an answer, not an unhandled rejection. */

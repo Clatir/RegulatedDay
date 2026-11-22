@@ -10,7 +10,8 @@ import { placeOf, type CategoryRules, type Pool } from '../model/categories'
 import { compareEvents, isKnown, type AnyEvent, type GameEvent, type LogEvent } from '../model/events'
 import { questionId } from '../model/ids'
 import { addDays, weekday } from '../time/zone'
-import { settingsAtMinute, type DayContext, type DayState } from './day'
+import { DEFAULT_SETTINGS, settingsFrom } from '../model/settings'
+import type { DayContext, DayState } from './day'
 import type { Descent, EnergyState } from './energy'
 import { OPEN, ranMinutes, type BlockFact } from './facts'
 import { idxOf } from './grid'
@@ -214,12 +215,18 @@ export interface EstimatedBlock {
 }
 
 /**
- * „Tolerancja trafności” of a block begun at minute `startIdx` (UX13, A1): the day's setting in force then – the day's
- * snapshot (the setting of its date), then each „od dziś” change before that minute (`settingsAtMinute`, as every dated
- * setting of the day). The block's estimate is its length at its start, so the start's setting judges it.
+ * „Tolerancja trafności” of a block by its start (UX13, A1): the day's setting in force then – the day's snapshot (the
+ * setting of its date), or the last „od dziś” snapshot (`day.snapshot`) written before the start in the order of events
+ * (`compareEvents` – a change in the start's own minute counts when it came first). The block's estimate is its length at
+ * its start, so the start's setting judges it.
  */
-export function toleranceOf(ctx: DayContext, state: DayState, startIdx: number): number {
-  return settingsAtMinute(ctx.snapshot, state.facts, startIdx).settings.accuracyTolerancePct
+export function toleranceOf(ctx: DayContext, state: DayState, start: LogEvent): number {
+  let last: Extract<LogEvent, { k: 'day.snapshot' }> | null = null
+  for (const e of ctx.events) {
+    if (!isKnown(e) || e.k !== 'day.snapshot' || state.facts.undone.has(e.id) || compareEvents(e, start) >= 0) continue
+    if (!last || compareEvents(e, last) > 0) last = e
+  }
+  return last ? settingsFrom(last.settings, DEFAULT_SETTINGS, { whole: true }).accuracyTolerancePct : ctx.snapshot.settings.accuracyTolerancePct
 }
 
 /**
@@ -235,7 +242,7 @@ export function estimatedBlocks(ctx: DayContext, state: DayState, rules: GameRul
     if (plan.get(x.f.id)?.byVariant || x.corrected.start || x.corrected.end) continue
     if (!x.clickStart || !x.realEnd || !x.done || (!x.away && x.start.c !== x.end.c) || x.absenceUnanswered) continue
     const real = ranMinutes(x.f, x.f.endedAt!)
-    const pct = toleranceOf(ctx, state, x.f.startedAt!)
+    const pct = toleranceOf(ctx, state, x.start)
     const tolerance = Math.max(rules.accuracy.floorMin, (p.durationMin * pct) / 100)
     out.push({ id: x.f.id, category: p.categoryId, plannedMin: p.durationMin, realMin: real, accurate: Math.abs(real - p.durationMin) <= tolerance, tolerancePct: pct })
   }
