@@ -274,10 +274,16 @@ export function CalendarPage() {
   }
 
   // The actions of the menu are always the page's latest (the items live in a memo).
-  // UX19: the template applied (or its window of hours asked) – the days are done with, as after „Typ dnia”.
-  const applyTo = async (t: Template, ids: readonly string[]) => {
-    if (await apply.start(t, ids)) selection.clear()
-  }
+  // UX19: after the template is really written (not when a window of the flow opens) the days are done with, as after „Typ dnia” – but only while the
+  // selection is still those very days (a window that stood open may have seen it changed).
+  const latestSelection = useRef(selection)
+  latestSelection.current = selection
+  const applyTo = (t: Template, ids: readonly string[]) =>
+    apply.start(t, ids, () => {
+      const now = latestSelection.current
+      const same = now.selected.length === ids.length && ids.every((d) => now.isSelected(d))
+      if (same) now.clear()
+    })
   const actions = useRef({ setType, setWakeOf, apply: applyTo })
   actions.current = { setType, setWakeOf, apply: applyTo }
   const menuActions = useMemo(() => ({ setType: (t: DayTypeId | null, ids: readonly string[]) => void actions.current.setType(t, ids), setWake: (v: number | null, ids: readonly string[]) => void actions.current.setWakeOf(v, ids), applyTemplate: (t: Template, ids: readonly string[]) => void actions.current.apply(t, ids) }), [])

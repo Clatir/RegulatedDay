@@ -165,6 +165,52 @@ describe('Kalendarz: menu zaznaczonych dni', () => {
   })
 })
 
+describe('Kalendarz: zaznaczenie znika po rzeczywistym zapisie', () => {
+  const cell = (d: string) => q(`day-${d}`)!
+  const ctrlClick = async (d: string) => {
+    await mouse(cell(d), 'mousedown', { button: 0, ctrlKey: true })
+    await mouse(cell(d), 'mouseup', { button: 0, ctrlKey: true })
+  }
+  const marked = () => [...document.querySelectorAll('[data-testid^="day-"][aria-pressed="true"]')].map((e) => e.getAttribute('data-testid')!.slice(4))
+  const applyFromMenu = async (d: string) => {
+    await rightClick(cell(d))
+    await pick('calendar-menu-apply')
+    await pick('calendar-menu-apply-t-zwykly')
+    await act(async () => undefined)
+  }
+
+  it('okno godzin dziś otwarte, nic jeszcze nie zapisane: zaznaczenie stoi; „Zastosuj” zapisuje i je zdejmuje', async () => {
+    await mount(createElement(CalendarPage))
+    await ctrlClick(TODAY)
+    await applyFromMenu(TODAY)
+    expect(q('template-apply-confirm')).not.toBeNull()
+    expect(marked()).toEqual([TODAY])
+    await pick('template-apply-confirm-ok')
+    expect(applied.calls).toHaveLength(1)
+    expect(marked()).toEqual([])
+  })
+
+  it('anulowane okno godzin: zaznaczenie zostaje', async () => {
+    await mount(createElement(CalendarPage))
+    await ctrlClick(TODAY)
+    await applyFromMenu(TODAY)
+    await pick('template-apply-confirm-cancel')
+    expect(applied.calls).toEqual([])
+    expect(marked()).toEqual([TODAY])
+  })
+
+  it('zaznaczenie zmienione, gdy okno stało: po zapisie zostaje to nowe (nie te same dni)', async () => {
+    await mount(createElement(CalendarPage))
+    await ctrlClick(TODAY)
+    await applyFromMenu(TODAY)
+    // Behind the open window another day is added to the selection.
+    await ctrlClick('2026-11-25')
+    await pick('template-apply-confirm-ok')
+    expect(applied.calls).toHaveLength(1)
+    expect(marked()).toEqual([TODAY, '2026-11-25'])
+  })
+})
+
 describe('„Tydzień”: menu nagłówka dnia', () => {
   it('prawy przycisk na nagłówku dnia: „Zastosuj szablon ▸” na ten dzień', async () => {
     useUi.setState({ page: 'week' })

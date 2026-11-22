@@ -26,29 +26,32 @@ const LABEL: Record<Kind, string> = { apply: 'Zastosuj do…', revoke: 'Odwołaj
 /**
  * „Zastosuj” on the days chosen, with its questions (UX19, P28: one flow for the button of a template and for the menus of days – the Calendar's and the
  * columns' of „Tydzień”): the window of today's hours (D546) when today or a day gone by is among them, the question of collisions (D541), then the write.
- * `start` – true: done (or nothing to do); `dialogs` – the windows, rendered once by the screen that uses it.
+ * `start` – true: done, or a window of the flow took over (or nothing to do); `onDone` runs only after the write itself went through (by the direct road, by
+ * the window of hours, by the question of collisions – never when a window is opened or closed with „Anuluj”); `dialogs` – the windows, rendered once by the screen that uses it.
  */
-export function useApplyFlow(): { start: (template: Template, dates: readonly string[]) => Promise<boolean | undefined>; busy: boolean; dialogs: ReactNode } {
+export function useApplyFlow(): { start: (template: Template, dates: readonly string[], onDone?: () => void) => Promise<boolean | undefined>; busy: boolean; dialogs: ReactNode } {
   // The days of the window of today's hours and the day that was today when it opened (D546) – the engine takes it at the same click.
-  const [timing, setTiming] = useState<{ template: Template; dates: string[]; today: string } | null>(null)
-  const [asking, setAsking] = useState<{ template: Template; dates: string[]; asked: string[]; choice: ApplyChoice } | null>(null)
+  const [timing, setTiming] = useState<{ template: Template; dates: string[]; today: string; done?: () => void } | null>(null)
+  const [asking, setAsking] = useState<{ template: Template; dates: string[]; asked: string[]; choice: ApplyChoice; done?: () => void } | null>(null)
   const [busy, run] = useBusy()
 
   /** „Zastosuj” at the hours chosen: after the question when a day asks it (D541). True – done (or nothing to do), the window may close. */
-  const apply = async (template: Template, list: string[], choice: ApplyChoice) => {
+  const apply = async (template: Template, list: string[], choice: ApplyChoice, done?: () => void) => {
     const asked = await askedDays(template, list, choice)
     if (asked.length) {
-      setAsking({ template, dates: list, asked, choice })
+      setAsking({ template, dates: list, asked, choice, done })
       return true
     }
-    return applyToDays(template, list, 'fill', choice)
+    const ok = await applyToDays(template, list, 'fill', choice)
+    if (ok) done?.()
+    return ok
   }
 
   /**
    * The chosen days: with today or a day gone by among them after the window of their hours (D546). Today is the logical day of the click (as the engine
    * takes it – `timingAt`), not the one the page was drawn with: after 04:00 they agree.
    */
-  const start = (template: Template, dates: readonly string[]) =>
+  const start = (template: Template, dates: readonly string[], done?: () => void) =>
     run(async () => {
       const list = [...new Set(dates)].sort()
       if (!list.length) return false
@@ -58,10 +61,10 @@ export function useApplyFlow(): { start: (template: Template, dates: readonly st
       }
       const now = logicalDayOf(Date.now())
       if (asksTiming(list, now)) {
-        setTiming({ template, dates: list, today: now })
+        setTiming({ template, dates: list, today: now, done })
         return true
       }
-      return apply(template, list, DEFAULT_CHOICE)
+      return apply(template, list, DEFAULT_CHOICE, done)
     })
 
   const dialogs = (
@@ -75,7 +78,7 @@ export function useApplyFlow(): { start: (template: Template, dates: readonly st
           onClose={() => setTiming(null)}
           onPick={(choice) =>
             void run(async () => {
-              if (await apply(timing.template, timing.dates, choice)) setTiming(null)
+              if (await apply(timing.template, timing.dates, choice, timing.done)) setTiming(null)
             })
           }
         />
@@ -89,7 +92,10 @@ export function useApplyFlow(): { start: (template: Template, dates: readonly st
           onClose={() => setAsking(null)}
           onPick={(mode) =>
             void run(async () => {
-              if (await applyToDays(asking.template, asking.dates, mode, asking.choice)) setAsking(null)
+              if (await applyToDays(asking.template, asking.dates, mode, asking.choice)) {
+                asking.done?.()
+                setAsking(null)
+              }
             })
           }
         />

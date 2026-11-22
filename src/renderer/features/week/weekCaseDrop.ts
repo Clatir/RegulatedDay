@@ -18,6 +18,7 @@ import { nextFreeStart } from '../cases/casesUi'
 import { planGroupDrop } from '../cases/groupActions'
 import { planOnAxis } from '../cases/planOnAxis'
 import { usePointerDrag, type GrabEvent, type PointerDragState } from '../cases/usePointerDrag'
+import { scrollParent } from '../../lib/axisScroll'
 import { gridMinute } from '../plan/gridCreate'
 
 /** Where a sprawa dropped now would stand: the day of the column under the pointer and the minute of the axis at its height. */
@@ -38,6 +39,9 @@ export function weekDropAt(x: number, y: number): WeekDrop | null {
   for (const el of document.querySelectorAll<HTMLElement>('[data-week-col]')) {
     const r = el.getBoundingClientRect()
     if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue
+    // Only what the box that scrolls the axis shows: a column scrolled out under the top bar or the banners is no target.
+    const box = scrollParent(el)?.getBoundingClientRect()
+    if (box && (x < box.left || x > box.right || y < box.top || y > box.bottom)) return null
     const lo = Number(el.dataset.lo)
     const hi = Number(el.dataset.hi)
     const ppm = Number(el.dataset.ppm)

@@ -160,13 +160,23 @@ describe('weekDropAt (czyste)', () => {
     expect(weekDropAt(50, 133)).toEqual({ date: '2026-11-18', minute: 425 })
     // The sticky headings and the strip of all-day events stand over the columns: a point in them is no drop (the column under them has an hour nobody sees).
     const head = document.createElement('div')
-    head.dataset.testid = 'week-head'
     head.setAttribute('data-testid', 'week-head')
     head.getBoundingClientRect = () => ({ left: 0, right: 100, top: 0, bottom: 150 }) as DOMRect
     document.body.append(head)
     expect(weekDropAt(50, 133)).toBeNull()
     expect(weekDropAt(50, 151)).toEqual({ date: '2026-11-18', minute: 440 })
     head.remove()
+    // The box that scrolls the axis cuts the column: what is scrolled out of it (under the top bar, the banners) is no drop either.
+    const box = document.createElement('div')
+    box.style.overflowY = 'auto'
+    box.getBoundingClientRect = () => ({ left: 0, right: 100, top: 100, bottom: 600 }) as DOMRect
+    document.body.append(box)
+    box.append(a)
+    expect(weekDropAt(50, 50)).toBeNull()
+    expect(weekDropAt(50, 650)).toBeNull()
+    expect(weekDropAt(50, 150)).toEqual({ date: '2026-11-18', minute: 440 })
+    document.body.append(a)
+    box.remove()
     // Not over a column.
     expect(weekDropAt(150, 133)).toBeNull()
     expect(weekDropAt(50, 5)).toBeNull()
