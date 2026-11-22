@@ -107,7 +107,12 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
     - **Wydanie 1.34.0:** PR #109 scalony 22.11 (`main` d130578) po zielonym CI 44988376381 (Linux i Windows; wcześniej
       poprawka strefy czasu w `ux8-calendar`, 42fd001). CI na `main` – run 45000947424; wydanie v1.34.0 – sprawdzić, że
       zadanie Windows je opublikowało. Drzewa `ux-a`..`ux-d` i gałęzie usunięte. Odbiór UX*.* w `docs/odbior.md`.
-    - **Dalej:** 1.35.0 – SK1 „Przelicz koszty ×N” (D566, `docs/plan.md`, „Po ciągu UX”) – „Przed etapem” i pauza do „dalej”.
+      CI na `main` raz czerwone (E2E `week.spec.ts:1166` – Home na „Dziś”, `horizon.test.ts:180` – znany niestabilny), ponowione
+      zadania, które padły.
+
+16. **1.35.0 – SK1 „Przelicz koszty ×N” (D566, D567):** „dalej” 22.11. Gałąź `claude/1.35-przelicz-koszty` (od 6c5072c).
+    Przed etapem: pytania 1–4 odpowiedziane (D567, rekomendacje); wykonawca `wykonawca-opus` · xhigh, przegląd xhigh
+    (folder danych, zapis grupowy); T2420–T2449; szacunek 3–4 h. Stan: w toku.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
