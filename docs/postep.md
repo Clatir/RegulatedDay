@@ -119,6 +119,7 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
       `npm test` 356/5176, `build`, `lint`, `playwright test` 144/144).
     - **Dokumenty i wydanie (Krok 1.3, 22.11):** T2420–T2423 w `docs/decyzje-techniczne.md`, reguły w `.claude/rules/koszt.md`,
       `version` `1.35.0` w `package.json`, `CHANGELOG.md`, punkty odbioru `SK1.1`–`SK1.3` w `docs/odbior.md`.
+      **PR #110 otwarty** (`claude/1.35-przelicz-koszty` → `main`), CI w toku – po zielonym CI scalić PR #110 i sprawdzić publikację wydania `v1.35.0`.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
