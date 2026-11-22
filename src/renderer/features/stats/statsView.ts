@@ -5,6 +5,7 @@
  */
 import type { AccuracyRow, FeltRow, MeanRow, PersonRow, StatsPeriod, StatsResult, WeekBoundaries } from '@shared/engine/stats'
 import { CORRECTION_H, FREEZE_MAX_H } from '@shared/engine/freezeWindow'
+import { GAME_RULES } from '@shared/engine/game'
 import { countLabel, durationLabel, formatNumber, plDate, plDayMonth, WEEKDAY_SHORT } from '@shared/format'
 import { addDays } from '@shared/time/zone'
 
@@ -99,6 +100,18 @@ export function ratioText(ratio: number): string {
   const delta = Math.round(Math.abs(ratio - 1) * 100)
   if (delta < 5) return 'jak w planie'
   return `o ${delta}% ${ratio > 1 ? 'dłużej' : 'krócej'}`
+}
+
+/**
+ * The note over „Trafność szacowania” (UX13, A1): the conditions of the reward and the tolerance the blocks of the period were
+ * judged by – each by its day's „Tolerancja trafności” (`StatsResult.accuracy.tolerancePct`; days with two settings: the range) –
+ * and with no block judged the setting of today (`todayPct`).
+ */
+export function accuracyNote(judged: StatsResult['accuracy']['tolerancePct'], todayPct: number): string {
+  const { minMin, floorMin } = GAME_RULES.accuracy
+  const range = !judged ? `${todayPct}%` : judged.min === judged.max ? `${judged.min}%` : `${judged.min}–${judged.max}%`
+  const byDay = judged && judged.min !== judged.max ? ' (tolerancja dnia)' : ''
+  return `Bloki elastyczne od ${minMin} min, zaczęte i skończone kliknięciem, bez poprawki czasu – jak w nagrodzie „Trafne szacowanie”. Trafny: czas w granicach ${range} planu${byDay}, najmniej ${floorMin} min. Mediana: realny czas do planowanego.`
 }
 
 /** „Brak pomiaru: 2 dni z wyłączonym modułem energii – nie są liczone jako zero.” */

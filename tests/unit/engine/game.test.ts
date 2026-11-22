@@ -11,7 +11,9 @@ import type { Pool } from '@shared/model/categories'
 import type { Answer } from '@shared/model/events'
 import { questionId } from '@shared/model/ids'
 import type { PlanBlock } from '@shared/model/plan'
+import { settingsOn, type SettingsChange } from '@shared/model/settings'
 import { dayEnd } from '@shared/time/day'
+import { addDays } from '@shared/time/zone'
 import { block, Scenario } from './dsl'
 
 const DATE = '2026-10-28'
@@ -169,6 +171,28 @@ describe('trafne szacowanie (1 nuta za blok, najwyżej 3 dziennie)', () => {
   it('tolerancja nie mniejsza niż 5 min (blok 20 min: 25 min się mieści, 26 – nie); blok krótszy niż 20 min – bez nuty', () => {
     const s = day([work('a', '08:00', 20), work('b', '09:00', 20), work('c', '10:00', 19)]).ran('a', '08:00', '08:25').ran('b', '09:00', '09:26').ran('c', '10:00', '10:19').workEnd('10:19')
     expect(grade(s).earned.accuracy).toEqual(['a'])
+  })
+
+  it('tolerancja z ustawienia dnia (UX13, A1): 25 % od daty ustawienia zmienia ocenę, dzień przed nią liczy 15 %', () => {
+    // A change of the setting from DATE (spec „Macierz ustawień”: wspólne, z datą obowiązywania).
+    const changes: SettingsChange[] = [{ id: 'tolerancja', from: DATE, at: null, made: null, patch: { accuracyTolerancePct: 25 } }]
+    const tolerance = (date: string) => settingsOn(changes, date).accuracyTolerancePct
+    expect([tolerance(addDays(DATE, -1)), tolerance(DATE)]).toEqual([15, 25])
+    // 60 min planned, 72 real: 12 min off – outside 15 % (9 min), within 25 % (15 min).
+    const ran = (date: string) => day([work('x', '08:00', 60)], { settings: { accuracyTolerancePct: tolerance(date) } }).ran('x', '08:00', '09:12').workEnd('09:12')
+    expect(grade(ran(addDays(DATE, -1))).earned.accuracy).toEqual([])
+    expect(grade(ran(DATE)).earned.accuracy).toEqual(['x'])
+    // Below the floor the 5 min still hold: 20 min planned, 26 real is out also with 25 % (5 min).
+    const short = day([work('a', '08:00', 20)], { settings: { accuracyTolerancePct: 25 } }).ran('a', '08:00', '08:26').workEnd('08:26')
+    expect(grade(short).earned.accuracy).toEqual([])
+  })
+
+  it('zmiana tolerancji „od dziś” liczy się od swojej chwili: blok zaczęty przed nią – stara, po niej – nowa (UX13)', () => {
+    const s = day([work('x', '08:00', 60), work('y', '11:00', 60)])
+    // „od dziś” at 10:00: the day's snapshot again with the new settings (`settingsAtMinute`).
+    s.raw({ k: 'day.snapshot', at: s.at('10:00'), dayType: 'zwykly', settings: { ...s.settings, accuracyTolerancePct: 25 }, reason: 'today' }, '10:00')
+    s.ran('x', '08:00', '09:12').ran('y', '11:00', '12:12').workEnd('12:12')
+    expect(grade(s).earned.accuracy).toEqual(['y'])
   })
 
   it('najwyżej 3 nuty dziennie', () => {

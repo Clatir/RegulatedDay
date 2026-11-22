@@ -44,7 +44,7 @@ const LISTED: readonly SettingField[] = [
   { id: 'field-on-top', title: 'Zawsze na wierzchu', section: 'settings-bar', keys: 'nad oknami panel' },
   { id: 'field-modes', title: 'Tryb sesji i tryb zajęć', section: 'settings-bar', keys: 'zwarty przygaszony' },
   { id: 'field-bar-pulse', title: 'Pulsowanie paska', section: 'settings-bar', keys: 'animacja koniec bloku' },
-  { id: 'field-notices', title: 'Powiadomienia Windows', section: 'settings-notices', keys: 'rezerwa energia sesja zajęcia dojazd twardy koniec projektów' },
+  { id: 'field-notices', title: 'Powiadomienia Windows', section: 'settings-notices', keys: 'rezerwa energia sesja zajęcia dojazd twardy koniec projektów przypomnienia plan poranny rytuał' },
   { id: 'field-sound', title: 'Dźwięk', section: 'settings-notices', keys: 'głośność' },
   { id: 'field-autostart', title: 'Uruchamiaj z Windows', section: 'settings-machine', keys: 'autostart' },
   { id: 'field-quick-key', title: 'Skrót szybkiego zapisu', section: 'settings-machine', keys: 'skrzynka klawisz' },

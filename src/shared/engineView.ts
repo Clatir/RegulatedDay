@@ -21,6 +21,7 @@ import { REGEN_CATEGORY, type Pool } from './model/categories'
 import { isRunningRequest, OPEN, pausedPlaceOf, workSince, type AutoAction, type RequestFact } from './engine/facts'
 import { atOf, type Grid } from './engine/grid'
 import { ritualDue } from './engine/ritual'
+import { reminderWords, remindersDue } from './engine/reminders'
 import { ROUTINE_LINE_MIN, routinesDue } from './engine/routineCheck'
 import { TASK_ANSWERS, TASK_LINE_MIN, taskLineText, taskQuestions } from './engine/cases'
 import { logicalDayOf } from './time/day'
@@ -401,6 +402,12 @@ export function engineView(i: EngineInput): WidgetView {
   // The hard end, a quiet icon with no buttons, stands last of the lines (the window of the main process puts it after
   // the lines it adds): where the bar shows one line only, it never pushes theirs into „⋯”.
   if (!hidden && !modes.night) lines.push(...hardEndLines(state, i.hardEnd !== undefined ? i.hardEnd : hardEndCurrent(state, t), modes))
+  // The reminders of the morning plan and of the ritual (UX13, D565 P21): quiet lines (no dot), the very last – a reminder
+  // never pushes a line of the day into „⋯” (the main process keeps them after its own lines too, `linesLast`).
+  for (const r of remindersDue({ ctx: i.ctx, state, now, modes, ritualFrom: i.ritualFrom ?? null })) {
+    const w = reminderWords(r.kind, state)
+    lines.push({ id: r.line, text: w.text, actions: [{ id: 'open', label: w.open }, { id: 'notToday', label: 'nie dziś' }], dot: false })
+  }
 
   const water = waterDue(events, state, t, now, i.care, { night: modes.night, disconnect: hidden })
   const session = !!fg && fg.info.rules.kind === 'session'

@@ -42,7 +42,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>; openQuick?: () => void } = {}) {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; remindersNotice?: boolean; opened?: string[]; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>; openQuick?: () => void } = {}) {
   // `now` is the wall clock; setting it moves the monotonic one by the same step (time passes), `jump` moves the wall clock
   // alone (Windows sets the time back or forward – the monotonic clock goes on).
   const clock = {
@@ -88,7 +88,7 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
         o.during?.()
         return o.modePrefs?.() ?? { sessionMode: true, classMode: true }
       },
-      notices: () => ({ start5: true, hardEnd: o.hardEndNotice ?? true, reserve: true }),
+      notices: () => ({ start5: true, hardEnd: o.hardEndNotice ?? true, reserve: true, reminders: o.remindersNotice ?? true }),
       notify: (n, onFailed) => {
         // Refused at once (an error of Windows): the failure is said before the answer.
         if (o.refuse?.()) {
@@ -102,7 +102,7 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
       },
       ...(o.taken ? { notificationState: async () => (o.taken!() ? 'accepts' : 'presentation') } : {}),
       ...(o.present ? { present: o.present } : {}),
-      showMain: () => undefined,
+      showMain: (page) => void o.opened?.push(page ?? 'today'),
       emit: (v) => views.push(v),
       log: (_level, msg) => void o.logs?.push(msg),
       now: () => clock.now,
@@ -172,6 +172,81 @@ describe('widget w procesie głównym', () => {
     await folder.check()
     await w.refresh()
     expect(shown.map((n) => n.title)).toEqual(['Sesja NY o 15:30'])
+  })
+
+  describe('przypomnienia planu porannego i rytuału (UX13, D565 P21)', () => {
+    const line = `remind:${DAY}:morning`
+    /**
+     * A settled leader (3 min after its start, `settle.ts`) at `until` (06:30 – 30 min after the wake 06:00), the plan not
+     * approved, no check-in; `before` – written before the first check.
+     */
+    async function morning(o: Parameters<typeof make>[0] = {}, until = 6 * 60 + 30, before?: (m: Awaited<ReturnType<typeof make>>) => Promise<void>) {
+      const m = await make({ from: placeLogical(DAY, until - 4), ...o })
+      await before?.(m)
+      await m.folder.check()
+      m.at(until - 1)
+      await m.folder.check()
+      m.at(until)
+      await m.folder.check()
+      // Never true by default: only the leader once settled notifies (a test without it would pass for nothing).
+      expect(m.folder.leader.iLead && m.folder.settle.settled(m.folder.clock.now())).toBe(true)
+      return m
+    }
+
+    it('cicha linia na końcu i jedno ciche powiadomienie prowadzącego; kliknięcie powiadomienia otwiera panel na linii, „Otwórz” – okno główne', async () => {
+      const opened: string[] = []
+      const { w, folder, shown } = await morning({ opened })
+      await w.refresh()
+      expect(shown).toEqual([{ id: `notice:${DAY}:remind:morning`, title: 'Plan poranny', body: 'Pytania o objawy i plan dnia czekają w oknie głównym.', line, day: DAY }])
+      expect(w.current().lines.at(-1)).toEqual({ id: line, text: 'Plan poranny czeka', actions: [{ id: 'open', label: 'Otwórz' }, { id: 'notToday', label: 'nie dziś' }], dot: false })
+      expect(w.current().dot).toBe(false)
+      // Once: its id in the day's log.
+      await w.refresh()
+      expect(shown).toHaveLength(1)
+      expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'notice.shown').map((e) => (e as unknown as { notice: string }).notice)).toEqual([`notice:${DAY}:remind:morning`])
+      // „Otwórz” opens the main window on „Dziś” (your click – D229), the line stays until the plan is done.
+      await w.act('line', `${line}|open`, 'panel')
+      expect(opened).toEqual(['today'])
+      expect(w.current().lines.some((l) => l.id === line)).toBe(true)
+      // „nie dziś” – the day's answer in the log: the line is gone for the day.
+      await w.act('line', `${line}|notToday`, 'panel')
+      expect(w.current().lines.some((l) => l.id === line)).toBe(false)
+    })
+
+    it('przełącznik tego komputera wyłączony: tylko linia, bez powiadomienia', async () => {
+      const { w, shown } = await morning({ remindersNotice: false })
+      await w.refresh()
+      expect(shown).toEqual([])
+      expect(w.current().lines.some((l) => l.id === line)).toBe(true)
+    })
+
+    it('w „mniej pytań” cicha linia bez powiadomienia (spec „Cisza”)', async () => {
+      const { w, shown } = await morning({}, 6 * 60 + 30, async (m) => {
+        await m.w.refresh()
+        await m.w.act('fewer', undefined, 'bar')
+      })
+      await w.refresh()
+      expect(w.current().fewer).toBe(true)
+      expect(shown).toEqual([])
+      expect(w.current().lines.some((l) => l.id === line)).toBe(true)
+    })
+
+    it('nie godziny po czasie: aplikacja włączona 61 min po chwili przypomnienia daje samą linię; 59 min – powiadomienie', async () => {
+      const late = await morning({}, 7 * 60 + 31)
+      await late.w.refresh()
+      expect(late.shown).toEqual([])
+      expect(late.w.current().lines.some((l) => l.id === line)).toBe(true)
+      const inTime = await morning({}, 7 * 60 + 29)
+      await inTime.w.refresh()
+      expect(inTime.shown.map((n) => n.title)).toEqual(['Plan poranny'])
+    })
+
+    it('plan zatwierdzony przed chwilą przypomnienia: ani linii, ani powiadomienia', async () => {
+      const m = await morning({}, 6 * 60 + 30, (x) => x.folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 6 * 60 + 26), boundary: placeLogical(DAY, 17 * 60), auto: false }]).then(() => undefined))
+      await m.w.refresh()
+      expect(m.shown).toEqual([])
+      expect(m.w.current().lines.some((l) => l.id.startsWith('remind:'))).toBe(false)
+    })
   })
 
   it('powiadomienie, którego Windows nie przyjął (pełny ekran): jeszcze raz, gdy przyjmuje i jesteś przy komputerze, póki aktualne (A4-07)', async () => {

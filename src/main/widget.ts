@@ -21,6 +21,7 @@ import { closeGap, gapId, gapNow, gapsNow, gapText } from '@shared/engine/gaps'
 import { atOf } from '@shared/engine/grid'
 import { hardEndCurrent, hardEndMessage, type HardEndNow } from '@shared/engine/hardEnd'
 import { classModeEnd, fewerAt, modesOf, type ModePrefs, type Modes } from '@shared/engine/modes'
+import { REMINDER_NOTICE_MIN, reminderWords, remindersDue } from '@shared/engine/reminders'
 import { suggestRegen } from '@shared/engine/reserve'
 import { timerNow, type TimerNow } from '@shared/engine/timer'
 import { pushedText } from '@shared/engine/pushApart'
@@ -388,6 +389,7 @@ export class WidgetEngine {
       const modePrefs = this.d.modePrefs()
       const modes = modesOf(m.state, timer, m.ctx.events, now, modePrefs)
       const hardEnd = hardEndCurrent(m.state, timer)
+      const ritualFrom = await folder.ritualDay()
       this.nextBlock = timer.next?.id ?? null
       this.view = {
         ...engineView({
@@ -408,7 +410,7 @@ export class WidgetEngine {
           people: m.people,
           person: (id) => personName(rd, id),
           carried: m.carried,
-          ritualFrom: await folder.ritualDay(),
+          ritualFrom,
           routines,
           // The day's file the model was counted from (D473: the routine's list it keeps, its ticks – read once, T1115).
           dayFile: m.dayFile,
@@ -427,7 +429,7 @@ export class WidgetEngine {
       // Notifications are the leader's, and only once settled – after a start or a wake the other computers' logs (their
       // shown notices) come first, so nothing is shown twice (spec „Kilka komputerów”, A8-03). After the view is out: a
       // slow helper (the state of notifications) never holds the bar back.
-      if (folder.leader.iLead && !folder.unavailable && folder.settle.settled(folder.clock.now())) notices = () => this.notices(folder, m, (b) => blockName(b, names), now, modes, timer, hardEnd, modePrefs)
+      if (folder.leader.iLead && !folder.unavailable && folder.settle.settled(folder.clock.now())) notices = () => this.notices(folder, m, (b) => blockName(b, names), now, modes, timer, hardEnd, modePrefs, ritualFrom)
     } catch (e) {
       // The day cannot be counted now: a bar without actions says so (never the last view with a stale countdown).
       if (!this.failing) this.d.log('warn', 'widok widgetu nie policzył się', e)
@@ -610,13 +612,16 @@ export class WidgetEngine {
   /**
    * The order of the lines at the end: the hard end's line after the day's other lines (the routine saved, the lines of
    * the computers and the battery), and the lines of changes with their „Cofnij” (`moved:`, D367) after all of the day's –
-   * the bar shows one of them at most (`barLines`), never in place of a question or a warning.
+   * the bar shows one of them at most (`barLines`), never in place of a question or a warning; the reminders (`remind:`,
+   * UX13) last of all.
    */
   private linesLast(): void {
     const v = this.view!
     const moved = (l: { id: string }) => l.id.startsWith('moved:')
     const hard = (l: { id: string }) => l.id.startsWith('hardEnd:')
-    v.lines = [...v.lines.filter((l) => !hard(l) && !moved(l)), ...v.lines.filter(hard), ...v.lines.filter(moved)]
+    // The reminders (UX13) after all: they never push a line of the day – nor a change's „Cofnij” – into „⋯”.
+    const remind = (l: { id: string }) => l.id.startsWith('remind:')
+    v.lines = [...v.lines.filter((l) => !hard(l) && !moved(l) && !remind(l)), ...v.lines.filter(hard), ...v.lines.filter(moved), ...v.lines.filter(remind)]
   }
 
   /** A day not counted now while the folder is away: the changes waiting for it still say so (A3-07). */
@@ -776,10 +781,10 @@ export class WidgetEngine {
    * The notifications on by default (D230): 5 min before a block waiting for „Zacznij” and before classes and the commute
    * (not before an online lecture, D237; none in the class mode, D236, nor during stationary classes and the commute),
    * the hard end of projects (a project runs, or it passed in a project or in time to explain after one within the hour),
-   * a pool at the reserve (the message of its first descent of the day).
-   * Each once: its id goes to the day's log.
+   * a pool at the reserve (the message of its first descent of the day), the reminders of the morning plan and of the ritual
+   * (D565 P21, UX13). Each once: its id goes to the day's log.
    */
-  private async notices(folder: DataFolder, m: Awaited<ReturnType<DataFolder['widgetModel']>>, name: (b: Parameters<typeof blockName>[0]) => string, now: number, modes: Modes, t: TimerNow, current: HardEndNow | null, prefs: ModePrefs): Promise<void> {
+  private async notices(folder: DataFolder, m: Awaited<ReturnType<DataFolder['widgetModel']>>, name: (b: Parameters<typeof blockName>[0]) => string, now: number, modes: Modes, t: TimerNow, current: HardEndNow | null, prefs: ModePrefs, ritualFrom: string | null): Promise<void> {
     const on = this.d.notices()
     const view = this.view
     if (!view || view.hidden || view.night || view.recording) return
@@ -833,6 +838,15 @@ export class WidgetEngine {
         if (!d.message || atOf(state.grid, d.at) < now - 60 * MIN || !m.energy.atReserve[d.pool] || answered(m.ctx.events, line)) continue
         // Its click opens the panel on the reserve's line – the sighting that counts (D241, A4-04).
         out.push({ id: `notice:${date}:reserve:${d.pool}:${d.at}`, title: 'Energia na poziomie rezerwy', body: `${POOL_TEXT[d.pool]} – czas na regenerację.`, line, day: date })
+      }
+    }
+    // The reminders of the morning plan and of the ritual (D565 P21, UX13): while their line holds (`remindersDue` – none in
+    // a session, a class, the night), within an hour of their moment – never hours late; in „mniej pytań” only the line.
+    if (on.reminders) {
+      for (const r of remindersDue({ ctx: m.ctx, state, now, modes, ritualFrom })) {
+        if (r.quiet || now >= r.at + REMINDER_NOTICE_MIN * MIN) continue
+        const w = reminderWords(r.kind, state)
+        out.push({ id: `notice:${date}:remind:${r.kind}`, title: w.title, body: w.body, line: r.line, day: date })
       }
     }
     // The state of notifications – one read of the helper per refresh, only when a notification needs it. Windows takes
@@ -1102,6 +1116,13 @@ export class WidgetEngine {
         if (kind === 'moved') return act === 'undo' ? this.undoMoved(id === 'push' ? 'push' : 'variant') : undefined
         // „Zadanie zrobione? · Tak · Wraca na listę” (D384): the answer is the task's record.
         if (kind === 'task') return act === 'done' || act === 'back' ? this.answerTask(line, act) : undefined
+        // A reminder (UX13, D565 P21): „Otwórz” / „Rytuał” – the main window on „Dziś” (the morning plan) or the ritual, by your
+        // click (D229); „nie dziś” – the day's answer in the log, the line gone for the day.
+        if (kind === 'remind') {
+          if (act === 'open') return this.d.showMain(id.endsWith(':ritual') ? 'ritual' : 'today')
+          if (act === 'notToday') await this.d.timer({ a: 'mark', question: line, answer: act, day })
+          return this.refresh()
+        }
         if (kind === 'wait') click = act === 'start' ? { a: 'start', block: id } : { a: 'cancel', block: id }
         else if (kind === 'restart') click = { a: 'restart', block: id }
         // The day's moments (A1-12): an anchored block's „Zacznij · Zaparkuj · Koniec pracy”, a fixed block cancelled after
