@@ -570,6 +570,38 @@ describe('zejście do rezerwy (E2)', () => {
     const { energy } = await f.folder.energyState(DAY)
     expect(energy.descents.map((d) => d.recorded)).toEqual([true])
   })
+
+  it('zejście z minuty sygnału, który jeszcze można cofnąć na pasku (10 s, D564 P18), czeka na koniec tych 10 s; cofnięty – nie ma zejścia', async () => {
+    writeFileSync(join(dataDir, paths.settings), JSON.stringify({ schema: 1, settings: [] }))
+    const f = await make({ at: '08:00' })
+    const yes = [2, 2] as const
+    f.folder.append({ day: DAY, dom: 'energy', k: 'energy.checkin', at: f.now, answers: { head: yes, emotions: yes, senses: yes, body: yes } })
+    const r = await f.advance(5)
+    expect(r.leader.iLead && r.settled).toBe(true)
+    // Głowa 25 → 15 at 08:05:29 (its minute 08:05); at 08:05:31 the gate closes that minute – the assessment is 2 s old.
+    const minute = f.now
+    f.now = minute + 29_000
+    const rel = f.folder.append({ day: DAY, dom: 'energy', k: 'energy.relative', at: f.now, pool: 'head', delta: -10, before: { head: 25, emotions: 25, senses: 25, body: 25 } })
+    f.now = minute + 31_000
+    await f.folder.check()
+    expect(events().filter((e) => e.k === 'energy.reserve')).toEqual([])
+    // Taken back within its 10 s: no descent then, nor later.
+    f.folder.append({ day: DAY, dom: 'timer', k: 'undo', at: f.now, target: rel.id, reason: 'user' })
+    f.now = minute + 45_000
+    await f.folder.check()
+    await f.advance(2)
+    expect(events().filter((e) => e.k === 'energy.reserve')).toEqual([])
+    // Another, not taken back: registered once its 10 s are over.
+    const again = minute + 4 * 60_000 + 29_000
+    f.now = again
+    f.folder.append({ day: DAY, dom: 'energy', k: 'energy.relative', at: f.now, pool: 'head', delta: -10, before: { head: 25, emotions: 25, senses: 25, body: 25 } })
+    f.now = again + 2_000
+    await f.folder.check()
+    expect(events().filter((e) => e.k === 'energy.reserve')).toEqual([])
+    f.now = again + 11_000
+    await f.folder.check()
+    expect(events().filter((e) => e.k === 'energy.reserve')).toEqual([expect.objectContaining({ pool: 'head' })])
+  })
 })
 
 describe('bramka minut i kopia zdarzenia o wyliczonym identyfikatorze', () => {

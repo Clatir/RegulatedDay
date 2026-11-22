@@ -11,6 +11,9 @@ import { ALL_DAY_COLOR_HEX, ENGINE_TONE_SET, iconColor, TONE_SETS, toneColor, ty
  */
 export const UNDO_LINE_MS = 15 * 60_000
 
+/** „<akcja> · Cofnij” of a click of the bar (D564 P18) stays this long; the leader registers no descent to the reserve from a signal this young. */
+export const CLICK_UNDO_MS = 10_000
+
 /** A button of a line: its id goes back to the main process with the line's (`line` action, `<line>|<action>`). */
 export interface BarAction {
   id: string

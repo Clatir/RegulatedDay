@@ -622,7 +622,7 @@ test('„Dalej” i „Cofnij” paska pulpitu prawdziwym kliknięciem: linia �
       const before = pidWindows(bar.pid)
       const orderBefore = topWindows()
       click(...next)
-      await expect(page.getByTestId('bar-line-clickUndo:next')).toContainText('Skończono: Inne obowiązki', { timeout: 5_000 })
+      await expect(page.locator('[data-testid^="bar-line-clickUndo:next:"]')).toContainText('Skończono: Inne obowiązki', { timeout: 5_000 })
       await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).block)).toBeNull()
       // The bar grew by the line: its new place first, then the real click on „Cofnij” (well within its 10 s).
       await settledBarBounds(app)
@@ -630,7 +630,7 @@ test('„Dalej” i „Cofnij” paska pulpitu prawdziwym kliknięciem: linia �
       await expect.poll(() => windowsAt([undo]), { timeout: 5_000 }).toEqual([bar.hwnd])
       click(...undo)
       await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).block?.name ?? null), { timeout: 5_000 }).toBe('Inne obowiązki')
-      await expect(page.getByTestId('bar-line-clickUndo:next')).toHaveCount(0)
+      await expect(page.locator('[data-testid^="bar-line-clickUndo:next:"]')).toHaveCount(0)
       expect(pidWindows(bar.pid)).toEqual(before)
       const orderAfter = topWindows()
       expect(movedAcross(orderBefore, orderAfter, bar.hwnd)).toEqual([])

@@ -18,8 +18,11 @@ export const CLICK_UNDO_TEXT = {
 
 /** What the bar's clicks with „Cofnij” write: the ends, the starts and the moves they bring, the parking of „Koniec pracy”, the anchors of energy. */
 const CLICK_KINDS = new Set(['block.end', 'block.start', 'block.resume', 'block.pause', 'block.fg', 'block.park', 'work.end', 'energy.signal', 'energy.relative'])
-/** Events that begin something: a block whose end is taken back would run beside it. */
-const BEGINS = new Set(['block.start', 'block.resume', 'block.restart', 'request.start', 'disconnect.start'])
+/**
+ * Later events the click's events depend on: what begins something (a block whose end is taken back would run beside it) and the end
+ * of a request or of „Odcinam się” – it resumes what it held; a block taken back paused after it would wait paused for good.
+ */
+const DEPENDS = new Set(['block.start', 'block.resume', 'block.restart', 'request.start', 'request.end', 'disconnect.start', 'disconnect.end'])
 
 const blockOf = (e: AnyEvent): string | null => {
   const b = (e as { block?: unknown }).block
@@ -28,8 +31,8 @@ const blockOf = (e: AnyEvent): string | null => {
 
 /**
  * The undos of a click (`ids`), or why not: on a frozen day (later events are outside its grade), for events not in the day's log or
- * not of such a click, a click undone already – and, for a click of the timer, when after it something began (a block, a request,
- * „Odcinam się”), another „Koniec pracy” came or a block it touched changed (paused, ended, parked …): the click's blocks would stand
+ * not of such a click, a click undone already – and, for a click of the timer, when after it something began or ended that holds
+ * blocks (a block, a request, „Odcinam się”), another „Koniec pracy” came or a block it touched changed (paused, ended, parked …): the click's blocks would stand
  * beside it. A signal or an assessment depends on nothing – only the energy's anchor goes. An event of it undone on its own is skipped.
  */
 export function clickUndoEvents(state: DayState, events: readonly AnyEvent[], ids: readonly string[], at: number): TimerDraft[] | string {
@@ -47,7 +50,7 @@ export function clickUndoEvents(state: DayState, events: readonly AnyEvent[], id
     const mine = new Set(list.map((e) => e.id))
     const last = list.reduce((a, b) => (compareEvents(a, b) >= 0 ? a : b))
     const blocks = new Set(list.map(blockOf).filter((b): b is string => b != null))
-    const touches = (e: AnyEvent) => BEGINS.has(e.k) || e.k === 'work.end' || (blockOf(e) != null && blocks.has(blockOf(e)!))
+    const touches = (e: AnyEvent) => DEPENDS.has(e.k) || e.k === 'work.end' || (blockOf(e) != null && blocks.has(blockOf(e)!))
     if (events.some((e) => isKnown(e) && !mine.has(e.id) && !undone.has(e.id) && compareEvents(e, last) > 0 && touches(e))) return CLICK_UNDO_TEXT.later
   }
   return live.map((e): TimerDraft => ({ k: 'undo', at, target: e.id, reason: 'user' }))

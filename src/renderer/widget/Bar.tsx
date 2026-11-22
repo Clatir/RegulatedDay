@@ -173,12 +173,31 @@ const CORNER_BUTTON = 'flex h-5 w-5 items-center justify-center rounded text-[14
  */
 function BarCorner() {
   const [hint, setHint] = useState(false)
+  // The window's focus gone (the bar hidden by its „×”, another window): no hint left for its return.
+  useEffect(() => {
+    const off = () => setHint(false)
+    window.addEventListener('blur', off)
+    return () => window.removeEventListener('blur', off)
+  }, [])
   return (
     <div className="absolute top-1 right-1 z-10 flex flex-col gap-1" data-testid="bar-corner">
       <button type="button" className={CORNER_BUTTON} aria-label={OPEN_MAIN_TEXT} onPointerUp={(e) => e.button === 0 && window.rd.showMain()} data-testid="bar-open-main">
         ↗
       </button>
-      <button type="button" className={CORNER_BUTTON} aria-label="Schowaj pasek (z Shift – zakończ aplikację)" onPointerUp={(e) => e.button === 0 && window.rd.barClose(e.shiftKey ? 'quit' : 'x')} onPointerEnter={() => setHint(true)} onPointerLeave={() => setHint(false)} data-testid="bar-close">
+      <button
+        type="button"
+        className={CORNER_BUTTON}
+        aria-label="Schowaj pasek (z Shift – zakończ aplikację)"
+        // Its release hides the bar or ends the app: no hint left behind (nor after a cancelled pointer, nor the window's blur).
+        onPointerUp={(e) => {
+          setHint(false)
+          if (e.button === 0) window.rd.barClose(e.shiftKey ? 'quit' : 'x')
+        }}
+        onPointerEnter={() => setHint(true)}
+        onPointerLeave={() => setHint(false)}
+        onPointerCancel={() => setHint(false)}
+        data-testid="bar-close"
+      >
         ×
       </button>
       {hint && (
@@ -1124,16 +1143,17 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
         {mode === 'desktop' && <BarCorner />}
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           {view.question && (
-            <div className="flex shrink-0 items-center gap-1.5" data-testid="bar-question">
-              <span className="h-[7px] w-[7px] rounded-full bg-fg" />
-              <span className="font-medium text-fg">{view.question.text}</span>
+            // It narrows to the row (`min-w-0`): a long name of its „Dalej: <nazwa>” is cut, its other answers stay on the bar.
+            <div className="flex max-w-full min-w-0 items-center gap-1.5" data-testid="bar-question">
+              <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-fg" />
+              <span className="shrink-0 font-medium text-fg">{view.question.text}</span>
               {view.question.actions.map((a) =>
                 a.id === 'extend' ? (
                   <BarButton key={a.id} mode={mode} accent pressed={unfold === 'extend'} onAct={() => toggle('extend')}>
                     {a.label}
                   </BarButton>
                 ) : (
-                  <BarButton key={a.id} mode={mode} accent testId={`bar-q-${a.id}`} onAct={() => act('line', `${view.question!.id}|${a.id}${a.id === 'endedAt' && view.question!.at != null ? `|${view.question!.at}` : ''}`)}>
+                  <BarButton key={a.id} mode={mode} accent fit={a.id === 'next'} testId={`bar-q-${a.id}`} onAct={() => act('line', `${view.question!.id}|${a.id}${a.id === 'endedAt' && view.question!.at != null ? `|${view.question!.at}` : ''}`)}>
                     {a.label}
                   </BarButton>
                 )

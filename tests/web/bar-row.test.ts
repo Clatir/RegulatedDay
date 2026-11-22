@@ -134,6 +134,18 @@ describe('„Dalej?” bez dubli w wierszu (C5)', () => {
     expect(rowIds()).toEqual(['bar-pause', 'bar-end-work', 'bar-quick', 'bar-group-more'])
   })
 
+  it('długa nazwa w „Dalej: <nazwa>” pytania się tnie – „Przedłuż” i „Koniec pracy” zostają w pasku (pytanie może się zwęzić)', async () => {
+    const long: BarLine = { ...question(true), actions: [{ id: 'next', label: 'Dalej: Przegląd tygodnia i planowanie kolejnych dni' }, { id: 'extend', label: 'Przedłuż' }, { id: 'workEnd', label: 'Koniec pracy' }] }
+    await bar(work({ question: long }), 'desktop')
+    const box = q('bar-question')!
+    expect(box.className).toContain('min-w-0')
+    expect(box.className).not.toContain('shrink-0')
+    const next = q('bar-q-next')!
+    expect(next.className).toContain('min-w-[4.5rem]')
+    expect(next.querySelector('span')!.className).toContain('truncate')
+    expect(q('bar-q-workEnd')!.className).toContain('shrink-0')
+  })
+
   it('koszt „Przedłuż” z pytania stoi w wierszu w miejscu przycisku, z ±15 i „Anuluj”', async () => {
     await bar(work({ question: question(true), pending: { button: 'extend', text: 'Przedłuż +15 · −15 min puli', left: 9_000, steps: true } }))
     expect(q('bar-extend-confirm')!.textContent).toBe('Przedłuż +15 · −15 min puli · Potwierdź')
@@ -169,6 +181,21 @@ describe('podpowiedź Shift+× w pasku (C6)', () => {
     act(() => void q('bar-close')!.dispatchEvent(new MouseEvent('pointerout', { bubbles: true, relatedTarget: document.body })))
     expect(q('bar-close-hint')).toBeNull()
   })
+
+  it('podpowiedź znika po puszczeniu „×”, przerwaniu wskaźnika i utracie fokusu okna (nie zostaje po schowaniu paska)', async () => {
+    await bar(work(), 'desktop')
+    const over = () => act(() => void q('bar-close')!.dispatchEvent(new MouseEvent('pointerover', { bubbles: true })))
+    for (const end of [
+      () => q('bar-close')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, button: 0 })),
+      () => q('bar-close')!.dispatchEvent(new MouseEvent('pointercancel', { bubbles: true })),
+      () => window.dispatchEvent(new Event('blur'))
+    ]) {
+      over()
+      expect(q('bar-close-hint')).not.toBeNull()
+      act(() => void end())
+      expect(q('bar-close-hint')).toBeNull()
+    }
+  })
 })
 
 describe('trwająca prośba i linia „<akcja> · Cofnij” (P20, P18)', () => {
@@ -183,9 +210,9 @@ describe('trwająca prośba i linia „<akcja> · Cofnij” (P20, P18)', () => {
   })
 
   it('„Cofnij” linii po kliknięciu idzie do procesu głównego jako odpowiedź linii', async () => {
-    await bar(work({ lines: [{ id: 'clickUndo:next', text: 'Skończono: Pisanie, zaczęto: Nauka', actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }] }))
-    expect(q('bar-line-clickUndo:next')!.textContent).toBe('Skończono: Pisanie, zaczęto: NaukaCofnij')
+    await bar(work({ lines: [{ id: 'clickUndo:next:1', text: 'Skończono: Pisanie, zaczęto: Nauka', actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }] }))
+    expect(q('bar-line-clickUndo:next:1')!.textContent).toBe('Skończono: Pisanie, zaczęto: NaukaCofnij')
     click(q('bar-act-clickUndo-undo')!)
-    expect(acts()).toEqual(['line|clickUndo:next|undo'])
+    expect(acts()).toEqual(['line|clickUndo:next:1|undo'])
   })
 })

@@ -134,7 +134,8 @@ export interface ActionCost {
  * Why a click found nothing to do, for a caller that must tell it from another refusal (D336) – never read from the text; the
  * ends of a list of steps say these by no word (D474, D328 – `quietRefusal`, T1109).
  */
-export type ResultCode = 'alreadyOver' | 'notBegun' | 'notRunning' | 'routineSaved' | 'noRoutine'
+/** `clickGone`: the bar's click cannot be taken back any more (`clickUndoEvents` – frozen, gone, undone, not a click's, depended on). */
+export type ResultCode = 'alreadyOver' | 'notBegun' | 'notRunning' | 'routineSaved' | 'noRoutine' | 'clickGone'
 
 export type ActionResult =
   | { ok: true; events: TimerDraft[]; confirm: ActionCost | null }
@@ -1102,7 +1103,7 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
     }
     case 'undoClick': {
       const r = clickUndoEvents(state, ctx.events, Array.isArray(act.ids) ? act.ids.filter((x): x is string => typeof x === 'string') : [], at)
-      return typeof r === 'string' ? no(r) : yes(r)
+      return typeof r === 'string' ? no(r, null, 'clickGone') : yes(r)
     }
     case 'restart': {
       const info = byId.get(act.block)

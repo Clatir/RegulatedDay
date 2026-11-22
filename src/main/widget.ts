@@ -44,7 +44,7 @@ import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { answered } from '@shared/engine/care'
 import { batteryLine, NO_SYNC, syncLines } from '@shared/sync/syncLines'
-import { ASSESS_TEXT, noFolderView, SEEN_LINE, shortTitle, SIGNAL_TEXT, UNDO_LINE_MS, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
+import { ASSESS_TEXT, CLICK_UNDO_MS, noFolderView, SEEN_LINE, shortTitle, SIGNAL_TEXT, UNDO_LINE_MS, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
 import type { DataFolder } from './data/folder'
 
 const CONFIRM_MS = 10_000
@@ -104,8 +104,8 @@ export interface WidgetDeps {
   openQuick?: () => void
 }
 
-/** „<akcja> · Cofnij” of a click of the bar (D564 P18) stays this long (B7: the bar's own clicks had no way back). */
-export const CLICK_UNDO_MS = 10_000
+/** What the bar says of „Cofnij” on a line no longer in force (a newer click replaced it): nothing is taken back. */
+export const CLICK_LINE_GONE = 'Ta linia jest już nieaktualna – nic nie cofnięto.'
 
 /**
  * The bar's line after a click it can take back (D564 P18, B7): „Dalej”, „Skończyłem”, „Koniec pracy”, „Zakończ teraz”, a signal or a
@@ -113,12 +113,14 @@ export const CLICK_UNDO_MS = 10_000
  */
 interface ClickUndo {
   kind: 'next' | 'finished' | 'workEnd' | 'bgEnd' | 'signal'
+  /** Its token in the line's id (`clickUndo:<kind>:<seq>`): „Cofnij” on an older line is no „Cofnij” of this one. */
+  seq: number
   text: string
   day: string
   ids: string[]
   until: number
-  /** „Dalej” whose start waits for its cost: the block the second click begins (its name joins the line). */
-  starts?: string | null
+  /** „Dalej” whose start waits for its cost: the block the second click begins (the cost's own – its name joins the line). */
+  starts?: string
 }
 
 /** `until` here is on the monotonic clock (`WidgetEngine.mono`); the view gets what is left of it (`left`). */
@@ -308,6 +310,7 @@ export class WidgetEngine {
   private stepsUndo: StepsUndo | null = null
   /** „<akcja> · Cofnij” of the bar's last click it can take back (D564 P18): one at a time – a newer click replaces it. */
   private clickUndo: ClickUndo | null = null
+  private clickSeq = 0
 
   constructor(private readonly d: WidgetDeps) {}
 
@@ -624,7 +627,7 @@ export class WidgetEngine {
     const v = this.view!
     const u = this.clickUndo
     if (u && u.until <= mono) this.clickUndo = null
-    else if (u && !v.hidden) v.lines = [{ id: `clickUndo:${u.kind}`, text: u.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }, ...v.lines]
+    else if (u && !v.hidden) v.lines = [{ id: `clickUndo:${u.kind}:${u.seq}`, text: u.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }, ...v.lines]
   }
 
   /**
@@ -1073,7 +1076,11 @@ export class WidgetEngine {
         if (r && !r.ok && r.why) this.say(r.why)
         // The start after „Dalej” that waited for its cost: the same click – its „Cofnij” takes both back (D564 P18).
         const u = p?.undoOf
-        if (r?.ok && r.wrote && u && this.clickUndo === u && r.wrote.day === u.day) this.clickDone(u.kind, u.starts ? `${u.text}, zaczęto: ${u.starts}` : u.text, { day: u.day, ids: [...u.ids, ...r.wrote.ids] })
+        if (r?.ok && r.wrote && u && this.clickUndo === u && r.wrote.day === u.day) {
+          // Named now: the view counted after the first click knows the block (a plan changed just before it too).
+          const started = u.starts ? this.blockNameOf(u.starts) : null
+          this.clickDone(u.kind, started ? `${u.text}, zaczęto: ${started}` : u.text, { day: u.day, ids: [...u.ids, ...r.wrote.ids] })
+        }
         return this.refresh()
       }
       case 'cancelPending':
@@ -1144,7 +1151,7 @@ export class WidgetEngine {
         button = `line:${line}|${act}`
         if (kind === 'moved') return act === 'undo' ? this.undoMoved(id === 'push' ? 'push' : 'variant') : undefined
         // „<akcja> · Cofnij” of the bar's last click (D564 P18).
-        if (kind === 'clickUndo') return act === 'undo' ? this.undoClickLine() : undefined
+        if (kind === 'clickUndo') return act === 'undo' ? this.undoClickLine(id) : undefined
         // „Zadanie zrobione? · Tak · Wraca na listę” (D384): the answer is the task's record.
         if (kind === 'task') return act === 'done' || act === 'back' ? this.answerTask(line, act) : undefined
         if (kind === 'wait') click = act === 'start' ? { a: 'start', block: id } : { a: 'cancel', block: id }
@@ -1215,13 +1222,17 @@ export class WidgetEngine {
     const ended = undoKind && undoKind !== 'workEnd' ? (this.endingName(undoKind, arg) ?? 'blok') : null
     const begins = undoKind === 'next' ? v.buttons.nextName : null
     r = await this.d.timer(c)
-    const undo = r.ok && undoKind ? this.clickDone(undoKind, undoKind === 'workEnd' ? 'Koniec pracy' : `Skończono: ${ended}${begins && !r.confirm ? `, zaczęto: ${begins}` : ''}`, r.wrote, r.confirm ? begins : null) : null
+    const undo = r.ok && undoKind ? this.clickDone(undoKind, undoKind === 'workEnd' ? 'Koniec pracy' : `Skończono: ${ended}${begins && !r.confirm ? `, zaczęto: ${begins}` : ''}`, r.wrote) : null
     if (r.confirm) {
       const cost = r.confirm
       // „Dalej”: its first click ended the running block; the cost belongs to starting the next one – shown at „Start”.
       if (action === 'next') {
         this.wait('start', 'Start', cost, () => this.d.timer({ a: 'start', block: cost.block, day, confirm: true }))
-        if (undo && this.pending) this.pending.undoOf = undo
+        // The start its second click makes – the cost's own block, not the view's guess from before the click.
+        if (undo && this.pending) {
+          this.pending.undoOf = undo
+          undo.starts = cost.block
+        }
       }
       // „Przedłuż” – of the block in front, in the background or from a line – keeps its length's steps (T289).
       else this.wait(button, label || 'Start', cost, () => this.d.timer({ ...c, confirm: true }), c.a === 'extend' ? c.minutes : undefined, c.a === 'extend' ? c.block : undefined)
@@ -1449,9 +1460,9 @@ export class WidgetEngine {
   }
 
   /** A click of the bar it can take back (D564 P18): its line for `CLICK_UNDO_MS`, in place of the line of an older click. */
-  private clickDone(kind: ClickUndo['kind'], text: string, w: TimerResult['wrote'], starts: string | null = null): ClickUndo | null {
+  private clickDone(kind: ClickUndo['kind'], text: string, w: TimerResult['wrote']): ClickUndo | null {
     if (!w?.ids.length) return null
-    const u: ClickUndo = { kind, text, day: w.day, ids: [...w.ids], until: this.mono + CLICK_UNDO_MS, starts }
+    const u: ClickUndo = { kind, seq: ++this.clickSeq, text, day: w.day, ids: [...w.ids], until: this.mono + CLICK_UNDO_MS }
     this.clickUndo = u
     setTimeout(() => void this.refresh(), CLICK_UNDO_MS + 50).unref?.()
     return u
@@ -1460,26 +1471,45 @@ export class WidgetEngine {
   /** The name of the block a click of the bar ends, as the bar knows the day now (its line „Skończono: …”, D564 P18). */
   private endingName(kind: 'next' | 'finished' | 'bgEnd', arg: string | undefined): string | null {
     const m = this.model
-    const names = this.names
-    if (!m || !names) return null
+    if (!m) return null
     const t = timerNow(m.state)
     const session = t.fg?.info.rules.kind === 'session' ? t.fg : t.bg.find((x) => x.info.rules.kind === 'session')
     const id = kind === 'bgEnd' ? (arg ?? null) : kind === 'finished' ? (session?.info.id ?? null) : (t.fg?.info.id ?? null)
-    return id ? nameById(id, namingOf(m.ctx, m.state.facts), names) : null
+    return id ? this.blockNameOf(id) : null
+  }
+
+  /** A block of the bar's day by its id, named as everywhere (`nameById`); null before the first view. */
+  private blockNameOf(id: string): string | null {
+    const m = this.model
+    const names = this.names
+    return m && names ? nameById(id, namingOf(m.ctx, m.state.facts), names) : null
   }
 
   /**
-   * „Cofnij” of the line after the bar's click (D564 P18): an `undo` of each event that click wrote (`undoClick` – refused, with why,
-   * when something since depends on it). The cost its „Dalej” left waiting goes with it: that start would come beside the block again.
+   * „Cofnij” of the line after the bar's click (D564 P18): an `undo` of each event that click wrote (`undoClick`). Done, or refused for
+   * good (`clickGone` – something since depends on it, …): the line goes, and the cost its „Dalej” left waiting with it – that start
+   * would come beside the block again. Refused for a while (the day's logs not readable now) or not written (a throw): both stay for
+   * another „Cofnij” until the line's 10 s end. A line no longer in force (`id` – `<kind>:<seq>`) takes nothing back.
    */
-  private async undoClickLine(): Promise<void> {
+  private async undoClickLine(id: string): Promise<void> {
     const u = this.clickUndo
-    this.clickUndo = null
-    if (u) {
-      if (this.pending?.undoOf === u) this.pending = null
-      const r = await this.d.timer({ a: 'undoClick', ids: u.ids, day: u.day })
-      if (!r.ok && r.why) this.say(r.why)
+    if (!u || `${u.kind}:${u.seq}` !== id) {
+      this.say(CLICK_LINE_GONE)
+      return this.refresh()
     }
+    let r: TimerResult
+    try {
+      r = await this.d.timer({ a: 'undoClick', ids: u.ids, day: u.day })
+    } catch (e) {
+      this.say(`Nie cofnięto: ${e instanceof Error ? e.message : String(e)}`)
+      this.d.log('warn', 'pasek: cofnięcie kliknięcia', e)
+      return this.refresh()
+    }
+    if ((r.ok || r.code === 'clickGone') && this.clickUndo === u) {
+      this.clickUndo = null
+      if (this.pending?.undoOf === u) this.pending = null
+    }
+    if (!r.ok && r.why) this.say(r.why)
     return this.refresh()
   }
 

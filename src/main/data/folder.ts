@@ -55,7 +55,7 @@ import { placeOf, type Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type PlanBlock, type Template } from '@shared/model/plan'
 import { MODULES, personName, RD_SCHEMA, rdFrom, type ModuleId, type WriteOnceField } from '@shared/model/rd'
 import { runningRequestOf } from '@shared/engineView'
-import type { RunningRequest } from '@shared/widget'
+import { CLICK_UNDO_MS, type RunningRequest } from '@shared/widget'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { blockName, type Names } from '@shared/blockName'
 import { routineCostsOf, routineFrom, type Routine } from '@shared/model/routines'
@@ -1264,10 +1264,14 @@ export class DataFolder {
           }
           // Descents to the reserve, registered once their minute is closed by the gate (events up to 30 s after a minute
           // still round into it): they stay whatever later corrections say (spec). Apart, so energy never stops the rest.
+          // Nor from the minute of a signal or an assessment still within its „Cofnij” on the bar (D564 P18, `CLICK_UNDO_MS`): taken back,
+          // it never was one – a descent registered stays.
           try {
             const gateIdx = idxOf(state.grid, gate)
+            const young = ctx.events.flatMap((e) => (isKnown(e) && (e.k === 'energy.signal' || e.k === 'energy.relative') && !state.facts.undone.has(e.id) && now - e.at < CLICK_UNDO_MS ? [idxOf(state.grid, e.at)] : []))
+            const holdFrom = young.length ? Math.min(...young) : Number.POSITIVE_INFINITY
             for (const d of newDescents(state.grid, computeEnergy(ctx, state))) {
-              if (idxOf(state.grid, d.at) >= gateIdx) continue
+              if (idxOf(state.grid, d.at) >= gateIdx || idxOf(state.grid, d.at) >= holdFrom) continue
               this.append({ id: derivedId(day, 'energy.reserve', d.pool, d.at), day, dom: 'energy', k: 'energy.reserve', at: d.at, pool: d.pool, silent: d.silent })
             }
           } catch (e) {

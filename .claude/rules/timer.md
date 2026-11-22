@@ -51,8 +51,9 @@ paths:
 - „Cofnij” kliknięcia paska (D564 P18, UX12): `timerClick` odpowiada `wrote` (`{ day, ids }` zapisanych zdarzeń; `TimerResult.wrote`,
   sygnał – `energySignal` → `{ day, id }`), akcja `undoClick` (`ids` tylko z procesu głównego – nie ma jej w `TIMER_ACTIONS` okna) →
   `clickUndoEvents` (`engine/clickUndo.ts`): `undo` każdego żywego zdarzenia; odmowa – dzień zamrożony, zdarzenia nie w logu albo nie
-  z kliknięcia (`CLICK_KINDS`), już cofnięte, a dla timera – późniejsze (`compareEvents`) zdarzenie, które coś zaczyna, `work.end` albo
-  zdarzenie bloku tego kliknięcia (`CLICK_UNDO_TEXT.later`). Sygnał / ocena nie zależą od niczego.
+  z kliknięcia (`CLICK_KINDS`), już cofnięte, a dla timera – późniejsze (`compareEvents`) zdarzenie z `DEPENDS` (start, wznowienie, koniec
+  prośby i „Odcinam się”), `work.end` albo zdarzenie bloku tego kliknięcia (`CLICK_UNDO_TEXT.later`); każda odmowa ma `code: 'clickGone'`
+  (ostateczna – pasek zdejmuje linię; inna odmowa i wyjątek ją zostawiają). Sygnał / ocena nie zależą od niczego.
 - Start bloku życia (`isLife`) przy biegnącej pracy pauzuje ją jak regeneracja (D335, `startEvents`); inny blok elastyczny zamienia się z
   biegnącym (D478, niżej) – kończy go tylko po planowanym końcu, regeneracja i blok „poza komputerem”. „Usuń” zaczętego bloku: `removeBegun` (`block.end` z `rule: 'removed'`, `done: false`) i `undoRemove`
   (`undo` tego końca, D336; odmowa, gdy po zdarzeniu usunięcia – kolejnością zdarzeń `compareOrder` z `BlockFact.endOrder`, nie minutami – zaczął się inny blok, prośba (`RequestFact.begun`) albo „Odcinam się”; kończy przez `endInstant` jak „Skończyłem”; powody „już skończony” / „nie zaczął się” mają `code` w `ActionResult`/`TimerResult`); blok zdjęty z planu zostaje w dniu jako „poza planem” (`dayItems`) z nazwą ze startu albo z migawki dnia (`nameById`, T543, T1024), liczy się jak każdy przebieg.

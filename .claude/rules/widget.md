@@ -137,7 +137,7 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 - Wiersz przycisków (UX12, D564 P17–P20): `bar-buttons` – „Dalej: <nazwa>” (`buttons.nextName`, `nextLabel`; też odpowiedź „Dalej?”), Pauza,
   Przedłuż, Koniec pracy, „+ Skrzynka”, „⋯”; Odcinam się, „Prośba ▸”, „Sygnały ▸” – `bar-more-actions` w „⋯” (noc: „Prośba ▸” w wierszu); przy
   „Dalej?” wiersz bez jego odpowiedzi (C5); `BarButton fit` – nazwa się tnie (jeden wiersz przy 100 %); koszt z „Anuluj” (`cancelPending`);
-  linia `clickUndo:<rodzaj>` „<akcja> · Cofnij” – pierwsza, `CLICK_UNDO_MS` 10 s (`clickUndoView`, `undoClick` – `timer.md`).
+  linia `clickUndo:<rodzaj>:<n>` „<akcja> · Cofnij” – pierwsza, `CLICK_UNDO_MS` 10 s; znika po udanym albo `clickGone` (`undoClick` – `timer.md`).
 - Wydarzenia całodniowe (D405, T740–T743): `WidgetView.allDay` (`barAllDay`, dziś = doba logiczna) – kropka i tytuł (≤ 20 znaków, „+N”) z lewej strony pierwszego wiersza
   paska pulpitu (`AllDayLabel`, tylko `desktop`), tylko odczyt, pełne tytuły po najechaniu w miejscu; miejsce zabiera tylko elastyczna nazwa bloku.
 

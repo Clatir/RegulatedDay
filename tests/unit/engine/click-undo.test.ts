@@ -4,6 +4,7 @@
  * happened since that depends on them.
  */
 import { describe, expect, it } from 'vitest'
+import { requestAction, type RequestAction } from '@shared/engine/requests'
 import { timerAction, timerNow, type TimerAction } from '@shared/engine/timer'
 import { CLICK_UNDO_TEXT } from '@shared/engine/clickUndo'
 import { block, Scenario } from './dsl'
@@ -15,12 +16,12 @@ function day(plan = [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), bloc
 }
 
 /** A click at `time`: written, with the ids of what it wrote (as `folder.timerClick` answers them). */
-function click(s: Scenario, time: string, act: TimerAction): { ok: boolean; why: string | null; ids: string[] } {
+function click(s: Scenario, time: string, act: TimerAction): { ok: boolean; why: string | null; code?: string; ids: string[] } {
   const t = s.at(time)
   const r = timerAction(s.contextAt(t), s.stateAt(t), act, t)
   const from = s.events.length
   if (r.ok) s.write(r.events, t)
-  return { ok: r.ok, why: r.ok ? null : r.why, ids: s.events.slice(from).map((e) => e.id) }
+  return { ok: r.ok, why: r.ok ? null : r.why, ...(!r.ok && r.code ? { code: r.code } : {}), ids: s.events.slice(from).map((e) => e.id) }
 }
 
 const fgId = (s: Scenario, time: string) => timerNow(s.state(time)).fg?.info.id ?? null
@@ -71,7 +72,8 @@ describe('„Cofnij” kliknięcia paska (undoClick, D564 P18)', () => {
     const next = click(s, '08:40', { a: 'next' })
     // B (begun by this „Dalej”) paused since: its pause would stand on a block that never began.
     click(s, '08:42', { a: 'pause' })
-    expect(click(s, '08:43', { a: 'undoClick', ids: next.ids })).toMatchObject({ ok: false, why: CLICK_UNDO_TEXT.later })
+    // Every refusal of it is final (the bar takes its line away): its code says so, never its words.
+    expect(click(s, '08:43', { a: 'undoClick', ids: next.ids })).toMatchObject({ ok: false, why: CLICK_UNDO_TEXT.later, code: 'clickGone' })
     // Another block begun after a „Koniec pracy”: the ended one would run beside it.
     const t = day()
     click(t, '08:00', { a: 'start', block: 'a' })
@@ -79,6 +81,30 @@ describe('„Cofnij” kliknięcia paska (undoClick, D564 P18)', () => {
     click(t, '08:35', { a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 30 })
     expect(click(t, '08:36', { a: 'undoClick', ids: end.ids })).toMatchObject({ ok: false, why: CLICK_UNDO_TEXT.later })
     expect(fgId(t, '08:37')).toBe('x')
+  })
+
+  it('odmowa, gdy po „Koniec pracy” skończyła się prośba albo „Odcinam się”, które trzymały blok (blok zostałby zapauzowany na zawsze)', () => {
+    const request = (s: Scenario, time: string, act: RequestAction) => {
+      const t = s.at(time)
+      const r = requestAction(s.stateAt(t), act, t)
+      if (!r.ok) throw new Error(r.why)
+      s.write(r.events, t)
+    }
+    const s = day()
+    click(s, '08:00', { a: 'start', block: 'a' })
+    request(s, '08:10', { a: 'requestNow', request: 'r1', person: null })
+    const end = click(s, '08:15', { a: 'workEnd' })
+    expect(end.ok).toBe(true)
+    request(s, '08:16', { a: 'requestEnd', request: 'r1' })
+    expect(click(s, '08:17', { a: 'undoClick', ids: end.ids })).toMatchObject({ ok: false, why: CLICK_UNDO_TEXT.later })
+    // „Odcinam się” that paused the block before the click, ended after it: the same.
+    const t = day()
+    click(t, '08:00', { a: 'start', block: 'a' })
+    click(t, '08:10', { a: 'cutOff' })
+    const tEnd = click(t, '08:15', { a: 'workEnd' })
+    expect(tEnd.ok).toBe(true)
+    click(t, '08:16', { a: 'back' })
+    expect(click(t, '08:17', { a: 'undoClick', ids: tEnd.ids })).toMatchObject({ ok: false, why: CLICK_UNDO_TEXT.later })
   })
 
   it('odmowa dla zdarzeń, których nie ma w logu, i nie z kliknięcia paska; nic nie pisze', () => {
