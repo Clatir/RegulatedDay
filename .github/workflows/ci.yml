@@ -26,6 +26,9 @@ jobs:
         # 22.12.0 = exact minimum (first 22.x with require() of ES modules by default), 24 = the pinned LTS, 26 = next.
         node: ['22.12.0', '24', '26']
     steps:
+      - name: PowerShell ExecutionPolicy (self-hosted Windows)
+        shell: cmd
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force"
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
@@ -48,6 +51,9 @@ jobs:
     name: Pomocnik C# 5 (Roslyn, .NET Framework 4.7.2)
     runs-on: self-hosted
     steps:
+      - name: PowerShell ExecutionPolicy (self-hosted Windows)
+        shell: cmd
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force"
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
@@ -64,6 +70,9 @@ jobs:
       # An empty folder of settings: the development identity's data never touches a real profile.
       XDG_CONFIG_HOME: ${{ github.workspace }}/.xdg-config
     steps:
+      - name: PowerShell ExecutionPolicy (self-hosted Windows)
+        shell: cmd
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force"
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
@@ -86,6 +95,9 @@ jobs:
     name: Blokada zbyt starego Node (22.11)
     runs-on: self-hosted
     steps:
+      - name: PowerShell ExecutionPolicy (self-hosted Windows)
+        shell: cmd
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force"
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
@@ -106,6 +118,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: PowerShell ExecutionPolicy (self-hosted Windows)
+        shell: cmd
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force"
       - uses: actions/checkout@v5
       # An outdated system Node.js (like on the user's PC): build-windows.cmd must not depend on it.
       - uses: actions/setup-node@v5
