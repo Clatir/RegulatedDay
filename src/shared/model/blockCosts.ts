@@ -102,6 +102,7 @@ export const pastOldRange = (c: Costs): boolean => POOLS.some((p) => Math.abs(c[
 /** The warning under costs past ±5 while a computer with an older version is in the folder (`older` – their names), or null. */
 export function wideCostWarning(older: readonly string[], costs: readonly Costs[]): string | null {
   if (older.length === 0 || !costs.some(pastOldRange)) return null
-  const where = older.length === 1 ? `Komputer ${older[0]} ma` : `Komputery ${older.join(', ')} mają`
-  return `Koszt spoza −${OLD_COST_MAX}…${OLD_COST_MAX}: ${where} starszą wersję aplikacji – czyta go jak brak kosztu i przy zmianie może zapisać w jego miejsce domyślny. Zaktualizuj aplikację na tym komputerze.`
+  const one = older.length === 1
+  const where = one ? `Komputer ${older[0]} ma` : `Komputery ${older.join(', ')} mają`
+  return `Koszt spoza −${OLD_COST_MAX}…${OLD_COST_MAX}: ${where} starszą wersję aplikacji – czyta go jak brak kosztu i przy zmianie może zapisać w jego miejsce domyślny. Zaktualizuj aplikację na ${one ? 'tym komputerze' : 'tych komputerach'}.`
 }

@@ -326,6 +326,125 @@ describe('okienko kosztu bloku – pole, przewinięcie, ostrzeżenie (D568, T244
     expect(val('cost-pop-senses-value')).toBe('2')
   })
 
+  describe('okienko nad pytaniem o zakres – przytrzymanie (T2440)', () => {
+    const scopeSetup = async () => {
+      const onCosts = vi.fn(async (_id: string, _costs: unknown, ask: { scope: string | null }) => {
+        await Promise.resolve()
+        ask.scope ??= await askScope('change', 'Blok a', 'codziennie')
+        return ask.scope != null
+      })
+      const items = [item('a', 600, 660, cost({ head: 3, emotions: 1, senses: 1, body: 0 }))]
+      await mount(items, { onCosts })
+      act(() => root!.render(createElement('div', null, createElement(Timeline, { items, markers: [], selected: null, onSelect: vi.fn(), onMove: vi.fn(), onCosts, from: 6 * 60, to: 22 * 60 }), createElement(SeriesScopeDialog))))
+      click(q('block-a-cost')!)
+      typeIn('cost-pop-head-value', '40')
+      return onCosts
+    }
+    const advance = (ms: number) => act(async () => void vi.advanceTimersByTime(ms))
+
+    it('dotyk: pointerdown, pointerup, potem (blur pola) pytanie – okienko stoi do kliknięcia, krok zapisany po odpowiedzi', async () => {
+      vi.useFakeTimers()
+      try {
+        const onCosts = await scopeSetup()
+        const plus = q('cost-pop-senses-plus')!
+        pointer(plus, 'pointerdown', 100, 200)
+        pointer(plus, 'pointerup', 100, 200, 0)
+        // A touch sends the mousedown – the blur of the field – after the release.
+        act(() => (q('cost-pop-head-value') as HTMLInputElement).blur())
+        await act(async () => undefined)
+        expect(q('series-scope')).not.toBeNull()
+        expect(q('cost-pop')).not.toBeNull()
+        expect(q('cost-pop-senses-plus')).toBe(plus)
+        click(plus)
+        await act(async () => click(q('series-scope-following')!))
+        await advance(10)
+        expect(q('series-scope')).toBeNull()
+        expect(onCosts).toHaveBeenCalledTimes(2)
+        expect(onCosts).toHaveBeenNthCalledWith(1, 'a', { head: 40, emotions: 1, senses: 1, body: 0 }, expect.anything())
+        expect(onCosts).toHaveBeenNthCalledWith(2, 'a', { head: 40, emotions: 1, senses: 2, body: 0 }, expect.anything())
+        expect(q('cost-pop')).not.toBeNull()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('pointerdown i pointerup bez kliknięcia (wyjechanie z przycisku): po 600 ms okienko chowa się pod pytaniem; nie wcześniej', async () => {
+      vi.useFakeTimers()
+      try {
+        await scopeSetup()
+        const plus = q('cost-pop-senses-plus')!
+        pointer(plus, 'pointerdown', 100, 200)
+        pointer(window, 'pointerup', 300, 200, 0)
+        act(() => (q('cost-pop-head-value') as HTMLInputElement).blur())
+        await act(async () => undefined)
+        expect(q('series-scope')).not.toBeNull()
+        await advance(500)
+        expect(q('cost-pop')).not.toBeNull()
+        await advance(150)
+        expect(q('cost-pop')).toBeNull()
+        expect(q('series-scope')).not.toBeNull()
+        await act(async () => click(q('series-scope-following')!))
+        await advance(10)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+
+  it('odrzucone 101, potem [+] tej puli: powód znika (wartość zmieniła się z zewnątrz pola)', async () => {
+    await open({}, cost({ head: 3, emotions: 1, senses: 1, body: 0 }))
+    typeLeave('cost-pop-head-value', '101')
+    expect(q('cost-pop-head-value-error')).not.toBeNull()
+    click(q('cost-pop-head-plus')!)
+    expect(q('cost-pop-head-value-error')).toBeNull()
+    expect(q('cost-pop-head-value')!.getAttribute('aria-invalid')).toBe('false')
+    expect(val('cost-pop-head-value')).toBe('4')
+  })
+
+  it('przewinięcie nie rusza pola poza okienkiem: inny input z fokusem zostaje aktywny i nie dostaje blur, okienko się zamyka', async () => {
+    await open()
+    const outside = document.createElement('input')
+    const blurred = vi.fn()
+    outside.addEventListener('blur', blurred)
+    document.body.append(outside)
+    outside.focus()
+    expect(document.activeElement).toBe(outside)
+    act(() => void window.dispatchEvent(new Event('scroll')))
+    expect(q('cost-pop')).toBeNull()
+    expect(document.activeElement).toBe(outside)
+    expect(blurred).not.toHaveBeenCalled()
+    // The same for the resize of the window.
+    click(q('block-a-cost')!)
+    outside.focus()
+    act(() => void window.dispatchEvent(new Event('resize')))
+    expect(q('cost-pop')).toBeNull()
+    expect(document.activeElement).toBe(outside)
+    expect(blurred).not.toHaveBeenCalled()
+  })
+
+  it('pytanie o zakres otwarte z innego miejsca, gdy w polu głowy stoi wpis bez opuszczenia: wpis jest zatwierdzony przed schowaniem okienka – głowa 40 i wcześniejsze emocje +1 nie przepadają', async () => {
+    const onCosts = vi.fn().mockResolvedValue(true)
+    const items = [item('a', 600, 660, cost({ head: 3, emotions: 1, senses: 1, body: 0 }))]
+    await mount(items, { onCosts })
+    act(() => root!.render(createElement('div', null, createElement(Timeline, { items, markers: [], selected: null, onSelect: vi.fn(), onMove: vi.fn(), onCosts, from: 6 * 60, to: 22 * 60 }), createElement(SeriesScopeDialog))))
+    click(q('block-a-cost')!)
+    click(q('cost-pop-emotions-plus')!)
+    await act(async () => undefined)
+    typeIn('cost-pop-head-value', '40')
+    expect(document.activeElement).toBe(q('cost-pop-head-value'))
+    // A question of the series' scope from the panel – no press in the window.
+    let asked!: Promise<unknown>
+    act(() => void (asked = askScope('change', 'Blok z panelu', 'codziennie')))
+    expect(q('cost-pop')).toBeNull()
+    await act(async () => click(q('series-scope-cancel')!))
+    await act(async () => asked)
+    expect(q('cost-pop')).not.toBeNull()
+    expect(onCosts).toHaveBeenCalledTimes(2)
+    expect(onCosts).toHaveBeenNthCalledWith(1, 'a', { head: 3, emotions: 2, senses: 1, body: 0 }, expect.anything())
+    expect(onCosts).toHaveBeenNthCalledWith(2, 'a', { head: 40, emotions: 2, senses: 1, body: 0 }, expect.anything())
+    expect(val('cost-pop-head-value')).toBe('40')
+  })
+
   it('ostrzeżenie cost-pop-old: starszy komputer (1.36.0) i koszt 40 – jest, z nazwą komputera', async () => {
     computers({ name: 'Laptop', appVersion: '1.36.0' })
     await open({}, cost({ head: 40, emotions: 1, senses: 1, body: 0 }))

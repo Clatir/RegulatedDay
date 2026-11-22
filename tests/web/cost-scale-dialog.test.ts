@@ -223,6 +223,29 @@ describe('własny mnożnik (T2431)', () => {
   })
 })
 
+describe('ostrzeżenie o starszym komputerze (D568, T2440)', () => {
+  const computers = (...list: Array<{ name: string; appVersion: string }>) => act(async () => useData.setState({ view: { ...view(), computers: list } as unknown as DataView }))
+
+  it('komputer z 1.36.0 i przeliczenie dające koszt powyżej 5 (×2: 60 → 100) – `cost-scale-old` jest, z nazwą komputera', async () => {
+    await computers({ name: 'Laptop', appVersion: '1.36.0' })
+    expect(q('cost-scale-old')!.textContent).toContain('Komputer Laptop ma starszą wersję')
+  })
+
+  it('komputer z 1.37.0 – nie ma; starszy, ale wszystko po przeliczeniu ≤ 5 (×0,05: 60 → 3) – nie ma; brak widoku komputerów – nie ma', async () => {
+    await computers({ name: 'Laptop', appVersion: '1.37.0' })
+    expect(q('cost-scale-old')).toBeNull()
+    await computers({ name: 'Laptop', appVersion: '1.36.0' })
+    expect(q('cost-scale-old')).not.toBeNull()
+    await pick(q('cost-scale-factor'), 'custom')
+    await type(custom(), '0,05')
+    expect(all('cost-scale-change').map((x) => x.textContent)).toEqual(['60 · 1 · 1 · 0 → 3 · 0 · 0 · 0', '2 · 0 · 0 · 0 → 0 · 0 · 0 · 0'])
+    expect(q('cost-scale-old')).toBeNull()
+    await computers()
+    await pick(q('cost-scale-factor'), '2')
+    expect(q('cost-scale-old')).toBeNull()
+  })
+})
+
 describe('dostęp (D566)', () => {
   it('Ctrl K: polecenie „Przelicz koszty ×N” otwiera Ustawienia z oknem; pole w indeksie Ustawień', () => {
     const cmd = COMMANDS.find((x) => x.id === 'costScale')!

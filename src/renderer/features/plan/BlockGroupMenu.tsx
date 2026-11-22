@@ -107,16 +107,12 @@ export function commonCosts(blocks: readonly MenuBlock[]): Costs {
 export function GroupCostDialog({ n, initial, onClose, onApply }: { n: number; initial: Costs; onClose: () => void; onApply: (costs: Costs | null) => void }) {
   const [costs, setCosts] = useState<Costs>(initial)
   const step = (pool: Pool, by: 1 | -1) => setCosts((c) => costStep(c, pool, by))
-  // A field that refuses its text on the press of „Zastosuj” (the blur of that press – 101, 1,5): that click applies nothing and the window
-  // stays with the reason under the field (T2440). Only a refusal during the press: an earlier one, the text then corrected, never blocks
-  // „Zastosuj” – by the pointer, Enter or Space.
-  const pressing = useRef(false)
-  const refusedOnPress = useRef(false)
+  // A field that stands refused (its reason under it – 101, 1,5; also one refused by the blur of the press on „Zastosuj”): „Zastosuj” applies
+  // nothing and the window stays (T2440). The field's own state is the one source (`aria-invalid`): Esc or a taken text clears it.
+  const box = useRef<HTMLDivElement>(null)
   const apply = () => {
-    const skip = refusedOnPress.current
-    pressing.current = false
-    refusedOnPress.current = false
-    if (!skip) onApply(costs)
+    if (box.current?.querySelector('[aria-invalid="true"]')) return
+    onApply(costs)
   }
   return (
     <Dialog
@@ -127,12 +123,7 @@ export function GroupCostDialog({ n, initial, onClose, onApply }: { n: number; i
           <button type="button" className="btn" onClick={() => onApply(null)} data-testid="group-cost-reset">
             Jak podkategoria
           </button>
-          <button type="button" className="btn btn-accent" onPointerDown={() => {
-              pressing.current = true
-              refusedOnPress.current = false
-            }}
-            onBlur={() => (pressing.current = false)}
-            onClick={apply} data-testid="group-cost-apply">
+          <button type="button" className="btn btn-accent" onClick={apply} data-testid="group-cost-apply">
             Zastosuj
           </button>
           <button type="button" className="btn" onClick={onClose}>
@@ -142,7 +133,7 @@ export function GroupCostDialog({ n, initial, onClose, onApply }: { n: number; i
       }
       data-testid="group-cost"
     >
-      <div className="num flex flex-col gap-1.5 text-[12px]">
+      <div ref={box} className="num flex flex-col gap-1.5 text-[12px]">
         {POOLS.map((p) => (
           <div key={p} className="flex items-center gap-2">
             <span className="w-[58px] shrink-0" style={{ color: POOL_COLOR[p] }}>
@@ -155,9 +146,6 @@ export function GroupCostDialog({ n, initial, onClose, onApply }: { n: number; i
               pool={p}
               value={costs[p]}
               onCommit={(v) => setCosts((c) => costSet(c, p, v))}
-              onRefused={(r) => {
-                if (r && pressing.current) refusedOnPress.current = true
-              }}
               testId={`group-cost-${p}-value`}
             />
             <button type="button" className="btn px-2 py-0" disabled={costs[p] >= COST_MAX} onClick={() => step(p, 1)} aria-label={`${POOL_NAME[p]}: więcej`} data-testid={`group-cost-${p}-plus`}>
@@ -174,6 +162,7 @@ export function GroupCostDialog({ n, initial, onClose, onApply }: { n: number; i
 /** „Przenieś na dzień…”: the day (a day gone by is refused – D417), „Przenieś” moves them all, each keeping its hour. */
 export function GroupMoveDialog({ n, today, initial, onClose, onMove }: { n: number; today: string; initial: string; onClose: () => void; onMove: (date: string) => void }) {
   const [date, setDate] = useState(initial)
+  const moveBox = useRef<HTMLDivElement>(null)
   const past = date < today
   return (
     <Dialog
@@ -181,7 +170,7 @@ export function GroupMoveDialog({ n, today, initial, onClose, onMove }: { n: num
       onClose={onClose}
       actions={
         <>
-          <button type="button" className="btn btn-accent" disabled={past} title={past ? 'Dni minionych nie zmieniasz' : undefined} onClick={() => onMove(date)} data-autofocus data-testid="group-move-apply">
+          <button type="button" className="btn btn-accent" disabled={past} title={past ? 'Dni minionych nie zmieniasz' : undefined} onClick={() => !moveBox.current?.querySelector('[aria-invalid="true"]') && onMove(date)} data-autofocus data-testid="group-move-apply">
             Przenieś
           </button>
           <button type="button" className="btn" onClick={onClose}>
@@ -191,7 +180,10 @@ export function GroupMoveDialog({ n, today, initial, onClose, onMove }: { n: num
       }
       data-testid="group-move"
     >
-      <DateField today={today} value={date} onCommit={setDate} shellClassName="w-[140px]" aria-label="Dzień" data-testid="group-move-date" />
+      {/* A date the field stands refusing (31.02, also refused by the blur of the press on „Przenieś”): „Przenieś” moves nothing (T2440). */}
+      <div ref={moveBox}>
+        <DateField today={today} value={date} onCommit={setDate} shellClassName="w-[140px]" aria-label="Dzień" data-testid="group-move-date" />
+      </div>
       <p className="mt-2 text-[12px] text-muted">Każdy blok zachowuje swoją godzinę; zajęte miejsca rozsuwają kolejne bloki elastyczne.</p>
     </Dialog>
   )

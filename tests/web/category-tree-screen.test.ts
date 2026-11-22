@@ -405,6 +405,31 @@ describe('nazwy pul przy polach kosztu (D525, D520)', () => {
   })
 })
 
+describe('ostrzeżenie o starszym komputerze w „Kategoriach” (D568, T2440)', () => {
+  const head = () => category('analiza').querySelector<HTMLInputElement>('input[aria-label="Analiza: głowa"]')!
+
+  it('komputer z 1.36.0 i koszt podkategorii powyżej 5 – `settings-categories-old` jest, z nazwą; po powrocie do ±5 znika', async () => {
+    useData.setState({ view: { today: TODAY, computers: [{ name: 'Laptop', appVersion: '1.36.0' }] } as never })
+    await show()
+    expect(q('settings-categories-old')).toBeNull()
+    commitText(head(), '40')
+    await act(async () => undefined)
+    expect(settingsFrom(TOMORROW).categories.analiza!.costs.head).toBe(40)
+    expect(q('settings-categories-old')!.textContent).toContain('Komputer Laptop ma starszą wersję')
+    commitText(head(), '4')
+    await act(async () => undefined)
+    expect(q('settings-categories-old')).toBeNull()
+  })
+
+  it('bez ostrzeżenia: komputer z 1.37.0 albo brak starszych, nawet przy koszcie 40', async () => {
+    useData.setState({ view: { today: TODAY, computers: [{ name: 'Laptop', appVersion: '1.37.0' }] } as never })
+    await show()
+    commitText(head(), '40')
+    await act(async () => undefined)
+    expect(q('settings-categories-old')).toBeNull()
+  })
+})
+
 describe('warianty podkategorii', () => {
   const open = async (id: string) => click(q('category-more', category(id)))
   const variant = (cat: string, id: string) => category(cat).querySelector<HTMLElement>(`[data-testid="variant-row"][data-variant="${id}"]`)!

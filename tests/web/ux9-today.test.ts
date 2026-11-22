@@ -457,4 +457,57 @@ describe('okienko kosztu: wysokość mierzona (D7)', () => {
       height.mockRestore()
     }
   })
+
+  it('ostrzeżenie o starszym komputerze (T2440) podnosi okienko: po jego pojawieniu się staje na nowo według wysokości (nad napisem, gdy pod nim już się nie mieści)', async () => {
+    const c = { head: 3, emotions: 1, senses: 1, body: 0 }
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ ...anchor, x: 100, y: 486, width: 100, height: 14, toJSON: () => ({}) } as DOMRect)
+    // 200 px without the warning (fits below the label), 330 with it (does not).
+    const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(() => (document.querySelector('[data-testid="cost-pop-old"]') ? 330 : 200))
+    Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true })
+    useData.setState({ view: { computers: [{ name: 'Laptop', appVersion: '1.36.0' }] } as unknown as DataView })
+    try {
+      await render(createElement(Timeline, { items: [item({ costs: c, base: c, own: false, edit: true })], markers: [], selected: null, onSelect: vi.fn(), onCosts: vi.fn(), from: 6 * 60, to: 22 * 60 }))
+      await act(async () => click(q('block-a-cost')!))
+      expect(q('cost-pop-old')).toBeNull()
+      expect(q('cost-pop')!.style.top).toBe('504px')
+      const input = q('cost-pop-head-value') as HTMLInputElement
+      await act(async () => {
+        input.focus()
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '40')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        input.blur()
+      })
+      expect(q('cost-pop-old')).not.toBeNull()
+      expect(q('cost-pop')!.style.top).toBe(`${486 - 4 - 330}px`)
+    } finally {
+      rect.mockRestore()
+      height.mockRestore()
+      useData.setState({ view: null })
+    }
+  })
+
+  it('ostrzeżenie pojawia się, gdy do widoku dojdzie starszy komputer przy otwartym okienku z kosztem 40: okienko przeskakuje nad napis (także bez zmiany kosztu)', async () => {
+    const c = { head: 40, emotions: 1, senses: 1, body: 0 }
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ ...anchor, x: 100, y: 486, width: 100, height: 14, toJSON: () => ({}) } as DOMRect)
+    const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(() => (document.querySelector('[data-testid="cost-pop-old"]') ? 330 : 200))
+    Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true })
+    useData.setState({ view: { computers: [] } as unknown as DataView })
+    try {
+      await render(createElement(Timeline, { items: [item({ costs: c, base: c, own: true, edit: true })], markers: [], selected: null, onSelect: vi.fn(), onCosts: vi.fn(), from: 6 * 60, to: 22 * 60 }))
+      await act(async () => click(q('block-a-cost')!))
+      expect(q('cost-pop-old')).toBeNull()
+      expect(q('cost-pop')!.style.top).toBe('504px')
+      await act(async () => useData.setState({ view: { computers: [{ name: 'Laptop', appVersion: '1.36.0' }] } as unknown as DataView }))
+      expect(q('cost-pop-old')).not.toBeNull()
+      expect(q('cost-pop')!.style.top).toBe(`${486 - 4 - 330}px`)
+      // The computer gone (updated): the window comes down again.
+      await act(async () => useData.setState({ view: { computers: [{ name: 'Laptop', appVersion: '1.37.0' }] } as unknown as DataView }))
+      expect(q('cost-pop-old')).toBeNull()
+      expect(q('cost-pop')!.style.top).toBe('504px')
+    } finally {
+      rect.mockRestore()
+      height.mockRestore()
+      useData.setState({ view: null })
+    }
+  })
 })

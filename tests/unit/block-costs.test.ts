@@ -156,5 +156,8 @@ describe('ostrzeżenie o koszcie spoza ±5 przy starszym komputerze (D568, T2440
 
   it('dwa starsze komputery – „Komputery A, B mają”', () => {
     expect(wideCostWarning(['A', 'B'], [c(40)])).toContain('Komputery A, B mają starszą wersję')
+    // The ending agrees with the count: one computer – „na tym komputerze”, more – „na tych komputerach”.
+    expect(wideCostWarning(['A'], [c(40)])).toMatch(/Zaktualizuj aplikację na tym komputerze\.$/)
+    expect(wideCostWarning(['A', 'B'], [c(40)])).toMatch(/Zaktualizuj aplikację na tych komputerach\.$/)
   })
 })

@@ -1,6 +1,6 @@
 /**
  * The energy's curve beside a day's axis (E2; „Dziś” – D293, the columns of „Tydzień” and „3 dni” – D417): the four pools
- * sampled every `ENERGY_SAMPLE_MIN` minutes and at their turns (T2440) of the day's series (the past from the log, from now on the forecast), and the
+ * sampled every `ENERGY_SAMPLE_MIN` minutes and at their bends (T2440) of the day's series (the past from the log, from now on the forecast), and the
  * reserve. One sampling for every place that draws it.
  *
  * A day to come has no check-in (spec: without one the energy is „nieznana”), so its column's forecast starts from the
@@ -17,6 +17,8 @@ import { logicalMinuteOf } from '../time/day'
 
 /** The step of the samples (minutes of the day). */
 export const ENERGY_SAMPLE_MIN = 10
+/** Two changes of a minute differ (the engine's unit is 1/2000 of a point – far above this). */
+const BEND_EPS = 1e-9
 
 export interface EnergyTrack {
   /** Samples of the four pools (0–100) at logical minutes (`body` – D520). */
@@ -28,18 +30,19 @@ export interface EnergyTrack {
 
 /**
  * The curve of a counted day's energy: only when it is known (a check-in) and the module is on – as „Dziś” draws it. A sample every
- * `ENERGY_SAMPLE_MIN` minutes and at every minute where a pool turns (its change of a minute changes sign – a block's edge, a floor or a
- * ceiling, an anchor): with costs up to ±100 an hour (D568, T2440) a pool may go down 40 and up again between two samples of the step,
- * and the dip below the reserve would not be drawn. Between turns a pool is straight, so the samples hold every low and high.
+ * `ENERGY_SAMPLE_MIN` minutes and at every minute where a pool's change of a minute changes (a block's edge, a floor or a ceiling, an
+ * anchor, a one-off cost): with costs up to ±100 an hour (D568, T2440) a pool may go down 40 and up again between two samples of the step,
+ * or bend from −5 to −0,05 a minute – the curve would smooth over it. Between two such minutes a pool is straight, so the samples hold
+ * every low, high and bend. A change of a minute is a whole number of the engine's units: the tolerance only absorbs the division.
  */
 export function energyTrack(date: string, grid: Grid, e: EnergyState): EnergyTrack | null {
   if (!e.known || !e.enabled) return null
   const samples: EnergyTrack['samples'] = []
   const n = Math.min(grid.length, e.series.head.length)
   const series = [e.series.head, e.series.emotions, e.series.senses, e.series.body]
-  const turns = (k: number) => k > 0 && k < n - 1 && series.some((v) => Math.sign(v[k]! - v[k - 1]!) !== Math.sign(v[k + 1]! - v[k]!))
+  const bends = (k: number) => k > 0 && k < n - 1 && series.some((v) => !(Math.abs(v[k + 1]! - v[k]! - (v[k]! - v[k - 1]!)) < BEND_EPS))
   for (let k = 0; k < n; k++) {
-    if (k % ENERGY_SAMPLE_MIN !== 0 && !turns(k)) continue
+    if (k % ENERGY_SAMPLE_MIN !== 0 && !bends(k)) continue
     const v = { head: e.series.head[k]!, emotions: e.series.emotions[k]!, senses: e.series.senses[k]!, body: e.series.body[k]! }
     if (Number.isFinite(v.head)) samples.push({ at: logicalMinuteOf(date, atOf(grid, k)), ...v })
   }

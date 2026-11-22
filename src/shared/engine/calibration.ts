@@ -254,6 +254,9 @@ export interface CostProposal {
   to: Costs
 }
 
+/** How far one review moves a pool's cost (T2440). */
+export const COST_STEP_MAX = 5
+
 /**
  * The proposals for costs: the costs a block ran with (a category's, or a variant's own), in the foreground on at least
  * 5 days of the period, get the change per hour that would have foreseen what their anchors said (a cost k takes 3·k
@@ -261,9 +264,6 @@ export interface CostProposal {
  * force now. The step: with the range of ±5 the range itself kept a proposal near the cost; with ±100 a few minutes of evidence before
  * strong signals would propose a jump of tens (T2440) – one review moves a cost by at most 5, the next ones go on if the evidence stays.
  */
-/** How far one review moves a pool's cost (T2440). */
-export const COST_STEP_MAX = 5
-
 export function costProposals(days: readonly CostEvidence[], settings: RulesSettings): CostProposal[] {
   const keys = new Set(days.flatMap((d) => Object.keys(d.minutes)))
   const out: CostProposal[] = []

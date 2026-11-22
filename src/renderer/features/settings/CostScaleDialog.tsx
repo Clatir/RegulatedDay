@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { plDate } from '@shared/format'
 import { COST_MAX, COST_MIN, costNumber, costsText } from '@shared/model/blockCosts'
+import { WideCostWarning } from '../plan/CostInput'
 import { POOL_LETTER, POOLS, type Pool } from '@shared/model/categories'
 import { COST_SCALE_FACTORS, DEFAULT_SCALE, parseScaleFactor, SCALE_SCOPES, scaleLabel, type ScaleItem, type ScaleKind, type ScaleOptions, type ScalePlan, type ScaleScope } from '@shared/engine/costScale'
 import { addDays } from '@shared/time/zone'
@@ -199,6 +200,8 @@ export function CostScaleDialog({ onClose }: { onClose: () => void }) {
         <p className="text-[12.5px]" role="status" data-testid="cost-scale-count">
           {countText(plan, error, factor)}
         </p>
+        {/* D568 (T2440): costs after the change past ±5 while a computer of an older version is in the folder. */}
+        <WideCostWarning costs={items.map((it) => it.after)} testId="cost-scale-old" />
         {items.length > 0 && (
           <ul className="flex max-h-[40vh] flex-col gap-0.5 overflow-y-auto rounded border border-line p-2 text-[12px]">
             {items.map((it) => (

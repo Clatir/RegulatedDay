@@ -20,7 +20,7 @@ import { useEscapeLayer } from '../../lib/escape'
 import { useOutsidePointer } from '../../lib/outside'
 import type { SaveAnswer } from '../../store/data'
 import { useScopeAsked } from '../series/scopeAsk'
-import { CostInput, WideCostWarning } from './CostInput'
+import { CostInput, useWideCostWarning } from './CostInput'
 import type { CostAsk } from './costSave'
 import { COST_SCALE_TEXT, POOL_COLOR, POOL_NAME } from './energyDraw'
 import { NO_GRID } from './gridDrag'
@@ -39,6 +39,8 @@ const POP_W = 232
 const POP_H = 236
 const GAP = 4
 const MARGIN = 8
+/** How long a press in the window keeps it over a question of the series' scope when no click follows its release (T2440). */
+const HOLD_MS = 600
 
 /** The room the label of one- and two-digit costs takes (−5 at most): with spaces („−5 · −5 · −5 · −5”) and the week's tight one („−5·−5·−5·−5”). */
 const ROOM_PX = { spaced: 108, tight: 74 } as const
@@ -107,6 +109,11 @@ export function TileCost({
   const pop = useRef<HTMLDivElement>(null)
   const open = place != null
   const close = () => setPlace(null)
+  /** The window's own field that has the focus commits (it is left); a field elsewhere on the page is not touched. */
+  const blurInside = () => {
+    const a = document.activeElement
+    if (a instanceof HTMLElement && pop.current?.contains(a)) commitActiveField()
+  }
   // What is saved (`base`: the tile's, or what a save just wrote) and the clicks not saved yet (`ops`, the first one on its way); the
   // window shows the clicks over what is saved.
   const saved = (c: TileCostInfo): Shown => ({ costs: c.costs, own: c.own })
@@ -117,6 +124,8 @@ export function TileCost({
   const running = useRef(false)
   const ask = useRef<CostAsk>({ scope: null })
   const [shown, setShown] = useState<Shown>(() => saved(cost))
+  // The warning about an older computer under the numbers (D568, T2440) – shown or not, also when the folder's computers change.
+  const warned = useWideCostWarning([shown.costs])
   const apply = (v: Shown, op: Op): Shown =>
     op.k === 'reset' ? { costs: latest.current.base, own: false } : { costs: op.k === 'set' ? costSet(v.costs, op.pool, op.value) : costStep(v.costs, op.pool, op.by), own: true }
   const showNow = () => setShown(ops.current.reduce(apply, base.current))
@@ -128,19 +137,35 @@ export function TileCost({
   // A question of a series' scope is open: the window steps aside for it (it would stand over the question) and comes back after it.
   const asked = useScopeAsked()
   // A press in the window that blurs a typed number (its save may ask the series' scope at once): the window stays until the press is
-  // over, so its click (a step, „Jak podkategoria”) is not lost under the question (T2440) – cleared after the click of that release.
+  // over, so its click (a step, „Jak podkategoria”) is not lost under the question (T2440). Over: after the click that follows (a touch
+  // sends its mousedown – the blur – and the click after its pointerup), or `HOLD_MS` after the release when no click comes.
   const [held, setHeld] = useState(false)
   useEffect(() => {
     if (!held) return
-    const up = () => setTimeout(() => setHeld(false), 0)
+    let late: ReturnType<typeof setTimeout> | undefined
+    const done = () => setTimeout(() => setHeld(false), 0)
+    const up = () => {
+      clearTimeout(late)
+      late = setTimeout(() => setHeld(false), HOLD_MS)
+    }
+    window.addEventListener('click', done, true)
     window.addEventListener('pointerup', up, true)
     window.addEventListener('pointercancel', up, true)
     return () => {
+      clearTimeout(late)
+      window.removeEventListener('click', done, true)
       window.removeEventListener('pointerup', up, true)
       window.removeEventListener('pointercancel', up, true)
     }
   }, [held])
-  const hidden = asked && !held
+  // Stepping aside: a number being typed in the window (a question started by an earlier save in the queue may open while you type)
+  // is committed first – blurred while the window is still there – and only then the window goes (T2440: unmounted, it lost the text).
+  const [hidden, setHidden] = useState(false)
+  useLayoutEffect(() => {
+    const aside = asked && !held
+    if (aside) blurInside()
+    setHidden(aside)
+  }, [asked, held])
   useEscapeLayer(open, close)
   useOutsidePointer(open && !hidden, `[data-cost-of="${id}"]`, close)
   useEffect(() => {
@@ -149,11 +174,11 @@ export function TileCost({
     // text in a field) is the field's own.
     const scroll = (e: Event) => {
       if (e.target instanceof Node && pop.current?.contains(e.target)) return
-      commitActiveField()
+      blurInside()
       close()
     }
     const resize = () => {
-      commitActiveField()
+      blurInside()
       close()
     }
     window.addEventListener('scroll', scroll, true)
@@ -163,13 +188,14 @@ export function TileCost({
       window.removeEventListener('resize', resize)
     }
   }, [open])
-  // The window drawn: placed again by the height it really has (the heading wraps by the width of the text, not by a count), once per opening.
+  // The window drawn: placed again by the height it really has (the heading wraps by the width of the text, not by a count), once per opening
+  // and when the warning about an older computer (a cost past ±5, T2440) comes or goes – it makes the window taller while open.
   useLayoutEffect(() => {
     const h = pop.current?.offsetHeight
     if (!place || !h) return
     const next = popPlace(place.anchor, { width: window.innerWidth, height: window.innerHeight }, h)
     if (next.left !== place.left || next.top !== place.top) setPlace({ ...place, ...next })
-  }, [place?.anchor])
+  }, [place?.anchor, warned != null])
   // The tile became one that may not be changed (it ended, its day went by): its window goes.
   useLayoutEffect(() => {
     if (!editable) setPlace(null)
@@ -298,7 +324,11 @@ export function TileCost({
                 </button>
               </div>
             ))}
-            <WideCostWarning costs={[shown.costs]} testId="cost-pop-old" />
+            {warned && (
+              <p role="note" className="text-[11px] leading-snug text-lamp" data-testid="cost-pop-old">
+                {warned}
+              </p>
+            )}
             <button type="button" className="btn mt-0.5" aria-pressed={!shown.own} onClick={() => push({ k: 'reset', ask: ask.current })} data-testid="cost-pop-reset">
               {resetLabel(cost)}
             </button>

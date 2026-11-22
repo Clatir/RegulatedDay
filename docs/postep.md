@@ -77,7 +77,22 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
       komentarze −5…5, `silnik.md` 19.
     - **Przyjęte bez pytania:** ostrzeżenie o starszym komputerze; kalibracja – najwyżej ±5 na przegląd; napis kosztu z wielokropkiem w wąskim kafelku.
     - **Uwagi na później (r1):** Tab z pola kosztu w okienku ✎ rutyny skacze do dialogu (portal poza pułapką Tab); mnożnik > 15 cyfr znaczących – najbliższy double.
-    - **Stan:** testy poprawek (wykonawca), potem pełne testy, `/code-review` r2 na poprawkach, instalator, PR.
+    - **Testy poprawek r1 (wykonawca):** pasek „poniżej rezerwy” z dołkiem, `wideCostWarning`, `cost-pop-old`, scroll/resize, [+] po wpisaniu w bloku serii,
+      „Zastosuj” przy odmowie w trakcie naciśnięcia i z klawiatury po poprawionym wpisie (złapał regres strażnika – poprawione: tylko odmowa w trakcie naciśnięcia).
+    - **Commit `749fc03`** (wypchnięty, bez PR): unit 5224/5224, build, lint, kontekst zielone; E2E 143/144 – `screens.spec.ts` SK1 oczekiwał ×2 3 → 5 (stare przycięcie), poprawione na 6.
+    - **Przegląd xhigh r2 (4 ważne):** krzywa bez zgięć tego samego kierunku (100 → 1) – próbki przy każdej zmianie spadku (`bends`); „Zastosuj” po naciśnięciu bez
+      kliknięcia – strażnik to teraz `aria-invalid` pola w oknie; brak ostrzeżenia w „Przelicz koszty” – dodane (`cost-scale-old`); dotyk gubił klik przy pytaniu o serię –
+      `held` do kliknięcia albo `HOLD_MS` 600. Drobne: ułożenie okienka przy ostrzeżeniu, JSDoc kalibracji, T2441 (brzegi – przyjęte bez pytania), `energia.md`.
+      Testy (wykonawca): 5232/5232; każdy nowy pada bez poprawki (test dotyku – tylko krok i wpis, zegar łapie test „po 600 ms”).
+    - **Po r2:** unit 5232/5232, build, lint, kontekst, E2E 144/144 zielone.
+    - **Przegląd xhigh r3 (2 ważne):** „Zastosuj” martwe po [+] przy odrzuconym polu – `CommitField` zdejmuje powód, gdy wartość zmieni się z zewnątrz; wpis gubiony,
+      gdy pytanie o serię otwiera się w trakcie pisania – okienko najpierw zatwierdza swoje pole (`blurInside`), potem się chowa. Też: „Przenieś na dzień…” przy odrzuconej
+      dacie (sprzed zmiany) – nic nie przenosi; scroll zatwierdza tylko pole okienka; liczba mnoga ostrzeżenia; ostrzeżenie w „Nowa podkategoria / wariant”; ułożenie
+      okienka, gdy zmienią się komputery. Uwagi na później: pole kosztu pokazuje „-” (ASCII), napis „−”.
+    - **Testy r3 (wykonawca):** 5249/5249; nowe `commit-field-external.test.ts`, `cost-dialogs-warnings.test.ts`, testy ostrzeżeń `group-cost-old`, `settings-categories-old`.
+      Każdy pada bez poprawki, oprócz „wpis przy pytaniu z innego miejsca” – jsdom (jak Chrome) wysyła blur przy odmontowaniu, test chroni wynik, nie kolejność.
+      Runda 4 bez przeglądu (D551: tylko po critical/high w r3).
+    - **Stan:** pełne testy w toku; potem commit, instalator (`npm run dist:win` – dwa razy odmowa uprawnień w Bashu), PR.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;

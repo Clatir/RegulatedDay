@@ -14,18 +14,14 @@ import { POOL_NAME } from './energyDraw'
 /** The field of a pool's cost: an integer in the schema's range. */
 export const COST_FIELD = { kind: 'integer', range: RANGES.cost } as const
 
-export function CostInput({ pool, value, onCommit, onRefused, testId }: { pool: Pool; value: number; onCommit: (v: number) => void; onRefused?: (refused: boolean) => void; testId: string }) {
-  return (
-    <SettingNumber
-      field={{ ...COST_FIELD, label: `${POOL_NAME[pool]}: koszt na godzinę` }}
-      value={value}
-      onCommit={onCommit}
-      onReject={onRefused && (() => onRefused(true))}
-      onAccept={onRefused && (() => onRefused(false))}
-      className="w-[52px]"
-      data-testid={testId}
-    />
-  )
+export function CostInput({ pool, value, onCommit, testId }: { pool: Pool; value: number; onCommit: (v: number) => void; testId: string }) {
+  return <SettingNumber field={{ ...COST_FIELD, label: `${POOL_NAME[pool]}: koszt na godzinę` }} value={value} onCommit={onCommit} className="w-[52px]" data-testid={testId} />
+}
+
+/** The text of `WideCostWarning` for these costs (null – none): the computers of the folder's view. */
+export function useWideCostWarning(costs: readonly Costs[]): string | null {
+  const computers = useData((s) => s.view?.computers)
+  return wideCostWarning(olderComputers(computers ?? [], WIDE_COST_FROM), costs)
 }
 
 /**
@@ -33,8 +29,7 @@ export function CostInput({ pool, value, onCommit, onRefused, testId }: { pool: 
  * such a cost as none and an edit there may write the default over it (a subcategory's variants go as a whole list).
  */
 export function WideCostWarning({ costs, testId }: { costs: readonly Costs[]; testId: string }) {
-  const computers = useData((s) => s.view?.computers)
-  const text = wideCostWarning(olderComputers(computers ?? [], WIDE_COST_FROM), costs)
+  const text = useWideCostWarning(costs)
   return text ? (
     <p role="note" className="text-[11px] leading-snug text-lamp" data-testid={testId}>
       {text}

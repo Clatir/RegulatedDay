@@ -427,4 +427,24 @@ describe('pasek „poniżej rezerwy” widzi dołek krótkiego bloku o koszcie 1
     const every10 = { ...t, samples: t.samples.filter((x) => x.at % 10 === 0) }
     expect(stripRuns(every10).some((r) => r.state === 'low')).toBe(false)
   })
+
+  it('próbka także tam, gdzie pula nadal spada, ale wolniej (−5 → −0,05 na minutę): krzywa nie ma ~12 punktów za dużo w zgięciu', () => {
+    const DAY = '2026-10-28'
+    const plan = [
+      planBlock({ id: 'h', categoryId: 'inne', startMin: 600, durationMin: 5, costs: { head: 100, emotions: 0, senses: 0, body: 0 } }),
+      planBlock({ id: 'l', categoryId: 'inne', startMin: 605, durationMin: 30, costs: { head: 1, emotions: 0, senses: 0, body: 0 } })
+    ]
+    const s = new Scenario({ date: DAY, plan, settings: { transitionBufferMin: 0 } })
+      .checkin('08:00', { head: [1, 1], emotions: [0, 0], senses: [0, 0], body: [0, 0] })
+      .ran('h', '10:00', '10:05')
+      .ran('l', '10:05', '10:35')
+    const t = energyTrack(DAY, s.state('12:00').grid, s.energy('12:00'))!
+    // 65 − 5 min × 5 = 40 at 10:05 (the bend between the two blocks); both go down, so the sign of the change never turns.
+    const bend = t.samples.find((x) => x.at === 605)
+    expect(bend).toBeDefined()
+    expect(bend!.head).toBeGreaterThan(38)
+    expect(bend!.head).toBeLessThan(42)
+    // The drawn curve at the bend is the true value (the old samples every 10 minutes put it at about 52).
+    expect(Math.abs(valuesAt(poolCurves(t), 605)!.head - bend!.head)).toBeLessThanOrEqual(1)
+  })
 })

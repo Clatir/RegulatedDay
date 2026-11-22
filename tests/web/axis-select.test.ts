@@ -450,6 +450,82 @@ describe('menu prawego przycisku „Zmień N bloków” (D528)', () => {
     expect(runs.at(-1)).toEqual({ view: 'today', ids: ['a', 'b'], action: { kind: 'cost', costs: { head: 55, emotions: 1, senses: 1, body: 0 } } })
   })
 
+  it('„Koszt…”: pole stoi odrzucone (101, Tab) – „Zastosuj” bez pointerdown (Enter, Space) nic nie stosuje, okno zostaje; Esc czyści powód i „Zastosuj” stosuje stare 3', async () => {
+    await mount()
+    await click('block-a', { ctrlKey: true })
+    await click('block-b', { ctrlKey: true })
+    await rightClick('block-b')
+    await pick('block-menu-cost')
+    const before = runs.length
+    await typeLeave('group-cost-head-value', '101')
+    expect(q('group-cost-head-value-error')).not.toBeNull()
+    expect(q('group-cost-head-value')!.getAttribute('aria-invalid')).toBe('true')
+    // From the keyboard: Enter / Space on the focused button is a click with no press before it.
+    await pick('group-cost-apply')
+    await pick('group-cost-apply')
+    expect(runs).toHaveLength(before)
+    expect(q('group-cost')).not.toBeNull()
+    expect(q('group-cost-head-value-error')).not.toBeNull()
+    // Esc clears the reason (the field keeps its saved 3), and „Zastosuj” applies it.
+    key(document.body, 'Escape')
+    expect(q('group-cost-head-value-error')).toBeNull()
+    expect((q('group-cost-head-value') as HTMLInputElement).value).toBe('3')
+    await pick('group-cost-apply')
+    expect(runs.at(-1)).toEqual({ view: 'today', ids: ['a', 'b'], action: { kind: 'cost', costs: { head: 3, emotions: 1, senses: 1, body: 0 } } })
+  })
+
+  it('„Koszt…”: naciśnięcie „Zastosuj” bez kliknięcia (wyjechanie przed puszczeniem) nic nie psuje – następne zastosowanie działa, gdy pole nie jest odrzucone', async () => {
+    await mount()
+    await click('block-a', { ctrlKey: true })
+    await click('block-b', { ctrlKey: true })
+    await rightClick('block-b')
+    await pick('block-menu-cost')
+    const before = runs.length
+    await act2(() => void q('group-cost-apply')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, buttons: 1 })))
+    expect(runs).toHaveLength(before)
+    // A refused text, then pressed away from the button; after the field is clean again, Enter applies.
+    await typeLeave('group-cost-head-value', '101')
+    await act2(() => void q('group-cost-apply')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, buttons: 1 })))
+    await pick('group-cost-apply')
+    expect(runs).toHaveLength(before)
+    key(document.body, 'Escape')
+    await pick('group-cost-apply')
+    expect(runs).toHaveLength(before + 1)
+  })
+
+  it('„Koszt…”: 101, Tab (odmowa), potem [+] przy głowie – powód znika i „Zastosuj” stosuje 4 (3 + 1)', async () => {
+    await mount()
+    await click('block-a', { ctrlKey: true })
+    await click('block-b', { ctrlKey: true })
+    await rightClick('block-b')
+    await pick('block-menu-cost')
+    await typeLeave('group-cost-head-value', '101')
+    expect(q('group-cost-head-value')!.getAttribute('aria-invalid')).toBe('true')
+    await pick('group-cost-head-plus')
+    expect(q('group-cost-head-value-error')).toBeNull()
+    expect((q('group-cost-head-value') as HTMLInputElement).value).toBe('4')
+    await pick('group-cost-apply')
+    expect(runs.at(-1)).toEqual({ view: 'today', ids: ['a', 'b'], action: { kind: 'cost', costs: { head: 4, emotions: 1, senses: 1, body: 0 } } })
+  })
+
+  it('„Koszt…”: ostrzeżenie group-cost-old przy starszym komputerze (1.36.0) i koszcie 40 – jest; przy koszcie w ±5 albo bez starszego – nie ma', async () => {
+    await mount()
+    await click('block-a', { ctrlKey: true })
+    await click('block-b', { ctrlKey: true })
+    await rightClick('block-b')
+    await pick('block-menu-cost')
+    expect(q('group-cost-old')).toBeNull()
+    await act(async () => useData.setState({ view: { today: TODAY, computers: [{ name: 'Laptop', appVersion: '1.36.0' }] } as unknown as DataView }))
+    expect(q('group-cost-old')).toBeNull()
+    await typeLeave('group-cost-head-value', '40')
+    expect(q('group-cost-old')!.textContent).toContain('Komputer Laptop ma starszą wersję')
+    await typeLeave('group-cost-head-value', '5')
+    expect(q('group-cost-old')).toBeNull()
+    await typeLeave('group-cost-head-value', '40')
+    await act(async () => useData.setState({ view: { today: TODAY, computers: [{ name: 'Laptop', appVersion: '1.37.0' }] } as unknown as DataView }))
+    expect(q('group-cost-old')).toBeNull()
+  })
+
   it('„Koszt…”: wpisanie, potem [+] liczy się od wpisanej', async () => {
     await mount()
     await click('block-a', { ctrlKey: true })

@@ -18,7 +18,7 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
   kolor rezerwy, prognoza; `newDescents` (zejścia do zapisu przez prowadzącego), `checkinStates`, `shownOf`.
 - `engine/reserve.ts` – `suggestRegen` (sposób o najniższym koszcie w puli, remis: pierwszy z listy wariantów),
   `reserveReaction` (nagroda: stany zejść i werdykt).
-- `engine/energyTrack.ts` – krzywa przy osi (`energyTrack`, próbki co 10 min; „Dziś” i kolumny) i `columnEnergy` (D417,
+- `engine/energyTrack.ts` – krzywa przy osi (`energyTrack`, próbki co 10 min i w każdej minucie zmiany spadku puli – T2440; „Dziś” i kolumny) i `columnEnergy` (D417,
   T903): dzień przyszły od przyjętego check-inu (`ASSUMED_CHECKIN`, 04:00, `assumed`) – tylko dla energii, nie zdarzenie logu.
   Dziś bez check-inu (brak, „Pomiń”) – też `assumedEnergy` (T2430): w kolumnie (`columnEnergy` `today`) i przy osi „Dziś” (`dayAxis`, gdy
   `date >= today`); przyjęte zdarzenie żyje tylko w kopii `ctx.events` do `computeEnergy` – nigdy w logu, pliku dnia ani `DayState`.
