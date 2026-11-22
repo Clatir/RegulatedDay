@@ -9,7 +9,7 @@ import { calibrationPeriod, costEvidence, costProposals, inCalibration, reviewPr
 import type { Pool } from '@shared/model/categories'
 import type { Answer } from '@shared/model/events'
 import { planBlock, type Template } from '@shared/model/plan'
-import { DEFAULT_SETTINGS } from '@shared/model/settings'
+import { DEFAULT_SETTINGS, type RulesSettings } from '@shared/model/settings'
 import { modulesOfDay } from '@shared/engine/sideB'
 import { dayEnd } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
@@ -121,15 +121,22 @@ describe('propozycje przeglądu', () => {
     expect(timeProposals([s(80), s(85), s(84), s(90)], [template], '2026-11-20')).toEqual([])
   })
 
-  it('koszty: z co najmniej 5 dni z kategorią – zmiana kosztu na godzinę, która przewidziałaby sygnały, w zakresie −5…5', () => {
+  it('koszty: z co najmniej 5 dni z kategorią – zmiana kosztu na godzinę, która przewidziałaby sygnały, w zakresie −100…100 (D568)', () => {
     const day = (residualSenses: number, key = 'analiza'): CostEvidence => ({ minutes: { [key]: 120 }, residual: { [key]: { head: 0, emotions: 0, senses: residualSenses, body: 0 } } })
     // 10 h of analysis (3 / 1 / 1), −30 units of senses the model did not foresee: +1 an hour.
     const [p] = costProposals([day(-6), day(-6), day(-6), day(-6), day(-6)], DEFAULT_SETTINGS)
     expect(p).toEqual({ category: 'analiza', variant: null, days: 5, hours: 10, from: { head: 3, emotions: 1, senses: 1, body: 0 }, to: { head: 3, emotions: 1, senses: 2, body: 0 } })
     expect(costProposals([day(-6), day(-6), day(-6), day(-6)], DEFAULT_SETTINGS)).toEqual([])
-    // Nothing to change: no proposal; never beyond 5.
+    // Nothing to change: no proposal; never beyond 100 (D568; was 5).
     expect(costProposals([day(0), day(0), day(0), day(0), day(0)], DEFAULT_SETTINGS)).toEqual([])
-    expect(costProposals([day(-600), day(-600), day(-600), day(-600), day(-600)], DEFAULT_SETTINGS)[0]!.to.senses).toBe(5)
+    // −300 units over 10 h: +10 an hour – one review moves a cost by at most 5 (T2440: with ±100 the range no longer keeps it near).
+    expect(costProposals([day(-60), day(-60), day(-60), day(-60), day(-60)], DEFAULT_SETTINGS)[0]!.to.senses).toBe(6)
+    expect(costProposals([day(-9000), day(-9000), day(-9000), day(-9000), day(-9000)], DEFAULT_SETTINGS)[0]!.to.senses).toBe(6)
+    expect(costProposals([day(9000), day(9000), day(9000), day(9000), day(9000)], DEFAULT_SETTINGS)[0]!.to.senses).toBe(-4)
+    // A cost near the end of the range: the step stops at 100 / −100 (D568).
+    const near = (senses: number): RulesSettings => ({ ...DEFAULT_SETTINGS, categories: { ...DEFAULT_SETTINGS.categories, analiza: { ...DEFAULT_SETTINGS.categories.analiza!, costs: { ...DEFAULT_SETTINGS.categories.analiza!.costs, senses } } } })
+    expect(costProposals([day(-9000), day(-9000), day(-9000), day(-9000), day(-9000)], near(98))[0]!.to.senses).toBe(100)
+    expect(costProposals([day(9000), day(9000), day(9000), day(9000), day(9000)], near(-97))[0]!.to.senses).toBe(-100)
     // A variant with its own costs: its costs change, not the category's (drzemka −3 / −1 / −2).
     const [v] = costProposals([0, 1, 2, 3, 4].map(() => day(-6, 'regeneracja:drzemka')), DEFAULT_SETTINGS)
     expect(v).toMatchObject({ category: 'regeneracja', variant: 'drzemka', from: { head: -3, emotions: -1, senses: -2, body: -3 }, to: { senses: -1, body: -3 } })

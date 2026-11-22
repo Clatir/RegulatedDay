@@ -1,7 +1,7 @@
 /**
  * „Przelicz koszty ×N” (D566, D567): every stored cost per hour of the chosen pools and kinds multiplied by N (0,5–3 by 0,25, or your own
  * – `parseScaleFactor`, T2431), each pool
- * rounded half away from zero (1,5 → 2, −1,5 → −2) and clipped to −5…5 – the stored values change, the engine knows no factor. What it
+ * rounded half away from zero (1,5 → 2, −1,5 → −2) and clipped to −100…100 (D568) – the stored values change, the engine knows no factor. What it
  * touches: the subcategories' and the variants' own costs of the settings in force from the change's date (one dated change of rd.json); the
  * routines' costs (a routine has one cost without dates – changed at once); the own costs of blocks of the days' files from the change's date
  * (never a day gone by, never a block begun, taken off or passed – `ScaleDay.keep`), of the templates and of the series – a version from that
@@ -48,17 +48,49 @@ export const roundHalfAway = (v: number): number => {
 }
 
 /**
- * One pool's cost × n: rounded half away from zero, clipped to −5…5 (`clipped` – it would have gone past). With a cost −5…5 and a factor
- * of up to four decimals the floating product rounds as the exact one (T2431 – checked in the tests for every such pair up to ×5); a factor
- * of more decimals rounds on the floating product (a half may differ in the last digit).
+ * The factor as an exact decimal (`digits` / 10^`scale`): the shortest text of the number (`String(n)` – what was typed, „1,3” → 1.3, or a
+ * list factor), so no floating noise of the product decides a half (T2440: with costs up to ±100, 100 × 0,145 was 14.499… → 14). A factor
+ * typed with more than ~15 significant digits is the nearest double first (`parseScaleFactor` – `Number`), as everywhere else.
  */
-export function scaleCost(v: number, n: number): { value: number; clipped: boolean } {
-  const r = roundHalfAway(v * n)
-  const value = Math.max(COST_MIN, Math.min(COST_MAX, r))
-  return { value, clipped: value !== r }
+function exactFactor(n: number): { digits: bigint; scale: number } {
+  const m = /^(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/.exec(String(Math.abs(n)))
+  if (!m) throw new Error(`scaleCost: not a factor ${n}`)
+  const frac = m[2] ?? ''
+  let digits = BigInt(m[1]! + frac)
+  let scale = frac.length - Number(m[3] ?? 0)
+  if (scale < 0) {
+    digits *= 10n ** BigInt(-scale)
+    scale = 0
+  }
+  return { digits: n < 0 ? -digits : digits, scale }
 }
 
-/** The costs with the chosen pools × n (the others as they are); `clipped` – the pools that went past ±5. */
+/**
+ * One pool's cost × n: the exact product (`exactFactor`) rounded half away from zero, clipped to `COST_MIN`…`COST_MAX` (−100…100, D568;
+ * `clipped` – it would have gone past). `v` is a whole cost; `n` a finite factor.
+ */
+export function scaleCost(v: number, n: number): { value: number; clipped: boolean } {
+  // The floating product decides when it is far from a half and from the range's ends: within ±(COST_MAX + 1) its error is below 1e-13,
+  // so a fraction more than 1e-6 from ½ rounds as the exact one; past the range only its sign counts. Near a half – the exact product.
+  const f = v * n
+  if (Number.isFinite(f) && Math.abs(f) > COST_MAX + 1) return { value: f < 0 ? COST_MIN : COST_MAX, clipped: true }
+  if (Number.isFinite(f) && Math.abs((Math.abs(f) % 1) - 0.5) > 1e-6) {
+    const r = roundHalfAway(f)
+    const value = Math.max(COST_MIN, Math.min(COST_MAX, r))
+    return { value, clipped: value !== r }
+  }
+  const { digits, scale } = exactFactor(n)
+  const q = BigInt(v) * digits
+  const d = 10n ** BigInt(scale)
+  const a = q < 0n ? -q : q
+  // Half away from zero: ⌊|q| / d + ½⌋ with the sign of q.
+  const abs = (2n * a + d) / (2n * d)
+  const r = q < 0n ? -abs : abs
+  const value = r < BigInt(COST_MIN) ? COST_MIN : r > BigInt(COST_MAX) ? COST_MAX : Number(r)
+  return { value, clipped: BigInt(value) !== r }
+}
+
+/** The costs with the chosen pools × n (the others as they are); `clipped` – the pools that went past the range (±100). */
 export function scaleCosts(c: Costs, n: number, pools: readonly Pool[]): { costs: Costs; clipped: Pool[] } {
   const out = { ...c }
   const clipped: Pool[] = []

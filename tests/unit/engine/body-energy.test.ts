@@ -153,6 +153,24 @@ describe('ciało – krzywa, statystyki, CSV, kalibracja', () => {
     expect(track.samples[0]).toHaveProperty('body')
   })
 
+  it('krzywa ma próbkę w każdym zwrocie puli (T2440): dołek bloku o koszcie 100 między próbkami co 10 min jest narysowany', () => {
+    // 10:01–10:09 head 100 an hour (−40), then 10:09–10:17 −100 (+40): at 10:00 and 10:10 / 10:20 the head looks nearly flat.
+    const plan = [
+      planBlock({ id: 'h', categoryId: 'inne', startMin: 601, durationMin: 8, costs: { head: 100, emotions: 0, senses: 0, body: 0 } }),
+      planBlock({ id: 'r', categoryId: 'inne', startMin: 609, durationMin: 8, costs: { head: -100, emotions: 0, senses: 0, body: 0 } })
+    ]
+    const s = sc(plan).checkin('08:00', { head: [1, 1], emotions: [0, 0], senses: [0, 0], body: [0, 0] }).ran('h', '10:01', '10:09').ran('r', '10:09', '10:17')
+    const st = s.state('12:00')
+    const e = s.energy('12:00')
+    const track = energyTrack(DATE, st.grid, e)!
+    const lowest = Math.min(...Array.from(e.series.head).filter(Number.isFinite))
+    expect(Math.min(...track.samples.map((x) => x.head))).toBe(lowest)
+    expect(track.samples.find((x) => x.at === 609)?.head).toBe(lowest)
+    // Still a sample every 10 minutes, in order.
+    expect(track.samples.filter((x) => x.at % 10 === 0).length).toBeGreaterThan(50)
+    expect(track.samples.every((x, i, a) => i === 0 || a[i - 1]!.at < x.at)).toBe(true)
+  })
+
   it('statystyki: energia check-inu to średnia zadanych pul – cztery; check-in bez ciała – trzy (T1522)', () => {
     const end = dayEnd(DATE)
     const stats = (s: Scenario) => dayStats({ ...s.contextAt(end), now: end }, lastEventsOf(s.events), { energy: true, projects: true, requests: true })

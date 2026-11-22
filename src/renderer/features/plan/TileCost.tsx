@@ -1,24 +1,26 @@
 /**
  * The cost per hour on a block's tile (D501): four numbers in the colours of the pools, always all four, G · E · B · C (D524: „3 · 1 · 1 · 0”, a regeneration „−1 · −2 · −3 · −1”,
- * „3·1·1·0” in the week) and, on a click, a small window beside the tile for this block alone – „głowa”, „emocje”, „bodźce”, „ciało” with [−] and
- * [+] between −5 and 5, and „Jak podkategoria (3·1·1·0)” – „Jak wariant (…)” when its variant has a cost of its own (D510, `resetLabel`) –,
+ * „3·1·1·0” in the week) and, on a click, a small window beside the tile for this block alone – „głowa”, „emocje”, „bodźce”, „ciało” with a field
+ * to type the number in between [−] and [+] (−100…100, D568), and „Jak podkategoria (3·1·1·0)” – „Jak wariant (…)” when its variant has a cost of its own (D510, `resetLabel`) –,
  * which gives the block's own cost up. The tile places the label (`className`);
  * a press and a click on it stop here, so they neither drag the block nor open its panel. The window stands over the page (a portal,
  * the tile clips what is inside it), closes with Esc, a press elsewhere, a scroll and a resize; while a question of a series' scope is open
  * it steps aside (it would stand over the question) and comes back after it. Its clicks are saved one after another, each as what it
- * does (a step of a pool, „Jak podkategoria”) over what is saved when its turn comes – a click is never lost, a save that did not surely
+ * does (a step of a pool, a typed number, „Jak podkategoria”) over what is saved when its turn comes – a click is never lost, a save that did not surely
  * write (refused, a question, unknown) leaves the window at what is saved. A block of a series asks its scope once while the window is
  * open (`CostAsk`, D501): the next clicks use it.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { COST_MAX, COST_MIN, costNumber, costStep, costsText, sameCosts, type TileCost as TileCostInfo } from '@shared/model/blockCosts'
+import { COST_MAX, COST_MIN, costNumber, costSet, costStep, costsText, sameCosts, type TileCost as TileCostInfo } from '@shared/model/blockCosts'
 import { POOLS as POOL_ORDER, type Costs, type Pool } from '@shared/model/categories'
 import { cx } from '../../components/ui'
+import { commitActiveField } from '../../lib/commit'
 import { useEscapeLayer } from '../../lib/escape'
 import { useOutsidePointer } from '../../lib/outside'
 import type { SaveAnswer } from '../../store/data'
 import { useScopeAsked } from '../series/scopeAsk'
+import { CostInput, WideCostWarning } from './CostInput'
 import type { CostAsk } from './costSave'
 import { COST_SCALE_TEXT, POOL_COLOR, POOL_NAME } from './energyDraw'
 import { NO_GRID } from './gridDrag'
@@ -30,7 +32,7 @@ interface Shown {
 }
 const sameShown = (a: Shown, b: Shown): boolean => a.own === b.own && sameCosts(a.costs, b.costs)
 /** A click of the window: a step of a pool, or „Jak podkategoria” / „Jak wariant”; `ask` – the memory of the window it was made in. */
-type Op = ({ k: 'step'; pool: Pool; by: 1 | -1 } | { k: 'reset' }) & { ask: CostAsk }
+type Op = ({ k: 'step'; pool: Pool; by: 1 | -1 } | { k: 'set'; pool: Pool; value: number } | { k: 'reset' }) & { ask: CostAsk }
 
 /** The size the window is first placed by: its width is fixed, its height is an estimate (the heading – the title and its sentence, which wraps to two lines –, four rows and the button); once drawn, it is placed again by the height it has. */
 const POP_W = 232
@@ -38,11 +40,17 @@ const POP_H = 236
 const GAP = 4
 const MARGIN = 8
 
+/** The room the label of one- and two-digit costs takes (−5 at most): with spaces („−5 · −5 · −5 · −5”) and the week's tight one („−5·−5·−5·−5”). */
+const ROOM_PX = { spaced: 108, tight: 74 } as const
+/** About the width of one character of the label (11 px, tabular digits) and of the label's own frame (its padding, the corner's offset). */
+const ROOM_CHAR_PX = 6
+const ROOM_FRAME_PX = 6
+
 /**
- * The room the label in the tile's corner takes from the row of the hours beside it (that row ends with an ellipsis before it): the
- * label with spaces („−5 · −5 · −5 · −5”, „Dziś” and „3 dni”) is wider than the week's tight one („−5·−5·−5·−5”).
+ * The room (px, the right padding) the label in the tile's corner takes from the row of the hours beside it (that row ends with an ellipsis
+ * before it): the label with spaces („Dziś” and „3 dni”) is wider than the week's tight one; a cost of three digits (D568: −100…100) widens it.
  */
-export const costRoom = (tight: boolean): string => (tight ? 'pr-[74px]' : 'pr-[108px]')
+export const costRoom = (tight: boolean, costs: Costs): number => Math.max(tight ? ROOM_PX.tight : ROOM_PX.spaced, costsText(costs, tight).length * ROOM_CHAR_PX + ROOM_FRAME_PX)
 
 /** The label's box the window is placed by. */
 type PopAnchor = { left: number; right: number; top: number; bottom: number }
@@ -109,7 +117,8 @@ export function TileCost({
   const running = useRef(false)
   const ask = useRef<CostAsk>({ scope: null })
   const [shown, setShown] = useState<Shown>(() => saved(cost))
-  const apply = (v: Shown, op: Op): Shown => (op.k === 'reset' ? { costs: latest.current.base, own: false } : { costs: costStep(v.costs, op.pool, op.by), own: true })
+  const apply = (v: Shown, op: Op): Shown =>
+    op.k === 'reset' ? { costs: latest.current.base, own: false } : { costs: op.k === 'set' ? costSet(v.costs, op.pool, op.value) : costStep(v.costs, op.pool, op.by), own: true }
   const showNow = () => setShown(ops.current.reduce(apply, base.current))
   useEffect(() => {
     if (running.current) return
@@ -118,15 +127,40 @@ export function TileCost({
   }, [cost.costs.head, cost.costs.emotions, cost.costs.senses, cost.costs.body, cost.own])
   // A question of a series' scope is open: the window steps aside for it (it would stand over the question) and comes back after it.
   const asked = useScopeAsked()
+  // A press in the window that blurs a typed number (its save may ask the series' scope at once): the window stays until the press is
+  // over, so its click (a step, „Jak podkategoria”) is not lost under the question (T2440) – cleared after the click of that release.
+  const [held, setHeld] = useState(false)
+  useEffect(() => {
+    if (!held) return
+    const up = () => setTimeout(() => setHeld(false), 0)
+    window.addEventListener('pointerup', up, true)
+    window.addEventListener('pointercancel', up, true)
+    return () => {
+      window.removeEventListener('pointerup', up, true)
+      window.removeEventListener('pointercancel', up, true)
+    }
+  }, [held])
+  const hidden = asked && !held
   useEscapeLayer(open, close)
-  useOutsidePointer(open && !asked, `[data-cost-of="${id}"]`, close)
+  useOutsidePointer(open && !hidden, `[data-cost-of="${id}"]`, close)
   useEffect(() => {
     if (!open) return
-    window.addEventListener('scroll', close, true)
-    window.addEventListener('resize', close)
+    // A scroll of the page closes the window – a typed number first commits (like a click beside it); a scroll inside the window (a long
+    // text in a field) is the field's own.
+    const scroll = (e: Event) => {
+      if (e.target instanceof Node && pop.current?.contains(e.target)) return
+      commitActiveField()
+      close()
+    }
+    const resize = () => {
+      commitActiveField()
+      close()
+    }
+    window.addEventListener('scroll', scroll, true)
+    window.addEventListener('resize', resize)
     return () => {
-      window.removeEventListener('scroll', close, true)
-      window.removeEventListener('resize', close)
+      window.removeEventListener('scroll', scroll, true)
+      window.removeEventListener('resize', resize)
     }
   }, [open])
   // The window drawn: placed again by the height it really has (the heading wraps by the width of the text, not by a count), once per opening.
@@ -181,6 +215,8 @@ export function TileCost({
     if (!running.current) void drain()
   }
   const step = (pool: Pool, by: 1 | -1) => push({ k: 'step', pool, by, ask: ask.current })
+  // A typed number (D568): the field took it in the range – the window counts it like a step to it.
+  const set = (pool: Pool, value: number) => push({ k: 'set', pool, value, ask: ask.current })
 
   const c = cost.costs
   const sep = tight ? '·' : ' · '
@@ -214,7 +250,7 @@ export function TileCost({
         data-editable={editable ? 'true' : undefined}
         title={costTitle(cost, editable)}
         aria-label={editable ? costTitle(cost, editable) : undefined}
-        className={cx('num whitespace-nowrap rounded-sm bg-bg px-1 text-[11px] leading-[14px]', editable ? 'cursor-pointer hover:ring-1 hover:ring-line-strong' : 'cursor-default', className)}
+        className={cx('num max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-sm bg-bg px-1 text-[11px] leading-[14px]', editable ? 'cursor-pointer hover:ring-1 hover:ring-line-strong' : 'cursor-default', className)}
       >
         {POOL_ORDER.map((p, k) => (
           <span key={p}>
@@ -225,7 +261,7 @@ export function TileCost({
       </span>
       {/* Stepped aside while a question of a series' scope is open – it comes back where it stood after it. */}
       {place &&
-        !asked &&
+        !hidden &&
         createPortal(
           <div
             ref={pop}
@@ -236,7 +272,10 @@ export function TileCost({
             className="num fixed z-50 flex flex-col gap-1.5 rounded border border-line-strong bg-panel p-2 text-[12px] shadow-lg"
             style={{ left: place.left, top: place.top, width: POP_W }}
             // The portal's events travel up the tile's tree: nothing that happens here is the tile's (a drag, a selection).
-            onPointerDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              setHeld(true)
+            }}
             onPointerUp={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
@@ -253,14 +292,13 @@ export function TileCost({
                 <button type="button" className="btn px-2 py-0" disabled={shown.costs[p] <= COST_MIN} onClick={() => step(p, -1)} aria-label={`${POOL_NAME[p]}: mniej`} data-testid={`cost-pop-${p}-minus`}>
                   −
                 </button>
-                <span className="w-6 text-center text-fg" data-testid={`cost-pop-${p}-value`}>
-                  {costNumber(shown.costs[p])}
-                </span>
+                <CostInput pool={p} value={shown.costs[p]} onCommit={(v) => set(p, v)} testId={`cost-pop-${p}-value`} />
                 <button type="button" className="btn px-2 py-0" disabled={shown.costs[p] >= COST_MAX} onClick={() => step(p, 1)} aria-label={`${POOL_NAME[p]}: więcej`} data-testid={`cost-pop-${p}-plus`}>
                   +
                 </button>
               </div>
             ))}
+            <WideCostWarning costs={[shown.costs]} testId="cost-pop-old" />
             <button type="button" className="btn mt-0.5" aria-pressed={!shown.own} onClick={() => push({ k: 'reset', ask: ask.current })} data-testid="cost-pop-reset">
               {resetLabel(cost)}
             </button>

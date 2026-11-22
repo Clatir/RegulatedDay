@@ -1,5 +1,5 @@
 /**
- * „Przelicz koszty ×N” (D566, D567): v' = clamp(zaokrąglenie połówek od zera(v × N), −5, 5); pule i zakres niewybrane bez zmian; podkategorie
+ * „Przelicz koszty ×N” (D566, D567): v' = clamp(zaokrąglenie połówek od zera(v × N), −100, 100); pule i zakres niewybrane bez zmian; podkategorie
  * i warianty z ustawień w mocy od daty zmiany, rutyny wprost; własne koszty bloków w dniach od daty zmiany (dzień miniony i blok zaczęty –
  * bez zmian), szablony i serie – nowa wersja od tej daty (późniejsze też, gdy blok ma nadal stary koszt). „Cofnij” przywraca tylko to, co
  * nadal stoi jak po przeliczeniu.
@@ -18,13 +18,13 @@ const TODAY = '2026-11-22'
 const FROM = '2026-11-23'
 const ALL: ScaleOptions = { n: 2, pools: ['head', 'emotions', 'senses', 'body'], scope: ['categories', 'variants', 'routines', 'blocks', 'templates'] }
 
-/** Settings with only „analiza” 3·1·1·0 (a variant 2·0·0·0 and one „jak podkategoria”) and „inne” 1·1·1·0 – the rest with no cost. */
+/** Settings with only „analiza” 60·1·1·0 (a variant 2·0·0·0 and one „jak podkategoria”) and „inne” 1·1·1·0 – the rest with no cost. */
 function settings(): RulesSettings {
   const s = settingsOn([], FROM)
   const zero = Object.fromEntries(Object.entries(s.categories).map(([id, r]) => [id, { ...r, costs: c(0, 0, 0, 0), variants: r.variants.map((v) => ({ id: v.id, name: v.name })) }]))
   return {
     ...s,
-    categories: { ...zero, analiza: { ...s.categories.analiza!, costs: c(3, 1, 1, 0), variants: [{ id: 'gleboka', name: 'Głęboka', costs: c(2, 0, 0, 0) }, { id: 'lekka', name: 'Lekka' }] }, inne: { ...s.categories.inne!, costs: c(1, 1, 1, 0), variants: [] } }
+    categories: { ...zero, analiza: { ...s.categories.analiza!, costs: c(60, 1, 1, 0), variants: [{ id: 'gleboka', name: 'Głęboka', costs: c(2, 0, 0, 0) }, { id: 'lekka', name: 'Lekka' }] }, inne: { ...s.categories.inne!, costs: c(1, 1, 1, 0), variants: [] } }
   }
 }
 
@@ -41,10 +41,13 @@ function input(over: Partial<ScaleInput> = {}): ScaleInput {
 }
 
 describe('reguła liczby (D567 p.3)', () => {
-  it('×2: 2 → 4, 3 → 5 przycięte, −3 → −5 przycięte, 0 → 0', () => {
+  it('×2: 2 → 4, 3 → 6 (bez przycięcia – zakres ±100, D568), 60 → 100 przycięte, −60 → −100 przycięte, 50 → 100 dokładnie, 0 → 0', () => {
     expect(scaleCost(2, 2)).toEqual({ value: 4, clipped: false })
-    expect(scaleCost(3, 2)).toEqual({ value: 5, clipped: true })
-    expect(scaleCost(-3, 2)).toEqual({ value: -5, clipped: true })
+    expect(scaleCost(3, 2)).toEqual({ value: 6, clipped: false })
+    expect(scaleCost(60, 2)).toEqual({ value: 100, clipped: true })
+    expect(scaleCost(-60, 2)).toEqual({ value: -100, clipped: true })
+    expect(scaleCost(50, 2)).toEqual({ value: 100, clipped: false })
+    expect(scaleCost(-50, 2)).toEqual({ value: -100, clipped: false })
     expect(scaleCost(0, 2)).toEqual({ value: 0, clipped: false })
   })
 
@@ -52,11 +55,12 @@ describe('reguła liczby (D567 p.3)', () => {
     expect([roundHalfAway(1.5), roundHalfAway(-1.5), roundHalfAway(2.5), roundHalfAway(-0.4)]).toEqual([2, -2, 3, 0])
     expect(Object.is(roundHalfAway(-0.4), 0)).toBe(true)
     expect([scaleCost(3, 0.5).value, scaleCost(1, 0.5).value, scaleCost(-1, 0.5).value, scaleCost(-3, 0.5).value]).toEqual([2, 1, -1, -2])
-    expect([scaleCost(1, 1.5).value, scaleCost(5, 0.5).value]).toEqual([2, 3])
+    expect([scaleCost(1, 1.5).value, scaleCost(5, 0.5).value, scaleCost(99, 0.5).value, scaleCost(-99, 0.5).value]).toEqual([2, 3, 50, -50])
   })
 
   it('pule niewybrane zostają; przycięte pule są wskazane', () => {
-    expect(scaleCosts(c(3, 2, 1, -3), 2, ['head', 'body'])).toEqual({ costs: c(5, 2, 1, -5), clipped: ['head', 'body'] })
+    expect(scaleCosts(c(60, 2, 1, -60), 2, ['head', 'body'])).toEqual({ costs: c(100, 2, 1, -100), clipped: ['head', 'body'] })
+    expect(scaleCosts(c(3, 2, 1, -3), 2, ['head', 'body'])).toEqual({ costs: c(6, 2, 1, -6), clipped: [] })
   })
 
   it('mnożnik 0,5–3 co 0,25, zapis polski z przecinkiem', () => {
@@ -70,21 +74,35 @@ describe('reguła liczby (D567 p.3)', () => {
     expect([scaleLabel(1.3), scaleLabel(0.05), scaleLabel(0.0000001), scaleLabel(1e21), scaleLabel(1.234)]).toEqual(['×1,3', '×0,05', '×0,0000001', '×1000000000000000000000', '×1,234'])
   })
 
-  it('własny mnożnik liczony jak dokładnie (T2431): każdy koszt −5…5 × każdy mnożnik 0,0001–5 (do czterech miejsc) – jak w liczbach całkowitych', () => {
+  it('własny mnożnik liczony jak dokładnie (T2431): każdy koszt −100…100 × każdy mnożnik 0,0001–5 (do czterech miejsc) – jak w liczbach całkowitych', () => {
     const D = 10_000
     // v · k / D rounded half away from zero, in integers only.
     const exact = (v: number, k: number) => {
       const q = Math.trunc((2 * Math.abs(v) * k + D) / (2 * D))
-      return Math.max(-5, Math.min(5, v < 0 ? -q : q))
+      return Math.max(-100, Math.min(100, v < 0 ? -q : q))
     }
     let wrong = 0
     for (let k = 1; k <= 5 * D; k++) {
       const n = parseScaleFactor(`${Math.trunc(k / D)},${String(k % D).padStart(4, '0')}`)!
-      for (let v = -5; v <= 5; v++) if (scaleCost(v, n).value !== exact(v, k)) wrong++
+      for (let v = -100; v <= 100; v++) if (scaleCost(v, n).value !== exact(v, k)) wrong++
     }
     expect(wrong).toBe(0)
     expect([scaleCost(3, 1.3).value, scaleCost(2, 1.3).value, scaleCost(-3, 1.3).value, scaleCost(5, 0.7).value, scaleCost(4, 0.125).value, scaleCost(-4, 0.125).value]).toEqual([4, 3, -4, 4, 1, -1])
-    expect([scaleCost(2, 6), scaleCost(1, 6)]).toEqual([{ value: 5, clipped: true }, { value: 5, clipped: true }])
+    expect([scaleCost(2, 6), scaleCost(17, 6), scaleCost(-17, 6)]).toEqual([{ value: 12, clipped: false }, { value: 100, clipped: true }, { value: -100, clipped: true }])
+  })
+  it('iloczyn dokładny, nie zmiennoprzecinkowy (T2440): połówki tuż pod szumem liczby, wiele miejsc i zapis z wykładnikiem', () => {
+    // The floating products are 14.499…, 28.499…, 14.499…, 31.499…, 56.499… – the exact ones are halves.
+    expect([scaleCost(100, 0.145), scaleCost(100, 0.285), scaleCost(50, 0.29), scaleCost(90, 0.35), scaleCost(100, 0.565), scaleCost(-100, 0.145)].map((r) => r.value)).toEqual([15, 29, 15, 32, 57, -15])
+    // A factor of many decimals: what was typed counts, not a tolerance – just under the half stays under it.
+    expect([scaleCost(100, parseScaleFactor('0,1449999999999')!).value, scaleCost(100, parseScaleFactor('0,1450000000001')!).value]).toEqual([14, 15])
+    // `String(n)` with an exponent: a tiny factor and a huge one.
+    expect([scaleCost(100, 1e-7), scaleCost(5, 5e-7), scaleCost(3, 1e21), scaleCost(-3, 1e21), scaleCost(0, 1e21)]).toEqual([
+      { value: 0, clipped: false },
+      { value: 0, clipped: false },
+      { value: 100, clipped: true },
+      { value: -100, clipped: true },
+      { value: 0, clipped: false }
+    ])
   })
 })
 
@@ -93,9 +111,9 @@ describe('plan zmian – ustawienia i rutyny (D566, D567 p.1)', () => {
     const p = costScalePlan(input(), ALL)
     expect(p.items.map((i) => i.key)).toEqual(['category:analiza', 'variant:analiza:gleboka', 'category:inne'])
     const a = p.items[0]!
-    expect([a.before, a.after, a.clipped, a.pools]).toEqual([c(3, 1, 1, 0), c(5, 2, 2, 0), ['head'], ['head', 'emotions', 'senses']])
+    expect([a.before, a.after, a.clipped, a.pools]).toEqual([c(60, 1, 1, 0), c(100, 2, 2, 0), ['head'], ['head', 'emotions', 'senses']])
     expect(p.write.settingsPatch).toEqual({
-      categories: { analiza: { costs: c(5, 2, 2, 0), variants: [{ id: 'gleboka', name: 'Głęboka', costs: c(4, 0, 0, 0) }, { id: 'lekka', name: 'Lekka' }] }, inne: { costs: c(2, 2, 2, 0) } }
+      categories: { analiza: { costs: c(100, 2, 2, 0), variants: [{ id: 'gleboka', name: 'Głęboka', costs: c(4, 0, 0, 0) }, { id: 'lekka', name: 'Lekka' }] }, inne: { costs: c(2, 2, 2, 0) } }
     })
   })
 
@@ -115,7 +133,7 @@ describe('plan zmian – ustawienia i rutyny (D566, D567 p.1)', () => {
   it('pula niewybrana bez zmian: tylko G', () => {
     const p = costScalePlan(input(), { ...ALL, pools: ['head'], scope: ['categories'] })
     expect(p.items.map((i) => [i.key, i.after])).toEqual([
-      ['category:analiza', c(5, 1, 1, 0)],
+      ['category:analiza', c(100, 1, 1, 0)],
       ['category:inne', c(2, 1, 1, 0)]
     ])
   })
@@ -184,7 +202,7 @@ describe('„Cofnij” (D567 p.4)', () => {
     const p = costScalePlan(input({ routines: [routine('r1', c(2, 1, 0, 0)), routine('r2', c(1, 0, 0, 0))], templates: [t], days: [day] }), ALL)
     // After the save – and two values changed meanwhile (the routine r2, the subcategory „inne”).
     const s = settings()
-    const analiza = { ...s.categories.analiza!, costs: c(5, 2, 2, 0), variants: [{ id: 'gleboka', name: 'Głęboka', costs: c(4, 0, 0, 0) }, { id: 'lekka', name: 'Lekka' }] }
+    const analiza = { ...s.categories.analiza!, costs: c(100, 2, 2, 0), variants: [{ id: 'gleboka', name: 'Głęboka', costs: c(4, 0, 0, 0) }, { id: 'lekka', name: 'Lekka' }] }
     const now = {
       settings: { ...s, categories: { ...s.categories, analiza, inne: { ...s.categories.inne!, costs: c(0, 0, 0, 0) } } },
       routines: [routine('r1', c(4, 2, 0, 0)), routine('r2', c(-2, 0, 0, 0))],
@@ -194,7 +212,7 @@ describe('„Cofnij” (D567 p.4)', () => {
     }
     const r = costScaleUndo(now, p.items)
     expect(r.kept.map((i) => i.key).sort()).toEqual(['category:inne', 'routine:r2'])
-    expect(r.write.settingsPatch).toEqual({ categories: { analiza: { costs: c(3, 1, 1, 0), variants: [{ id: 'gleboka', name: 'Głęboka', costs: c(2, 0, 0, 0) }, { id: 'lekka', name: 'Lekka' }] } } })
+    expect(r.write.settingsPatch).toEqual({ categories: { analiza: { costs: c(60, 1, 1, 0), variants: [{ id: 'gleboka', name: 'Głęboka', costs: c(2, 0, 0, 0) }, { id: 'lekka', name: 'Lekka' }] } } })
     expect(r.write.routines).toEqual([{ id: 'r1', costs: c(2, 1, 0, 0) }])
     expect(r.write.templates[0]!.versions.find((v) => v.from === FROM)!.blocks[0]!.costs).toEqual(c(2, 1, 0, 0))
     expect(r.write.days).toEqual([{ date: '2026-11-25', block: expect.objectContaining({ id: 'fut' }), costs: c(2, 0, 0, 0) }])

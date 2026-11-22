@@ -873,7 +873,7 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
         <span className="block truncate pt-px text-fg">{nameContent}</span>
       )}
       {height >= 30 && (
-        <span className={cx('num block truncate text-muted', costAt === 'corner' && costRoom(tight))} data-testid={`week-hours-${date}-${b.id}`}>
+        <span className="num block truncate text-muted" style={costAt === 'corner' && b.cost ? { paddingRight: costRoom(tight, b.cost.costs) } : undefined} data-testid={`week-hours-${date}-${b.id}`}>
           {logicalClock(b.startMin)}–{logicalClock(b.endMin)}
           {kind ? ` · ${kind}` : ''}
           {attach > 0 && (

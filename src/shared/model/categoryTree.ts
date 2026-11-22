@@ -319,7 +319,7 @@ function entryOf(v: Variant | VariantEntry): VariantEntry {
 
 const sameEntry = (a: VariantEntry, b: VariantEntry): boolean => JSON.stringify(entryOf(a)) === JSON.stringify(entryOf(b))
 
-/** The list with a new variant at its end; null – no name, its id taken, a cost out of −5…5. */
+/** The list with a new variant at its end; null – no name, its id taken, a cost out of `RANGES.cost` (−100…100, D568). */
 export function addVariant(variants: ReadonlyArray<Variant | VariantEntry>, v: { id: string; name: string; place?: Place | null; costs?: Costs | null }): VariantEntry[] | null {
   const name = cleanName(v.name, VARIANT_NAME_MAX)
   if (!name || !v.id || variants.some((x) => x.id === v.id)) return null

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * D512: the own cost of a routine in „Rutyny” – the same label and window as the cost of a tile (D501, `TileCost`): three numbers in the
- * colours of the pools, [−] and [+] of −5…5, and the button that gives the routine's cost up („jak podkategoria”). A change writes `costs`
+ * colours of the pools, [−] and [+] of −100…100, and the button that gives the routine's cost up („jak podkategoria”). A change writes `costs`
  * over the routine's record as it is when its turn comes (fields this version does not know stay).
  */
 import { act, createElement } from 'react'
@@ -122,8 +122,8 @@ describe('koszt rutyny w „Rutynach” (D512)', () => {
     expect(useUi.getState().toasts).toEqual([])
   })
 
-  it('[−] przy −5 jest wyłączony – koszt zostaje w zakresie', async () => {
-    await open(routine({ head: -5, emotions: 0, senses: 0, body: 0 }))
+  it('[−] przy −100 jest wyłączony – koszt zostaje w zakresie', async () => {
+    await open(routine({ head: -100, emotions: 0, senses: 0, body: 0 }))
     await click(q('routine-cost'))
     expect((q('cost-pop-head-minus') as HTMLButtonElement).disabled).toBe(true)
   })

@@ -30,7 +30,7 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
 - Odcinki bloków: przebiegi z logu przed teraz + prognoza dnia (`DayState.forecast`) od teraz; prośby i „Odcinam się”
   tylko do teraz (biegnąca prośba kończy się teraz w prognozie, jak w E1).
 - Każda minuta: suma kosztów na godzinę w setnych (pierwszy plan, tło według powodu: zaplanowane / odsunięte /
-  wymuszone, czas bez bloku `REST_FREE` jak „gra, film”, „Odcinam się” jak „cisza”), obcięta do ±500.
+  wymuszone, czas bez bloku `REST_FREE` jak „gra, film”, „Odcinam się” jak „cisza”), obcięta do ±`SUM_CAP` (`COST_MAX` × 100 = ±10000, D568; było ±500).
 - Stan w jednostkach 1/2000 (`Int32Array`): w minucie k najpierw koszt minuty k−1, potem jednorazowe koszty z k,
   potem kotwice z k; obcięcie 0–100 po każdym kroku. `series[k]` = stan na początku minuty k.
 - Zejścia tylko do teraz; prognoza (ostrzeżenie) od teraz do `bedtime.forecast`.

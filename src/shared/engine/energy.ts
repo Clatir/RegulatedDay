@@ -14,7 +14,7 @@
  * variant's, its category's.
  */
 import { POOLS, REGEN_CATEGORY, REQUEST_CATEGORY, costsOf, type CategoryRules, type Costs, type LoggedPools, type Pool, type PoolValues } from '../model/categories'
-import { baseCosts } from '../model/blockCosts'
+import { COST_MAX, baseCosts } from '../model/blockCosts'
 import { compareEvents, isKnown, type AnyEvent, type EnergyEvent } from '../model/events'
 import { DEFAULT_SETTINGS, type RulesSettings } from '../model/settings'
 import type { BlockInfo } from './blocks'
@@ -31,8 +31,8 @@ export const CHECKIN_STATES = [100, 85, 65, 45, 25] as const
 const SWITCH_COST = 2
 const CONTACT_COST = 2
 const HYSTERESIS = 5
-/** The costs running together, summed, stay within ±5 an hour in each pool (in hundredths). */
-const SUM_CAP = 500
+/** The costs running together, summed, stay within the range of one cost an hour in each pool (in hundredths; ±100 – D568). */
+const SUM_CAP = COST_MAX * 100
 
 export interface Descent {
   pool: Pool

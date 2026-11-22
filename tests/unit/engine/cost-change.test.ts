@@ -140,11 +140,12 @@ describe('zmiana kosztu zaczętego bloku (D501, block.cost)', () => {
     expect(costEvidence(ctx, computeDay(ctx), true)!.minutes).toEqual({ analiza: 40 })
   })
 
-  it('zdarzenie: znane z polem block, at i costs (−5…5 albo null); bierne dla silnika dnia; nieznany rodzaj timera nic nie psuje', () => {
+  it('zdarzenie: znane z polem block, at i costs (−100…100 albo null); bierne dla silnika dnia; nieznany rodzaj timera nic nie psuje', () => {
     const line = (o: Record<string, unknown>) => JSON.stringify({ id: 'x', c: 'pca', n: 1, t: 1, l: 1, v: 13, day: DATE, dom: 'timer', at: 1, ...o })
     expect(parseEvent(line({ k: 'block.cost', block: 'a', costs: HIGH }))).toMatchObject({ ok: true })
     expect(parseEvent(line({ k: 'block.cost', block: 'a', costs: null }))).toMatchObject({ ok: true })
-    expect(parseEvent(line({ k: 'block.cost', block: 'a', costs: { head: 6, emotions: 0, senses: 0 } }))).toEqual({ ok: false, why: 'pole costs' })
+    expect(parseEvent(line({ k: 'block.cost', block: 'a', costs: { head: 101, emotions: 0, senses: 0 } }))).toEqual({ ok: false, why: 'pole costs' })
+    expect(parseEvent(line({ k: 'block.cost', block: 'a', costs: { head: 100, emotions: -100, senses: 0 } }))).toMatchObject({ ok: true })
     expect(parseEvent(line({ k: 'block.cost', block: 'a', costs: { head: 1.5, emotions: 0, senses: 0 } }))).toEqual({ ok: false, why: 'pole costs' })
     expect(parseEvent(line({ k: 'block.cost', costs: null }))).toEqual({ ok: false, why: 'pole block' })
     const parsed = parseEvent(line({ k: 'block.cost', block: 'a', costs: null }))

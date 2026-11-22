@@ -11,6 +11,8 @@ export function SettingNumber({
   onCommit,
   className,
   errorPlacement,
+  onReject,
+  onAccept,
   ...rest
 }: {
   field: { kind: FieldKind; range: readonly [number, number]; offAllowed?: boolean; label?: string; unit?: string }
@@ -18,6 +20,10 @@ export function SettingNumber({
   onCommit: (v: number) => void
   className?: string
   errorPlacement?: ErrorPlacement
+  /** The typed text was refused (its reason stands under the field). */
+  onReject?: () => void
+  /** A typed text was taken (also one equal to the value) – the refusal is over. */
+  onAccept?: () => void
   'aria-label'?: string
   'data-testid'?: string
 }) {
@@ -30,6 +36,8 @@ export function SettingNumber({
         onCommit={(v) => checkField(field, v).ok && onCommit(v)}
         shellClassName={className ?? 'w-[96px]'}
         errorPlacement={errorPlacement}
+        onReject={onReject}
+        onAccept={onAccept}
         aria-label={rest['aria-label'] ?? field.label}
         data-testid={rest['data-testid']}
       />

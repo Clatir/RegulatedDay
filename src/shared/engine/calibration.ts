@@ -257,8 +257,13 @@ export interface CostProposal {
 /**
  * The proposals for costs: the costs a block ran with (a category's, or a variant's own), in the foreground on at least
  * 5 days of the period, get the change per hour that would have foreseen what their anchors said (a cost k takes 3·k
- * units an hour), rounded, within −5…5 – against the costs in force now.
+ * units an hour), rounded, at most `COST_STEP_MAX` from the cost now and within `COST_MIN`…`COST_MAX` (−100…100, D568) – against the costs in
+ * force now. The step: with the range of ±5 the range itself kept a proposal near the cost; with ±100 a few minutes of evidence before
+ * strong signals would propose a jump of tens (T2440) – one review moves a cost by at most 5, the next ones go on if the evidence stays.
  */
+/** How far one review moves a pool's cost (T2440). */
+export const COST_STEP_MAX = 5
+
 export function costProposals(days: readonly CostEvidence[], settings: RulesSettings): CostProposal[] {
   const keys = new Set(days.flatMap((d) => Object.keys(d.minutes)))
   const out: CostProposal[] = []
@@ -271,7 +276,9 @@ export function costProposals(days: readonly CostEvidence[], settings: RulesSett
     const to = { ...from }
     for (const p of POOLS as readonly Pool[]) {
       const r = withIt.reduce((s, d) => s + (d.residual[key]?.[p] ?? 0), 0)
-      to[p] = Math.max(COST_MIN, Math.min(COST_MAX, Math.round(from[p] - r / (3 * hours))))
+      const want = Math.round(from[p] - r / (3 * hours))
+      const stepped = Math.max(from[p] - COST_STEP_MAX, Math.min(from[p] + COST_STEP_MAX, want))
+      to[p] = Math.max(COST_MIN, Math.min(COST_MAX, stepped))
     }
     const [category, variant] = key.split(':') as [string, string | undefined]
     if (POOLS.some((p) => to[p] !== from[p])) out.push({ category, variant: variant ?? null, days: withIt.length, hours: Math.round(hours * 10) / 10, from: { ...from }, to })

@@ -364,6 +364,8 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] SK2.1 Własny mnożnik „Przelicz koszty ×N” – „1,3”, zła wartość (1.36.0)
    - [ ] EA1.1 Pasy energii przy osi „Dziś” przed check-inem, po „Pomiń” i na dniu przyszłym – „przyjęte” (1.36.0)
    - [ ] EA1.2 Kolumna dzisiejsza „Tygodnia” i „3 dni” przed check-inem – „przyjęte”, po check-inie pełna (1.36.0)
+   - [ ] KZ1.1 Koszt do ±100 wpisany w okienku kafelka i w „Koszt…” kilku bloków; 101 odrzucone (1.37.0)
+   - [ ] KZ1.2 Duży koszt w energii i napis na kafelku – pasy, suma równoległych, miejsce napisu (1.37.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3165,6 +3167,22 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** przed check-inem (albo po „Pomiń”) otwórz „Tydzień” i „3 dni”; potem wypełnij check-in i wróć do nich.
 - **Oczekiwany efekt:** kolumna dzisiejsza ma pasek energii jaśniejszy z podpisem „przyjęte” – jak dni przyszłe; po check-inie pasek pełny, bez podpisu.
 - **Nie przechodzi, gdy:** kolumna dzisiejsza przed check-inem nie ma paska; pasek nie jest jaśniejszy albo nie ma podpisu; po check-inie podpis zostaje.
+
+### KZ1 – koszt na godzinę od −100 do 100 (1.37.0, D568, T2440)
+
+#### KZ1.1 Koszt do ±100 wpisany w okienku kafelka i w „Koszt…” kilku bloków; 101 odrzucone
+- [ ] Odebrane
+- **Automatycznie:** `tests/web/tile-cost.test.ts`, `tests/web/axis-select.test.ts` (pole kosztu), `tests/e2e/group-select.spec.ts` (bodźce 40 w „Tygodniu”). Ty: rzut oka.
+- **Jak sprawdzić:** w „Dziś” kliknij koszt na kafelku niezaczętego bloku, w polu głowy wpisz `40` i Tab; potem `101`, `1,5` i `−20`; kliknij [+] przy 100. Zaznacz dwa bloki (Ctrl+klik), prawy przycisk → „Koszt…”, wpisz `55` w emocjach, „Zastosuj”. Na koniec Ustawienia → Kategorie: koszt podkategorii `80`.
+- **Oczekiwany efekt:** nagłówek okienka mówi „od −100 do 100”; `40` zapisuje się od razu (napis na kafelku „40 · …”, prognoza się przelicza); `101` i `1,5` – czerwona ramka, powód pod polem, wartość wraca do zapisanej, nic się nie zapisuje; `−20` przyjęte; [+] przy 100 wyłączony; oba zaznaczone bloki mają emocje 55, linia „Zmieniono 2 bloki · Cofnij”; podkategoria przyjmuje 80.
+- **Nie przechodzi, gdy:** pole nie przyjmuje liczby większej niż 5; 101 albo ułamek się zapisuje; po odmowie zostaje zła liczba; „Zastosuj” nie niesie wpisanej wartości.
+
+#### KZ1.2 Duży koszt w energii i napis na kafelku – pasy, suma równoległych, miejsce napisu
+- [ ] Odebrane
+- **Automatycznie:** testy silnika energii (koszt 100, suma równoległych do 100/h), `tests/web/tile-cost-week.test.ts` (`costRoom`). Ty: rzut oka.
+- **Jak sprawdzić:** po check-inie daj blokowi 60 min koszt głowy `30`; obejrzyj pasy energii przy osi „Dziś”. Potem daj blokowi `−100 · −100 · −100 · −100` i obejrzyj kafelek w „Dziś”, „3 dniach” i „Tygodniu”.
+- **Oczekiwany efekt:** pas głowy spada w trakcie bloku o ok. 90 punktów (30 × 3), nie więcej niż do 0; napis kosztu na kafelku jest cały (w bardzo wąskiej kolumnie może być ucięty – pełny w podpowiedzi po najechaniu), godziny obok skracają się wielokropkiem, napis nie wychodzi poza kafelek ani nie zasłania sąsiedniej kolumny.
+- **Nie przechodzi, gdy:** energia spada tak, jakby koszt był 5; napis nachodzi na godziny albo wychodzi poza kafelek; pas schodzi poniżej 0.
 
 ### UX – ciąg poprawek użytkowych (1.34.0, D561–D565)
 

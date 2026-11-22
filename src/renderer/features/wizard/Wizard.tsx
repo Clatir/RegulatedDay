@@ -12,6 +12,7 @@ import { POOLS, type Pool } from '@shared/model/categories'
 import { newId } from '@shared/model/ids'
 import { MODULES, MODULE_NAMES, rdFrom } from '@shared/model/rd'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, sessionWithEnd, sessionWithStart, type DayTypeId, type SessionChoice } from '@shared/model/settings'
+import { COST_MAX, COST_MIN, costNumber } from '@shared/model/blockCosts'
 import { zoneChoices } from '@shared/model/templateSessions'
 import { placeLogical } from '@shared/time/day'
 import { addDays, weekday } from '@shared/time/zone'
@@ -565,7 +566,7 @@ function StepCosts() {
   const meal = s.categories.posilek!
   return (
     <div className="flex flex-col gap-4">
-      <Lead>Koszt na godzinę dla każdej puli, od −5 do 5 (koszt 3 zjada 9 jednostek na godzinę; ujemny oddaje). To wartości startowe – przegląd kalibracji je poprawi.</Lead>
+      <Lead>Koszt na godzinę dla każdej puli, od {costNumber(COST_MIN)} do {COST_MAX} (koszt 3 zjada 9 jednostek na godzinę; ujemny oddaje). To wartości startowe – przegląd kalibracji je poprawi.</Lead>
       <div className="flex flex-col gap-2 rounded border border-line bg-panel p-3">
         <Field label="Zajęcia zdalne to kontakt z ludźmi?" labelWidth={300}>
           <Segmented value={remote.contact ? 'yes' : 'no'} options={[{ value: 'yes', label: 'tak' }, { value: 'no', label: 'nie' }]} onChange={(v) => patchSettings({ categories: { 'zajecia-zdalne': { contact: v === 'yes' } } })} data-testid="wizard-remote-contact" />

@@ -294,9 +294,9 @@ describe('legenda energii pod „?” (P10) i koszt (D7)', () => {
     expect(q('energy-legend')).toBeNull()
   })
 
-  it('legenda mówi o koszcie: poziom na godzinę od −5 do 5, 1 = 3 punkty energii', async () => {
+  it('legenda mówi o koszcie: poziom na godzinę od −100 do 100, 1 = 3 punkty energii', async () => {
     await render(createElement(EnergyLegendHelp, { reserve: 30, open: true }))
-    expect(q('energy-legend-cost')!.textContent).toContain('koszt na godzinę, od −5 do 5; 1 = 3 punkty energii')
+    expect(q('energy-legend-cost')!.textContent).toContain('koszt na godzinę, od −100 do 100; 1 = 3 punkty energii')
   })
 
   const item = (cost: TimelineItem['cost']): TimelineItem => ({ id: 'a', startMin: 600, endMin: 660, title: 'Blok a', marks: [], color: '#F2B66D', categoryId: 'analiza', background: false, movable: true, cost })
@@ -307,7 +307,7 @@ describe('legenda energii pod „?” (P10) i koszt (D7)', () => {
     await act(async () => click(q('block-a-cost')!))
     // The same words as the legend's (one text).
     expect(q('cost-pop-head')!.textContent).toContain(COST_SCALE_TEXT)
-    expect(COST_SCALE_TEXT).toBe('koszt na godzinę, od −5 do 5; 1 = 3 punkty energii')
+    expect(COST_SCALE_TEXT).toBe('koszt na godzinę, od −100 do 100; 1 = 3 punkty energii')
   })
 })
 

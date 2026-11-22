@@ -25,7 +25,7 @@ export const ASSUMED_FACTOR = 0.5
 /** The numbers at „teraz” of the lanes counted from the assumed check-in (T2430). */
 export const ASSUMED_NOW_OPACITY = 0.6
 /**
- * What the numbers beside a tile are (D7) – one text for the legend and the tile's window: a level of cost an hour, between −5 and 5; a cost k
+ * What the numbers beside a tile are (D7) – one text for the legend and the tile's window: a level of cost an hour, in `RANGES.cost` (−100…100, D568); a cost k
  * takes 3·k points of the pool's 0–100 an hour (spec „Koszt na godzinę”).
  */
 export const COST_SCALE_TEXT = `koszt na godzinę, od ${costNumber(COST_MIN)} do ${COST_MAX}; 1 = 3 punkty energii`

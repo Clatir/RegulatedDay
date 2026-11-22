@@ -1,6 +1,6 @@
 /**
  * The energy's curve beside a day's axis (E2; „Dziś” – D293, the columns of „Tydzień” and „3 dni” – D417): the four pools
- * sampled every `ENERGY_SAMPLE_MIN` minutes of the day's series (the past from the log, from now on the forecast), and the
+ * sampled every `ENERGY_SAMPLE_MIN` minutes and at their turns (T2440) of the day's series (the past from the log, from now on the forecast), and the
  * reserve. One sampling for every place that draws it.
  *
  * A day to come has no check-in (spec: without one the energy is „nieznana”), so its column's forecast starts from the
@@ -26,11 +26,20 @@ export interface EnergyTrack {
   assumed?: true
 }
 
-/** The curve of a counted day's energy: only when it is known (a check-in) and the module is on – as „Dziś” draws it. */
+/**
+ * The curve of a counted day's energy: only when it is known (a check-in) and the module is on – as „Dziś” draws it. A sample every
+ * `ENERGY_SAMPLE_MIN` minutes and at every minute where a pool turns (its change of a minute changes sign – a block's edge, a floor or a
+ * ceiling, an anchor): with costs up to ±100 an hour (D568, T2440) a pool may go down 40 and up again between two samples of the step,
+ * and the dip below the reserve would not be drawn. Between turns a pool is straight, so the samples hold every low and high.
+ */
 export function energyTrack(date: string, grid: Grid, e: EnergyState): EnergyTrack | null {
   if (!e.known || !e.enabled) return null
   const samples: EnergyTrack['samples'] = []
-  for (let k = 0; k < Math.min(grid.length, e.series.head.length); k += ENERGY_SAMPLE_MIN) {
+  const n = Math.min(grid.length, e.series.head.length)
+  const series = [e.series.head, e.series.emotions, e.series.senses, e.series.body]
+  const turns = (k: number) => k > 0 && k < n - 1 && series.some((v) => Math.sign(v[k]! - v[k - 1]!) !== Math.sign(v[k + 1]! - v[k]!))
+  for (let k = 0; k < n; k++) {
+    if (k % ENERGY_SAMPLE_MIN !== 0 && !turns(k)) continue
     const v = { head: e.series.head[k]!, emotions: e.series.emotions[k]!, senses: e.series.senses[k]!, body: e.series.body[k]! }
     if (Number.isFinite(v.head)) samples.push({ at: logicalMinuteOf(date, atOf(grid, k)), ...v })
   }

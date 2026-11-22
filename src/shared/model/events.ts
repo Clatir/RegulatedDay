@@ -67,9 +67,13 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * setting „Tolerancja trafności” (UX13, A1) – an older version judges every block by 15 % and would freeze the reward of a day with
  * another tolerance so; (b) a signal or a relative assessment taken back (`undo`) is no anchor of the energy – UX12 (`liveEnergyEvent`), the same release.
  * An older version gives way to this one as the leader, and the days it froze in the lookback are
- * graded again.
+ * graded again. 19 – a cost an hour of −100…100 (D568, T2440; was −5…5), the costs running together summed within the same range: an
+ * older version reads a cost past ±5 as none – a category's, variant's or routine's in the settings as the default's (`costsFrom`), a block's
+ * own in a day's file as its category's (`poolCostsFrom`), a block's start as by its plan (`planned.costs`); `block.cost`, `routine.cost`,
+ * `energy.cost` with one – a broken line to it, skipped and listed (the line stays in its writer's log). It would count other energy (other
+ * descents, the reward „Reakcja na rezerwę”): it gives way to this one as the leader.
  */
-export const RULES_VERSION = 18
+export const RULES_VERSION = 19
 
 /** The rules since which a block's start writes the cost of its routine (D512, `planned.routineCosts`): an earlier start had none. */
 export const ROUTINE_COSTS_FROM = 14

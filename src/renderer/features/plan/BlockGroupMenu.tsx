@@ -4,15 +4,16 @@
  * `runBlockGroup`. One component for the axes of „Dziś” and „Szablony” and the columns of „Tydzień” and „3 dni”: the screen says which blocks the
  * ids are (`blocksOf`) and what to choose from (`ctx`).
  */
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { groupCount } from '@shared/groupText'
 import { addDays } from '@shared/time/zone'
-import { COST_MAX, COST_MIN, costNumber, costStep } from '@shared/model/blockCosts'
+import { COST_MAX, COST_MIN, costSet, costStep } from '@shared/model/blockCosts'
 import { POOLS, type Costs, type Pool } from '@shared/model/categories'
 import { ContextMenu } from '../../components/ContextMenu'
 import { Dialog } from '../../components/Dialog'
 import { DateField } from '../../components/fields'
 import type { GroupView } from '../../store/groupLine'
+import { CostInput, WideCostWarning } from './CostInput'
 import { POOL_COLOR, POOL_NAME } from './energyDraw'
 import { blockMenu, blockMenuTitle, type GroupWhere, type MenuBlock, type MenuCtx } from './groupMenu'
 import { runBlockGroup } from './groupRun'
@@ -102,10 +103,21 @@ export function commonCosts(blocks: readonly MenuBlock[]): Costs {
   return blocks.find((b) => b.costs)?.costs ?? { head: 0, emotions: 0, senses: 0, body: 0 }
 }
 
-/** „Koszt na godzinę” of the selected blocks: the four numbers, −5 … 5, „Jak podkategoria” (their own cost given up), „Zastosuj”. */
+/** „Koszt na godzinę” of the selected blocks: the four numbers (typed or stepped, −100 … 100 – D568), „Jak podkategoria” (their own cost given up), „Zastosuj”. */
 export function GroupCostDialog({ n, initial, onClose, onApply }: { n: number; initial: Costs; onClose: () => void; onApply: (costs: Costs | null) => void }) {
   const [costs, setCosts] = useState<Costs>(initial)
   const step = (pool: Pool, by: 1 | -1) => setCosts((c) => costStep(c, pool, by))
+  // A field that refuses its text on the press of „Zastosuj” (the blur of that press – 101, 1,5): that click applies nothing and the window
+  // stays with the reason under the field (T2440). Only a refusal during the press: an earlier one, the text then corrected, never blocks
+  // „Zastosuj” – by the pointer, Enter or Space.
+  const pressing = useRef(false)
+  const refusedOnPress = useRef(false)
+  const apply = () => {
+    const skip = refusedOnPress.current
+    pressing.current = false
+    refusedOnPress.current = false
+    if (!skip) onApply(costs)
+  }
   return (
     <Dialog
       title={`Koszt na godzinę – ${groupCount(n, 'block')}`}
@@ -115,7 +127,12 @@ export function GroupCostDialog({ n, initial, onClose, onApply }: { n: number; i
           <button type="button" className="btn" onClick={() => onApply(null)} data-testid="group-cost-reset">
             Jak podkategoria
           </button>
-          <button type="button" className="btn btn-accent" onClick={() => onApply(costs)} data-testid="group-cost-apply">
+          <button type="button" className="btn btn-accent" onPointerDown={() => {
+              pressing.current = true
+              refusedOnPress.current = false
+            }}
+            onBlur={() => (pressing.current = false)}
+            onClick={apply} data-testid="group-cost-apply">
             Zastosuj
           </button>
           <button type="button" className="btn" onClick={onClose}>
@@ -134,14 +151,21 @@ export function GroupCostDialog({ n, initial, onClose, onApply }: { n: number; i
             <button type="button" className="btn px-2 py-0" disabled={costs[p] <= COST_MIN} onClick={() => step(p, -1)} aria-label={`${POOL_NAME[p]}: mniej`} data-testid={`group-cost-${p}-minus`}>
               −
             </button>
-            <span className="w-6 text-center text-fg" data-testid={`group-cost-${p}-value`}>
-              {costNumber(costs[p])}
-            </span>
+            <CostInput
+              pool={p}
+              value={costs[p]}
+              onCommit={(v) => setCosts((c) => costSet(c, p, v))}
+              onRefused={(r) => {
+                if (r && pressing.current) refusedOnPress.current = true
+              }}
+              testId={`group-cost-${p}-value`}
+            />
             <button type="button" className="btn px-2 py-0" disabled={costs[p] >= COST_MAX} onClick={() => step(p, 1)} aria-label={`${POOL_NAME[p]}: więcej`} data-testid={`group-cost-${p}-plus`}>
               +
             </button>
           </div>
         ))}
+        <WideCostWarning costs={[costs]} testId="group-cost-old" />
       </div>
     </Dialog>
   )

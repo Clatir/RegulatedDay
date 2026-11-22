@@ -233,7 +233,7 @@ test('oś dnia (jutro): zaznaczone dwa bloki → menu „Przesuń o… → Póź
   }
 })
 
-test('Tydzień: dwa bloki z różnych dni → menu „Koszt…” → głowa +1 → „Zastosuj”: oba dni jedną zmianą, linia „Zmieniono 2 bloki”, „Cofnij” przywraca oba', async () => {
+test('Tydzień: dwa bloki z różnych dni → menu „Koszt…” → głowa +1, bodźce wpisane 40 (D568) → „Zastosuj”: oba dni jedną zmianą, linia „Zmieniono 2 bloki”, „Cofnij” przywraca oba', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-group-week-'))
   const { today } = seedAwake(dataDir, [])
   const tue = addDays(mondayOf(today), 8)
@@ -258,10 +258,17 @@ test('Tydzień: dwa bloki z różnych dni → menu „Koszt…” → głowa +1 
       await second.click({ button: 'right' })
       await expect(page.getByTestId('block-menu')).toHaveAttribute('aria-label', 'Zmień 2 bloki')
       await page.getByTestId('block-menu-cost').click()
-      const head = Number(await page.getByTestId('group-cost-head-value').textContent())
+      const head = Number(await page.getByTestId('group-cost-head-value').inputValue())
       await page.getByTestId('group-cost-head-plus').click()
+      // D568: a cost past the old ±5, typed in the field (it saves on leaving it).
+      await page.getByTestId('group-cost-senses-value').fill('40')
+      await page.getByTestId('group-cost-senses-value').press('Tab')
+      await expect(page.getByTestId('group-cost-senses-value')).toHaveValue('40')
       await page.getByTestId('group-cost-apply').click()
-      await expect.poll(() => costs().map((c) => c?.head ?? null), { timeout: 15_000 }).toEqual([head + 1, head + 1])
+      await expect.poll(() => costs().map((c) => (c ? [c.head, c.senses] : null)), { timeout: 15_000 }).toEqual([
+        [head + 1, 40],
+        [head + 1, 40]
+      ])
       await expect(page.getByTestId('group-line-week')).toContainText('Zmieniono 2 bloki')
       await page.getByTestId('group-line-week-undo').click()
       await expect.poll(costs, { timeout: 15_000 }).toEqual([null, null])

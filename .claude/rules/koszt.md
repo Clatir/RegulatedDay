@@ -92,13 +92,17 @@ T1360–T1374, T1395–T1399, T1430–T1437, T1440–T1447.
   daty zmian, bez pytania o serię). „Rutyny” i okno ✎ rutyny – `RoutineCostField` (`TileCost` z
   `routineCostShown`: bez kosztu – koszt kategorii rodzaju „rutyna”), zapis `saveRoutineRecord` (`tryUpdateRecord`, sam rekord – T1430); w ✎ okienko
   zmienia formularz do „Zapisz” (T1397).
-- Jednostka i zakres (UX9 D7): okienko ma nagłówek `cost-pop-head` („Koszt bloku” i `COST_SCALE_TEXT` z `energyDraw.ts` – „koszt na godzinę, od −5 do 5; 1 = 3 punkty energii”; położenie: z szacunku `POP_H`, po narysowaniu z mierzonej wysokości – `popPlace(…, height)`, bo nagłówek zawija się według szerokości tekstu), legenda energii – linię `energy-legend-cost` z tym samym zdaniem (liczba to poziom kosztu, nie punkty).
+- Jednostka i zakres (UX9 D7): okienko ma nagłówek `cost-pop-head` („Koszt bloku” i `COST_SCALE_TEXT` z `energyDraw.ts` – „koszt na godzinę, od −100 do 100; 1 = 3 punkty energii”; położenie: z szacunku `POP_H`, po narysowaniu z mierzonej wysokości – `popPlace(…, height)`, bo nagłówek zawija się według szerokości tekstu), legenda energii – linię `energy-legend-cost` z tym samym zdaniem (liczba to poziom kosztu, nie punkty).
 - `TileCost` (napis + okienko w portalu): `edit` = `costEditable(fakt, dzień miniony, minięty)` – niezaczęty nieminięty, zaczęty do
-  końca (także poza planem); skończony i dzień miniony – sam napis. Kliknięcia to zamiary (krok puli, „Jak podkategoria”) po kolei –
+  końca (także poza planem); skończony i dzień miniony – sam napis. Kliknięcia to zamiary (krok puli, wpisana liczba – `set`, „Jak podkategoria”) po kolei –
   pierwszy od razu, każdy nad tym, co zapisane, gdy przyjdzie jego kolej; żaden nie przepada, wyjątek = odmowa; okienko pokazuje
   zapisane + czekające; ponowne otwarcie – liczby z kafelka i nowa pamięć zakresu (`CostAsk`). Otwarte pytanie o zakres serii
   (`useScopeAsked`, z dowolnego miejsca) chowa okienko na czas pytania. Uchwyty krawędzi (`z-30`) nad napisem (`z-20`); miejsce w
-  wierszu godzin – `costRoom(tight)`.
+  wierszu godzin – `costRoom(tight, koszt)` (px, `style.paddingRight`; rośnie z liczbami trzycyfrowymi), napis `max-w-full` kafelka.
+- Zakres −100…100 (D568, T2440; był −5…5): jedno źródło `RANGES.cost`. Okienko kafelka i okno grupowe – pole `CostInput` (`SettingNumber`,
+  całkowita w zakresie, „−” i „-”; odmowa – `<testid>-error`) między −/+; `costSet` przycina. Suma kosztów biegnących razem – `SUM_CAP =
+  COST_MAX * 100` (`energy.ts`). `RULES_VERSION` 19: starsza wersja koszt poza ±5 czyta jako brak (ustawienia – domyślny, plik – kategorii,
+  `block.cost`/`routine.cost`/`energy.cost` – linia zła) i ustępuje prowadzenia.
 - Zapis jeden dla „Dziś”, „3 dni”, „Tygodnia”: `plan/costSave.ts` `saveTileCosts(cel, koszt, { ask })` – niezaczęty blok serii pyta
   `changeScope` (`series/seriesScope.ts`, ten sam kod co pole panelu – `seriesFirst` w `TodayPage.saveFields`) raz na okienko
   (`ask.scope`); zaczęty blok serii – bez pytania, tylko on od teraz. W kolejce okna dzień czytany raz bez liczenia (`plannedDay`:

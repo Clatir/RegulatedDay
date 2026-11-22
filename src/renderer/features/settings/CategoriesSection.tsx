@@ -21,6 +21,7 @@ import { takeFoundPick, takePick, toast, undoToast, useUi } from '../../store/ui
 import { GroupLine } from '../../components/GroupLine'
 import { COST_SCALE_COMMAND, GROUP_PICK } from '../search/records'
 import { CategoryRow } from './CategoryRow'
+import { WideCostWarning } from '../plan/CostInput'
 import { CostScaleDialog } from './CostScaleDialog'
 import { createCategory, NEW_CATEGORY_COSTS } from './categoryFields'
 import { saveTree, undoTree } from './categoryTreeEdits'
@@ -152,6 +153,8 @@ export function CategoriesSection() {
       <p className="text-[12px] text-muted">
         Kategoria zbiera podkategorie, podkategoria ma koszt i właściwości, a wariant – własny koszt i miejsce albo „jak podkategoria”. Wariantów podkategorii „Regeneracja” używasz jako sposobów regeneracji. Usunięcie niczego nie kasuje – zostaje w historii. Nazwy, kolory, przynależność i archiwum działają od razu; koszty i właściwości – od daty z paska „od jutra” (jak reszta ustawień z datą).
       </p>
+      {/* D568 (T2440): a cost past ±5 here while a computer of an older version is in the folder – it may write the default over it. */}
+      <WideCostWarning costs={Object.values(s.categories).flatMap((c) => [c.costs, ...c.variants.flatMap((v) => (v.costs ? [v.costs] : []))])} testId="settings-categories-old" />
       {tree.map(({ group: g, categories: groupIds }) => (
         <GroupBox
           key={g.id}

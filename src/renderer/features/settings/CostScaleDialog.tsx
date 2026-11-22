@@ -2,13 +2,13 @@
  * The window „Przelicz koszty ×N” (D566, D567): the factor (0,5–3 by 0,25, ×2 at first, or „Własny…” – a number of your own above 0
  * with a comma or a point – `parseScaleFactor`, T2431; while it is not one, no preview and „Przelicz” off), the pools (G · E · B · C, all at first), what it
  * touches (subcategories, variants, routines, the own costs of blocks – the days planned from the change's date and the series –, templates;
- * all at first), and the preview „przed → po” of every cost that changes (one that stays is not listed; one clipped to ±5 is marked). The
+ * all at first), and the preview „przed → po” of every cost that changes (one that stays is not listed; one clipped to the range of a cost, ±100 – D568, is marked). The
  * date is the bar's („od jutra / od dziś / od daty”); a routine has one cost without dates – changed at once, the window says so. „Przelicz”
  * – one save (`applyCostScale`), off while nothing changes; Esc and „Anuluj” leave everything as it was.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { plDate } from '@shared/format'
-import { costsText } from '@shared/model/blockCosts'
+import { COST_MAX, COST_MIN, costNumber, costsText } from '@shared/model/blockCosts'
 import { POOL_LETTER, POOLS, type Pool } from '@shared/model/categories'
 import { COST_SCALE_FACTORS, DEFAULT_SCALE, parseScaleFactor, SCALE_SCOPES, scaleLabel, type ScaleItem, type ScaleKind, type ScaleOptions, type ScalePlan, type ScaleScope } from '@shared/engine/costScale'
 import { addDays } from '@shared/time/zone'
@@ -48,7 +48,7 @@ function countText(plan: ScalePlan | null, error: string | null, factor: number 
   if (!plan) return 'Liczę…'
   if (!plan.items.length) return 'Nic się nie zmienia.'
   const clipped = plan.items.filter((i) => i.clipped.length).length
-  return `Zmieni się ${costsCount(plan.items.length)}${clipped ? ` · przycięte do ±5: ${clipped}` : ''}`
+  return `Zmieni się ${costsCount(plan.items.length)}${clipped ? ` · przycięte do ±${COST_MAX}: ${clipped}` : ''}`
 }
 
 /** One cost of the preview: what it is, its name, the pools that change, „przed → po”, clipped. */
@@ -138,7 +138,7 @@ export function CostScaleDialog({ onClose }: { onClose: () => void }) {
       }
     >
       <p className="text-[12.5px] text-muted">
-        Każdy zapisany koszt wybranych pul mnoży się przez N, zaokrągla do całości (połówki od zera) i przycina do −5…5. Podkategorie, warianty i szablony – {fromText(from, today)} (pasek nad ustawieniami); bloki – w dniach od tej daty, dni minione i bloki już zaczęte zostają; rutyny – od razu.
+        Każdy zapisany koszt wybranych pul mnoży się przez N, zaokrągla do całości (połówki od zera) i przycina do {costNumber(COST_MIN)}…{COST_MAX}. Podkategorie, warianty i szablony – {fromText(from, today)} (pasek nad ustawieniami); bloki – w dniach od tej daty, dni minione i bloki już zaczęte zostają; rutyny – od razu.
       </p>
       <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
         <label className="flex items-center gap-2">

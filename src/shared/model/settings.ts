@@ -188,7 +188,7 @@ export const RANGES = {
   idleThresholdMin: [5, 60],
   absenceQuestionMin: [10, 120],
   signalEffect: [0, 30],
-  cost: [-5, 5]
+  cost: [-100, 100]
 } as const
 
 /** One change of the shared settings (rd.json „settings”), applying from `from` (and, for „od dziś”, from `at`). */

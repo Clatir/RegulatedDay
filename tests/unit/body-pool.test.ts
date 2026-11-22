@@ -109,7 +109,8 @@ describe('ciało – odczyt kosztu własnego, rutyny i sesji bez ciała (T1520)'
     expect(costs('regeneracja', 'moj-wariant')).toEqual({ head: 1, emotions: 1, senses: 1, body: 0 })
     expect(planBlockFrom({ id: 'a', categoryId: 'inne', startMin: 600, durationMin: 60, costs: { ...three(1, 1, 1), body: -2 } })!.costs!.body).toBe(-2)
     // A body that is there and no cost: no cost at all (never a part of one).
-    expect(planBlockFrom({ id: 'a', categoryId: 'inne', startMin: 600, durationMin: 60, costs: { ...three(1, 1, 1), body: 9 } })!.costs).toBeNull()
+    expect(planBlockFrom({ id: 'a', categoryId: 'inne', startMin: 600, durationMin: 60, costs: { ...three(1, 1, 1), body: 101 } })!.costs).toBeNull()
+    expect(planBlockFrom({ id: 'a', categoryId: 'inne', startMin: 600, durationMin: 60, costs: { ...three(1, 1, 1), body: 100 } })!.costs!.body).toBe(100)
     expect(sessionBlockFieldsFrom({ categoryId: 'sesja', costs: three(2, 2, 2) })!.costs).toEqual({ head: 2, emotions: 2, senses: 2, body: 0 })
   })
 
@@ -151,7 +152,7 @@ describe('ciało – zdarzenia starszej wersji i reguły (T1524, T1527, T1528)',
     expect(parseEvent(line('energy.signal', { signal: 'rocking', before: { head: 50, emotions: 50, senses: 50 } }))).toMatchObject({ ok: true })
     expect(parseEvent(line('energy.signal', { signal: 'rocking', before: { head: 50, emotions: 50, senses: 50, body: 120 } }))).toEqual({ ok: false, why: 'pole before' })
     expect(parseEvent(line('block.cost', { block: 'a', costs: three(1, 1, 1) }))).toMatchObject({ ok: true })
-    expect(parseEvent(line('block.cost', { block: 'a', costs: { ...three(1, 1, 1), body: 6 } }))).toEqual({ ok: false, why: 'pole costs' })
+    expect(parseEvent(line('block.cost', { block: 'a', costs: { ...three(1, 1, 1), body: 101 } }))).toEqual({ ok: false, why: 'pole costs' })
     expect(parseEvent(line('routine.cost', { routine: 'r', costs: three(1, 1, 1), was: null }))).toMatchObject({ ok: true })
     // The body is a pool of a relative assessment and of a descent.
     expect(parseEvent(line('energy.relative', { pool: 'body', delta: -10, before: null }, 16))).toMatchObject({ ok: true })
@@ -209,7 +210,7 @@ describe('ciało – migawka ustawień starszej wersji (T1532)', () => {
     const snapshot = { dayType: 'zwykly', settings: {}, templateId: null, templateFrom: null, budgetMin: 0, maxMin: 0, wakeMin: 420, templateWakeMin: 420, changes: [], holidays: [] }
     const blocks = [
       { id: 'a', categoryId: 'regeneracja', variantId: 'moje', costs: three(1, 1, 1) },
-      { id: 'b', categoryId: 'inne', variantId: null, costs: three(9, 1, 1) }
+      { id: 'b', categoryId: 'inne', variantId: null, costs: three(101, 1, 1) }
     ]
     const e = JSON.parse(JSON.stringify({ id: 'x', c: 'pcb', n: 1, t: 5, l: 5, v: 15, day: '2026-11-15', dom: 'timer', k: 'day.create', snapshot: { ...snapshot, blocks } })) as AnyEvent
     expect(daySnapshotOf([e])!.blocks.map((b) => b.costs)).toEqual([{ ...three(1, 1, 1), body: 0 }, null])
@@ -248,7 +249,7 @@ describe('migawka dnia – pełne ustawienia (T1538, T1539)', () => {
   })
 
   it('koszt bloku migawki spoza zakresu – brak kosztu, także z ciałem', () => {
-    const s = daySnapshotOf([created(mine, [{ id: 'a', categoryId: 'inne', variantId: null, costs: { head: 9, emotions: 0, senses: 0, body: 0 } }, { id: 'b', categoryId: 'inne', variantId: null, costs: { head: 1, emotions: 0, senses: 0, body: 2 } }])])!
+    const s = daySnapshotOf([created(mine, [{ id: 'a', categoryId: 'inne', variantId: null, costs: { head: 101, emotions: 0, senses: 0, body: 0 } }, { id: 'b', categoryId: 'inne', variantId: null, costs: { head: 1, emotions: 0, senses: 0, body: 2 } }])])!
     expect(s.blocks.map((b) => b.costs)).toEqual([null, { head: 1, emotions: 0, senses: 0, body: 2 }])
   })
 })
