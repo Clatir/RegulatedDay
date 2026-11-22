@@ -60,6 +60,7 @@ import { SessionFields } from './SessionFields'
 import { templateAdd, templateCopy, templateDrag, templateStartAt, withTemplateChange, type TemplateChange } from './templatePush'
 import { copyTemplateBlock } from '../plan/blockCopy'
 import { dragTemplateGroup, templateDragPreview } from '../plan/groupDrag'
+import { undoMark } from '../../lib/undoKey'
 import { COPY_SPAN_ID } from '../today/dayPush'
 import { losesText, winsText } from './clashText'
 import { freshAfter, removeTemplate, removeTemplateBlock, undoAddedBlock } from './templateActions'
@@ -264,7 +265,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
   const saveVersion = (patch: Partial<TemplateVersion> | ((v: TemplateVersion) => Partial<TemplateVersion>)) => change((t) => withVersion(t, patch))
 
   // D367, D372: the blocks a change of the axis pushed apart – the template before and after it, for „Cofnij”.
-  const [pushed, setPushed] = useState<{ text: string; before: RawRecord; after: RawRecord } | null>(null)
+  const [pushed, setPushed] = useState<{ text: string; before: RawRecord; after: RawRecord; at: number } | null>(null)
   useEffect(() => {
     if (!pushed) return
     const t = setTimeout(() => setPushed(null), UNDO_LINE_MS)
@@ -289,7 +290,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
       return made.after
     })
     const saved = isSaved(out)
-    if (saved && c.pushed > 0 && made.before && made.after) setPushed({ text: pushedText(c.pushed), before: made.before, after: made.after })
+    if (saved && c.pushed > 0 && made.before && made.after) setPushed({ text: pushedText(c.pushed), before: made.before, after: made.after, at: Date.now() })
     // Only when the add changed the template (`made`): a record gone or unreadable answers with nothing to write – nothing was added to take back.
     else if (saved && added && made.before && made.after) {
       const done = { before: made.before, after: made.after }
@@ -471,7 +472,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
           {pushedShown && (
             <div className="flex items-center gap-2 self-start rounded border border-line bg-raised px-3 py-1.5 text-[12.5px]" role="status" data-testid="template-pushed">
               <span>{pushed.text}</span>
-              <button type="button" className="btn" onClick={() => void undoPushed()} data-testid="template-pushed-undo">
+              <button type="button" className="btn" onClick={() => void undoPushed()} {...undoMark(pushed.at)} data-testid="template-pushed-undo">
                 Cofnij
               </button>
             </div>

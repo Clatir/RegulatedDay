@@ -12,7 +12,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent } from 'react'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import type { Costs } from '@shared/model/categories'
-import { logicalClock } from '@shared/format'
+import { logicalClock, plDate } from '@shared/format'
 import type { DragKey } from '@shared/engine/groupDrag'
 import type { GroupDay } from '@shared/engine/groupEdit'
 import { logicalMinuteOf } from '@shared/time/day'
@@ -23,7 +23,9 @@ import { stepsCounter } from '@shared/model/steps'
 import { SERIES_MARK } from '@shared/seriesText'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { weekday } from '@shared/time/zone'
-import { menuBind } from '../../components/ContextMenu'
+import { ContextMenu, menuBind } from '../../components/ContextMenu'
+import { applyTemplateEntry } from '../templates/applyMenu'
+import { useApplyFlow } from '../templates/ApplyTemplate'
 import { cx } from '../../components/ui'
 import { contentTop, followAxis, scrollAxis, scrollParent } from '../../lib/axisScroll'
 import { useDeleteSelected } from '../../lib/deleteKey'
@@ -175,7 +177,10 @@ export function DayGrid({
   /** The days as counted, with the blocks of the unchecked calendars too (`days` has them taken out): the free hour of Ctrl+N is looked for among all. */
   allDays?: readonly HorizonDay[]
 }) {
-  const { rd, routines, requests } = useData()
+  const { rd, routines, requests, templates } = useData()
+  // UX19 (P28): the right button on a day's heading – „Zastosuj szablon ▸” for that day, through the flow of „Zastosuj do…”.
+  const [dayMenu, setDayMenu] = useState<{ date: string; at: { x: number; y: number } } | null>(null)
+  const apply = useApplyFlow()
   const today = useData((s) => s.view?.today ?? '')
   const bodyRef = useRef<HTMLDivElement>(null)
   const headRef = useRef<HTMLDivElement>(null)
@@ -542,7 +547,7 @@ export function DayGrid({
         <div className="grid gap-x-1" style={cols}>
           <span />
           {days.map((d) => (
-            <ColumnHeading key={d.date} day={d} brightness={brightness} />
+            <ColumnHeading key={d.date} day={d} brightness={brightness} onContext={(at) => setDayMenu({ date: d.date, at })} />
           ))}
         </div>
         <div className="mt-1">
@@ -608,11 +613,21 @@ export function DayGrid({
         )}
       </div>
       {group.overlay}
+      {dayMenu && (
+        <ContextMenu
+          title={`Dzień ${plDate(dayMenu.date)}`}
+          at={dayMenu.at}
+          onClose={() => setDayMenu(null)}
+          testId="week-day-menu"
+          items={[applyTemplateEntry(templates, apply.busy, (t) => void apply.start(t, [dayMenu.date]), 'week-day-menu-apply')]}
+        />
+      )}
+      {apply.dialogs}
     </div>
   )
 }
 
-function ColumnHeading({ day, brightness }: { day: HorizonDay; brightness: number }) {
+function ColumnHeading({ day, brightness, onContext }: { day: HorizonDay; brightness: number; onContext: (at: { x: number; y: number }) => void }) {
   const today = day.when === 'today'
   // The weekday of the date, not the place of the column: „3 dni” does not start on a Monday.
   const index = weekday(day.date) - 1
@@ -623,7 +638,8 @@ function ColumnHeading({ day, brightness }: { day: HorizonDay; brightness: numbe
     <button
       type="button"
       onClick={() => openDay(day.date)}
-      title={`${WEEKDAY_FULL[index]} – otwórz plan dnia`}
+      {...menuBind(onContext)}
+      title={`${WEEKDAY_FULL[index]} – otwórz plan dnia (prawy przycisk – szablon na ten dzień)`}
       data-testid={`week-day-${day.date}`}
       data-when={day.when}
       aria-current={today ? 'date' : undefined}
@@ -730,6 +746,11 @@ function DayColumn({
       style={{ height }}
       {...grid.bind}
       data-testid={`week-col-${day.date}`}
+      // UX19 (P27): what a sprawa dragged from the panel „Sprawy” reads to find the day and the hour under the pointer (`weekCaseDrop`).
+      data-week-col={day.date}
+      data-lo={lo}
+      data-hi={hi}
+      data-ppm={ppm}
       aria-label={columnLabel(weekday(day.date) - 1, day.blocks.length)}
     >
       {marks.map((h) => (

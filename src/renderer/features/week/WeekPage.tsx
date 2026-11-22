@@ -35,7 +35,8 @@ import { THREE_DAYS_PPM, goalsMonthOfWeek } from './weekLayout'
 import { weekTitle } from './weekText'
 import { WeekPushLine } from './WeekPushLine'
 import { GroupLine } from '../../components/GroupLine'
-import { lastWeekMode, rememberWeekMode, shiftDay, threeDaysTitle, WEEK_MODES, type WeekMode } from './weekViews'
+import { WeekCasesPanel } from './WeekCasesPanel'
+import { casesOpen, lastWeekMode, rememberCasesOpen, rememberWeekMode, shiftDay, threeDaysTitle, WEEK_MODES, type WeekMode } from './weekViews'
 import { agendaTitle, AGENDA_STEP } from './weekPeriod'
 
 export function WeekPage() {
@@ -85,6 +86,13 @@ export function WeekPage() {
     },
     !picking
   )
+  // UX19 (P27): the panel „Sprawy” beside the columns – folded until opened, remembered by this computer; the list „Agenda” has no columns to drop on.
+  const [cases, setCases] = useState(casesOpen)
+  const toggleCases = () => {
+    rememberCasesOpen(!cases)
+    setCases(!cases)
+  }
+  const columns = mode !== 'agenda'
   const choose = (m: WeekMode) => {
     setMode(m)
     rememberWeekMode(m)
@@ -147,6 +155,11 @@ export function WeekPage() {
             </button>
           </>
         )}
+        {columns && (
+          <button type="button" className="btn ml-auto" aria-expanded={cases} onClick={toggleCases} title="Panel spraw: przeciągnij sprawę na kolumnę dnia" data-testid="week-cases-toggle">
+            Sprawy {cases ? '▾' : '▸'}
+          </button>
+        )}
       </div>
       {/* D10: what the gestures on the grid do (the list of „Agenda” has none). */}
       {mode !== 'agenda' && (
@@ -157,9 +170,15 @@ export function WeekPage() {
       <WeekPushLine />
       <GroupLine view="week" />
       <AllDayLines page="week" />
-      {mode === 'week' && <WeekBody week={week} today={today} openCard={waiting} onCardOpened={() => setCard(null)} opened={opened} onPicking={setPicking} />}
-      {mode === '3days' && <ThreeDaysBody middle={middle} opened={opened} onPicking={setPicking} />}
-      {mode === 'agenda' && <AgendaBody from={agendaFrom} today={today} opened={opened} />}
+      {/* The columns and the panel „Sprawy” side by side (the panel is not in the grid: its keys and the grid's are apart). */}
+      <div className="flex items-start gap-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          {mode === 'week' && <WeekBody week={week} today={today} openCard={waiting} onCardOpened={() => setCard(null)} opened={opened} onPicking={setPicking} />}
+          {mode === '3days' && <ThreeDaysBody middle={middle} opened={opened} onPicking={setPicking} />}
+          {mode === 'agenda' && <AgendaBody from={agendaFrom} today={today} opened={opened} />}
+        </div>
+        {columns && cases && <WeekCasesPanel today={today} />}
+      </div>
     </div>
   )
 }

@@ -22,7 +22,7 @@ import { knownSessionDefs } from '@shared/model/templateSessions'
 import { logicalClock, plDate } from '@shared/format'
 import type { ZjazdDay } from '@shared/import/zjazdy'
 import { eventsOn } from '@shared/model/allDay'
-import { dayFileFrom } from '@shared/model/plan'
+import { dayFileFrom, type Template } from '@shared/model/plan'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, settingsOn, type DayTypeId } from '@shared/model/settings'
 import { blockFill } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
@@ -55,6 +55,7 @@ import { emptyMonthDay, monthCellView, visibleMonthDay } from './monthCellView'
 import { gridDates, MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from './MonthGrid'
 import { questionsText, savedText, skippedLines, undoneText, unchangedText } from './zjazdyDraft'
 import { undoDayEdits } from './dayGroup'
+import { useApplyFlow } from '../templates/ApplyTemplate'
 import { dayMenu, type MenuDay } from './dayMenu'
 import { runInTurn } from './zjazdyRun'
 import { closeZjazdy, keepZjazdy, openZjazdy, useZjazdy } from './zjazdyStore'
@@ -131,7 +132,10 @@ export function CalendarPage() {
     }
   }, [dates, stamp])
   const fileOf = (d: string) => (files[d] ? dayFileFrom(files[d], d) : null)
-  const [busy, run] = useBusy()
+  const [saving, run] = useBusy()
+  // UX19 (P28): „Zastosuj szablon ▸” of the menu – the flow of „Zastosuj do…” (its windows stand here, the menu is gone by then).
+  const apply = useApplyFlow()
+  const busy = saving || apply.busy
   // Ctrl+N (D6, P9): the small window of a new block today – or on the first day of the grid from today – at the nearest free hour, beside its cell.
   const root = useRef<HTMLDivElement>(null)
   const freshSeq = useRef(0)
@@ -270,9 +274,19 @@ export function CalendarPage() {
   }
 
   // The actions of the menu are always the page's latest (the items live in a memo).
-  const actions = useRef({ setType, setWakeOf })
-  actions.current = { setType, setWakeOf }
-  const menuActions = useMemo(() => ({ setType: (t: DayTypeId | null, ids: readonly string[]) => void actions.current.setType(t, ids), setWake: (v: number | null, ids: readonly string[]) => void actions.current.setWakeOf(v, ids) }), [])
+  // UX19: after the template is really written (not when a window of the flow opens) the days are done with, as after „Typ dnia” – but only while the
+  // selection is still those very days (a window that stood open may have seen it changed).
+  const latestSelection = useRef(selection)
+  latestSelection.current = selection
+  const applyTo = (t: Template, ids: readonly string[]) =>
+    apply.start(t, ids, () => {
+      const now = latestSelection.current
+      const same = now.selected.length === ids.length && ids.every((d) => now.isSelected(d))
+      if (same) now.clear()
+    })
+  const actions = useRef({ setType, setWakeOf, apply: applyTo })
+  actions.current = { setType, setWakeOf, apply: applyTo }
+  const menuActions = useMemo(() => ({ setType: (t: DayTypeId | null, ids: readonly string[]) => void actions.current.setType(t, ids), setWake: (v: number | null, ids: readonly string[]) => void actions.current.setWakeOf(v, ids), applyTemplate: (t: Template, ids: readonly string[]) => void actions.current.apply(t, ids) }), [])
   /** What each day of the menu is, from the grid's files and the ones read for the menu – once per change, not per item. */
   const menuDays = useMemo(() => {
     if (!menu) return null
@@ -284,7 +298,7 @@ export function CalendarPage() {
       })
     )
   }, [menu, files, rd])
-  const menuEntries = useMemo(() => (menu && menuDays ? dayMenu(menu.dates, menuDays, today, busy, menuActions) : null), [menu, menuDays, today, busy, menuActions])
+  const menuEntries = useMemo(() => (menu && menuDays ? dayMenu(menu.dates, menuDays, today, busy, menuActions, templates) : null), [menu, menuDays, today, busy, menuActions, templates])
 
   /** „Wczytaj PDF zjazdów”: a file picked in the dialog of Windows, read into the preview; nothing is saved (D357). */
   const readPdf = () =>
@@ -442,6 +456,7 @@ export function CalendarPage() {
         />
       )}
       {menu && menuEntries && <ContextMenu title={`Zmień ${groupCount(menu.dates.length, 'day')}`} at={menu.at} items={menuEntries} onClose={() => setMenu(null)} testId="calendar-menu" />}
+      {apply.dialogs}
     </div>
   )
 }

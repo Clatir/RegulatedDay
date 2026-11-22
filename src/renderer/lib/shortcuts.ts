@@ -9,6 +9,7 @@ export const SHORTCUTS: Array<[string, string]> = [
   ['PgUp / PgDn', 'poprzedni / następny okres: dzień w „Dziś” i „3 dniach”, tydzień w „Tygodniu”, 7 dni w „Agendzie”, miesiąc w Kalendarzu (nie w polu)'],
   ['Home', 'wraca do dziś: do dzisiejszego dnia, tygodnia albo miesiąca (nie w polu)'],
   ['Win+Alt+N', 'szybki zapis zadania do Skrzynki z dowolnego programu (skrót globalny, do zmiany i wyłączenia w Ustawieniach)'],
+  ['Ctrl+Z', 'cofa ostatnią zmianę, przy której widać „Cofnij” (dymek w rogu albo linia strony); w polu tekstowym cofa wpis w polu'],
   ['Enter', 'zatwierdza pole; w pytaniu o usunięcie – potwierdza'],
   ['Esc', 'cofa edycję pola; kolejny Esc zamyka to, co otwarte, a na końcu czyści zaznaczenie'],
   ['Del', 'usuwa zaznaczony element po pytaniu (Enter – Usuń, Esc – Anuluj); w polu tekstowym kasuje tekst'],

@@ -6,8 +6,9 @@
  */
 import { useState, type ComponentProps, type ReactNode } from 'react'
 import { daysFromTo, dmy, isBadDmy, parseDmy, typedDmy } from '@shared/dateInput'
-import { countLabel } from '@shared/format'
+import { countLabel, WEEKDAY_SHORT } from '@shared/format'
 import { Dialog } from '../../components/Dialog'
+import { weekdaysOfMonth, workdaysOfMonth } from './dayQuick'
 import { MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from './MonthGrid'
 
 /** The most days a range typed may have when the caller gives no `max`: a range of centuries is never built (ten years). */
@@ -163,6 +164,18 @@ export function DaysDialog({
         <button type="button" className="btn" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Następny miesiąc">
           ›
         </button>
+      </div>
+      {/* UX19 (P28): the quick picks – the month shown, whole at once; they replace the selection as a typed range does. */}
+      <div className="flex flex-wrap items-center gap-1.5 text-[12px]" data-testid={`${testId}-quick`}>
+        <button type="button" className="chip" onClick={() => picked(new Set(workdaysOfMonth(month)))} title="Zaznacza poniedziałek–piątek pokazanego miesiąca" data-testid={`${testId}-quick-workdays`}>
+          pn–pt tego miesiąca
+        </button>
+        <span className="ml-2 text-muted">każdy:</span>
+        {WEEKDAY_SHORT.map((w, i) => (
+          <button key={w} type="button" className="chip" onClick={() => picked(new Set(weekdaysOfMonth(month, i + 1)))} title={`Zaznacza każdy dzień „${w}” pokazanego miesiąca`} data-testid={`${testId}-quick-weekday-${i + 1}`}>
+            {w}
+          </button>
+        ))}
       </div>
       <MonthGrid month={month} today={today} selected={sel} onSelect={picked} cell={cell ?? (() => ({ tone: null, marks: null }))} data-testid={`${testId}-month`} />
       {note && <p className="text-[12px] text-muted">{note}</p>}

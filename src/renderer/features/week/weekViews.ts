@@ -50,6 +50,48 @@ export function rememberWeekMode(mode: WeekMode): void {
   }
 }
 
+const GOALS_KEY = 'rd.goalsFolded'
+
+/** Whether this computer folded the goals panel over the columns (UX19, P28): unfolded until it is. Storage that cannot be read is no memory. */
+export function goalsFolded(): boolean {
+  try {
+    return localStorage.getItem(GOALS_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** Remembers the goals panel folded or unfolded. */
+export function rememberGoalsFolded(folded: boolean): void {
+  try {
+    if (folded) localStorage.setItem(GOALS_KEY, '1')
+    else localStorage.removeItem(GOALS_KEY)
+  } catch {
+    // No storage: the panel opens unfolded again.
+  }
+}
+
+const CASES_KEY = 'rd.weekCases'
+
+/** Whether this computer left the panel „Sprawy” beside the columns open (UX19, P27): folded until it is opened. */
+export function casesOpen(): boolean {
+  try {
+    return localStorage.getItem(CASES_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** Remembers the panel „Sprawy” open or folded. */
+export function rememberCasesOpen(open: boolean): void {
+  try {
+    if (open) localStorage.setItem(CASES_KEY, '1')
+    else localStorage.removeItem(CASES_KEY)
+  } catch {
+    // No storage: the panel is folded again.
+  }
+}
+
 /** The title of „3 dni”: „wt 17.11 – cz 19.11.2026” (the year of each end when they differ). */
 export function threeDaysTitle(dates: readonly string[]): string {
   const first = dates[0]
