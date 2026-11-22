@@ -119,7 +119,9 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
       `npm test` 356/5176, `build`, `lint`, `playwright test` 144/144).
     - **Dokumenty i wydanie (Krok 1.3, 22.11):** T2420–T2423 w `docs/decyzje-techniczne.md`, reguły w `.claude/rules/koszt.md`,
       `version` `1.35.0` w `package.json`, `CHANGELOG.md`, punkty odbioru `SK1.1`–`SK1.3` w `docs/odbior.md`.
-      **PR #110 otwarty** (`claude/1.35-przelicz-koszty` → `main`), CI w toku – po zielonym CI scalić PR #110 i sprawdzić publikację wydania `v1.35.0`.
+    - **CI i scalenie (22.11):** Pełny powrót runnerów w `.github/workflows/ci.yml` do GitHub-hosted (`ubuntu-latest`, `windows-latest`).
+      PR #110 z pełnym zielonym CI (run 45021866279) scalony do `main` (`d7de25f`). Publikacja wydania `v1.35.0` w toku w CI na `main` (run 45031554832).
+      Lokalny instalator skopiowany do `Downloads\Regulated-Day-Setup.exe`. Odbiór SK1.1–SK1.3 w `docs/odbior.md`.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
