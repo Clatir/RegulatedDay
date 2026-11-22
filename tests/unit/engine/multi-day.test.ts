@@ -12,6 +12,7 @@ import { computeDay } from '@shared/engine/day'
 import { computeEnergy } from '@shared/engine/energy'
 import { ASSUMED_CHECKIN, ENERGY_SAMPLE_MIN, energyTrack } from '@shared/engine/energyTrack'
 import { foldFacts } from '@shared/engine/facts'
+import { checkinSkipId } from '@shared/engine/reminders'
 import { gridOf, idxOfLogical } from '@shared/engine/grid'
 import { moveBetweenDays, moveGroup, moveRoots, stayerStart, stayHowOf, stayRuleOf } from '@shared/engine/planEdit'
 import { applyVariant, planWith, variantCauses, variantsFor } from '@shared/engine/variants'
@@ -292,12 +293,25 @@ describe('D417 – krzywa energii kolumny tym samym silnikiem co „Dziś”', (
     expect(sampleAt(d, lm('15:00')).head).toBeLessThan(sampleAt(d, lm('14:00')).head)
   })
 
-  it('dziś bez check-inu – brak krzywej (energia „nieznana”, jak w „Dziś”); moduł wyłączony – brak', () => {
-    const s = new Scenario({ date: TODAY, plan: [block({ id: 'a', cat: 'inne', at: '13:00', min: 60, origin: 'user' })] })
+  it('dziś bez check-inu (brak, „Pomiń”) – krzywa od przyjętego check-inu (T2430); po check-inie – Twoja, bez „przyjęte”; moduł wyłączony – brak', () => {
+    const s = new Scenario({ date: TODAY, plan: [block({ id: 'a', cat: 'analiza', at: '13:00', min: 60, origin: 'user' })], settings: { transitionBufferMin: 0 } })
     s.presence('07:30').using('07:30', '12:00')
-    expect(horizonDay(s.contextAt(NOW), 'today').energy).toBeNull()
-    s.checkin('07:40', { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] })
-    expect(horizonDay(s.contextAt(NOW), 'today').energy).not.toBeNull()
+    const ctx = s.contextAt(NOW)
+    const before = horizonDay(ctx, 'today')
+    expect(before.energy).toMatchObject({ assumed: true, reserve: DEFAULT_SETTINGS.reserve })
+    // From 100 / 100 / 100 / 100 at 04:00; the analysis at 13:00 brings the forecast down.
+    expect(before.energy!.samples[0]).toEqual({ at: 240, head: 100, emotions: 100, senses: 100, body: 100 })
+    expect(sampleAt(before, lm('14:00')).head).toBeLessThan(sampleAt(before, lm('13:00')).head)
+    // The assumed check-in is for the energy only: the day's log stays without it, the rest of the day the same as with the module off.
+    expect(ctx.events.some((e) => e.k === 'energy.checkin')).toBe(false)
+    expect({ ...before, energy: null }).toEqual(horizonDay(ctx, 'today', null, { moduleOn: false }))
+    // „Pomiń” is a mark of the question, not a check-in: still assumed.
+    s.mark('07:35', checkinSkipId(TODAY), 'skip')
+    expect(horizonDay(s.contextAt(NOW), 'today').energy!.assumed).toBe(true)
+    s.checkin('07:40', { head: [1, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] })
+    const after = horizonDay(s.contextAt(NOW), 'today')
+    expect(after.energy).not.toBeNull()
+    expect(after.energy!.assumed).toBeUndefined()
     expect(horizonDay(s.contextAt(NOW), 'today', null, { moduleOn: false }).energy).toBeNull()
   })
 

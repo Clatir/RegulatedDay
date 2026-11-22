@@ -2,11 +2,13 @@
  * The energy beside the axis of „Dziś” (D500): four narrow lanes G · E · B · C (głowa, emocje, bodźce, ciało), each 0–100, a filled bar
  * of the smoothed forecast (`energyDraw.ts`, T1280), lighter where it stands below the reserve; the reserve is a tick in each
  * lane, the letters stay over the lanes while the axis scrolls, the four numbers of now stand at the line „teraz”, and the
- * pointer over the lanes shows the hour and the four values („10:30 · głowa 71 · emocje 66 · bodźce 41 · ciało 58”).
+ * pointer over the lanes shows the hour and the four values („10:30 · głowa 71 · emocje 66 · bodźce 41 · ciało 58”). Counted from the
+ * assumed check-in (today before its own check-in, a day to come – T2430): the bars `ASSUMED_FACTOR` fainter, the numbers at „teraz”
+ * at `ASSUMED_NOW_OPACITY`, the caption „przyjęte” under the letters.
  */
 import { useId, useMemo, useState, type MouseEvent } from 'react'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
-import { COST_SCALE_TEXT, ENERGY_SCALE, hoverText, laneAreaPath, nearestSample, poolCurves, POOL_COLOR, POOL_LETTER, POOL_NAME, POOLS, RESERVE_COLOR, spansAtLeast, valuesAt } from './energyDraw'
+import { ASSUMED_CAPTION, ASSUMED_FACTOR, ASSUMED_NOW_OPACITY, COST_SCALE_TEXT, ENERGY_SCALE, hoverText, laneAreaPath, nearestSample, poolCurves, POOL_COLOR, POOL_LETTER, POOL_NAME, POOLS, RESERVE_COLOR, spansAtLeast, valuesAt } from './energyDraw'
 
 /** The width of the column of lanes (the strip of all-day events leaves the same place free over it). */
 export const LANES_WIDTH = 63
@@ -45,9 +47,11 @@ export function EnergyLanes({ track, lo, ppm, height, nowAt, nowColor }: { track
   }
   const sample = hover == null ? null : nearestSample(track, hover)
   const reserveX = (i: number) => laneLeft(i) + (track.reserve / 100) * LANE_WIDTH
+  const assumed = track.assumed === true
+  const faint = assumed ? ASSUMED_FACTOR : 1
   return (
-    <div className="relative shrink-0 border-l border-line" style={{ width: LANES_WIDTH, height }} onMouseMove={onMove} onMouseLeave={() => setHover(null)} data-testid="energy-track">
-      <svg width={LANES_WIDTH} height={height} className="absolute top-0 left-0" role="img" aria-label={`${ENERGY_SCALE}: ${POOLS.map((p) => POOL_NAME[p]).join(', ')}; rezerwa ${track.reserve}`}>
+    <div className="relative shrink-0 border-l border-line" style={{ width: LANES_WIDTH, height }} onMouseMove={onMove} onMouseLeave={() => setHover(null)} data-testid="energy-track" data-assumed={assumed ? 'true' : undefined}>
+      <svg width={LANES_WIDTH} height={height} className="absolute top-0 left-0" role="img" aria-label={`${ENERGY_SCALE}: ${POOLS.map((p) => POOL_NAME[p]).join(', ')}; rezerwa ${track.reserve}${assumed ? ` – ${ASSUMED_CAPTION}` : ''}`}>
         <defs>
           {drawn.map(({ pool: p, spans }) => (
             <clipPath key={p} id={`${clip}-${p}`}>
@@ -61,8 +65,8 @@ export function EnergyLanes({ track, lo, ppm, height, nowAt, nowColor }: { track
           return (
             <g key={p} data-testid={`energy-lane-${p}`}>
               <rect x={x0} width={LANE_WIDTH} y={0} height={height} fill={POOL_COLOR[p]} opacity={0.08} />
-              <path d={d} fill={POOL_COLOR[p]} opacity={BAR_BELOW_OPACITY} data-testid={`energy-bar-${p}`} />
-              <path d={d} fill={POOL_COLOR[p]} opacity={BAR_OPACITY} clipPath={`url(#${clip}-${p})`} data-testid={`energy-bar-full-${p}`} />
+              <path d={d} fill={POOL_COLOR[p]} opacity={BAR_BELOW_OPACITY * faint} data-testid={`energy-bar-${p}`} />
+              <path d={d} fill={POOL_COLOR[p]} opacity={BAR_OPACITY * faint} clipPath={`url(#${clip}-${p})`} data-testid={`energy-bar-full-${p}`} />
               <line x1={reserveX(i)} x2={reserveX(i)} y1={0} y2={height} stroke={RESERVE_COLOR} strokeDasharray="2 3" strokeWidth={1} data-testid={`energy-reserve-${p}`} />
             </g>
           )
@@ -70,17 +74,22 @@ export function EnergyLanes({ track, lo, ppm, height, nowAt, nowColor }: { track
         {nowAt != null && <line x1={0} x2={LANES_WIDTH} y1={y(nowAt)} y2={y(nowAt)} stroke={nowColor} strokeWidth={1} data-testid="energy-now-line" />}
         {sample && <line x1={0} x2={LANES_WIDTH} y1={y(sample.at)} y2={y(sample.at)} stroke={nowColor} strokeOpacity={0.5} strokeWidth={1} />}
       </svg>
-      {/* The letters over the lanes – they stay at the top while the axis scrolls. */}
-      <div className="pointer-events-none sticky top-0 z-10 h-3 bg-bg/85" data-testid="energy-letters">
+      {/* The letters over the lanes – they stay at the top while the axis scrolls; counted from the assumed check-in, „przyjęte” under them. */}
+      <div className={`pointer-events-none sticky top-0 z-10 bg-bg/85 ${assumed ? 'h-[22px]' : 'h-3'}`} data-testid="energy-letters">
         {POOLS.map((p, i) => (
           <span key={p} className="absolute top-0 text-center text-[9px] leading-3 font-medium" style={{ left: laneLeft(i), width: LANE_WIDTH, color: POOL_COLOR[p] }} title={POOL_NAME[p]}>
             {POOL_LETTER[p]}
           </span>
         ))}
+        {assumed && (
+          <span className="absolute top-3 right-0 left-0 text-center text-[9px] leading-[10px] text-muted" data-testid="energy-assumed">
+            {ASSUMED_CAPTION}
+          </span>
+        )}
       </div>
       {nowAt != null && now && (
         // Each number centred on the line „teraz”: its top half its height above the line.
-        <div className="pointer-events-none absolute inset-0 z-10" data-testid="energy-now">
+        <div className="pointer-events-none absolute inset-0 z-10" style={assumed ? { opacity: ASSUMED_NOW_OPACITY } : undefined} data-testid="energy-now">
           {POOLS.map((p, i) => (
             <span
               key={p}

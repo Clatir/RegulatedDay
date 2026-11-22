@@ -223,6 +223,11 @@ export class Scenario {
     return this
   }
 
+  /** A question answered by the timer's `mark` (e.g. „Pomiń” of the check-in – `checkinSkipId`). */
+  mark(at: string, question: string, answer: string): this {
+    return this.push({ k: 'question.answer', at: this.at(at), question, answer, value: null }, at)
+  }
+
   /** A question seen on a computer. */
   seen(question: string, at: string, computer = this.computer): this {
     return this.push({ k: 'question.seen', at: this.at(at), question, how: 'main' }, at, computer)

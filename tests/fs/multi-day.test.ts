@@ -77,8 +77,8 @@ describe('„3 dni” i „Agenda” w folderze danych', () => {
     expect(thu.blocks.find((b) => b.id === 'a')).toMatchObject({ movable: true, startMin: 11 * 60, endMin: 13 * 60 })
     expect(thu.energy).toMatchObject({ assumed: true })
     expect(thu.energy!.samples[0]).toEqual({ at: 240, head: 100, emotions: 100, senses: 100, body: 100 })
-    // No check-in today: unknown, as „Dziś” shows it.
-    expect(v.days[1]!.energy).toBeNull()
+    // No check-in today: from the assumed check-in, as „Dziś” shows it (T2430).
+    expect(v.days[1]!.energy).toMatchObject({ assumed: true })
     expect(thu.budget!.limitMin).toBe(DEFAULT_SETTINGS.dayTypes.zwykly.budgetMin)
     // Asked again without a change: from memory.
     const before = runs.length
