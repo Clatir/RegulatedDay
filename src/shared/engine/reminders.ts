@@ -7,8 +7,9 @@
  * - The morning plan: `morningAfterWakeMin` after the wake (the day's own wake too), at the latest `morningBeforeFixedMin`
  *   before the first fixed block of work, never before the wake (then at the wake). 0 after the wake – no reminder; 0 before
  *   the fixed block – no such bound. It holds for `REMINDER_LINE_MIN` while the plan is still to do (`morningToDo`): a boundary
- *   proposed and not approved (an approval – also by the first work block – closes it); in a day with no boundary to approve,
- *   the check-in – the energy module on, no check-in that day and no „Pomiń” (`checkinSkipId`, written by the window).
+ *   proposed and not approved (any approval closes it – also the first work block's, which the card does not call
+ *   „zatwierdzony”); in a day with no boundary to approve, the check-in – the energy module on, no check-in that day and no
+ *   „Pomiń” (`checkinSkipId`, written by the window, its „Cofnij” takes it back).
  * - The ritual: `ritualBeforeBedMin` before the effective bedtime (0 – none), up to the bedtime (the night's quiet), while
  *   the ritual is due (`ritualDue` – the bar's „Rytuał”: no work runs) and the day is not closed.
  *
@@ -52,8 +53,9 @@ const MIN = 60_000
 export const reminderLineId = (date: string, kind: ReminderKind): string => `remind:${date}:${kind}`
 
 /**
- * „Pomiń” of the morning's check-in (the window writes it as `question.answer` through the timer's `mark`): the step counts as
- * done for the reminder on every computer. The check-in card itself keeps its own skip in the window's state (D563 B5).
+ * „Pomiń” of the morning's check-in (the window writes it as `question.answer` through the timer's `mark`; its toast's „Cofnij” –
+ * `unmark`): the step counts as done for the reminder and the card (`checkinOpen`) on every computer, read from the day's facts
+ * (an undone one is none). The window skips it at once too, in its own state (D563 B5).
  */
 export const checkinSkipId = (date: string): string => `checkinSkip:${date}`
 
@@ -80,15 +82,17 @@ export function ritualReminderAt(state: DayState): number | null {
 }
 
 /**
- * What of the morning plan is still to do – one thing, as the card's „do zrobienia / zatwierdzony” says it: the boundary proposed
- * and not approved (an approval – yours or the first work block's – closes the plan); only a day with no boundary to approve has
- * its check-in to do (the energy module on, no check-in, no „Pomiń”). Null – nothing.
+ * What of the morning plan is still to do – one thing: the boundary proposed and not approved. Any approval closes it – yours and
+ * the one the first work block's start makes; the card says „zatwierdzony” only for yours, so after an automatic approval it
+ * still says „do zrobienia” while the reminder is gone (the work has begun – a reminder to plan would come too late). Only a day
+ * with no boundary to approve has its check-in to do (the energy module on, no check-in, no „Pomiń” not undone). Null – nothing.
  */
 export function morningToDo(ctx: DayContext, state: DayState, energyOn: boolean): 'approve' | 'checkin' | null {
   if (state.boundary.approved != null) return null
   if (state.boundary.proposal != null) return 'approve'
   const checkedIn = ctx.events.some((e) => isKnown(e) && e.k === 'energy.checkin' && !state.facts.undone.has(e.id))
-  return energyOn && !checkedIn && !answered(ctx.events, checkinSkipId(state.grid.date)) ? 'checkin' : null
+  // The facts' answers: a „Pomiń” taken back by its „Cofnij” (`unmark` – an `undo`) is none.
+  return energyOn && !checkedIn && !state.facts.answers.has(checkinSkipId(state.grid.date)) ? 'checkin' : null
 }
 
 /** A session or classes now by the day's facts (spec „Cisza”; as the notifications' `inClass`), not this computer's modes. */

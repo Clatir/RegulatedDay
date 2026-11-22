@@ -80,12 +80,12 @@ describe('przypomnienie o planie porannym – kiedy jest', () => {
     expect(due(s, '09:30')).toEqual([])
   })
 
-  it('dzień z granicą do zatwierdzenia: zrobiony = granica zatwierdzona (także sama, startem pierwszego bloku pracy) – jak „zatwierdzony” karty; check-in tego nie zmienia', () => {
-    // Approved, no check-in (the energy on): none – the card says „zatwierdzony”.
+  it('dzień z granicą do zatwierdzenia: przypomnienie zamyka każde zatwierdzenie – Twoje i samo (start pierwszego bloku pracy), choć karta pisze „zatwierdzony” tylko przy Twoim; check-in tego nie zmienia', () => {
+    // Approved by you, no check-in (the energy on): none – the card says „zatwierdzony”.
     const approved = day()
     approved.approve('17:00', '06:20')
     expect(due(approved, '06:30')).toEqual([])
-    // Approved by the first work block's start: none.
+    // Approved by the first work block's start: none – the card still says „do zrobienia” (it names only your approval).
     const auto = day([block({ id: 'a', cat: 'inne', at: '06:20', min: 60 })]).start('a', '06:20')
     expect(auto.stateAt(auto.at('06:30')).boundary).toMatchObject({ auto: true })
     expect(due(auto, '06:30')).toEqual([])
@@ -130,6 +130,16 @@ describe('przypomnienie o planie porannym – kiedy jest', () => {
     const s = skipped(day([block({ id: 'm', cat: 'posilek', at: '09:00', min: 30 })]), '06:20')
     const t = s.at('06:25')
     expect(timerAction(s.contextAt(t), s.stateAt(t), { a: 'mark', question: checkinSkipId(DATE), answer: 'skip' }, t)).toMatchObject({ ok: false, code: 'answered' })
+  })
+
+  it('„Pomiń” cofnięte („Cofnij” dymka = `unmark`): check-in znów czeka i przypomnienie wraca', () => {
+    const s = skipped(day([block({ id: 'm', cat: 'posilek', at: '09:00', min: 30 })]), '06:20')
+    expect(due(s, '06:30')).toEqual([])
+    const t = s.at('06:31')
+    const r = timerAction(s.contextAt(t), s.stateAt(t), { a: 'unmark', question: checkinSkipId(DATE) }, t)
+    if (!r.ok) throw new Error(r.why)
+    s.write(r.events, t)
+    expect(due(s, '06:32')).toMatchObject([{ kind: 'morning', checkin: true }])
   })
 
   it('nigdy w „Odcinam się”; w „mniej pytań” cicho (bez powiadomienia)', () => {

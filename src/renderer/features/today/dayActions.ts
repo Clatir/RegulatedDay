@@ -33,7 +33,7 @@ import type { DaySnapshot } from '@shared/model/events'
 import { attachmentUndoOf, ownAttachmentIds, removalEdits, restoreEdits, type AttachmentUndo } from '@shared/model/attachment'
 import { dayFilesNow, editOf, isSaved, trySaveWith, useData, withOwner, type SendState } from '../../store/data'
 import { countedDay, dayUsable, type DayModel } from '../../store/day'
-import { skipCheckin, toast, undoToast } from '../../store/ui'
+import { skipCheckin, toast, undoToast, useUi } from '../../store/ui'
 import { checkinSkipId } from '@shared/engine/reminders'
 import { MOVE_GONE_TEXT, movedDay, stayedOf, type Stayed, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
 
@@ -308,20 +308,37 @@ export async function tellFreed(date: string, freed: Freed | null): Promise<void
   }
 }
 
+/** The words of „Pomiń” of the check-in: written, not written (the window skips it all the same), „Cofnij” not written. */
+export const CHECKIN_SKIPPED_TEXT = 'Pominięto pytania o objawy.'
+export const CHECKIN_SKIP_UNSAVED_TEXT = 'Nie zapisano pominięcia – przypomnienie może jeszcze wrócić.'
+export const CHECKIN_UNSKIP_UNSAVED_TEXT = 'Nie cofnięto pominięcia w zapisie dnia – spróbuj za chwilę.'
+
 /**
- * „Pomiń” of the morning's check-in (UX13): the day's log gets its mark (`checkinSkipId`, the timer's `mark`) – the card does not
- * ask again after a restart nor on another computer (`checkinOpen`), and the morning plan's reminder counts the check-in as done –
- * and the window skips it at once (`skipCheckin`, D563 B5). Given before (`answered` – another computer): skipped as well. Refused
- * otherwise (the folder away, the day not usable): a toast says why and the check-in stays. True – skipped.
+ * „Pomiń” of the morning's check-in (UX13). Nothing waits on the log (D72): the window skips it at once (`skipCheckin`, D563 B5),
+ * then the day's log gets its mark in the background (`checkinSkipId`, the timer's `mark`) – the card does not ask again after a
+ * restart nor on another computer (`checkinOpen`), the morning plan's reminder counts the check-in as done. Written: a toast with
+ * „Cofnij” (`unmark` and the window's skip taken off – the log has no other way back). Given before (`answered` – another
+ * computer's „Pomiń”): nothing to say. Refused – the day's logs not all readable now (`timerClick`'s answer), or the IPC throws
+ * (no data folder open, a write of the log failed): only a toast in our words (never the IPC's „Error invoking remote method”);
+ * the card stays skipped here, the reminder may come back. True – in the log.
  */
 export async function skipCheckinDay(date: string): Promise<boolean> {
-  const r = await timerClick({ a: 'mark', question: checkinSkipId(date), answer: 'skip', day: date })
-  if (!r.ok && r.code !== 'answered') {
-    toast(`Nie pominięto pytań o objawy: ${r.why ?? 'spróbuj za chwilę'}.`, 'error')
-    return false
-  }
   skipCheckin(date)
-  return true
+  const r = await timerClick({ a: 'mark', question: checkinSkipId(date), answer: 'skip', day: date })
+  if (r.ok) {
+    undoToast(CHECKIN_SKIPPED_TEXT, () => void unskipCheckinDay(date))
+    return true
+  }
+  if (r.code === 'answered') return true
+  toast(CHECKIN_SKIP_UNSAVED_TEXT, 'error')
+  return false
+}
+
+/** „Cofnij” of „Pomiń”: the window asks the check-in again, and the log's mark is taken back (`unmark`). */
+async function unskipCheckinDay(date: string): Promise<void> {
+  if (useUi.getState().checkinSkipped === date) useUi.setState({ checkinSkipped: null })
+  const r = await timerClick({ a: 'unmark', question: checkinSkipId(date), day: date })
+  if (!r.ok) toast(CHECKIN_UNSKIP_UNSAVED_TEXT, 'error')
 }
 
 /** A click of the timer whose failure (the IPC throws) is an answer, not an unhandled rejection. */
