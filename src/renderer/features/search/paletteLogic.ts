@@ -52,6 +52,8 @@ export function choose(r: SearchRecord, today: string): void {
       // The help windows (UX15): the palette is the only dialog open and closes in the same step, so no guard.
       else if (r.id === 'concepts') showHelp('concepts')
       else if (r.id === 'shortcuts') showHelp('shortcuts')
+      // „Przelicz koszty ×N” (D566): the settings with its window open.
+      else if (r.id === 'costScale') openPick({ page: 'settings' }, { kind: 'command', id: 'costScale' })
       return
     case 'screen':
       navigate(r.id as Page)

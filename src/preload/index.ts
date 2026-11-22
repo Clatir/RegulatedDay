@@ -50,6 +50,7 @@ const api: RdApi = {
   onData: (cb) => on(CH.onData, cb),
   dayData: (date) => ipcRenderer.invoke(CH.dayData, date),
   dayFiles: (dates) => ipcRenderer.invoke(CH.dayFiles, dates),
+  dayDatesFrom: (from) => ipcRenderer.invoke(CH.dayDatesFrom, from),
   edit: (entries) => ipcRenderer.invoke(CH.edit, entries),
   planPushed: (day, count, entry, made, line) => ipcRenderer.invoke(CH.planPushed, day, count, entry, made, line),
   planArranged: (day, label, entry, made) => ipcRenderer.invoke(CH.planArranged, day, label, entry, made),

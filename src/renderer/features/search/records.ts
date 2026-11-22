@@ -40,8 +40,12 @@ export const COMMANDS: SearchRecord[] = [
   { kind: 'command', id: 'yesterday', title: 'Wczoraj', hint: 'plan wczorajszego dnia' },
   { kind: 'command', id: 'ritual', title: 'Rytuał', hint: 'rytuał dzisiejszego dnia', keys: 'wieczór podsumowanie' },
   { kind: 'command', id: 'concepts', title: 'Jak to działa', hint: 'pule, rezerwa, granica, nuty…', keys: 'pojęcia słowniczek pomoc' },
-  { kind: 'command', id: 'shortcuts', title: 'Skróty klawiszowe', hint: 'F1', keys: 'klawisze lista pomoc' }
+  { kind: 'command', id: 'shortcuts', title: 'Skróty klawiszowe', hint: 'F1', keys: 'klawisze lista pomoc' },
+  { kind: 'command', id: 'costScale', title: 'Przelicz koszty ×N', hint: 'w ustawieniach · Kategorie', keys: 'mnożnik skala pomnóż kosztów' }
 ]
+
+/** The command „Przelicz koszty ×N” (D566): it opens the settings with its window (`CategoriesSection` takes the pick). */
+export const COST_SCALE_COMMAND = 'costScale'
 
 /** The sections of the settings by the test id of their box (the screen scrolls to it; the layout of the page is the source, UX14); words only searched. */
 export const SETTING_SECTIONS: Array<{ id: string; title: string; keys?: string }> = SETTINGS_SECTIONS.map((s) => ({ id: s.id, title: s.title, ...(SECTION_KEYS[s.id] ? { keys: SECTION_KEYS[s.id] } : {}) }))

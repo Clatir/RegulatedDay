@@ -57,6 +57,9 @@ export async function saveSettings(patch: Record<string, unknown>): Promise<bool
  */
 export type SettingsPatch = Record<string, unknown> | ((raw: RawRecord) => Record<string, unknown> | null)
 
+/** Today cannot be read now: a change „od dziś” is not saved (never a guessed type, A7-09). */
+export const TODAY_UNREAD_TEXT = 'Nie da się teraz odczytać dzisiejszego dnia – zmiana „od dziś” nie została zapisana. Spróbuj za chwilę albo wybierz „od jutra”.'
+
 /** As `saveSettings`, from a date (and instant) chosen before – e.g. the „Cofnij” of a change made from that date. */
 export async function saveSettingsFrom(patch: SettingsPatch, f: { from: string; at: number | null }): Promise<boolean> {
   const today = useData.getState().view?.today
@@ -66,7 +69,7 @@ export async function saveSettingsFrom(patch: SettingsPatch, f: { from: string; 
   if (at != null) {
     const type = await todayTypeNow(today)
     if (!type) {
-      toast('Nie da się teraz odczytać dzisiejszego dnia – zmiana „od dziś” nie została zapisana. Spróbuj za chwilę albo wybierz „od jutra”.', 'error', 8000)
+      toast(TODAY_UNREAD_TEXT, 'error', 8000)
       return false
     }
     todayType = type
@@ -75,7 +78,7 @@ export async function saveSettingsFrom(patch: SettingsPatch, f: { from: string; 
 }
 
 /** Today's type now (its last snapshot's, or the day's own); null when the day cannot be read now. */
-async function todayTypeNow(today: string): Promise<DayTypeId | null> {
+export async function todayTypeNow(today: string): Promise<DayTypeId | null> {
   try {
     const data = await window.rd.dayData(today)
     if (!dayUsable(data)) return null
@@ -97,12 +100,17 @@ export async function saveSettingsChange(patch: SettingsPatch, todayType: DayTyp
     const p = typeof patch === 'function' ? patch(raw) : patch
     if (!p) return raw
     changed = true
-    const list = Array.isArray(raw.settings) ? raw.settings : []
-    return { ...raw, settings: [...list, { id: newId(), from, at, made, patch: p }] }
+    return withSettingsChange(raw, p, from, at, made)
   })
   if (!changed || !isSaved(out)) return false
   // „Od dziś”: the rest of today counts by the new settings (the main process fills them in at the instant).
   return at == null || (await logEvents([{ k: 'day.snapshot', day: today, at, dayType: todayType, reason: 'today' }]))
+}
+
+/** rd.json with one more dated change of the settings (the one way a change is written – also a save of several records, D567). */
+export function withSettingsChange(raw: RawRecord, patch: Record<string, unknown>, from: string, at: number | null, made = Date.now()): RawRecord {
+  const list = Array.isArray(raw.settings) ? raw.settings : []
+  return { ...raw, settings: [...list, { id: newId(), from, at, made, patch }] }
 }
 
 /** A shared setting without a date (it works at once). */

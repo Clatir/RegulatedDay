@@ -45,3 +45,14 @@ Wpisy zamkniętych paczek ciągu UX przeniesione z `docs/postep.md` (≤ 20 KB).
 | UX9 | scalone 21.11 (c76f0b9, konflikt `TodayPage.tsx` z UX17): T2040–T2045, odbiór UX9.1–UX9.5; przegląd high 4 rundy; uwagi na później: karty rutyn niewidoczne przy otwartym panelu bloku (jest linia „czeka na kroki”), test linii rutyny bloku otwartego przez konstrukcję |
 | UX18 | scalone 21.11 (71abbd8, konflikt `BlockEditor.tsx` z UX9): T2260–T2262, odbiór UX18.1–UX18.4; przegląd high 4 rundy; uwagi na później: Esc zamykający najwyższy dymek błędu, stos dymków może chwilowo przekroczyć 4 |
 | UX15 | scalone 21.11 (konflikty `ui.tsx` Toggle z UX11, `wizard.spec.ts`): T2360–T2365, odbiór UX15.1–UX15.5; przegląd high 2 rundy; uwagi na później: „?” w kreatorze nie działa (straż jak Ctrl K), Ctrl+Z do listy skrótów po UX19, krótkie własne podpowiedzi pól na granicy testu 20 znaków |
+| UX19 | scalone 22.11 (2b911d9): T2070–T2074, odbiór UX19.1–UX19.4; przegląd high 3 rundy; uwagi na później: panel Spraw 280 px zwęża kolumny przy 1024 px; „Zastosuj szablon ▸” w „Tygodniu” na nagłówku dnia (Tydzień zaznacza bloki) |
+| UX13 | scalone 22.11 (2594a4b): T2290–T2297, odbiór UX13.1–UX13.5; przegląd xhigh 4 rundy; `RULES_VERSION` 18 (wspólny z UX12); uwagi na później: „Pomiń” check-inu po restarcie okna z logu, prawdziwe powiadomienia tylko CI |
+| UX12 | scalone 22.11 (4efb9ff): T2140–T2148, odbiór UX12.1–UX12.6; przegląd xhigh 4 rundy (cofnięcie kliknięcia paska w silniku dnia); uwagi na później: spóźniony sygnał innego komputera może dać zejście do rezerwy przed cofnięciem, koszt członka grupy przy „Potwierdź” (`groupCost`), późniejsze `undo` / `block.fg` jako zdarzenia zależne cofnięcia, `ROUTINE_UNDO_MS` 60 s vs 10 s linii kliknięć |
+
+## Wydanie 1.34.0 (22.11)
+
+- `version` 1.34.0 i `CHANGELOG.md` – 6dff032. Przed PR dwa E2E poprawione (ccca5c6): Ctrl K w `allday` strzałkami do
+  wydarzenia (pola Ustawień w wynikach od UX14), timer E4a bez sprawdzenia 03:00 o tej godzinie.
+- PR #109: CI 44987796759 – testy Linux padły na strefie czasu w `ux8-calendar` (`setSystemTime` bez `+01:00`), poprawka
+  42fd001; CI 44988376381 zielone (Linux i Windows). Scalony 22.11 (`main` d130578), CI na `main` – run 45000947424.
+- Drzewa `ux-a`..`ux-d` i ich gałęzie usunięte po scaleniu (najpierw junction `node_modules`).

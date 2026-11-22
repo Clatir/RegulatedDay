@@ -9,8 +9,11 @@ import { create } from 'zustand'
 import { UNDO_LINE_MS } from '@shared/widget'
 import { toast } from './ui'
 
-/** The views that have a line: the bar of „Dziś”'s page, the page of a template, the columns of „Tydzień” and „3 dni”, „Sprawy”, „Kalendarz”. */
-export type GroupView = 'today' | 'template' | 'week' | 'cases' | 'calendar'
+/**
+ * The views that have a line: the bar of „Dziś”'s page, the page of a template, the columns of „Tydzień” and „3 dni”, „Sprawy”, „Kalendarz”,
+ * and the settings („Przelicz koszty ×N”, D567 – in „Kategorie”).
+ */
+export type GroupView = 'today' | 'template' | 'week' | 'cases' | 'calendar' | 'settings'
 
 /** Takes the change back; what it returns (if anything) is said in the window's corner – e.g. „2 bloki zmienione od tego czasu – zostały”. */
 export type GroupUndo = () => string | void | Promise<string | void>

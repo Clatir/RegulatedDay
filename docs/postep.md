@@ -101,24 +101,25 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
     lokalny. Drzewa wykonawców zakłada główna sesja z gałęzi ciągu (T1986 – `isolation: worktree` bierze `origin/main`).
     - **Paczka 1 (UX1–UX3) – zamknięta 21.11:** T1977–T1985, T1990; szczegóły i uwagi na później – `docs/archiwum/postep-ciag-UX.md`.
     - **Paczka 2 (UX4–UX6) – zamknięta 21.11:** T1986–T1996 (ostatni kod caf48e3); wpis i uwagi na później – `docs/archiwum/postep-ciag-UX.md`.
-    - **Paczki 3–8 (UX7–UX19) – w toku od 21.11, jednym ciągiem** (użytkownik: „rozpocznij paczki 3-8 jednym ciągiem” – bez pauzy
-      między paczkami; pytania P6–P29 odpowiedziane, D563–D565). Rejestr T1100–T1996 wydzielony (T1997). Trzy strumienie
-      równolegle, każdy we własnym drzewie z `claude/ciag-ux` (T1986, junction `node_modules`), zadania po kolei w strumieniu,
-      scalenie do `claude/ciag-ux` przez główną sesję po testach i `/code-review`; po scaleniu `claude/ciag-ux` wraca do drzew:
-      - **A** `.claude/worktrees/ux-a`, `claude/ux-a`: UX7 → UX8 → UX9 → UX19 (oś, widoki, „Dziś”, „Tydzień”) · `wykonawca-sonnet` · high · T2000–T2099.
-      - **B** `.claude/worktrees/ux-b`, `claude/ux-b`: UX10 → UX11 → UX12 → UX13 (pasek, panel, okna, gra, przypomnienia) · `wykonawca-opus` · xhigh · T2100–T2199.
-      - **C** `.claude/worktrees/ux-c`, `claude/ux-c`: UX16 → UX17 → UX18 → UX14 → UX15 (formaty, Sprawy, Historia, potem Ustawienia i kreator – po UX11/UX13) · `wykonawca-sonnet` (UX14 „Wycofaj” – `wykonawca-opus`) · high · T2200–T2399.
-      Na końcu: `version` 1.34.0, sekcja `CHANGELOG.md`, jeden PR z pełnym CI, wydanie (D562). Stan zadań – tabela niżej.
+    - **Paczki 3–8 (UX7–UX19) – zamknięte 22.11** (trzy, potem cztery strumienie w drzewach `ux-a`..`ux-d`, T1986, T1997):
+      wszystkie zadania scalone do `claude/ciag-ux`; tabela zadań, rundy przeglądu i uwagi na później –
+      `docs/archiwum/postep-ciag-UX.md`, „Paczki 3–8” i „Wydanie 1.34.0”.
+    - **Wydanie 1.34.0:** PR #109 scalony 22.11 (`main` d130578) po zielonym CI 44988376381 (Linux i Windows; wcześniej
+      poprawka strefy czasu w `ux8-calendar`, 42fd001). CI na `main` – run 45000947424 zielone, wydanie `v1.34.0` opublikowane 22.11.
+      Drzewa `ux-a`..`ux-d` i gałęzie usunięte. Odbiór UX*.* w `docs/odbior.md`.
+      CI na `main` raz czerwone (E2E `week.spec.ts:1166` – Home na „Dziś”, `horizon.test.ts:180` – znany niestabilny), ponowione
+      zadania, które padły.
 
-      | Zadanie | Stan |
-      | --- | --- |
-      | UX7–UX11, UX14–UX18 | scalone 21.11 (szczegóły, rundy przeglądu i uwagi na później – `docs/archiwum/postep-ciag-UX.md`, „Paczki 3–8”) |
-      | UX13 | przeniesione do strumienia C (po UX18) |
-      | UX19 | scalone 22.11: T2070–T2074, odbiór UX19.1–UX19.4; przegląd high 3 rundy; uwagi na później: panel Spraw 280 px zwęża kolumny przy 1024 px; „Zastosuj szablon ▸” w „Tygodniu” na nagłówku dnia (Tydzień zaznacza bloki) |
-      | UX13 | scalone 22.11: T2290–T2297, odbiór UX13.1–UX13.5; przegląd xhigh 4 rundy; `RULES_VERSION` 18 (wspólny z UX12); uwagi na później: „Pomiń” check-inu po restarcie okna z logu, prawdziwe powiadomienia tylko CI |
-      | UX12 | scalone 22.11: T2140–T2148, odbiór UX12.1–UX12.6; przegląd xhigh 4 rundy (cofnięcie kliknięcia paska w silniku dnia); uwagi na później: spóźniony sygnał innego komputera może dać zejście do rezerwy przed cofnięciem, koszt członka grupy przy „Potwierdź” (`groupCost`), późniejsze `undo` / `block.fg` jako zdarzenia zależne cofnięcia, `ROUTINE_UNDO_MS` 60 s vs 10 s linii kliknięć |
-      | Wszystkie UX7–UX19 | scalone; `version` 1.34.0 i `CHANGELOG.md` – 6dff032; testy lokalne zielone (E2E: Ctrl K w `allday` strzałkami do wydarzenia – pola Ustawień w wynikach od UX14; timer E4a bez sprawdzenia 03:00 o tej godzinie – ccca5c6). **PR #109** (22.11 06:04): CI 44987796759 – testy Linux padły na strefie czasu w `ux8-calendar` (`setSystemTime` bez `+01:00`), poprawka i nowe CI. Lokalny instalator `DownloadsRegulated-Day-Setup-1.34.0.exe` (22.11 06:06). Dalej: CI zielone → scalenie → wydanie na `main` → sprzątanie drzew `ux-a..d` (najpierw `cmd /c rmdir node_modules`), `CronDelete` strażnika |
-      | UX9, UX11–UX13, UX15, UX17–UX19 | do zrobienia; szkic CHANGELOG – w raportach wykonawców (scratchpad sesji), sekcja 1.34.0 na końcu |
+16. **1.35.0 – SK1 „Przelicz koszty ×N” (D566, D567, T2420–T2423):** „dalej” 22.11. Gałąź `claude/1.35-przelicz-koszty` (od 6c5072c).
+    Przed etapem: pytania 1–4 odpowiedziane (D567, rekomendacje); wykonawca `wykonawca-opus` · xhigh, przegląd xhigh
+    (folder danych, zapis grupowy); szacunek 3–4 h.
+    - **Kod i testy (22.11):** `src/shared/engine/costScale.ts`, `src/renderer/features/settings/costScale.ts`,
+      `CostScaleDialog.tsx`, `tests/unit/engine/cost-scale.test.ts`, `tests/fs/cost-scale.test.ts`,
+      `tests/web/cost-scale-dialog.test.ts` + E2E w `tests/e2e/screens.spec.ts`; pełne testy zielone (`typecheck`,
+      `npm test` 356/5176, `build`, `lint`, `playwright test` 144/144).
+    - **Dokumenty i wydanie (Krok 1.3, 22.11):** T2420–T2423 w `docs/decyzje-techniczne.md`, reguły w `.claude/rules/koszt.md`,
+      `version` `1.35.0` w `package.json`, `CHANGELOG.md`, punkty odbioru `SK1.1`–`SK1.3` w `docs/odbior.md`.
+      **PR #110 otwarty** (`claude/1.35-przelicz-koszty` → `main`), CI w toku – po zielonym CI scalić PR #110 i sprawdzić publikację wydania `v1.35.0`.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;

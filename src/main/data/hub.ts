@@ -613,6 +613,15 @@ export class DataHub {
   }
 
   /**
+   * The days from `from` on that have a file (also one still in the queue), in order – „Przelicz koszty ×N” (D567) reads the days planned
+   * from the change's date. A folder of days that cannot be listed now throws (unknown is never „none”).
+   */
+  dayDatesFrom(from: string): Promise<string[]> {
+    if (!isIsoDate(from)) throw new Error('data dnia')
+    return this.need().dayDatesFrom(from)
+  }
+
+  /**
    * The days' files as `dayFiles` gives them, and the days whose file is broken (`UnknownRecordError.broken` – never read as
    * it is) apart from those unreadable for a moment: both left out of `files` (unknown is never „no file”).
    */

@@ -978,6 +978,7 @@ function registerIpc(): void {
   handle(CH.dataView, () => needHub().view())
   handle(CH.dayData, (_e, date: string) => needHub().day(String(date)))
   handle(CH.dayFiles, (_e, dates: string[]) => needHub().dayFiles(Array.isArray(dates) ? dates.map(String) : []))
+  handle(CH.dayDatesFrom, (_e, from: string) => needHub().dayDatesFrom(String(from)))
   handle(CH.edit, (_e, entries: EditEntry[]) => needHub().edit(Array.isArray(entries) ? entries : []))
   // D367: blocks pushed apart, saved by the window – the bar's „Przesunięto N bloków · Cofnij” and the marker's trigger;
   // the answer never waits for the bar to be counted again.

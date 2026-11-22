@@ -9,8 +9,13 @@ paths:
   - "src/shared/model/routines.ts"
   - "src/renderer/features/routines/RoutinesPage.tsx"
   - "src/renderer/features/routines/routineCost.tsx"
+  - "src/shared/engine/costScale.ts"
+  - "src/renderer/features/settings/costScale.ts"
+  - "src/renderer/features/settings/CostScaleDialog.tsx"
   - "tests/web/tile-cost*.test.ts"
   - "tests/web/cost-save.test.ts"
+  - "tests/web/cost-scale-dialog.test.ts"
+  - "tests/fs/cost-scale.test.ts"
   - "tests/unit/block-costs.test.ts"
   - "tests/unit/body-pool.test.ts"
   - "tests/unit/cost-range.test.ts"
@@ -99,3 +104,22 @@ T1360–T1374, T1395–T1399, T1430–T1437, T1440–T1447.
   (`ask.scope`); zaczęty blok serii – bez pytania, tylko on od teraz. W kolejce okna dzień czytany raz bez liczenia (`plannedDay`:
   `dayData` – plan, `foldFacts`, plik): niezaczęty → plik dnia (`patchedBlock` z `dayActions`), zaczęty → `logEvents` `block.cost`
   (chwila z zegara procesu głównego, `USER_EVENTS`); minięty zegarem (`windowPassed` – stały/czekający po końcu okna) – odmowa.
+
+## Przelicz koszty ×N (D566, D567, T2420–T2423)
+- Czysty plan i cofnięcie w `engine/costScale.ts`: `COST_SCALE_FACTORS` (0,5–3 co 0,25, domyślnie 2), `roundHalfAway` (połówki od zera),
+  `scaleCost` (clamp do `COST_MIN`..`COST_MAX`, flaga `clipped`), `costScalePlan(input, opts)` → `{ items, write }`. Zmienia tylko wybrane
+  pule i zakres (`categories`, `variants`, `routines`, `blocks`, `templates`); pozycje bez zmiany wartości są pomijane. Podkategorie i
+  warianty z własnym kosztem składają jeden `settingsPatch` z ustawień w mocy od daty i chwili zmiany (warianty zmienionej podkategorii
+  zapisywane pełną listą); rutyny – jeden koszt bez dat; szablony i serie – `versionsFrom` (nowa wersja od daty zmiany, dla serii od
+  `max(from, start)` i bez zakończonych przed `from`; wersje późniejsze przeliczają bloki z dawnym kosztem z `from` i nowe, ręcznie
+  zmienione zostają); dni – tylko `date >= max(from, today)` i bloki z własnym kosztem spoza `keep`.
+- Odczyt i jeden zapis w `features/settings/costScale.ts`: `window.rd.dayDatesFrom(from)` (`DataHub.dayDatesFrom` → `DataFolder.dayDatesFrom`,
+  z uwzględnieniem kolejki zapisów); przy „od dziś” dzień dzisiejszy zawsze czytany przez `plannedDay` (`keep`: bloki zaczęte, zaparkowane,
+  odwołane i minięte zegarem `windowPassed`). `applyCostScale` liczy plan w turze `trySaveWith` (T517) i wysyła jedno `edit`
+  (`withSettingsChange`, surowe rekordy rutyn, `templateJson`, `seriesJson`, `patchedBlock` na `dayRaw`); przy „od dziś” i zapisanym
+  `rd.json` dopisuje `day.snapshot` (`reason: 'today'`). Pokazuje `GroupLine` `'settings'` („Przeliczono N kosztów ×2 · Cofnij”).
+- „Cofnij” (`costScaleUndo` + `undoOf`): sprawdza w turze zapisu bieżące koszty względem `after` (`sameCosts`) – przywraca do `before`
+  tylko niezmienione w międzyczasie (ustawienia – nowym wpisem `withSettingsChange` od tej samej daty i chwili, przy „od dziś” z nowym
+  `day.snapshot`; dni minione i bloki zaczęte od tego czasu trafiają do `kept`), o pominiętych zwraca `scaleKeptText`; niezapisane części
+  zostają w `pending` (`UndoNotDone`). Okno `CostScaleDialog.tsx` dostępne z `CategoriesSection` (`cost-scale-open`, `field-cost-scale`)
+  i polecenia Ctrl K `costScale`.
