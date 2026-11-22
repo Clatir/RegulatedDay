@@ -115,7 +115,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
       | UX7–UX11, UX14–UX18 | scalone 21.11 (szczegóły, rundy przeglądu i uwagi na później – `docs/archiwum/postep-ciag-UX.md`, „Paczki 3–8”) |
       | UX13 | przeniesione do strumienia C (po UX18) |
       | UX19 | scalone 22.11: T2070–T2074, odbiór UX19.1–UX19.4; przegląd high 3 rundy; uwagi na później: panel Spraw 280 px zwęża kolumny przy 1024 px; „Zastosuj szablon ▸” w „Tygodniu” na nagłówku dnia (Tydzień zaznacza bloki) |
-      | UX12 (`ux-b`, runda 1 xhigh poprawiana), UX13 (`ux-c`, runda 1 xhigh poprawiana) | w pracy; `RULES_VERSION` 18 wspólny dla obu |
+      | UX13 | scalone 22.11: T2290–T2297, odbiór UX13.1–UX13.5; przegląd xhigh 4 rundy; `RULES_VERSION` 18 (wspólny z UX12); uwagi na później: „Pomiń” check-inu po restarcie okna z logu, prawdziwe powiadomienia tylko CI |
+      | UX12 (`ux-b`, runda 4 xhigh) | w pracy – ostatnie zadanie |
       | UX9, UX11–UX13, UX15, UX17–UX19 | do zrobienia; szkic CHANGELOG – w raportach wykonawców (scratchpad sesji), sekcja 1.34.0 na końcu |
 
 ## Do odbioru na Windows

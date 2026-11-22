@@ -347,6 +347,11 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] UX19.2 Panel Spraw przy „Tygodniu” i przeciąganie na dzień (1.34.0)
    - [ ] UX19.3 „Zastosuj szablon ▸” z menu dni (1.34.0)
    - [ ] UX19.4 Szybkie wybory dni i zwijane cele (1.34.0)
+   - [ ] UX13.1 Tolerancja trafności zmienia ocenę „Trafne szacowanie” (1.34.0)
+   - [ ] UX13.2 Statystyki piszą Twoją tolerancję (1.34.0)
+   - [ ] UX13.3 Przypomnienie planu porannego (1.34.0)
+   - [ ] UX13.4 Przypomnienie rytuału (1.34.0)
+   - [ ] UX13.5 Wyłączanie przypomnień (1.34.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3589,6 +3594,42 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** w oknie dni „pn–pt tego miesiąca” i „każdy: wt”; zwiń cele nad „Tygodniem” i przejdź na inny tydzień.
 - **Oczekiwany efekt:** zaznaczone dni miesiąca pokazanego w oknie; zwinięcie celów zostaje.
 - **Nie przechodzi, gdy:** wybór bierze dni innego miesiąca; zwinięcie znika po zmianie tygodnia.
+
+
+#### UX13.1 Tolerancja trafności zmienia ocenę „Trafne szacowanie”
+- [ ] Odebrane
+- **Automatycznie:** `tests/unit/engine/game.test.ts` (25 % od daty ustawienia, „od dziś”). Ty: rzut oka w Pokoju.
+- **Jak sprawdzić:** Ustawienia → Trafność planu → 25 „od dziś”; blok 60 min skończony po 72 min.
+- **Oczekiwany efekt:** blok liczy się jako trafny od daty ustawienia; dni wcześniejsze bez zmian.
+- **Nie przechodzi, gdy:** blok 72/60 min nietrafny przy 25 %; zmiana działa wstecz.
+
+#### UX13.2 Statystyki piszą Twoją tolerancję
+- [ ] Odebrane
+- **Automatycznie:** E2E `stats` (25 %), `tests/web/stats-view.test.ts`. Ty: rzut oka.
+- **Jak sprawdzić:** po zmianie tolerancji otwórz Statystyki.
+- **Oczekiwany efekt:** nota „w granicach 25% planu”; okres z dwoma ustawieniami – zakres.
+- **Nie przechodzi, gdy:** dalej „15%”; okres z dwoma ustawieniami bez zakresu.
+
+#### UX13.3 Przypomnienie planu porannego
+- [ ] Odebrane
+- **Tylko Ty:** prawdziwe powiadomienie Windows.
+- **Jak sprawdzić:** rano bez zatwierdzonego planu, po czasie z „Przypomnień” po pobudce.
+- **Oczekiwany efekt:** linia „Plan poranny czeka · Otwórz · nie dziś” na końcu paska i jedno ciche powiadomienie; „Otwórz” – „Dziś”; po zatwierdzeniu planu albo check-inie linia znika.
+- **Nie przechodzi, gdy:** dźwięk; okno wychodzi samo; powiadomienie drugi raz.
+
+#### UX13.4 Przypomnienie rytuału
+- [ ] Odebrane
+- **Tylko Ty:** wieczorem.
+- **Jak sprawdzić:** przed porą snu o czas z „Przypomnień”.
+- **Oczekiwany efekt:** „Pora snu o HH:MM – rytuał zamknięcia · Rytuał · nie dziś” i ciche powiadomienie; po zamknięciu dnia znika.
+- **Nie przechodzi, gdy:** przychodzi w ciszy nocnej albo w sesji; zostaje po zamknięciu dnia.
+
+#### UX13.5 Wyłączanie przypomnień
+- [ ] Odebrane
+- **Tylko Ty:** ustawienia i powiadomienia.
+- **Jak sprawdzić:** 0 w „Przypomnieniach”; osobno przełącznik „przypomnienia: plan poranny i rytuał” w powiadomieniach.
+- **Oczekiwany efekt:** przy 0 nic nie przychodzi; przy wyłączonym przełączniku linia zostaje, powiadomienia nie ma.
+- **Nie przechodzi, gdy:** przy 0 coś przychodzi; przy wyłączonym przełączniku jest powiadomienie.
 
 ### CI – pula „ciało” i nazwy pul przy kosztach (1.27.0, D520–D525)
 
