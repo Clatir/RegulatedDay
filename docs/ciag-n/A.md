@@ -1,0 +1,21 @@
+# Ciąg N – strumień A
+
+Plan i rytm – `docs/plan.md` „Ciąg N” (strumień A). Drzewo `.claude/worktrees/n-a`, gałąź `claude/n-a`, scalanie do `claude/ciag-n`.
+Numery: D580–D589, T2450–T2549. Po wznowieniu czytaj ten plik, potem `git -C .claude/worktrees/n-a log --oneline -5`.
+
+## Stan
+- Nie zaczęty.
+
+## Zadania (kolejność)
+- [ ] N7
+- [ ] N17
+- [ ] N1
+- [ ] N12
+- [ ] N2
+- [ ] N4
+
+## Wpisy zadań
+<!-- Na zadanie: zakres, commit, scalone do ciag-n (sha), czas faktyczny, testy, przegląd (rundy, ważne), T- i D-decyzje (D „rekomendacja, bez pytania”), punkty odbioru N<n>.<k> (Jak sprawdzić / Oczekiwany efekt / Nie przechodzi, gdy), linie do CHANGELOG, uwagi na później. -->
+
+## Koniec strumienia
+- [ ] Strumień gotowy (wszystkie zadania scalone do `claude/ciag-n`, pełne testy zielone na `claude/ciag-n`)

@@ -13,6 +13,84 @@ według kolumny „Wykonawca” (D349).
 - **Ciągi** (D317): pozycje jednego ciągu idą bez pauzy do „dalej”; każdy PR kończy się jak zwykle (testy,
   `/code-review`, commit, `docs/postep.md`, `docs/odbior.md`). Poprawki z odbioru wchodzą między PR-y bieżącego ciągu.
 
+## Ciąg N – lżejsza obsługa (D569–D573)
+
+**Idea (analiza 23.11):** narzędzie nie może kosztować energii, którą liczy. Aplikacja sama prowadzi rachunek, Ty poprawiasz
+jednym ruchem tam, gdzie patrzysz, wszystko się cofa, nic nie blokuje (D72). 24 zadania N1–N24 (pozycje 1–24 analizy;
+pozycja 25 – import kalendarza – poza ciągiem). Użytkownik 23.11: wszystko jednym ciągiem bez pauz, nieobecny > 12 h –
+pytania odpowiedziane D569–D572, reszta rozstrzygnięć niżej to rekomendacje bez pytania (D573) – do przejrzenia po powrocie.
+Jedno wydanie **1.38.0** na końcu (D572, jak D562).
+
+**Organizacja (T2850):**
+- Gałąź ciągu `claude/ciag-n` (od `main` 167b5a8). Cztery strumienie = cztery sesje (Opus 5.5 · high, D351), każda
+  w swoim drzewie i gałęzi: A `.claude/worktrees/n-a` (`claude/n-a`), B `n-b`, C `n-c`, D `n-d`. Drzewo ma własne `npm ci`,
+  bez połączenia `node_modules` (T1986). Koordynator (sesja planu) tylko scala na końcu i wydaje.
+- **Zadanie w strumieniu:** świeży wykonawca z kolumny (bez `isolation`, w zleceniu bezwzględna ścieżka drzewa, nigdy
+  `git stash`) pisze test (pada na starym kodzie) i poprawkę → sesja sprawdza → pełne testy (`typecheck`, `npm test`,
+  `build`, `lint`, E2E) → `/code-review` (poziom z kolumny, ≤ 3 rundy D551; poprawki ten sam wykonawca przez SendMessage) →
+  commit w drzewie → `git fetch` + `git merge origin/claude/ciag-n` (konflikt – rozwiąż, testy dotkniętych plików) →
+  `git push origin claude/n-<x>:claude/ciag-n` (tylko przewinięcie; odmowa – fetch, merge, push jeszcze raz) → wpis w pliku strumienia → następne zadanie.
+- **Dokumenty bez konfliktów:** strumień pisze stan w `docs/ciag-n/<A|B|C|D>.md` (zadanie, czas, commit, T-decyzje,
+  D „bez pytania”, punkty odbioru `N<n>.<k>`, linie do `CHANGELOG.md`, uwagi na później). Nie rusza `docs/postep.md`,
+  rejestrów decyzji, `docs/odbior.md`, `CHANGELOG.md` ani `version` – to robi koordynator na końcu. Specyfikację
+  i `.claude/rules/` swojego modułu zmienia sam (git scala rozłączne fragmenty).
+- **Numery:** A – D580–D589, T2450–T2549; B – D590–D599, T2550–T2649; C – D600–D609, T2650–T2749; D – D610–D619,
+  T2750–T2849; koordynator – T2850–T2899. Zachowanie widoczne nierozstrzygnięte w tabeli – według rekomendacji, jako D
+  z dopiskiem „rekomendacja, bez pytania”.
+- **Wznowienie:** każda sesja ustawia `CronCreate` co godzinę (A :07, B :19, C :31, D :43, koordynator :53), który
+  w bezczynności czyta plik strumienia i drzewo i kontynuuje; po limicie praca rusza sama.
+- **Kolejność okien, pasek, powiadomienia** (N1, N11, N12) sprawdza tylko CI na Windows – wynik w PR końcowym;
+  koordynator ma na to rundę poprawek (2–4 h).
+- **Koniec:** cztery pliki strumieni mają „Strumień gotowy” → koordynator: `git merge origin/main`, `version` 1.38.0,
+  jedna sekcja `CHANGELOG.md`, rejestry, `docs/odbior.md`, `docs/postep.md`, pełne testy, lokalny Setup.exe w Downloads,
+  PR z pełnym CI, scalenie, wydanie, usunięcie drzew n-a…n-d.
+
+### Strumień A – silnik dnia, timer, pasek pulpitu (16–23,5 h)
+
+| # | Zadanie i rozstrzygnięcia | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
+| --- | --- | --- | --- | --- |
+| N7 | **Bufory dekompresji** – L3 z D386 bez zmian zakresu (D569: teraz, przed K). Ustawienia → „Plan dnia” → „Bufory dekompresji” (domyślnie wyłączone) z progami: długość bloku ≥ 45 min i koszt głowy, emocji albo bodźców ≥ 3/h (jednostka 1 = 3 punkty/h, D568). | `wykonawca-opus` · xhigh | 4–6 h | „Gotowe, gdy” L3 (niżej, ciąg L) + wyłączone ustawienie nie zmienia planu; progi z Ustawień działają od daty paska. |
+| N17 | **„Przesuń resztę dnia o…”** – w menu bloku (pojedynczego i zaznaczenia) w „Dziś”, „Tygodniu” i „3 dniach”: ten blok i wszystkie elastyczne po nim tego dnia o ±5 / 15 / 30 / 60 min albo własną liczbę; elastyczny przeskakuje stały jak w rozsuwaniu (D367); stałe, sesje, wykłady i zaczęte zostają; wyjście za granicę – ostrzeżenie, zapis (D72); linia „Przesunięto N bloków · Cofnij”. | `wykonawca-opus` · xhigh | 2–3 h | +30 min przesuwa 4 elastyczne, stały i zaczęty na miejscu, „Cofnij” przywraca plik dnia; testy silnika i E2E menu. |
+| N1 | **Bloki przy komputerze jednym ciągiem** (D570: wyłączone, przełącznik w „Pytaniach w ciągu dnia”). Włączone: blok przy komputerze dobiega planowanego końca, jesteś aktywny (wejście z klawiatury lub myszy w ostatnich 2 min), a następny elastyczny przy komputerze zaczyna się najpóźniej 5 min później – bieżący kończy się jako zrobiony o planowanym końcu, następny zaczyna się sam; pasek „Dalej: <nazwa> · Cofnij” przez 10 s i wpis w „Zrobione automatycznie”. Bez tego przy oczekującym „Przedłuż”, przed blokiem za granicą i przed sesją, wykładem, zjazdem. | `wykonawca-opus` · xhigh (timer, pasek, CI Windows) | 3–4,5 h | Aktywny + następny w 5 min – start sam; bezczynny albo wyłączone – zachowanie jak dziś; „Cofnij” przywraca oba bloki; test paska w CI. |
+| N12 | **Koszt trwającego bloku z paska pulpitu** – „⋯” → „Koszt ▸”: okienko jak na kafelku (pole, [−] [+], „Jak podkategoria (…)”); nowy koszt od chwili zmiany do końca bloku (jak 1.24); blok serii – tylko ten dzień. Pasek nie wychodzi nad inne okna (D229). | `wykonawca-opus` · xhigh (pasek) | 2–3 h | Zmiana z paska przelicza prognozę od teraz, minione minuty po staremu; test w CI na Windows. |
+| N2 | **Podpowiedź krótkiej nocy** (D571): z ostatniego **aktywnego** użycia komputera wczoraj wieczorem (wejście z klawiatury lub myszy, nie sam włączony komputer ani bezczynność; oba komputery) ≥ 30 min po planowanej porze snu – przy pytaniu „Spałem krócej niż zwykle?” dopisek „Wczoraj przy komputerze do 01:40 (pora snu 23:00)” i „tak” wybrane wstępnie. Twoja odpowiedź wygrywa; nic nie trafia do logu bez zatwierdzenia check-inu. | `wykonawca-opus` · xhigh (aktywność, dwa komputery) | 2–3 h | Komputer włączony do 02:00 bez wejścia od 23:10 – bez podpowiedzi; pisanie do 01:40 – podpowiedź i „tak”; testy `activity` i planu porannego. |
+| N4 | **„Gorszy dzień”** – przycisk w planie porannym zawsze; po check-inie z oceną „gorzej” w ≥ 2 pulach propozycja „Gorszy dzień · Przyjmij” tylko przy włączonym ustawieniu (D570: domyślnie wyłączone). Przyjęcie: rutyny dnia na „na gorsze dni” (gdzie są), proponowana granica pracy dnia wcześniej o 60 min (ustawienie), znak „gorszy dzień” w planie; jedno „Cofnij”. | `wykonawca-opus` · xhigh | 3–4 h | Przyjęcie zmienia wersje rutyn i granicę, „Cofnij” przywraca; bez ustawienia – brak propozycji, przycisk działa; testy silnika i E2E. |
+
+### Strumień B – oś, kafelki, energia przed decyzją (15–22 h)
+
+| # | Zadanie i rozstrzygnięcia | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
+| --- | --- | --- | --- | --- |
+| N8 | **Kółko myszy nad kosztem** – nad polem puli w okienku kafelka, „Koszt…”, ✎ i Ustawieniach: ±1, z Shift ±10, w zakresie −100…100; zapis jak [−] [+]; kółko poza polem przewija jak dotąd. | `wykonawca-sonnet` · high | 1–1,5 h | Trzy obroty z Shift dają +30; na brzegu 100 nie rośnie; testy komponentu. |
+| N9 | **Nazwa w miejscu** – F2 na zaznaczonym bloku albo dwuklik w nazwę na kafelku („Dziś”, „Tydzień”, „3 dni”, „Szablony”): pole na kafelku, Enter i klik obok zapisują, Esc anuluje, puste = nazwa jak podkategoria; blok serii – tylko ten dzień (jak D431). | `wykonawca-sonnet` · high | 1,5–2 h | F2 → wpis → Enter zmienia nazwę w pliku dnia; Esc nic nie zmienia; E2E. |
+| N20 | **Obwódka przy przyczynie** – kafelek bloku, w którego czasie pula pierwszy raz schodzi poniżej rezerwy, ma obwódkę w kolorze tej puli i podpowiedź „Tu głowa schodzi poniżej rezerwy (28 → 19)”; „Dziś”, „3 dni”, „Tydzień”. | `wykonawca-sonnet` · high | 1,5–2 h | Dzień z zejściem w bloku 14:00 – obwódka tylko na nim; bez zejścia – żadnej; testy widoku. |
+| N19 | **Energia na żywo** – w trakcie przeciągania bloku lub grupy, zmiany długości krawędzią i w okienku kosztu przed zapisem podpis „najniższa energia 52 → 44 (G)” z próbnego policzenia dnia; bez zacięć (≤ 100 ms na odświeżenie, T). | `wykonawca-opus` (próbna prognoza, wydajność) + `wykonawca-sonnet` (podpis) · xhigh | 3–4,5 h | Przeciągnięcie drogiego bloku na niską energię pokazuje spadek przed puszczeniem; Esc niczego nie zapisuje; test silnika i E2E. |
+| N3 | **„Wstaw regenerację tutaj”** – przy ostrzeżeniu o rezerwie (ostrzeżenia dnia, podpowiedź N20): przed blokiem z zejściem staje blok regeneracji 15 min z wariantem najbardziej odciążającym tę pulę (jak komunikat 1.27), z rozsuwaniem (D367) i „Cofnij”; nie przed teraz; dziś i dni przyszłe. | `wykonawca-opus` · xhigh | 2–3 h | Wstawienie podnosi minimum puli, kolejne elastyczne przesunięte, „Cofnij” przywraca; testy silnika. |
+| N22 | **„Najtańsza zamiana”** – przy ostrzeżeniu jedna propozycja zamiany miejscami dwóch elastycznych bloków w tej samej przerwie między stałymi, która najbardziej podnosi minimum energii (próg jak J5); „Zamień · Cofnij”; deterministycznie; bez poprawy – bez propozycji. | `wykonawca-opus` · xhigh | 2–3 h | Przykład z drogim blokiem przy dołku daje zamianę z poprawą ≥ progu; dzień bez poprawy – nic; testy silnika. |
+| N21 | **Kropka energii w miesiącu** – obok kropki pracy kropka najsłabszej puli dnia w odcieniach paska 1.24 (dobrze / uwaga / poniżej rezerwy); dni minione z faktów, przyszłe z przyjętego check-inu (przygaszone); podpowiedź z wartością. | `wykonawca-opus` (liczenie wielu dni) + `wykonawca-sonnet` · high | 2–3 h | Miesiąc z dniem pod rezerwą ma jego kropkę „poniżej”; otwarcie miesiąca bez zauważalnego czekania; testy. |
+| N18 | **Zaznaczanie w Agendzie i w paskach miesiąca** – Ctrl+klik, Shift+klik, Ctrl+A na blokach Agendy i paskach bloków w komórkach miesiąca; menu „Zmień N bloków” jak w „Tygodniu” (D528). | `wykonawca-sonnet` · high | 2–3 h | Trzy bloki z Agendy zmieniają podkategorię jednym menu z „Cofnij”; E2E. |
+
+### Strumień C – Sprawy, Ustawienia, podpowiedzi (13–18 h)
+
+| # | Zadanie i rozstrzygnięcia | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
+| --- | --- | --- | --- | --- |
+| N10 | **Szybki zapis rozumie więcej** – oprócz `!data` i `@data` (D409): długość `30m`, `1h`, `1h30` → szacunek; `#nazwa` (początek nazwy podkategorii, też bez polskich znaków) → kategoria; `@jutro 15:00` → sprawa od razu na osi jak „Zaplanuj” o tej godzinie. Podgląd pod polem pokazuje rozpoznane; nierozpoznane zostaje w tytule. | `wykonawca-sonnet` · high (parser czysty) | 2–3 h | Przykłady: „Raport @jutro 15:00 1h #anal” → blok jutro 15:00–16:00 „Analiza”; „#xyz” bez dopasowania zostaje w tytule; testy parsera. |
+| N11 | **Wklejenie listy** – w polu szybkiego zapisu („Do skrzynki”, „+” paska, „Sprawy”) wklejenie ≥ 2 niepustych linii: pod polem „Dodać 5 spraw? · Enter · Esc – jeden tytuł”; znaczniki „- ”, „* ”, „1. ”, „[ ] ” zdejmowane, każda linia przez parser N10; linia „Dodano 5 spraw · Cofnij”. | `wykonawca-sonnet` · high (okienko paska – CI Windows) | 1,5–2 h | Wklejenie 5 linii → 5 spraw w Skrzynce, „Cofnij” zdejmuje wszystkie; Esc – jedna sprawa. |
+| N13 | **Zaznaczanie w Ustawieniach → Kategorie** – Ctrl / Shift na podkategoriach i wariantach drzewa; menu „Zmień N”: Koszt… (okno „Koszt…” z ✓ / „—”), miejsce, przenieś do kategorii, usuń; zapis od daty paska Ustawień (jak D567 p.1); linia „Zmieniono 6 podkategorii · Cofnij”. | `wykonawca-opus` (zapis z datą) + `wykonawca-sonnet` · xhigh | 3–4 h | Sześć podkategorii dostaje ciało 2 od jutra jednym oknem; „Cofnij” przywraca; testy i E2E. |
+| N14 | **„Uzupełnij ciało”** – nad drzewem Kategorii linia „6 podkategorii ma ciało 0 · Uzupełnij · ×” („×” chowa na zawsze); okno: lista własnych podkategorii i wariantów z własnym kosztem o C = 0, przy każdej G · E · B i pole C z [−] [+]; zapis od daty paska, „Cofnij”. | `wykonawca-sonnet` · high | 1,5–2 h | Okno zapisuje C dla 3 pozycji naraz; po uzupełnieniu linia znika; testy. |
+| N5 | **„Rozłóż w luki”** w planie porannym – niezaplanowane sprawy z listy „Dziś” w kolejności listy w wolne luki dnia, które mieszczą szacunek (nie przed teraz, nie za maksimum, bez rozsuwania istniejących); niemieszczące się policzone: „Zaplanowano 3 sprawy w lukach · 1 się nie zmieściła · Cofnij”. | `wykonawca-opus` (umieszczanie) + `wykonawca-sonnet` · xhigh | 2–3 h | Trzy sprawy w dwóch lukach – dwie stoją, trzecia policzona; „Cofnij” zdejmuje bloki i przywraca sprawy; testy silnika. |
+| N6 | **Długość z historii** – przy polu „Długość” bloku i „Szacunek” sprawy podpowiedź „zwykle trwa 45 min · Przyjmij”, gdy mediana faktycznego czasu ≥ 5 zakończonych bloków tej podkategorii (90 dni) różni się od wpisanej o ≥ 20 % i ≥ 10 min; nic się nie zmienia samo; Ustawienia → „Plan dnia” → „Podpowiedzi długości z historii” (domyślnie włączone, D569 – progi w Ustawieniach). Część E9 (czas); koszty – po K. | `wykonawca-opus` (statystyka) + `wykonawca-sonnet` · xhigh | 3–4 h | 5 bloków po 45 min przy planie 30 – podpowiedź i „Przyjmij” ustawia 45; 4 bloki – bez; testy. |
+
+### Strumień D – dane hurtem i cofanie (12–17 h)
+
+| # | Zadanie i rozstrzygnięcia | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
+| --- | --- | --- | --- | --- |
+| N24 | **„Ostatnio usunięte”** – w Historii filtr „Usunięte” (30 dni): bloki, sprawy, rutyny, szablony, serie, wydarzenia całodniowe z „Przywróć” na dawne miejsce (bez rozsuwania); dzień zamrożony – „Przywróć” wyłączone z powodem. | `wykonawca-opus` · xhigh (folder danych) | 3–4 h | Usunięty blok i sprawa wracają po „Przywróć”; po 30 dniach znikają z listy; testy na kopii folderu. |
+| N15 | **„Zapisz jako szablon / rutynę…”** – z menu zaznaczonych bloków i menu dnia: szablon – wybór typu dnia, „Zastąp bloki szablonu” albo „Dołóż”, od daty paska (domyślnie od jutra), „Cofnij”; rutyna – nowa rutyna z krokami z nazw i długości bloków. | `wykonawca-opus` (wersje szablonów) + `wykonawca-sonnet` · xhigh | 3–4 h | Dzień zapisany jako szablon „Roboczy” od jutra daje te same bloki w przyszły dzień roboczy; dni minione bez zmian; testy. |
+| N16 | **„Skopiuj tydzień do…”** – w „Tygodniu” (nagłówek i menu zaznaczenia): okno dni jak „Zastosuj do…” z wyborem tygodni; bloki dnia tygodnia na ten sam dzień tygodnia; kolizje jak 1.29 („Uzupełnij luki / Nadpisz plan”), dni minione pominięte, sesje i zaczęte zostają; jedno „Cofnij”. | `wykonawca-opus` · xhigh | 3–4 h | Tydzień skopiowany na 2 następne – bloki pn→pn, kolizja pyta raz, „Cofnij” przywraca wszystkie dni; testy i E2E. |
+| N23 | **Stos Ctrl+Z i Ctrl+Y** – Ctrl+Z cofa kolejne zmiany z „Cofnij” z tej sesji okna (do 20, także po zniknięciu linii), Ctrl+Y i Ctrl+Shift+Z ponawiają; dymek „Cofnięto: <opis> · Ponów”; zmiana zmieniona w międzyczasie – komunikat jak dziś; nie w polu tekstowym (D565 P29). Ostatnie w strumieniu – obejmuje „Cofnij” z N15, N16, N24 i scalonych zadań innych strumieni. | `wykonawca-opus` · xhigh | 3–5 h | Trzy zmiany cofnięte po kolei i dwie ponowione dają stan zgodny z plikami; konflikt – komunikat; testy i E2E. |
+
+*Razem ciąg N: 56–80,5 h pracy; w czterech strumieniach 16–23,5 h zegarowo + koniec u koordynatora 3–5 h (z rundą po CI).*
+
 ## Ciąg UX – poprawki użytkowe po przeglądzie 1.33.0 (D561)
 
 Przegląd 20.11 (ustalenia z dowodami, plik:linia – `docs/przeglad-ux-20.11.md`, litery A–G niżej to jego pozycje);

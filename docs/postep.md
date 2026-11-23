@@ -58,45 +58,12 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 13. **1.35.0 – „Przelicz koszty ×N” (D566, D567)** i **1.36.0 – własny mnożnik, energia przed check-inem (T2430, T2431):** wydane 22.11
     (PR #110, #111; `v1.36.0` 21:01 UTC); wpisy i uwagi na później – `docs/archiwum/postep-1.31-1.36.md`; odbiór SK1–SK2, EA1 w `docs/odbior.md`.
 
-14. **1.37.0 – koszt na godzinę −100…100 (D568, T2440):** zlecenie użytkownika 22.11; pytania 1–4 odpowiedziane (rekomendacje, D568).
-    Gałąź `claude/1.37-koszt-100` (od `main` po PR #111); główna sesja (Opus 5.5), testy – `wykonawca-sonnet`; przegląd xhigh (silnik energii, walidatory danych).
-    - **Kod:** `RANGES.cost` [−100, 100]; `SUM_CAP = COST_MAX * 100` (`energy.ts`); `costSet` (`blockCosts.ts`); pole `plan/CostInput.tsx` w `TileCost`
-      (operacja `set` w kolejce zapisów) i `GroupCostDialog`; `costRoom(tight, koszt)` w px; teksty zakresu z `COST_MIN`/`COST_MAX` (legenda, okienko,
-      „Przelicz koszty”, kreator); `RULES_VERSION` 19 (starsza wersja odrzuca koszt spoza ±5 – ustępuje prowadzenia).
-    - **Dokumenty:** D568, T2440, reguły `koszt.md`, `energia.md`, specyfikacja (Model energii, Rutyny, Macierz ustawień, UX9, D501, SK1), `CHANGELOG.md` 1.37.0,
-      odbiór KZ1.1–KZ1.2; E2E `group-select.spec.ts` (bodźce 40).
-    - **Testy (wykonawca):** 43 testy zakresu na ±100, nowe: suma równoległych do 100/h i koszt 100 w silniku (`energy-rules`), granice 100/101
-      (zdarzenia, plik, ustawienia, warianty, rutyny), `costSet`, pole w okienku kafelka i w „Koszt…”, `costRoom`; wyczerpujący `scaleCost` ±100 × 0,0001–5.
-    - **Znalezione przez test wyczerpujący:** `scaleCost` zaokrąglał iloczyn zmiennoprzecinkowy – przy ±100 40 par źle (100 × 0,145 → 14). Teraz
-      iloczyn dokładny (`exactFactor`: `String(n)` jako ułamek dziesiętny, BigInt), test przypadków i wykładnika.
-    - **Uwagi na później:** pole kosztu pokazuje „-” (ASCII, jak inne pola ustawień), napis kafelka „−”.
-    - **Przegląd xhigh r1 (8 ważnych):** poprawione – postęp > 20 KB (wpisy 12–17 → `docs/archiwum/postep-1.31-1.36.md`); starszy komputer może nadpisać koszt
-      > 5 – ostrzeżenie `WideCostWarning` (okienko, „Koszt…”, Kategorie; jak przy długiej notatce); ucięty napis – wielokropek; test wyczerpujący 13,7 s – szybka
-      ścieżka `scaleCost` (0,7 s); kalibracja bez granicy kroku – `COST_STEP_MAX` 5 na przegląd; „Zastosuj” przy odrzuconym polu – nic nie stosuje; klik po
-      wpisaniu w bloku serii – okienko czeka do puszczenia przycisku; dołek między próbkami co 10 min – próbki w zwrotach pul. Drobne: scroll zatwierdza pole;
-      komentarze −5…5, `silnik.md` 19.
-    - **Przyjęte bez pytania:** ostrzeżenie o starszym komputerze; kalibracja – najwyżej ±5 na przegląd; napis kosztu z wielokropkiem w wąskim kafelku.
-    - **Uwagi na później (r1):** Tab z pola kosztu w okienku ✎ rutyny skacze do dialogu (portal poza pułapką Tab); mnożnik > 15 cyfr znaczących – najbliższy double.
-    - **Testy poprawek r1 (wykonawca):** pasek „poniżej rezerwy” z dołkiem, `wideCostWarning`, `cost-pop-old`, scroll/resize, [+] po wpisaniu w bloku serii,
-      „Zastosuj” przy odmowie w trakcie naciśnięcia i z klawiatury po poprawionym wpisie (złapał regres strażnika – poprawione: tylko odmowa w trakcie naciśnięcia).
-    - **Commit `749fc03`** (wypchnięty, bez PR): unit 5224/5224, build, lint, kontekst zielone; E2E 143/144 – `screens.spec.ts` SK1 oczekiwał ×2 3 → 5 (stare przycięcie), poprawione na 6.
-    - **Przegląd xhigh r2 (4 ważne):** krzywa bez zgięć tego samego kierunku (100 → 1) – próbki przy każdej zmianie spadku (`bends`); „Zastosuj” po naciśnięciu bez
-      kliknięcia – strażnik to teraz `aria-invalid` pola w oknie; brak ostrzeżenia w „Przelicz koszty” – dodane (`cost-scale-old`); dotyk gubił klik przy pytaniu o serię –
-      `held` do kliknięcia albo `HOLD_MS` 600. Drobne: ułożenie okienka przy ostrzeżeniu, JSDoc kalibracji, T2441 (brzegi – przyjęte bez pytania), `energia.md`.
-      Testy (wykonawca): 5232/5232; każdy nowy pada bez poprawki (test dotyku – tylko krok i wpis, zegar łapie test „po 600 ms”).
-    - **Po r2:** unit 5232/5232, build, lint, kontekst, E2E 144/144 zielone.
-    - **Przegląd xhigh r3 (2 ważne):** „Zastosuj” martwe po [+] przy odrzuconym polu – `CommitField` zdejmuje powód, gdy wartość zmieni się z zewnątrz; wpis gubiony,
-      gdy pytanie o serię otwiera się w trakcie pisania – okienko najpierw zatwierdza swoje pole (`blurInside`), potem się chowa. Też: „Przenieś na dzień…” przy odrzuconej
-      dacie (sprzed zmiany) – nic nie przenosi; scroll zatwierdza tylko pole okienka; liczba mnoga ostrzeżenia; ostrzeżenie w „Nowa podkategoria / wariant”; ułożenie
-      okienka, gdy zmienią się komputery. Uwagi na później: pole kosztu pokazuje „-” (ASCII), napis „−”.
-    - **Testy r3 (wykonawca):** 5249/5249; nowe `commit-field-external.test.ts`, `cost-dialogs-warnings.test.ts`, testy ostrzeżeń `group-cost-old`, `settings-categories-old`.
-      Każdy pada bez poprawki, oprócz „wpis przy pytaniu z innego miejsca” – jsdom (jak Chrome) wysyła blur przy odmontowaniu, test chroni wynik, nie kolejność.
-      Runda 4 bez przeglądu (D551: tylko po critical/high w r3).
-    - **Pełne testy (po r3):** typecheck, unit 5249/5249, build, lint, kontekst, E2E 143 (+16 pominiętych) zielone; commit `67d2e39`.
-    - **Wydanie:** lokalny instalator 1.37.0 (`npm run dist:win` przez PowerShell – w Bashu odmowa uprawnień) w `Downloads\Regulated-Day-Setup.exe`
-      (23.11 00:05, 104 356 296 B). PR #112, CI run 45081420929 – czerwone E2E Linux `week.spec.ts:1164` (niestabilny, padł też na `main` 22.11: PgUp przy „Liczę dzień…”
-      po Home) – test czeka na policzony dzień (`day-add`, d30b31a); CI run 45082180046 zielone (Linux i Windows), PR #112 scalony (`dedfae2`),
-      `main` run 45092702255 zielone, `v1.37.0` opublikowane 23.11 03:00 UTC (3 pliki). Zostaje odbiór KZ1.1–KZ1.2.
+14. **1.37.0 – koszt na godzinę −100…100 (D568, T2440, T2441):** wydane 23.11 (PR #112, `main` dedfae2, `v1.37.0` 03:00 UTC); wpis, przeglądy r1–r3 i uwagi na później – `docs/archiwum/postep-1.31-1.36.md`; odbiór KZ1.1–KZ1.2 w `docs/odbior.md`.
+
+15. **Ciąg N – lżejsza obsługa, 1.38.0 (D569–D573, T2450–T2899):** zlecenie użytkownika 23.11 (N1–N24 z analizy idei, bez importu kalendarza), użytkownik nieobecny > 12 h – rekomendacje bez pytania (D573).
+    Plan, strumienie, numery i rytm – `docs/plan.md` „Ciąg N”. Gałąź `claude/ciag-n` (od `main` 167b5a8); cztery sesje-strumienie w drzewach `.claude/worktrees/n-a` … `n-d`
+    (gałęzie `claude/n-a` … `claude/n-d`); stan każdego strumienia – `docs/ciag-n/A.md` … `D.md` (tam czytaj po wznowieniu strumienia). Koordynator (sesja planu)
+    – koniec: `version` 1.38.0, `CHANGELOG.md`, rejestry, odbiór, PR z pełnym CI, wydanie, lokalny Setup.exe w Downloads.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
