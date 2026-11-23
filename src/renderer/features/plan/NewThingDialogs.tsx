@@ -183,7 +183,7 @@ export function CostFields({ costs, onChange }: { costs: Costs; onChange: (c: Pa
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex flex-wrap items-center gap-3">
-        <CostNumbers costs={costs} named label={(pool) => `Koszt: ${pool}`} onCommit={(p, v) => onChange({ [p]: v })} testId={(p) => `new-cost-${p}`} />
+        <CostNumbers wheel="step" costs={costs} named label={(pool) => `Koszt: ${pool}`} onCommit={(p, v) => onChange({ [p]: v })} testId={(p) => `new-cost-${p}`} />
       </div>
       <span className="text-[11.5px] text-muted">Koszty: głowa, emocje, bodźce, ciało na godzinę (ujemne oddają energię).</span>
       <WideCostWarning costs={[costs]} testId="new-cost-old" />
