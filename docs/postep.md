@@ -95,7 +95,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
     - **Pełne testy (po r3):** typecheck, unit 5249/5249, build, lint, kontekst, E2E 143 (+16 pominiętych) zielone; commit `67d2e39`.
     - **Wydanie:** lokalny instalator 1.37.0 (`npm run dist:win` przez PowerShell – w Bashu odmowa uprawnień) w `Downloads\Regulated-Day-Setup.exe`
       (23.11 00:05, 104 356 296 B). PR #112, CI run 45081420929 – czerwone E2E Linux `week.spec.ts:1164` (niestabilny, padł też na `main` 22.11: PgUp przy „Liczę dzień…”
-      po Home) – test czeka na policzony dzień (`day-add`); po zielonym – scalenie i sprawdzenie `v1.37.0` na `main`.
+      po Home) – test czeka na policzony dzień (`day-add`, d30b31a); CI run 45082180046 zielone (Linux i Windows), PR #112 scalony (`dedfae2`),
+      `main` run 45092702255 zielone, `v1.37.0` opublikowane 23.11 03:00 UTC (3 pliki). Zostaje odbiór KZ1.1–KZ1.2.
 
 ## Do odbioru na Windows
 - `docs/odbior.md`: na górze „Do odebrania” – krótka lista punktów w kolejności, która oszczędza czas, i „Tylko Ty”;
