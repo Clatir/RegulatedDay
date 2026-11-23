@@ -61,8 +61,8 @@ archiwum ciągu, tu zostaje jedna linia w tabeli.
 14. **1.37.0 – koszt na godzinę −100…100 (D568, T2440, T2441):** wydane 23.11 (PR #112, `main` dedfae2, `v1.37.0` 03:00 UTC); wpis, przeglądy r1–r3 i uwagi na później – `docs/archiwum/postep-1.31-1.36.md`; odbiór KZ1.1–KZ1.2 w `docs/odbior.md`.
 
 15. **Ciąg N – lżejsza obsługa, 1.38.0 (D569–D573, T2450–T2899):** zlecenie użytkownika 23.11 (N1–N24 z analizy idei, bez importu kalendarza), użytkownik nieobecny > 12 h – rekomendacje bez pytania (D573).
-    Plan, strumienie, numery i rytm – `docs/plan.md` „Ciąg N”. Gałąź `claude/ciag-n` (od `main` 167b5a8); cztery sesje-strumienie w drzewach `.claude/worktrees/n-a` … `n-d`
-    (gałęzie `claude/n-a` … `claude/n-d`); stan każdego strumienia – `docs/ciag-n/A.md` … `D.md` (tam czytaj po wznowieniu strumienia). Koordynator (sesja planu)
+    Plan, strumienie, numery i rytm – `docs/plan.md` „Ciąg N”. Gałąź `claude/ciag-n` (od `main` 167b5a8); sześć sesji-strumieni (≤ 4 zadania na sesję, T2851) w drzewach `.claude/worktrees/n-a1`, `n-a2`, `n-b1`, `n-b2`, `n-c`, `n-d`
+    (gałęzie `claude/n-<x>`); stan każdego strumienia – `docs/ciag-n/<X>.md` (tam czytaj po wznowieniu strumienia). Koordynator (sesja planu)
     – koniec: `version` 1.38.0, `CHANGELOG.md`, rejestry, odbiór, PR z pełnym CI, wydanie, lokalny Setup.exe w Downloads.
 
 ## Do odbioru na Windows

@@ -22,30 +22,33 @@ pytania odpowiedziane D569–D572, reszta rozstrzygnięć niżej to rekomendacje
 Jedno wydanie **1.38.0** na końcu (D572, jak D562).
 
 **Organizacja (T2850):**
-- Gałąź ciągu `claude/ciag-n` (od `main` 167b5a8). Cztery strumienie = cztery sesje (Opus 5.5 · high, D351), każda
-  w swoim drzewie i gałęzi: A `.claude/worktrees/n-a` (`claude/n-a`), B `n-b`, C `n-c`, D `n-d`. Drzewo ma własne `npm ci`,
-  bez połączenia `node_modules` (T1986). Koordynator (sesja planu) tylko scala na końcu i wydaje.
+- Gałąź ciągu `claude/ciag-n` (od `main` 167b5a8). Sześć strumieni = sześć sesji (Opus 5.5 · high, D351), najwyżej
+  4 zadania na sesję, żeby kontekst nie puchł (T2851); każda w swoim drzewie i gałęzi: A1 `.claude/worktrees/n-a1`
+  (`claude/n-a1`), A2 `n-a2`, B1 `n-b1`, B2 `n-b2`, C `n-c`, D `n-d`. Drzewo ma własne `npm ci`, bez połączenia
+  `node_modules` (T1986). Koordynator (sesja planu) tylko scala na końcu i wydaje.
 - **Zadanie w strumieniu:** świeży wykonawca z kolumny (bez `isolation`, w zleceniu bezwzględna ścieżka drzewa, nigdy
   `git stash`) pisze test (pada na starym kodzie) i poprawkę → sesja sprawdza → pełne testy (`typecheck`, `npm test`,
   `build`, `lint`, E2E) → `/code-review` (poziom z kolumny, ≤ 3 rundy D551; poprawki ten sam wykonawca przez SendMessage) →
   commit w drzewie → `git fetch` + `git merge origin/claude/ciag-n` (konflikt – rozwiąż, testy dotkniętych plików) →
   `git push origin claude/n-<x>:claude/ciag-n` (tylko przewinięcie; odmowa – fetch, merge, push jeszcze raz) → wpis w pliku strumienia → następne zadanie.
-- **Dokumenty bez konfliktów:** strumień pisze stan w `docs/ciag-n/<A|B|C|D>.md` (zadanie, czas, commit, T-decyzje,
+- **Dokumenty bez konfliktów:** strumień pisze stan w `docs/ciag-n/<A1|A2|B1|B2|C|D>.md` (zadanie, czas, commit, T-decyzje,
   D „bez pytania”, punkty odbioru `N<n>.<k>`, linie do `CHANGELOG.md`, uwagi na później). Nie rusza `docs/postep.md`,
   rejestrów decyzji, `docs/odbior.md`, `CHANGELOG.md` ani `version` – to robi koordynator na końcu. Specyfikację
   i `.claude/rules/` swojego modułu zmienia sam (git scala rozłączne fragmenty).
-- **Numery:** A – D580–D589, T2450–T2549; B – D590–D599, T2550–T2649; C – D600–D609, T2650–T2749; D – D610–D619,
-  T2750–T2849; koordynator – T2850–T2899. Zachowanie widoczne nierozstrzygnięte w tabeli – według rekomendacji, jako D
-  z dopiskiem „rekomendacja, bez pytania”.
-- **Wznowienie:** każda sesja ustawia `CronCreate` co godzinę (A :07, B :19, C :31, D :43, koordynator :53), który
+- **Numery:** A1 – D580–D584, T2450–T2499; A2 – D585–D589, T2500–T2549; B1 – D590–D594, T2550–T2599; B2 – D595–D599,
+  T2600–T2649; C – D600–D609, T2650–T2749; D – D610–D619, T2750–T2849; koordynator – T2850–T2899. Zachowanie widoczne
+  nierozstrzygnięte w tabeli – według rekomendacji, jako D z dopiskiem „rekomendacja, bez pytania”.
+- **Wznowienie:** każda sesja ustawia `CronCreate` co godzinę (A1 :07, A2 :13, B1 :19, B2 :25, C :37, D :43, koordynator :53), który
   w bezczynności czyta plik strumienia i drzewo i kontynuuje; po limicie praca rusza sama.
 - **Kolejność okien, pasek, powiadomienia** (N1, N11, N12) sprawdza tylko CI na Windows – wynik w PR końcowym;
   koordynator ma na to rundę poprawek (2–4 h).
-- **Koniec:** cztery pliki strumieni mają „Strumień gotowy” → koordynator: `git merge origin/main`, `version` 1.38.0,
+- **Koniec:** sześć plików strumieni ma „Strumień gotowy” → koordynator: `git merge origin/main`, `version` 1.38.0,
   jedna sekcja `CHANGELOG.md`, rejestry, `docs/odbior.md`, `docs/postep.md`, pełne testy, lokalny Setup.exe w Downloads,
-  PR z pełnym CI, scalenie, wydanie, usunięcie drzew n-a…n-d.
+  PR z pełnym CI, scalenie, wydanie, usunięcie drzew n-a1, n-a2, n-b1, n-b2, n-c, n-d.
 
-### Strumień A – silnik dnia, timer, pasek pulpitu (16–23,5 h)
+### Strumień A – silnik dnia, timer, pasek pulpitu: A1 = N7, N17, N1 (9–13,5 h); A2 = N12, N2, N4 (7–10 h)
+
+A1 i A2 dotykają paska (N1, N12) – przy konflikcie w `src/main/widget.ts` scala ten, kto wypycha drugi.
 
 | # | Zadanie i rozstrzygnięcia | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
 | --- | --- | --- | --- | --- |
@@ -56,7 +59,10 @@ Jedno wydanie **1.38.0** na końcu (D572, jak D562).
 | N2 | **Podpowiedź krótkiej nocy** (D571): z ostatniego **aktywnego** użycia komputera wczoraj wieczorem (wejście z klawiatury lub myszy, nie sam włączony komputer ani bezczynność; oba komputery) ≥ 30 min po planowanej porze snu – przy pytaniu „Spałem krócej niż zwykle?” dopisek „Wczoraj przy komputerze do 01:40 (pora snu 23:00)” i „tak” wybrane wstępnie. Twoja odpowiedź wygrywa; nic nie trafia do logu bez zatwierdzenia check-inu. | `wykonawca-opus` · xhigh (aktywność, dwa komputery) | 2–3 h | Komputer włączony do 02:00 bez wejścia od 23:10 – bez podpowiedzi; pisanie do 01:40 – podpowiedź i „tak”; testy `activity` i planu porannego. |
 | N4 | **„Gorszy dzień”** – przycisk w planie porannym zawsze; po check-inie z oceną „gorzej” w ≥ 2 pulach propozycja „Gorszy dzień · Przyjmij” tylko przy włączonym ustawieniu (D570: domyślnie wyłączone). Przyjęcie: rutyny dnia na „na gorsze dni” (gdzie są), proponowana granica pracy dnia wcześniej o 60 min (ustawienie), znak „gorszy dzień” w planie; jedno „Cofnij”. | `wykonawca-opus` · xhigh | 3–4 h | Przyjęcie zmienia wersje rutyn i granicę, „Cofnij” przywraca; bez ustawienia – brak propozycji, przycisk działa; testy silnika i E2E. |
 
-### Strumień B – oś, kafelki, energia przed decyzją (15–22 h)
+### Strumień B – oś, kafelki, energia przed decyzją: B1 = N8, N9, N20, N19 (7–10 h); B2 = N21, N18, N22, N3 (8–12 h)
+
+B2 idzie w kolejności N21, N18, N22, N3 – N3 dokłada przycisk do podpowiedzi N20 z B1; gdy N20 nie jest jeszcze w
+`claude/ciag-n`, N3 stawia przycisk w ostrzeżeniach dnia, a do podpowiedzi N20 dokłada go po jej scaleniu.
 
 | # | Zadanie i rozstrzygnięcia | Wykonawca · przegląd | Szacunek | Gotowe, gdy |
 | --- | --- | --- | --- | --- |
@@ -89,7 +95,7 @@ Jedno wydanie **1.38.0** na końcu (D572, jak D562).
 | N16 | **„Skopiuj tydzień do…”** – w „Tygodniu” (nagłówek i menu zaznaczenia): okno dni jak „Zastosuj do…” z wyborem tygodni; bloki dnia tygodnia na ten sam dzień tygodnia; kolizje jak 1.29 („Uzupełnij luki / Nadpisz plan”), dni minione pominięte, sesje i zaczęte zostają; jedno „Cofnij”. | `wykonawca-opus` · xhigh | 3–4 h | Tydzień skopiowany na 2 następne – bloki pn→pn, kolizja pyta raz, „Cofnij” przywraca wszystkie dni; testy i E2E. |
 | N23 | **Stos Ctrl+Z i Ctrl+Y** – Ctrl+Z cofa kolejne zmiany z „Cofnij” z tej sesji okna (do 20, także po zniknięciu linii), Ctrl+Y i Ctrl+Shift+Z ponawiają; dymek „Cofnięto: <opis> · Ponów”; zmiana zmieniona w międzyczasie – komunikat jak dziś; nie w polu tekstowym (D565 P29). Ostatnie w strumieniu – obejmuje „Cofnij” z N15, N16, N24 i scalonych zadań innych strumieni. | `wykonawca-opus` · xhigh | 3–5 h | Trzy zmiany cofnięte po kolei i dwie ponowione dają stan zgodny z plikami; konflikt – komunikat; testy i E2E. |
 
-*Razem ciąg N: 56–80,5 h pracy; w czterech strumieniach 16–23,5 h zegarowo + koniec u koordynatora 3–5 h (z rundą po CI).*
+*Razem ciąg N: 56–80,5 h pracy; w sześciu strumieniach 13–18 h zegarowo (najdłuższy C) + koniec u koordynatora 3–5 h (z rundą po CI).*
 
 ## Ciąg UX – poprawki użytkowe po przeglądzie 1.33.0 (D561)
 
