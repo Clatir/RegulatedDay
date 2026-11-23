@@ -220,6 +220,204 @@ describe('szybki zapis i zadanie na osi (D385, D384)', () => {
     }
   })
 
+  it('szybki zapis „Raport @jutro 15:00 1h #anal” (D600–D602): szacunek 60, podkategoria Analiza i blok 15:00–16:00 na osi jutra w tej samej edycji', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      const today = logicalDayOf(Date.now())
+      const tomorrow = addDays(today, 1)
+      expect(await hub.quickCategories()).toEqual(expect.arrayContaining([{ id: 'analiza', name: 'Analiza' }, { id: 'inne', name: 'Inne obowiązki' }]))
+      const r = await hub.quickAdd('Raport @jutro 15:00 1h #anal')
+      expect(r).toMatchObject({ ok: true, error: null, title: 'Raport', placed: 'jutro 15:00' })
+      expect(r).not.toHaveProperty('notPlaced')
+      const file = JSON.parse(readFileSync(join(dir, paths.record('request', r.id!)), 'utf8')) as Record<string, unknown>
+      expect(file).toMatchObject({ kind: 'task', title: 'Raport', estimateMin: 60, categoryId: 'analiza', doDate: tomorrow, day: tomorrow })
+      expect(file.block).toEqual(expect.any(String))
+      const day = dayFileFrom((await hub.dayFiles([tomorrow]))[tomorrow], tomorrow)
+      expect(day.blocks).toEqual([expect.objectContaining({ id: file.block, categoryId: 'analiza', startMin: 900, durationMin: 60, fixed: false, task: r.id })])
+      // „Zaplanowane”: the lists count it so (its block stands in its day).
+      const rec = requestFrom(file)!
+      expect(scheduledOf(rec, (d) => (d === tomorrow ? day : undefined))).toMatchObject({ day: tomorrow, known: true })
+    } finally {
+      await hub.close('quit')
+    }
+  })
+
+  it('szybki zapis: samo „@15:00” = dziś o 15:00; długość bez godziny – tylko szacunek, bez bloku; „#xyz” zostaje w tytule', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      const today = logicalDayOf(Date.now())
+      // 10:00 by the folder's clock – the hour 15:00 of today has not passed whatever the time of the run (D603).
+      vi.spyOn(hub.service!.folder.clock, 'now').mockReturnValue(placeLogical(today, 10 * 60))
+      const now = await hub.quickAdd('Telefon @15:00 30m')
+      expect(now).toMatchObject({ ok: true, title: 'Telefon', placed: 'dziś 15:00' })
+      const nowFile = JSON.parse(readFileSync(join(dir, paths.record('request', now.id!)), 'utf8')) as Record<string, unknown>
+      expect(nowFile).toMatchObject({ estimateMin: 30, doDate: today, day: today })
+      expect(dayFileFrom((await hub.dayFiles([today]))[today], today).blocks).toEqual([expect.objectContaining({ id: nowFile.block, startMin: 900, durationMin: 30, task: now.id })])
+
+      const long = await hub.quickAdd('Raport #xyz 1h30')
+      expect(long).toMatchObject({ ok: true, title: 'Raport #xyz' })
+      expect(long).not.toHaveProperty('placed')
+      expect(JSON.parse(readFileSync(join(dir, paths.record('request', long.id!)), 'utf8'))).toMatchObject({ title: 'Raport #xyz', estimateMin: 90, categoryId: 'inne', day: null, block: null, doDate: null })
+    } finally {
+      vi.restoreAllMocks()
+      await hub.close('quit')
+    }
+  })
+
+  it('szybki zapis „@jutro 15:00”, gdy pliku dnia nie da się odczytać: sprawa zapisana z datą, bez bloku, wynik mówi dlaczego; plik dnia nietknięty', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      const tomorrow = addDays(logicalDayOf(Date.now()), 1)
+      const broken = join(dir, paths.day(tomorrow))
+      mkdirSync(join(broken, '..'), { recursive: true })
+      writeFileSync(broken, '{ not json')
+      const r = await hub.quickAdd('Raport @jutro 15:00 1h')
+      expect(r).toMatchObject({ ok: true, title: 'Raport', notPlaced: 'pliku dnia nie da się teraz odczytać' })
+      expect(r).not.toHaveProperty('placed')
+      expect(JSON.parse(readFileSync(join(dir, paths.record('request', r.id!)), 'utf8'))).toMatchObject({ title: 'Raport', estimateMin: 60, doDate: tomorrow, day: null, block: null })
+      expect(readFileSync(broken, 'utf8')).toBe('{ not json')
+    } finally {
+      await hub.close('quit')
+    }
+  })
+
+  it('szybki zapis z godziną na dzień miniony: sprawa z datą, bez bloku – „ten dzień już minął”', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      const r = await hub.quickAdd('Raport @2020-01-05 15:00')
+      expect(r).toMatchObject({ ok: true, title: 'Raport', notPlaced: 'ten dzień już minął' })
+      expect(JSON.parse(readFileSync(join(dir, paths.record('request', r.id!)), 'utf8'))).toMatchObject({ doDate: '2020-01-05', day: null, block: null })
+    } finally {
+      await hub.close('quit')
+    }
+  })
+
+  it('szybki zapis „@HH:MM” dziś z godziną już minioną (D603): sprawa z datą, bez bloku – „ta godzina już minęła”; bieżąca minuta jeszcze stoi', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      const today = logicalDayOf(Date.now())
+      vi.spyOn(hub.service!.folder.clock, 'now').mockReturnValue(placeLogical(today, 16 * 60))
+      const late = await hub.quickAdd('Raport @15:00')
+      expect(late).toMatchObject({ ok: true, title: 'Raport', notPlaced: 'ta godzina już minęła' })
+      expect(late).not.toHaveProperty('placed')
+      expect(JSON.parse(readFileSync(join(dir, paths.record('request', late.id!)), 'utf8'))).toMatchObject({ doDate: today, day: null, block: null })
+      // The minute that is now still stands.
+      expect(await hub.quickAdd('Raport @16:00')).toMatchObject({ ok: true, placed: 'dziś 16:00' })
+      // Tomorrow's 15:00 is no „past”, whatever the hour of today.
+      expect(await hub.quickAdd('Raport @jutro 15:00')).toMatchObject({ ok: true, placed: 'jutro 15:00' })
+    } finally {
+      vi.restoreAllMocks()
+      await hub.close('quit')
+    }
+  })
+
+  it('zegar szybkiego zapisu (T869, D604): dzień i minuta logiczna z jednej chwili zegara folderu – podgląd liczy z nich, nie z zegara okna', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      const today = logicalDayOf(Date.now())
+      const clock = vi.spyOn(hub.service!.folder.clock, 'now')
+      clock.mockReturnValue(placeLogical(today, 1530))
+      expect(hub.quickClock()).toEqual({ today, nowMin: 1530 })
+      clock.mockReturnValue(placeLogical(today, 10 * 60 + 5))
+      expect(hub.quickClock()).toEqual({ today, nowMin: 605 })
+      // Past 04:00 of the next day it is that day's minute, never the night minute 1685.
+      clock.mockReturnValue(placeLogical(addDays(today, 1), 4 * 60 + 5))
+      expect(hub.quickClock()).toEqual({ today: addDays(today, 1), nowMin: 245 })
+    } finally {
+      vi.restoreAllMocks()
+      await hub.close('quit')
+    }
+  })
+
+  it('szybki zapis bez godziny, gdy kolejka pyta o rekord sprawy: ok:true i „asked” (każdy wpis, nie tylko plik dnia), jedna sprawa', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      const real = hub.edit.bind(hub)
+      vi.spyOn(hub, 'edit').mockImplementation(async (entries) => (await real(entries)).map((o, i) => (i === 0 ? { status: 'conflict' as const, fields: [] } : o)))
+      const r = await hub.quickAdd('Zadzwonić do mamy')
+      expect(r).toMatchObject({ ok: true, error: null, title: 'Zadzwonić do mamy', asked: true })
+      expect(readdirSync(join(dir, 'requests')).filter((n) => n.endsWith('.json'))).toEqual([`${r.id}.json`])
+    } finally {
+      vi.restoreAllMocks()
+      await hub.close('quit')
+    }
+  })
+
+  it('szybki zapis „@15:00” w nocy po dacie (D604): godzina od 04:00 to następny dzień logiczny, godzina przed 04:00 – ta noc, już miniona – „ta godzina już minęła”', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      const today = logicalDayOf(Date.now())
+      // 01:30 of the night after `today` (logical minute 1530).
+      vi.spyOn(hub.service!.folder.clock, 'now').mockReturnValue(placeLogical(today, 1530))
+      const day = await hub.quickAdd('Raport @15:00')
+      expect(day).toMatchObject({ ok: true, placed: 'jutro 15:00' })
+      expect(JSON.parse(readFileSync(join(dir, paths.record('request', day.id!)), 'utf8'))).toMatchObject({ doDate: addDays(today, 1), day: addDays(today, 1) })
+      expect(await hub.quickAdd('Raport @02:00')).toMatchObject({ ok: true, placed: 'dziś 02:00 +1' })
+      expect(await hub.quickAdd('Raport @01:00')).toMatchObject({ ok: true, notPlaced: 'ta godzina już minęła' })
+    } finally {
+      vi.restoreAllMocks()
+      await hub.close('quit')
+    }
+  })
+
+  it('szybki zapis z godziną, gdy kolejka pyta o plik dnia (zmiana z innego komputera): ok:true i „asked”, bez „placed”, jedna sprawa – nigdy „spróbuj jeszcze raz”', async () => {
+    const dir = join(root, 'data')
+    mkdirSync(dir, { recursive: true })
+    await DataHub.createFirst(dir, [{ rel: 'rd.json', value: { schema: 1 } }], 'pca', 0)
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dir)).toBe(true)
+      const real = hub.edit.bind(hub)
+      // The day's file changed on another computer meanwhile: the queue answers its entry with a question (the record behind it waits).
+      vi.spyOn(hub, 'edit').mockImplementation(async (entries) => (await real(entries)).map((o, i) => (i === 0 ? { status: 'changedElsewhere' as const } : o)))
+      const r = await hub.quickAdd('Raport @jutro 15:00 1h')
+      expect(r).toMatchObject({ ok: true, error: null, title: 'Raport', asked: true })
+      // Nothing is „put” yet – the answer „ich wersja” takes the sprawa with its block.
+      expect(r).not.toHaveProperty('placed')
+      expect(r.id).toEqual(expect.any(String))
+      const requests = readdirSync(join(dir, 'requests')).filter((n) => n.endsWith('.json'))
+      expect(requests).toEqual([`${r.id}.json`])
+      // A refusal or a broken file is no save – and says so.
+      vi.mocked(hub.edit).mockResolvedValue([{ status: 'broken' }])
+      expect(await hub.quickAdd('Drugie')).toMatchObject({ ok: false, error: 'Nie zapisano – spróbuj jeszcze raz.', id: null })
+    } finally {
+      vi.restoreAllMocks()
+      await hub.close('quit')
+    }
+  })
+
   it('przeciągnięcie na „Dziś” 10:00 tworzy blok 30 min „Inne”, zadanie „zaplanowane”; blok usunięty – zadanie wraca, „Cofnij” przywraca', async () => {
     const dir = join(root, 'data')
     mkdirSync(dir, { recursive: true })
