@@ -847,7 +847,7 @@ export function Timeline({
           {costAt === 'row' && costLabel('ml-auto shrink-0')}
         </div>
         {!tiny && !narrow && (
-          <div className={cx('truncate text-[11px] text-muted', costAt === 'corner' && costRoom(false))}>
+          <div className="truncate text-[11px] text-muted" style={costAt === 'corner' && i.cost ? { paddingRight: costRoom(false, i.cost.costs) } : undefined}>
             {logicalClock(start)}–{logicalClock(end)}
             {i.kind ? ` · ${i.kind}` : ''}
             {i.marks.length ? ` · ${i.marks.join(' · ')}` : ''}

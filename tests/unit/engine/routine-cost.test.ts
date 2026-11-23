@@ -1,5 +1,5 @@
 /**
- * D512: a routine's own cost per hour (−5…5 a pool, or none – „jak podkategoria”) and the order of a block's cost – its own, then its
+ * D512: a routine's own cost per hour (−100…100 a pool, or none – „jak podkategoria”) and the order of a block's cost – its own, then its
  * routine's, then its variant's, then its category's. One rule for the engine (`costOf`), the tile (`blockCosts`, `begunCosts`), the
  * days of „Tydzień”, „Ułóż pod energię”, the variants at the reserve and the calibration's evidence. Only a block of a category of the kind
  * „rutyna” has its routine's cost (a routine left on a block of another category, where the panel hides it, costs nothing). A begun block
@@ -120,7 +120,7 @@ describe('koszt rutyny w silniku energii (D512)', () => {
   it('koszt rutyny spoza zakresu w zdarzeniu startu nie jest kosztem (jak brak kosztu rutyny)', () => {
     const s = day([withRoutine(m(), 'poranna')], { poranna: R })
     const t = s.at('08:00')
-    s.write([{ k: 'block.start', block: 'm', at: t, bg: false, planned: { categoryId: 'rutyny', variantId: null, durationMin: 90, fixed: false, costs: null, routineCosts: { head: 9, emotions: 0, senses: 0 } }, confirmUntil: null, how: 'click' }], t)
+    s.write([{ k: 'block.start', block: 'm', at: t, bg: false, planned: { categoryId: 'rutyny', variantId: null, durationMin: 90, fixed: false, costs: null, routineCosts: { head: 101, emotions: 0, senses: 0 } }, confirmUntil: null, how: 'click' }], t)
     expect(s.state('08:10').facts.blocks.get('m')!.planned!.routineCosts).toBeNull()
     expect(curve(s.energy('08:30'))).toEqual(curve(day([m()]).start('m', '08:00').energy('08:30')))
   })

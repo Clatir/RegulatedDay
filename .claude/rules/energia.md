@@ -18,7 +18,7 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
   kolor rezerwy, prognoza; `newDescents` (zejścia do zapisu przez prowadzącego), `checkinStates`, `shownOf`.
 - `engine/reserve.ts` – `suggestRegen` (sposób o najniższym koszcie w puli, remis: pierwszy z listy wariantów),
   `reserveReaction` (nagroda: stany zejść i werdykt).
-- `engine/energyTrack.ts` – krzywa przy osi (`energyTrack`, próbki co 10 min; „Dziś” i kolumny) i `columnEnergy` (D417,
+- `engine/energyTrack.ts` – krzywa przy osi (`energyTrack`, próbki co 10 min i w każdej minucie zmiany spadku puli – T2440; „Dziś” i kolumny) i `columnEnergy` (D417,
   T903): dzień przyszły od przyjętego check-inu (`ASSUMED_CHECKIN`, 04:00, `assumed`) – tylko dla energii, nie zdarzenie logu.
   Dziś bez check-inu (brak, „Pomiń”) – też `assumedEnergy` (T2430): w kolumnie (`columnEnergy` `today`) i przy osi „Dziś” (`dayAxis`, gdy
   `date >= today`); przyjęte zdarzenie żyje tylko w kopii `ctx.events` do `computeEnergy` – nigdy w logu, pliku dnia ani `DayState`.
@@ -30,7 +30,7 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
 - Odcinki bloków: przebiegi z logu przed teraz + prognoza dnia (`DayState.forecast`) od teraz; prośby i „Odcinam się”
   tylko do teraz (biegnąca prośba kończy się teraz w prognozie, jak w E1).
 - Każda minuta: suma kosztów na godzinę w setnych (pierwszy plan, tło według powodu: zaplanowane / odsunięte /
-  wymuszone, czas bez bloku `REST_FREE` jak „gra, film”, „Odcinam się” jak „cisza”), obcięta do ±500.
+  wymuszone, czas bez bloku `REST_FREE` jak „gra, film”, „Odcinam się” jak „cisza”), obcięta do ±`SUM_CAP` (`COST_MAX` × 100 = ±10000, D568; było ±500).
 - Stan w jednostkach 1/2000 (`Int32Array`): w minucie k najpierw koszt minuty k−1, potem jednorazowe koszty z k,
   potem kotwice z k; obcięcie 0–100 po każdym kroku. `series[k]` = stan na początku minuty k.
 - Zejścia tylko do teraz; prognoza (ostrzeżenie) od teraz do `bedtime.forecast`.

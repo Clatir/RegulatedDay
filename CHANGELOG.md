@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.37.0
+- Koszt na godzinę bloku, zajęcia, rutyny, wariantu i podkategorii może mieć teraz od −100 do 100 w każdej puli (dotąd od −5 do 5). Jednostka się nie zmienia: 1 = 3 punkty energii na godzinę, więc koszt 100 opróżnia pełną pulę w 20 minut. Regeneracja działa tak samo w drugą stronę.
+- Okienko kosztu na kafelku i okno „Koszt…” przy zmianie kilku bloków mają pole, w które wpisujesz liczbę – przyciski [−] i [+] zostają. Liczba spoza zakresu albo z częścią ułamkową nie zapisze się; pod polem stoi powód.
+- Koszty bloków biegnących równocześnie sumują się najwyżej do ±100 na godzinę w puli (dotąd ±5), a „Przelicz koszty ×N” przycina do ±100.
+- Napis kosztu na kafelku robi sobie więcej miejsca przy liczbach trzycyfrowych i nie wychodzi poza kafelek.
+- Drugi komputer ze starszą wersją: koszt spoza −5…5 czyta jak brak własnego kosztu, a prowadzenie dnia oddaje tej wersji. Zaktualizuj oba komputery.
+
 ## 1.36.0
 - „Przelicz koszty ×N” ma mnożnik „Własny…”: wpisujesz dowolną liczbę większą od 0, z przecinkiem albo kropką (np. 1,3). Podgląd „przed → po” liczy się od razu z wpisanej wartości, a przy złej wartości okno mówi, co poprawić, i „Przelicz” czeka.
 - Pasy energii G · E · B · C przy osi „Dziś” są widoczne także przed porannym check-inem, po „Pomiń” i na dniach przyszłych: liczone od przyjętego check-inu (wszystkie pule 100 o 04:00), przygaszone, z podpisem „przyjęte” pod literami; liczby przy kresce „teraz” też są przygaszone. Po check-inie pasy od razu są pełne, a podpis znika.

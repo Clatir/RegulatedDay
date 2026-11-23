@@ -1,5 +1,5 @@
 /**
- * D512: a routine's own cost per hour in its file (`routines/<id>.json`, field `costs`) – three pools of −5…5, or none (null, no field:
+ * D512: a routine's own cost per hour in its file (`routines/<id>.json`, field `costs`) – three pools of −100…100, or none (null, no field:
  * „jak podkategoria”). Additive: a file without the field reads as before, a value that is not a cost reads as none, and the fields a
  * version does not know stay in the file when it changes the routine (the editor writes over the raw record).
  */
@@ -14,13 +14,13 @@ describe('koszt rutyny w pliku (D512)', () => {
     expect(routineFrom({ ...raw, costs: null })!.costs).toBeNull()
   })
 
-  it('koszt −5…5 w każdej puli jest kosztem rutyny; plik bez ciała (starsza wersja) – ciało jak „Rutyny i opieka nad zwierzętami” (T1520)', () => {
-    expect(routineFrom({ ...raw, costs: { head: 5, emotions: -5, senses: 0, body: -2 } })!.costs).toEqual({ head: 5, emotions: -5, senses: 0, body: -2 })
-    expect(routineFrom({ ...raw, costs: { head: 5, emotions: -5, senses: 0 } })!.costs).toEqual({ head: 5, emotions: -5, senses: 0, body: 1 })
+  it('koszt −100…100 w każdej puli jest kosztem rutyny; plik bez ciała (starsza wersja) – ciało jak „Rutyny i opieka nad zwierzętami” (T1520)', () => {
+    expect(routineFrom({ ...raw, costs: { head: 100, emotions: -100, senses: 0, body: -2 } })!.costs).toEqual({ head: 100, emotions: -100, senses: 0, body: -2 })
+    expect(routineFrom({ ...raw, costs: { head: 100, emotions: -100, senses: 0 } })!.costs).toEqual({ head: 100, emotions: -100, senses: 0, body: 1 })
   })
 
   it('wartość spoza zakresu, niecałkowita, brak puli albo nie obiekt – brak kosztu, rutyna czyta się dalej', () => {
-    for (const costs of [{ head: 6, emotions: 0, senses: 0 }, { head: 1, emotions: 0, senses: 0, body: 6 }, { head: -6, emotions: 0, senses: 0 }, { head: 1.5, emotions: 0, senses: 0 }, { head: 1, emotions: 0 }, '1,1,1', [1, 1, 1], 3]) {
+    for (const costs of [{ head: 101, emotions: 0, senses: 0 }, { head: 1, emotions: 0, senses: 0, body: 101 }, { head: -101, emotions: 0, senses: 0 }, { head: 1.5, emotions: 0, senses: 0 }, { head: 1, emotions: 0 }, '1,1,1', [1, 1, 1], 3]) {
       const r = routineFrom({ ...raw, costs })
       expect(r).not.toBeNull()
       expect(r!.costs).toBeNull()

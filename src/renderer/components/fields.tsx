@@ -95,6 +95,21 @@ export function CommitField<T>({ value, onCommit, parse, format, placeholder, cl
   const [error, setError] = useState<string | null>(null)
   const errorId = useId()
   useEscapeLayer(error != null, () => setError(null))
+  // The value changed from outside while the refusal stood (a step [−] / [+] beside the field, another save): the reason was about the
+  // text before it – it goes (T2440: a window whose action waits on the field's refusal would stay dead under a valid number).
+  const shownValue = value == null ? null : format(value)
+  const refusedAt = useRef<string | null>(null)
+  useEffect(() => {
+    if (error == null) return
+    if (refusedAt.current === null) refusedAt.current = shownValue ?? ''
+    else if (refusedAt.current !== (shownValue ?? '')) {
+      refusedAt.current = null
+      setError(null)
+    }
+  }, [error, shownValue])
+  useEffect(() => {
+    if (error == null) refusedAt.current = null
+  }, [error])
   // Esc: the blur it causes runs with this render's draft – it must not apply it.
   const cancelled = useRef(false)
   // Enter with a typed text: the blur it causes commits, and only an accepted text goes on to `onEnter`.

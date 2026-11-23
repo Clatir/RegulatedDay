@@ -28,6 +28,7 @@ import { saveSettingsFrom } from '../settings/settingsStore'
 import { saveVariants } from '../settings/categoryTreeEdits'
 import { RoutineSteps } from '../routines/RoutineSteps'
 import { CLASS_NAMES } from './blockView'
+import { WideCostWarning } from './CostInput'
 import { cleanSteps, type CategoryForm, type RoutineForm, type VariantForm } from './thingForms'
 
 /** The fields as they are now: a field left by the click on „Zapisz” has told its value before the click is handled (a ref beside the state). */
@@ -185,6 +186,7 @@ export function CostFields({ costs, onChange }: { costs: Costs; onChange: (c: Pa
         <CostNumbers costs={costs} named label={(pool) => `Koszt: ${pool}`} onCommit={(p, v) => onChange({ [p]: v })} testId={(p) => `new-cost-${p}`} />
       </div>
       <span className="text-[11.5px] text-muted">Koszty: głowa, emocje, bodźce, ciało na godzinę (ujemne oddają energię).</span>
+      <WideCostWarning costs={[costs]} testId="new-cost-old" />
     </div>
   )
 }

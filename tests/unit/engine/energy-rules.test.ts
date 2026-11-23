@@ -144,21 +144,52 @@ describe('koszty', () => {
     expect(now(fixed, '11:00')).toEqual({ head: 57, emotions: 62, senses: 59, body: 65 })
   })
 
-  it('suma kosztów bloków biegnących razem mieści się w ±5 na godzinę', () => {
+  it('suma kosztów bloków biegnących razem mieści się w ±100 na godzinę (D568; było ±5)', () => {
     const up = sc([own(block({ id: 'a', cat: 'inne', at: '09:00', min: 60 }), { head: 5, emotions: 5, senses: 5, body: 5 }), own(block({ id: 'b', cat: 'inne', at: '09:00', min: 60, bg: true }), { head: 5, emotions: 5, senses: 5, body: 5 }, 100), LATER])
       .checkin('08:00', MID)
       .start('a', '09:00')
       .start('b', '09:00', { bg: true })
       .end('a', '10:00')
       .end('b', '10:00')
-    expect(now(up, '10:00')).toEqual({ head: 50, emotions: 50, senses: 50, body: 50 })
+    // 5 + 5 = 10 an hour: under the cap now – 3 points for each of them (it was cut to 5 a pool: 50).
+    expect(now(up, '10:00')).toEqual({ head: 35, emotions: 35, senses: 35, body: 35 })
     const down = sc([own(block({ id: 'r', cat: 'regeneracja', at: '09:00', min: 60 }), { head: -3, emotions: -3, senses: -3, body: -3 }), own(block({ id: 'b', cat: 'inne', at: '09:00', min: 60, bg: true }), { head: -5, emotions: -5, senses: -5, body: -5 }, 100), LATER])
       .checkin('08:00', MID)
       .start('r', '09:00')
       .start('b', '09:00', { bg: true })
       .end('r', '10:00')
       .end('b', '10:00')
-    expect(now(down, '10:00')).toEqual({ head: 80, emotions: 80, senses: 80, body: 80 })
+    expect(now(down, '10:00')).toEqual({ head: 89, emotions: 89, senses: 89, body: 89 })
+    // Past the cap: 80 + 80 an hour counts as 100 – 12 min of a full day (100) cost 60 points, not 96.
+    const heavy = sc([own(block({ id: 'a', cat: 'inne', at: '09:00', min: 12 }), { head: 80, emotions: 0, senses: 0, body: 0 }), own(block({ id: 'b', cat: 'inne', at: '09:00', min: 12, bg: true }), { head: 80, emotions: 0, senses: 0, body: 0 }, 100), LATER])
+      .checkin('08:00', FULL)
+      .start('a', '09:00')
+      .start('b', '09:00', { bg: true })
+      .end('a', '09:12')
+      .end('b', '09:12')
+    expect(now(heavy, '09:12')).toEqual({ head: 40, emotions: 100, senses: 100, body: 100 })
+    // The same at the other end: −80 + −80 counts as −100 (a day of 25: +60 in 12 min, not +96).
+    const rest = sc([own(block({ id: 'r', cat: 'regeneracja', at: '09:00', min: 12 }), { head: -80, emotions: 0, senses: 0, body: 0 }), own(block({ id: 'b', cat: 'inne', at: '09:00', min: 12, bg: true }), { head: -80, emotions: 0, senses: 0, body: 0 }, 100), LATER])
+      .checkin('08:00', { head: [2, 2], emotions: [2, 2], senses: [2, 2], body: [2, 2] })
+      .start('r', '09:00')
+      .start('b', '09:00', { bg: true })
+      .end('r', '09:12')
+      .end('b', '09:12')
+    expect(now(rest, '09:12').head).toBe(85)
+  })
+
+  it('koszt 100 głowy przez 30 min zabiera 150 punktów: pula spada do 0 i nie niżej (D568); 40 przez 30 min – 60', () => {
+    const run = (head: number) =>
+      now(
+        sc([own(block({ id: 'a', cat: 'inne', at: '09:00', min: 30 }), { head, emotions: 0, senses: 0, body: 0 }), LATER])
+          .checkin('08:00', FULL)
+          .start('a', '09:00')
+          .end('a', '09:30'),
+        '09:30'
+      ).head
+    expect(run(100)).toBe(0)
+    expect(run(40)).toBe(40)
+    expect(run(-100)).toBe(100)
   })
 
   it('prośba na pierwszym planie: blok stały za nią z pełnym kosztem, kontakt −2, powrót do pracy to przełączenie', () => {

@@ -437,18 +437,18 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
         await expect(page.getByTestId(id)).toBeInViewport()
       }
       // SK1 (D566, D567): „Przelicz koszty ×N” in „Kategorie” – preview „przed → po”, „Przelicz” writes one dated change of rd.json and
-      // shows „Przeliczono … ×2 · Cofnij”, „Cofnij” restores the costs.
+      // shows „Przeliczono … ×2 · Cofnij”, „Cofnij” restores the costs (×2: 3 → 6, no longer clipped to 5 – D568).
       await page.getByTestId('toc-settings-categories').click()
       await page.getByTestId('cost-scale-open').click()
       await expect(page.getByTestId('cost-scale-dialog')).toBeVisible()
       await expect(page.getByTestId('cost-scale-count')).toContainText('Zmieni się')
-      await expect(page.getByTestId('cost-scale-item').filter({ hasText: 'Analiza' })).toContainText('3 · 1 · 1 · 0 → 5 · 2 · 2 · 0')
+      await expect(page.getByTestId('cost-scale-item').filter({ hasText: 'Analiza' })).toContainText('3 · 1 · 1 · 0 → 6 · 2 · 2 · 0')
       await page.getByTestId('cost-scale-apply').click()
       await expect(page.getByTestId('cost-scale-dialog')).toHaveCount(0)
       await expect(page.getByTestId('group-line-settings')).toContainText('Przeliczono')
       await expect(page.getByTestId('group-line-settings')).toContainText('×2')
       const analizaCosts = () => (JSON.parse(readFileSync(join(dataDir, 'rd.json'), 'utf8')) as { settings: Array<{ patch: { categories?: { analiza?: { costs?: { head: number; emotions: number; senses: number; body: number } } } } }> }).settings.at(-1)?.patch.categories?.analiza?.costs
-      await expect.poll(analizaCosts).toEqual({ head: 5, emotions: 2, senses: 2, body: 0 })
+      await expect.poll(analizaCosts).toEqual({ head: 6, emotions: 2, senses: 2, body: 0 })
       await page.getByTestId('group-line-settings-undo').click()
       await expect(page.getByTestId('group-line-settings')).toHaveCount(0)
       await expect.poll(analizaCosts).toEqual({ head: 3, emotions: 1, senses: 1, body: 0 })

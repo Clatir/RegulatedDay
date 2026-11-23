@@ -206,11 +206,16 @@ describe('folder danych dla okna głównego', () => {
   it('zmiana kosztu zaczętego bloku z okna (D501): block.cost w dziedzinie timera, chwila z zegara procesu głównego; zły koszt – odmowa', async () => {
     const { folder } = await make()
     await folder.userEvents([{ k: 'block.cost', day: DAY, block: 'x', costs: { head: 4, emotions: 0, senses: -2, body: 1 } }])
-    await expect(folder.userEvents([{ k: 'block.cost', day: DAY, block: 'x', costs: { head: 9, emotions: 0, senses: 0, body: 0 } }])).rejects.toThrow(/costs/)
+    await expect(folder.userEvents([{ k: 'block.cost', day: DAY, block: 'x', costs: { head: 101, emotions: 0, senses: 0, body: 0 } }])).rejects.toThrow(/costs/)
+    // The range of a cost is −100…100 (D568): the ends are taken.
+    await folder.userEvents([{ k: 'block.cost', day: DAY, block: 'x', costs: { head: 100, emotions: -100, senses: 0, body: 0 } }])
     // The first builds' kind is read, never written by the window any more.
     await expect(folder.userEvents([{ k: 'energy.cost', day: DAY, block: 'x', costs: null }])).rejects.toThrow(/nie pochodzi z okna/)
     const events = readLogText(readFileSync(join(dataDir, paths.log(DAY, 'pca')), 'utf8')).events
-    expect(events.filter((e) => e.k === 'block.cost')).toEqual([expect.objectContaining({ dom: 'timer', block: 'x', costs: { head: 4, emotions: 0, senses: -2, body: 1 }, at: expect.any(Number) })])
+    expect(events.filter((e) => e.k === 'block.cost')).toEqual([
+      expect.objectContaining({ dom: 'timer', block: 'x', costs: { head: 4, emotions: 0, senses: -2, body: 1 }, at: expect.any(Number) }),
+      expect.objectContaining({ dom: 'timer', block: 'x', costs: { head: 100, emotions: -100, senses: 0, body: 0 } })
+    ])
     // This version knows it: no „unknown events of the timer” here. A version that does not know a kind of the timer's domain (as one
     // before 1.24 reads `block.cost`) sees one – the night installation without the 24 h.
     expect(await folder.unknownTimerEvents(placeLogical(DAY, 12 * 60))).toBe(false)

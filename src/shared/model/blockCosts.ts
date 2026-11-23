@@ -80,7 +80,29 @@ export const costNumber = (n: number): string => (n < 0 ? `−${-n}` : String(n)
  */
 export const costsText = (c: Costs, tight = false): string => POOLS.map((p) => costNumber(c[p])).join(tight ? '·' : ' · ')
 
-/** One pool's cost one step up or down, kept in `RANGES.cost` (−5…5; a step past the end changes nothing). */
-export const costStep = (c: Costs, pool: Pool, by: 1 | -1): Costs => ({ ...c, [pool]: Math.max(COST_MIN, Math.min(COST_MAX, c[pool] + by)) })
+/** A pool's cost kept in `RANGES.cost` (−100…100, D568): a whole number, the nearest end past it. */
+const inCostRange = (v: number): number => Math.max(COST_MIN, Math.min(COST_MAX, Math.round(v)))
+
+/** One pool's cost one step up or down, kept in `RANGES.cost` (a step past the end changes nothing). */
+export const costStep = (c: Costs, pool: Pool, by: 1 | -1): Costs => ({ ...c, [pool]: inCostRange(c[pool] + by) })
+
+/** One pool's cost set to a typed number (D568), kept in `RANGES.cost` (the field refuses what is outside; this never lets it through). */
+export const costSet = (c: Costs, pool: Pool, value: number): Costs => (Number.isFinite(value) ? { ...c, [pool]: inCostRange(value) } : c)
 
 export const sameCosts = (a: Costs, b: Costs): boolean => a.head === b.head && a.emotions === b.emotions && a.senses === b.senses && a.body === b.body
+
+/** The range of a cost a version before `WIDE_COST_FROM` takes (D568: it reads one past it as none and may write the default over it). */
+export const OLD_COST_MAX = 5
+/** The first version that takes a cost of −100…100 (D568, T2440). */
+export const WIDE_COST_FROM = '1.37.0'
+
+/** Some pool's cost is past what an older version takes (±`OLD_COST_MAX`). */
+export const pastOldRange = (c: Costs): boolean => POOLS.some((p) => Math.abs(c[p]) > OLD_COST_MAX)
+
+/** The warning under costs past ±5 while a computer with an older version is in the folder (`older` – their names), or null. */
+export function wideCostWarning(older: readonly string[], costs: readonly Costs[]): string | null {
+  if (older.length === 0 || !costs.some(pastOldRange)) return null
+  const one = older.length === 1
+  const where = one ? `Komputer ${older[0]} ma` : `Komputery ${older.join(', ')} mają`
+  return `Koszt spoza −${OLD_COST_MAX}…${OLD_COST_MAX}: ${where} starszą wersję aplikacji – czyta go jak brak kosztu i przy zmianie może zapisać w jego miejsce domyślny. Zaktualizuj aplikację na ${one ? 'tym komputerze' : 'tych komputerach'}.`
+}

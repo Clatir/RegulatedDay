@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * Okno „Przelicz koszty ×N” (D566, D567): domyślnie ×2, wszystkie pule i cały zakres; podgląd pokazuje każdą zmianę „przed → po” (cztery
- * liczby G · E · B · C) z licznikiem, pozycje bez zmiany pominięte, przycięte do ±5 oznaczone; ×1 albo pula bez kosztów – „Nic się nie
+ * liczby G · E · B · C) z licznikiem, pozycje bez zmiany pominięte, przycięte do ±100 oznaczone; ×1 albo pula bez kosztów – „Nic się nie
  * zmienia.” i „Przelicz” nieaktywne; Esc i „Anuluj” zamykają bez zapisu; „Przelicz” – jeden zapis i linia „Przeliczono … · Cofnij”.
  * Dostęp: przycisk w „Kategoriach” i polecenie Ctrl K; wpis w indeksie Ustawień. Własny mnożnik (T2431): „Własny…” i pole – przecinek albo
  * kropka, liczba dodatnia; zła wartość – komunikat, bez podglądu, „Przelicz” nieaktywne.
@@ -27,10 +27,10 @@ beforeAll(() => {
 
 const TODAY = '2026-11-21'
 const c = (head: number, emotions: number, senses: number, body: number) => ({ head, emotions, senses, body })
-/** rd.json: „analiza” 3·1·1·0 and „inne” 2·0·0·0 from the start, every other subcategory with no cost (so the preview lists only these). */
+/** rd.json: „analiza” 60·1·1·0 and „inne” 2·0·0·0 from the start, every other subcategory with no cost (so the preview lists only these). */
 function rd(): Record<string, unknown> {
   const zero = Object.fromEntries(Object.keys(rdFrom(undefined).categories).map((id) => [id, { costs: c(0, 0, 0, 0), variants: [] }]))
-  return { schema: 1, settings: [{ id: 's0', from: '2026-01-01', at: null, made: 1, patch: { categories: { ...zero, analiza: { costs: c(3, 1, 1, 0), variants: [] }, inne: { costs: c(2, 0, 0, 0), variants: [] } } } }] }
+  return { schema: 1, settings: [{ id: 's0', from: '2026-01-01', at: null, made: 1, patch: { categories: { ...zero, analiza: { costs: c(60, 1, 1, 0), variants: [] }, inne: { costs: c(2, 0, 0, 0), variants: [] } } } }] }
 }
 const sent: EditEntry[][] = []
 const view = (): DataView => ({ status: 'open', today: TODAY, folder: 'C:\\Dane', rd: rd(), templates: [], lectures: [], requests: [], routines: [], series: [], seriesDays: {}, allDay: [], attachments: [], attachmentsMissing: [], computers: [], questions: [], problems: [] }) as unknown as DataView
@@ -90,8 +90,8 @@ describe('okno „Przelicz koszty ×N” (D566, D567)', () => {
     expect(all('cost-scale-pools').flatMap((f) => [...f.querySelectorAll('input')]).every((i) => i.checked)).toBe(true)
     expect([...q('cost-scale-scope')!.querySelectorAll('input')].every((i) => i.checked)).toBe(true)
     expect(all('cost-scale-item').map((li) => li.dataset.key)).toEqual(['category:analiza', 'category:inne'])
-    expect(all('cost-scale-change').map((x) => x.textContent)).toEqual(['3 · 1 · 1 · 0 → 5 · 2 · 2 · 0', '2 · 0 · 0 · 0 → 4 · 0 · 0 · 0'])
-    expect(q('cost-scale-count')!.textContent).toBe('Zmieni się 2 koszty · przycięte do ±5: 1')
+    expect(all('cost-scale-change').map((x) => x.textContent)).toEqual(['60 · 1 · 1 · 0 → 100 · 2 · 2 · 0', '2 · 0 · 0 · 0 → 4 · 0 · 0 · 0'])
+    expect(q('cost-scale-count')!.textContent).toBe('Zmieni się 2 koszty · przycięte do ±100: 1')
     expect(all('cost-scale-clipped').map((x) => x.textContent)).toEqual(['przycięte (G)'])
     expect((q('cost-scale-apply') as HTMLButtonElement).disabled).toBe(false)
     expect(q('cost-scale-dialog')!.textContent).toContain('od jutra')
@@ -107,11 +107,11 @@ describe('okno „Przelicz koszty ×N” (D566, D567)', () => {
     expect((q('cost-scale-apply') as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('×1,5 i tylko G: 3 → 5 (4,5 → 5), 2 → 3; reszta pul bez zmian', async () => {
+  it('×1,5 i tylko G: 60 → 90, 2 → 3 (połówka od zera); reszta pul bez zmian', async () => {
     await pick(q('cost-scale-factor'), '1.5')
     expect([...(q('cost-scale-factor') as HTMLSelectElement).options].map((o) => o.textContent)).toContain('×1,5')
     for (const p of ['emotions', 'senses', 'body']) await click(q(`cost-scale-pool-${p}`))
-    expect(all('cost-scale-change').map((x) => x.textContent)).toEqual(['3 · 1 · 1 · 0 → 5 · 1 · 1 · 0', '2 · 0 · 0 · 0 → 3 · 0 · 0 · 0'])
+    expect(all('cost-scale-change').map((x) => x.textContent)).toEqual(['60 · 1 · 1 · 0 → 90 · 1 · 1 · 0', '2 · 0 · 0 · 0 → 3 · 0 · 0 · 0'])
   })
 
   it('„Anuluj” i Esc zamykają bez zapisu', async () => {
@@ -155,10 +155,10 @@ describe('własny mnożnik (T2431)', () => {
     expect(q('cost-scale-custom-error')).toBeNull()
   })
 
-  it('„1,3” (przecinek → 1.3): podgląd z mnożnikiem 1,3 – 3 → 4, 2 → 3; „1.3” to samo', async () => {
+  it('„1,3” (przecinek → 1.3): podgląd z mnożnikiem 1,3 – 60 → 78, 2 → 3; „1.3” to samo', async () => {
     await pick(q('cost-scale-factor'), 'custom')
     await type(custom(), '1,3')
-    expect(all('cost-scale-change').map((x) => x.textContent)).toEqual(['3 · 1 · 1 · 0 → 4 · 1 · 1 · 0', '2 · 0 · 0 · 0 → 3 · 0 · 0 · 0'])
+    expect(all('cost-scale-change').map((x) => x.textContent)).toEqual(['60 · 1 · 1 · 0 → 78 · 1 · 1 · 0', '2 · 0 · 0 · 0 → 3 · 0 · 0 · 0'])
     expect(q('cost-scale-count')!.textContent).toBe('Zmieni się 2 koszty')
     await type(custom(), '1.3')
     expect(all('cost-scale-change')).toHaveLength(2)
@@ -180,7 +180,7 @@ describe('własny mnożnik (T2431)', () => {
     // Corrected: the preview is back.
     await type(custom(), '0,5')
     expect(q('cost-scale-custom-error')).toBeNull()
-    expect(all('cost-scale-change').map((x) => x.textContent)).toEqual(['3 · 1 · 1 · 0 → 2 · 1 · 1 · 0', '2 · 0 · 0 · 0 → 1 · 0 · 0 · 0'])
+    expect(all('cost-scale-change').map((x) => x.textContent)).toEqual(['60 · 1 · 1 · 0 → 30 · 1 · 1 · 0', '2 · 0 · 0 · 0 → 1 · 0 · 0 · 0'])
   })
 
   it('podgląd innego mnożnika nie zostaje, póki nowy się liczy: „Liczę…”, „Przelicz” nieaktywne', async () => {
@@ -194,11 +194,12 @@ describe('własny mnożnik (T2431)', () => {
     expect(applyOff()).toBe(true)
   })
 
-  it('mnożnik większy od 3 (np. 6): wszystko przycięte do ±5', async () => {
+  it('mnożnik większy od 3 (np. 6): przycięte do ±100 tylko to, co poza zakresem (60 → 100; 2 → 12 bez przycięcia)', async () => {
     await pick(q('cost-scale-factor'), 'custom')
     await type(custom(), '6')
-    expect(all('cost-scale-change').map((x) => x.textContent)).toEqual(['3 · 1 · 1 · 0 → 5 · 5 · 5 · 0', '2 · 0 · 0 · 0 → 5 · 0 · 0 · 0'])
-    expect(q('cost-scale-count')!.textContent).toBe('Zmieni się 2 koszty · przycięte do ±5: 2')
+    expect(all('cost-scale-change').map((x) => x.textContent)).toEqual(['60 · 1 · 1 · 0 → 100 · 6 · 6 · 0', '2 · 0 · 0 · 0 → 12 · 0 · 0 · 0'])
+    expect(q('cost-scale-count')!.textContent).toBe('Zmieni się 2 koszty · przycięte do ±100: 1')
+    expect(all('cost-scale-clipped').map((x) => x.textContent)).toEqual(['przycięte (G)'])
   })
 
   it('powrót do mnożnika z listy chowa pole i liczy z niego', async () => {
@@ -207,7 +208,7 @@ describe('własny mnożnik (T2431)', () => {
     await pick(q('cost-scale-factor'), '2')
     expect(custom()).toBeNull()
     expect(q('cost-scale-custom-error')).toBeNull()
-    expect(q('cost-scale-count')!.textContent).toBe('Zmieni się 2 koszty · przycięte do ±5: 1')
+    expect(q('cost-scale-count')!.textContent).toBe('Zmieni się 2 koszty · przycięte do ±100: 1')
   })
 
   it('„Przelicz” z własnym 1,3 – jeden zapis z kosztami ×1,3, linia „Przeliczono 2 koszty ×1,3”', async () => {
@@ -216,9 +217,32 @@ describe('własny mnożnik (T2431)', () => {
     await click(q('cost-scale-apply'))
     expect(sent).toHaveLength(1)
     expect(sent[0]!.map((e) => e.rel)).toEqual(['rd.json'])
-    expect(JSON.stringify(sent[0]![0])).toContain('"head":4')
+    expect(JSON.stringify(sent[0]![0])).toContain('"head":78')
     expect(closed).toBe(1)
     expect(useGroupLine.getState().lines.settings?.text).toBe('Przeliczono 2 koszty ×1,3')
+  })
+})
+
+describe('ostrzeżenie o starszym komputerze (D568, T2440)', () => {
+  const computers = (...list: Array<{ name: string; appVersion: string }>) => act(async () => useData.setState({ view: { ...view(), computers: list } as unknown as DataView }))
+
+  it('komputer z 1.36.0 i przeliczenie dające koszt powyżej 5 (×2: 60 → 100) – `cost-scale-old` jest, z nazwą komputera', async () => {
+    await computers({ name: 'Laptop', appVersion: '1.36.0' })
+    expect(q('cost-scale-old')!.textContent).toContain('Komputer Laptop ma starszą wersję')
+  })
+
+  it('komputer z 1.37.0 – nie ma; starszy, ale wszystko po przeliczeniu ≤ 5 (×0,05: 60 → 3) – nie ma; brak widoku komputerów – nie ma', async () => {
+    await computers({ name: 'Laptop', appVersion: '1.37.0' })
+    expect(q('cost-scale-old')).toBeNull()
+    await computers({ name: 'Laptop', appVersion: '1.36.0' })
+    expect(q('cost-scale-old')).not.toBeNull()
+    await pick(q('cost-scale-factor'), 'custom')
+    await type(custom(), '0,05')
+    expect(all('cost-scale-change').map((x) => x.textContent)).toEqual(['60 · 1 · 1 · 0 → 3 · 0 · 0 · 0', '2 · 0 · 0 · 0 → 0 · 0 · 0 · 0'])
+    expect(q('cost-scale-old')).toBeNull()
+    await computers()
+    await pick(q('cost-scale-factor'), '2')
+    expect(q('cost-scale-old')).toBeNull()
   })
 })
 

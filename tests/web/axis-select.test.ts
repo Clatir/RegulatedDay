@@ -75,6 +75,15 @@ afterAll(() => undefined)
 const q = (id: string) => document.body.querySelector<HTMLElement>(`[data-testid="${id}"]`)
 const act2 = (fn: () => void) => act(async () => void fn())
 const click = (id: string, init: MouseEventInit = {}) => act2(() => void q(id)!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1, ...init })))
+/** Types `text` into the cost field and leaves it (the commit of the field). */
+const typeLeave = (id: string, text: string) =>
+  act(async () => {
+    const input = q(id) as HTMLInputElement
+    input.focus()
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    input.blur()
+  })
 const key = (target: Element, k: string, init: KeyboardEventInit = {}) => {
   const ev = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...init })
   act(() => void target.dispatchEvent(ev))
@@ -398,7 +407,7 @@ describe('menu prawego przycisku „Zmień N bloków” (D528)', () => {
     await rightClick('block-b')
     await pick('block-menu-cost')
     expect(q('group-cost')).not.toBeNull()
-    expect(q('group-cost-head-value')!.textContent).toBe('3')
+    expect((q('group-cost-head-value') as HTMLInputElement).value).toBe('3')
     await pick('group-cost-head-plus')
     await pick('group-cost-apply')
     expect(runs.at(-1)).toEqual({ view: 'today', ids: ['a', 'b'], action: { kind: 'cost', costs: { head: 4, emotions: 1, senses: 1, body: 0 } } })
@@ -407,6 +416,156 @@ describe('menu prawego przycisku „Zmień N bloków” (D528)', () => {
     await pick('group-cost-reset')
     expect(runs.at(-1)!.action).toEqual({ kind: 'cost', costs: null })
   })
+
+  it('„Koszt…”: wpisane 55 i „Zastosuj” niesie 55 (D568); 101 – odmowa, wartość wraca; [+] przy 100 wyłączony', async () => {
+    await mount()
+    await click('block-a', { ctrlKey: true })
+    await click('block-b', { ctrlKey: true })
+    await rightClick('block-b')
+    await pick('block-menu-cost')
+    await typeLeave('group-cost-head-value', '101')
+    expect(q('group-cost-head-value-error')!.getAttribute('role')).toBe('alert')
+    expect((q('group-cost-head-value') as HTMLInputElement).value).toBe('3')
+    await typeLeave('group-cost-head-value', '55')
+    expect(q('group-cost-head-value-error')).toBeNull()
+    expect((q('group-cost-head-value') as HTMLInputElement).value).toBe('55')
+    await typeLeave('group-cost-body-value', '-100')
+    expect(q('group-cost-body-minus')!.hasAttribute('disabled')).toBe(true)
+    // The press of the button (the mouse): pointerdown, then the click.
+    await act2(() => void q('group-cost-apply')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, buttons: 1 })))
+    await pick('group-cost-apply')
+    expect(runs.at(-1)).toEqual({ view: 'today', ids: ['a', 'b'], action: { kind: 'cost', costs: { head: 55, emotions: 1, senses: 1, body: -100 } } })
+  })
+
+  it('„Koszt…”: wcześniejsza odmowa pola nie blokuje „Zastosuj” z klawiatury (Tab, Enter – bez pointerdown), gdy wpis poprawiony', async () => {
+    await mount()
+    await click('block-a', { ctrlKey: true })
+    await click('block-b', { ctrlKey: true })
+    await rightClick('block-b')
+    await pick('block-menu-cost')
+    await typeLeave('group-cost-head-value', '101')
+    expect(q('group-cost-head-value-error')).not.toBeNull()
+    await typeLeave('group-cost-head-value', '55')
+    await pick('group-cost-apply')
+    expect(runs.at(-1)).toEqual({ view: 'today', ids: ['a', 'b'], action: { kind: 'cost', costs: { head: 55, emotions: 1, senses: 1, body: 0 } } })
+  })
+
+  it('„Koszt…”: pole stoi odrzucone (101, Tab) – „Zastosuj” bez pointerdown (Enter, Space) nic nie stosuje, okno zostaje; Esc czyści powód i „Zastosuj” stosuje stare 3', async () => {
+    await mount()
+    await click('block-a', { ctrlKey: true })
+    await click('block-b', { ctrlKey: true })
+    await rightClick('block-b')
+    await pick('block-menu-cost')
+    const before = runs.length
+    await typeLeave('group-cost-head-value', '101')
+    expect(q('group-cost-head-value-error')).not.toBeNull()
+    expect(q('group-cost-head-value')!.getAttribute('aria-invalid')).toBe('true')
+    // From the keyboard: Enter / Space on the focused button is a click with no press before it.
+    await pick('group-cost-apply')
+    await pick('group-cost-apply')
+    expect(runs).toHaveLength(before)
+    expect(q('group-cost')).not.toBeNull()
+    expect(q('group-cost-head-value-error')).not.toBeNull()
+    // Esc clears the reason (the field keeps its saved 3), and „Zastosuj” applies it.
+    key(document.body, 'Escape')
+    expect(q('group-cost-head-value-error')).toBeNull()
+    expect((q('group-cost-head-value') as HTMLInputElement).value).toBe('3')
+    await pick('group-cost-apply')
+    expect(runs.at(-1)).toEqual({ view: 'today', ids: ['a', 'b'], action: { kind: 'cost', costs: { head: 3, emotions: 1, senses: 1, body: 0 } } })
+  })
+
+  it('„Koszt…”: naciśnięcie „Zastosuj” bez kliknięcia (wyjechanie przed puszczeniem) nic nie psuje – następne zastosowanie działa, gdy pole nie jest odrzucone', async () => {
+    await mount()
+    await click('block-a', { ctrlKey: true })
+    await click('block-b', { ctrlKey: true })
+    await rightClick('block-b')
+    await pick('block-menu-cost')
+    const before = runs.length
+    await act2(() => void q('group-cost-apply')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, buttons: 1 })))
+    expect(runs).toHaveLength(before)
+    // A refused text, then pressed away from the button; after the field is clean again, Enter applies.
+    await typeLeave('group-cost-head-value', '101')
+    await act2(() => void q('group-cost-apply')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, buttons: 1 })))
+    await pick('group-cost-apply')
+    expect(runs).toHaveLength(before)
+    key(document.body, 'Escape')
+    await pick('group-cost-apply')
+    expect(runs).toHaveLength(before + 1)
+  })
+
+  it('„Koszt…”: 101, Tab (odmowa), potem [+] przy głowie – powód znika i „Zastosuj” stosuje 4 (3 + 1)', async () => {
+    await mount()
+    await click('block-a', { ctrlKey: true })
+    await click('block-b', { ctrlKey: true })
+    await rightClick('block-b')
+    await pick('block-menu-cost')
+    await typeLeave('group-cost-head-value', '101')
+    expect(q('group-cost-head-value')!.getAttribute('aria-invalid')).toBe('true')
+    await pick('group-cost-head-plus')
+    expect(q('group-cost-head-value-error')).toBeNull()
+    expect((q('group-cost-head-value') as HTMLInputElement).value).toBe('4')
+    await pick('group-cost-apply')
+    expect(runs.at(-1)).toEqual({ view: 'today', ids: ['a', 'b'], action: { kind: 'cost', costs: { head: 4, emotions: 1, senses: 1, body: 0 } } })
+  })
+
+  it('„Koszt…”: ostrzeżenie group-cost-old przy starszym komputerze (1.36.0) i koszcie 40 – jest; przy koszcie w ±5 albo bez starszego – nie ma', async () => {
+    await mount()
+    await click('block-a', { ctrlKey: true })
+    await click('block-b', { ctrlKey: true })
+    await rightClick('block-b')
+    await pick('block-menu-cost')
+    expect(q('group-cost-old')).toBeNull()
+    await act(async () => useData.setState({ view: { today: TODAY, computers: [{ name: 'Laptop', appVersion: '1.36.0' }] } as unknown as DataView }))
+    expect(q('group-cost-old')).toBeNull()
+    await typeLeave('group-cost-head-value', '40')
+    expect(q('group-cost-old')!.textContent).toContain('Komputer Laptop ma starszą wersję')
+    await typeLeave('group-cost-head-value', '5')
+    expect(q('group-cost-old')).toBeNull()
+    await typeLeave('group-cost-head-value', '40')
+    await act(async () => useData.setState({ view: { today: TODAY, computers: [{ name: 'Laptop', appVersion: '1.37.0' }] } as unknown as DataView }))
+    expect(q('group-cost-old')).toBeNull()
+  })
+
+  it('„Koszt…”: wpisanie, potem [+] liczy się od wpisanej', async () => {
+    await mount()
+    await click('block-a', { ctrlKey: true })
+    await click('block-b', { ctrlKey: true })
+    await rightClick('block-b')
+    await pick('block-menu-cost')
+    await typeLeave('group-cost-senses-value', '99')
+    await pick('group-cost-senses-plus')
+    expect((q('group-cost-senses-value') as HTMLInputElement).value).toBe('100')
+    expect(q('group-cost-senses-plus')!.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('„Zastosuj” naciśnięte na polu, które odrzuca wpis (pointerdown → blur → odmowa → click): nic nie stosuje, okno zostaje z powodem (T2440)', async () => {
+    await mount()
+    await click('block-a', { ctrlKey: true })
+    await click('block-b', { ctrlKey: true })
+    await rightClick('block-b')
+    await pick('block-menu-cost')
+    const before = runs.length
+    const input = q('group-cost-head-value') as HTMLInputElement
+    await act2(() => {
+      input.focus()
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '101')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    // The press: pointerdown first, then the blur of the field (its refusal), then the click.
+    await act2(() => void q('group-cost-apply')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, buttons: 1 })))
+    await act2(() => input.blur())
+    await pick('group-cost-apply')
+    expect(runs).toHaveLength(before)
+    expect(q('group-cost')).not.toBeNull()
+    expect(q('group-cost-head-value-error')!.getAttribute('role')).toBe('alert')
+    expect((q('group-cost-head-value') as HTMLInputElement).value).toBe('3')
+    // Corrected and pressed again: it applies.
+    await typeLeave('group-cost-head-value', '55')
+    await act2(() => void q('group-cost-apply')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, buttons: 1 })))
+    await pick('group-cost-apply')
+    expect(runs.at(-1)).toEqual({ view: 'today', ids: ['a', 'b'], action: { kind: 'cost', costs: { head: 55, emotions: 1, senses: 1, body: 0 } } })
+  })
+
 })
 
 describe('Del na zaznaczeniu ≥ 2 – jedno pytanie (D528)', () => {

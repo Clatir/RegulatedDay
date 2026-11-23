@@ -27,7 +27,7 @@ export interface Routine {
   worse: RoutineStep[]
   archived: boolean
   /**
-   * The routine's own cost per hour (D512: four pools of −5…5 – the body since D520), null – none („jak podkategoria”: a block of it costs its variant's or
+   * The routine's own cost per hour (D512: four pools of −100…100 (D568) – the body since D520), null – none („jak podkategoria”: a block of it costs its variant's or
    * category's). Additive: a file without the field (an older version's) has none; an older version keeps the field when it changes the
    * routine (the editor writes over the raw record) and counts without it. Absent (a routine made in code) – none.
    */

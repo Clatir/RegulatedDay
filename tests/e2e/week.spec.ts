@@ -1160,6 +1160,8 @@ test('Pamięć okresu i klawisze (UX8, D2, D6): następny tydzień → dzień �
       await expect(page.getByTestId('day-today')).toBeEnabled()
       await page.keyboard.press('Home')
       await expect(page.getByTestId('day-today')).toBeDisabled({ timeout: 30_000 })
+      // Today counted again before the next key (while „Liczę dzień…” the page has no keys – PgUp was lost, flaky on CI).
+      await expect(page.getByTestId('day-add')).toBeVisible({ timeout: 30_000 })
       await page.keyboard.press('PageUp')
       await expect(page.getByTestId('day-today')).toBeEnabled({ timeout: 30_000 })
       await page.keyboard.press('Home')

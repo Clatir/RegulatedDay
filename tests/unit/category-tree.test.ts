@@ -321,7 +321,9 @@ describe('warianty dowolnej podkategorii (ustawienia z datą)', () => {
     const regen = RULES.regeneracja!
     expect(changeVariant(regen.variants, 'nie-ma', { name: 'X' })).toBeNull()
     expect(changeVariant(regen.variants, 'gra', { name: 'Gra, film' })).toBeNull()
-    expect(changeVariant(regen.variants, 'gra', { costs: { head: 9, emotions: 0, senses: 0, body: 0 } })).toBeNull()
+    expect(changeVariant(regen.variants, 'gra', { costs: { head: 101, emotions: 0, senses: 0, body: 0 } })).toBeNull()
+    expect(changeVariant(regen.variants, 'gra', { costs: { head: -101, emotions: 0, senses: 0, body: 0 } })).toBeNull()
+    expect(changeVariant(regen.variants, 'gra', { costs: { head: 100, emotions: -100, senses: 0, body: 0 } })).not.toBeNull()
     expect(changeVariant(RULES.sprawy!.variants, 'przy-komputerze', { costs: null })).toBeNull()
     const archived = archiveVariant(regen.variants, 'gra')!
     expect(archived.find((v) => v.id === 'gra')).toMatchObject({ archived: true })

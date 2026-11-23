@@ -16,7 +16,7 @@ export type Place = 'computer' | 'passive' | 'away'
  */
 export type CategoryKind = 'session' | 'lecture' | 'remoteClass' | 'commute' | 'meal' | 'routine' | 'request' | 'regen' | 'project' | 'other'
 
-/** Cost per hour for the cognitive, emotional, sensory and physical pool, −5…5 (spec „Model energii”; `body` – D520). */
+/** Cost per hour for the cognitive, emotional, sensory and physical pool, −100…100 (D568; spec „Model energii”; `body` – D520). */
 export interface Costs {
   head: number
   emotions: number

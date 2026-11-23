@@ -86,7 +86,7 @@ export function ColorSwatches({ value, onPick }: { value: string | null; onPick:
 }
 
 /**
- * The cost of each pool an hour (−5…5): `label` names a field for the reader, `named` puts the pool's name before it (a form);
+ * The cost of each pool an hour (`RANGES.cost`, −100…100 – D568): `label` names a field for the reader, `named` puts the pool's name before it (a form);
  * `testId` – each field's.
  */
 export function CostNumbers({ costs, onCommit, label, named, testId }: { costs: Costs; onCommit: (pool: keyof Costs, v: number) => void; label: (pool: string) => string; named?: boolean; testId?: (pool: keyof Costs) => string }) {

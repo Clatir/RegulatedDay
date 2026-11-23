@@ -79,9 +79,9 @@ describe('ustawienia bez liczb', () => {
     expect(s.sessions.map((x) => x.id)).toEqual(['a'])
   })
 
-  it('kategorie: koszty od −5 do 5, klasa i miejsce ze słownika; zła wartość wraca do poprzedniej', () => {
-    const s = settingsFrom(deepMerge<unknown>(DEFAULT_SETTINGS, { categories: { analiza: { costs: { head: 5, emotions: -5, senses: 6, body: 1.5 }, cls: 'zabawa', place: 'passive', contact: 'tak' } } }))
-    expect(s.categories.analiza!.costs).toEqual({ head: 5, emotions: -5, senses: DEFAULT_SETTINGS.categories.analiza!.costs.senses, body: DEFAULT_SETTINGS.categories.analiza!.costs.body })
+  it('kategorie: koszty od −100 do 100, klasa i miejsce ze słownika; zła wartość wraca do poprzedniej', () => {
+    const s = settingsFrom(deepMerge<unknown>(DEFAULT_SETTINGS, { categories: { analiza: { costs: { head: 100, emotions: -100, senses: 101, body: 1.5 }, cls: 'zabawa', place: 'passive', contact: 'tak' } } }))
+    expect(s.categories.analiza!.costs).toEqual({ head: 100, emotions: -100, senses: DEFAULT_SETTINGS.categories.analiza!.costs.senses, body: DEFAULT_SETTINGS.categories.analiza!.costs.body })
     expect(s.categories.analiza!.cls).toBe('work')
     expect(s.categories.analiza!.place).toBe('passive')
     expect(s.categories.analiza!.contact).toBe(false)

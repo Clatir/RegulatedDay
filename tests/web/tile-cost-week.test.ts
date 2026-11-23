@@ -131,24 +131,36 @@ describe('koszt na kafelku „Tygodnia” i „3 dni” (D501)', () => {
   })
 
   it('wiersz godzin zostawia miejsce na napis w rogu według trybu: „3 dni” – na napis ze spacjami, „Tydzień” – na skrót', async () => {
-    const hours = (date: string, id: string) => q(`week-hours-${date}-${id}`)!.className
+    const hours = (date: string, id: string) => q(`week-hours-${date}-${id}`)!.style.paddingRight
     await mount([day(TODAY, [block('a', 600, 660, { cost: cost(-5, -5, -5, -5) })]), day(DATES[1]!, [])], THREE_DAYS_PPM)
-    expect(hours(TODAY, 'a')).toContain('pr-[108px]')
+    expect(hours(TODAY, 'a')).toBe('108px')
     act(() => root?.unmount())
     await mount([day(TODAY, [block('a', 600, 660, { cost: cost(-5, -5, -5, -5) })]), day(DATES[1]!, [])])
-    expect(hours(TODAY, 'a')).toContain('pr-[74px]')
+    expect(hours(TODAY, 'a')).toBe('74px')
+  })
+
+  it('koszt trzycyfrowy (D568, −100…100) poszerza miejsce wiersza godzin: „3 dni” 156 px, „Tydzień” 120 px; napis ma max-w-full', async () => {
+    const hours = (date: string, id: string) => q(`week-hours-${date}-${id}`)!.style.paddingRight
+    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(-100, -100, -100, -100) })]), day(DATES[1]!, [])], THREE_DAYS_PPM)
+    expect(labelOf(TODAY, 'a')!.textContent).toBe('−100 · −100 · −100 · −100')
+    expect(hours(TODAY, 'a')).toBe('156px')
+    expect(labelOf(TODAY, 'a')!.className).toContain('max-w-full')
+    act(() => root?.unmount())
+    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(-100, -100, -100, -100) })]), day(DATES[1]!, [])])
+    expect(labelOf(TODAY, 'a')!.textContent).toBe('−100·−100·−100·−100')
+    expect(hours(TODAY, 'a')).toBe('120px')
   })
 
   it('okienko ma czwarte pole – ciało (D524): [+] zapisuje cztery liczby z ciałem', async () => {
     await mount([day(TODAY, []), day(DATES[1]!, [block('f', 600, 660, { cost: cost(3, 1, 1, 0, { own: true }) })])])
     click(labelOf(DATES[1]!, 'f')!)
-    expect(q('cost-pop-body-value')!.textContent).toBe('0')
+    expect((q('cost-pop-body-value') as HTMLInputElement).value).toBe('0')
     click(q('cost-pop-body-plus')!)
     expect(saveTileCosts).toHaveBeenLastCalledWith(expect.objectContaining({ date: DATES[1], blockId: 'f' }), { head: 3, emotions: 1, senses: 1, body: 1 }, { ask: { scope: null } })
   })
 
-  it('[+] przy 5 nic nie zmienia', async () => {
-    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(5, 1, 1, 0, { own: true }) })]), day(DATES[1]!, [])])
+  it('[+] przy 100 nic nie zmienia', async () => {
+    await mount([day(TODAY, [block('a', 600, 660, { cost: cost(100, 1, 1, 0, { own: true }) })]), day(DATES[1]!, [])])
     click(labelOf(TODAY, 'a')!)
     click(q('cost-pop-head-plus')!)
     expect(saveTileCosts).not.toHaveBeenCalled()

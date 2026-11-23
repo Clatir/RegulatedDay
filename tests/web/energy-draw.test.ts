@@ -8,7 +8,8 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import type { EnergyTrack } from '@shared/engine/energyTrack'
+import { energyTrack, type EnergyTrack } from '@shared/engine/energyTrack'
+import { planBlock } from '@shared/model/plan'
 import { EnergyLanes, EnergyLegend, LANE_WIDTH, laneLeft, LANES_WIDTH, NOW_CHIP_HEIGHT } from '@renderer/features/plan/EnergyLanes'
 import {
   ASSUMED_CAPTION,
@@ -401,5 +402,49 @@ describe('oś „Dziś” bez check-inu – energia od przyjętego check-inu, ty
     expect(axisAt(new Scenario({ date: PAST, plan }), PAST, '10:00').axis.energy).toBeNull()
     expect(axisAt(new Scenario({ date: TODAY, plan }), TODAY, '10:00', null).axis.energy).toBeNull()
     expect(axisAt(new Scenario({ date: TODAY, plan }), TODAY, '10:00', TODAY, false).axis.energy).toBeNull()
+  })
+})
+
+describe('pasek „poniżej rezerwy” widzi dołek krótkiego bloku o koszcie 100 (T2440, D568)', () => {
+  it('blok 12 min z kosztem głowy 100 i po nim 12 min z −100 (rezerwa 15): dołek między próbkami co 10 min jest w odcinkach paska jako „low”', () => {
+    const plan = [
+      planBlock({ id: 'h', categoryId: 'inne', startMin: 601, durationMin: 12, costs: { head: 100, emotions: 0, senses: 0, body: 0 } }),
+      planBlock({ id: 'r', categoryId: 'inne', startMin: 613, durationMin: 12, costs: { head: -100, emotions: 0, senses: 0, body: 0 } })
+    ]
+    const DAY = '2026-10-28'
+    const s = new Scenario({ date: DAY, plan, settings: { transitionBufferMin: 0 } })
+      .checkin('08:00', { head: [1, 1], emotions: [0, 0], senses: [0, 0], body: [0, 0] })
+      .ran('h', '10:01', '10:13')
+      .ran('r', '10:13', '10:25')
+    const t = energyTrack(DAY, s.state('12:00').grid, s.energy('12:00'))!
+    const runs = stripRuns(t)
+    // Head 65 → 5 at 10:13 (below the reserve of 15) → 65 again: the strip has a „low” run of the head around the dip.
+    const low = runs.filter((r) => r.state === 'low')
+    expect(low.length).toBeGreaterThan(0)
+    expect(low.every((r) => r.pool === 'head')).toBe(true)
+    expect(low.some((r) => r.from <= 613 && r.to > 613)).toBe(true)
+    // Without the turn's sample (only every 10 minutes) the strip would never go „low”.
+    const every10 = { ...t, samples: t.samples.filter((x) => x.at % 10 === 0) }
+    expect(stripRuns(every10).some((r) => r.state === 'low')).toBe(false)
+  })
+
+  it('próbka także tam, gdzie pula nadal spada, ale wolniej (−5 → −0,05 na minutę): krzywa nie ma ~12 punktów za dużo w zgięciu', () => {
+    const DAY = '2026-10-28'
+    const plan = [
+      planBlock({ id: 'h', categoryId: 'inne', startMin: 600, durationMin: 5, costs: { head: 100, emotions: 0, senses: 0, body: 0 } }),
+      planBlock({ id: 'l', categoryId: 'inne', startMin: 605, durationMin: 30, costs: { head: 1, emotions: 0, senses: 0, body: 0 } })
+    ]
+    const s = new Scenario({ date: DAY, plan, settings: { transitionBufferMin: 0 } })
+      .checkin('08:00', { head: [1, 1], emotions: [0, 0], senses: [0, 0], body: [0, 0] })
+      .ran('h', '10:00', '10:05')
+      .ran('l', '10:05', '10:35')
+    const t = energyTrack(DAY, s.state('12:00').grid, s.energy('12:00'))!
+    // 65 − 5 min × 5 = 40 at 10:05 (the bend between the two blocks); both go down, so the sign of the change never turns.
+    const bend = t.samples.find((x) => x.at === 605)
+    expect(bend).toBeDefined()
+    expect(bend!.head).toBeGreaterThan(38)
+    expect(bend!.head).toBeLessThan(42)
+    // The drawn curve at the bend is the true value (the old samples every 10 minutes put it at about 52).
+    expect(Math.abs(valuesAt(poolCurves(t), 605)!.head - bend!.head)).toBeLessThanOrEqual(1)
   })
 })

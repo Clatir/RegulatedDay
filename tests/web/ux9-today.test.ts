@@ -294,9 +294,9 @@ describe('legenda energii pod „?” (P10) i koszt (D7)', () => {
     expect(q('energy-legend')).toBeNull()
   })
 
-  it('legenda mówi o koszcie: poziom na godzinę od −5 do 5, 1 = 3 punkty energii', async () => {
+  it('legenda mówi o koszcie: poziom na godzinę od −100 do 100, 1 = 3 punkty energii', async () => {
     await render(createElement(EnergyLegendHelp, { reserve: 30, open: true }))
-    expect(q('energy-legend-cost')!.textContent).toContain('koszt na godzinę, od −5 do 5; 1 = 3 punkty energii')
+    expect(q('energy-legend-cost')!.textContent).toContain('koszt na godzinę, od −100 do 100; 1 = 3 punkty energii')
   })
 
   const item = (cost: TimelineItem['cost']): TimelineItem => ({ id: 'a', startMin: 600, endMin: 660, title: 'Blok a', marks: [], color: '#F2B66D', categoryId: 'analiza', background: false, movable: true, cost })
@@ -307,7 +307,7 @@ describe('legenda energii pod „?” (P10) i koszt (D7)', () => {
     await act(async () => click(q('block-a-cost')!))
     // The same words as the legend's (one text).
     expect(q('cost-pop-head')!.textContent).toContain(COST_SCALE_TEXT)
-    expect(COST_SCALE_TEXT).toBe('koszt na godzinę, od −5 do 5; 1 = 3 punkty energii')
+    expect(COST_SCALE_TEXT).toBe('koszt na godzinę, od −100 do 100; 1 = 3 punkty energii')
   })
 })
 
@@ -455,6 +455,59 @@ describe('okienko kosztu: wysokość mierzona (D7)', () => {
     } finally {
       rect.mockRestore()
       height.mockRestore()
+    }
+  })
+
+  it('ostrzeżenie o starszym komputerze (T2440) podnosi okienko: po jego pojawieniu się staje na nowo według wysokości (nad napisem, gdy pod nim już się nie mieści)', async () => {
+    const c = { head: 3, emotions: 1, senses: 1, body: 0 }
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ ...anchor, x: 100, y: 486, width: 100, height: 14, toJSON: () => ({}) } as DOMRect)
+    // 200 px without the warning (fits below the label), 330 with it (does not).
+    const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(() => (document.querySelector('[data-testid="cost-pop-old"]') ? 330 : 200))
+    Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true })
+    useData.setState({ view: { computers: [{ name: 'Laptop', appVersion: '1.36.0' }] } as unknown as DataView })
+    try {
+      await render(createElement(Timeline, { items: [item({ costs: c, base: c, own: false, edit: true })], markers: [], selected: null, onSelect: vi.fn(), onCosts: vi.fn(), from: 6 * 60, to: 22 * 60 }))
+      await act(async () => click(q('block-a-cost')!))
+      expect(q('cost-pop-old')).toBeNull()
+      expect(q('cost-pop')!.style.top).toBe('504px')
+      const input = q('cost-pop-head-value') as HTMLInputElement
+      await act(async () => {
+        input.focus()
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '40')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        input.blur()
+      })
+      expect(q('cost-pop-old')).not.toBeNull()
+      expect(q('cost-pop')!.style.top).toBe(`${486 - 4 - 330}px`)
+    } finally {
+      rect.mockRestore()
+      height.mockRestore()
+      useData.setState({ view: null })
+    }
+  })
+
+  it('ostrzeżenie pojawia się, gdy do widoku dojdzie starszy komputer przy otwartym okienku z kosztem 40: okienko przeskakuje nad napis (także bez zmiany kosztu)', async () => {
+    const c = { head: 40, emotions: 1, senses: 1, body: 0 }
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ ...anchor, x: 100, y: 486, width: 100, height: 14, toJSON: () => ({}) } as DOMRect)
+    const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(() => (document.querySelector('[data-testid="cost-pop-old"]') ? 330 : 200))
+    Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true })
+    useData.setState({ view: { computers: [] } as unknown as DataView })
+    try {
+      await render(createElement(Timeline, { items: [item({ costs: c, base: c, own: true, edit: true })], markers: [], selected: null, onSelect: vi.fn(), onCosts: vi.fn(), from: 6 * 60, to: 22 * 60 }))
+      await act(async () => click(q('block-a-cost')!))
+      expect(q('cost-pop-old')).toBeNull()
+      expect(q('cost-pop')!.style.top).toBe('504px')
+      await act(async () => useData.setState({ view: { computers: [{ name: 'Laptop', appVersion: '1.36.0' }] } as unknown as DataView }))
+      expect(q('cost-pop-old')).not.toBeNull()
+      expect(q('cost-pop')!.style.top).toBe(`${486 - 4 - 330}px`)
+      // The computer gone (updated): the window comes down again.
+      await act(async () => useData.setState({ view: { computers: [{ name: 'Laptop', appVersion: '1.37.0' }] } as unknown as DataView }))
+      expect(q('cost-pop-old')).toBeNull()
+      expect(q('cost-pop')!.style.top).toBe('504px')
+    } finally {
+      rect.mockRestore()
+      height.mockRestore()
+      useData.setState({ view: null })
     }
   })
 })
