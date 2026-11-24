@@ -19,7 +19,7 @@ import { begunIds, foldFacts } from '@shared/engine/facts'
 import type { Freed } from '@shared/engine/gaps'
 import { gridOf } from '@shared/engine/grid'
 import type { AnyEvent } from '@shared/model/events'
-import { createDay } from '@shared/engine/createDay'
+import { createDay, dayPlan } from '@shared/engine/createDay'
 import { copiedDay, moveBetweenDays, stayRuleOf, wakeChange } from '@shared/engine/planEdit'
 import type { DayContext, DayState } from '@shared/engine/day'
 import type { EnergyState } from '@shared/engine/energy'
@@ -117,121 +117,60 @@ export function withPushed(raw: RawRecord, date: string, change: (raw: RawRecord
   return after
 }
 
-/** The fields of a block that make its place in the plan (a block a change counts on, `countedPlanStands`). */
-const PLACE_FIELDS = ['startMin', 'durationMin', 'anchor', 'fixed', 'alongside', 'categoryId'] as const
+/** The fields of a block the day's forecast lays it by (T2927): what two plans must agree on to be one plan. */
+const PLAN_FIELDS = ['startMin', 'durationMin', 'anchor', 'fixed', 'categoryId', 'variantId', 'background', 'alongside'] as const
 
-/** A place on the plan's axis (logical minutes). */
-type Span = { startMin: number; endMin: number }
+/** A plan by what the forecast lays it by – every block's id and `PLAN_FIELDS`, in the order of the ids (T2927). */
+const planKey = (plan: readonly PlanBlock[]): string =>
+  JSON.stringify([...plan].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map((b) => [b.id, ...PLAN_FIELDS.map((k) => b[k] ?? null)]))
 
-/** What a change of the plan was counted on and what it moves or puts (`countedPlanStands`). */
-export interface CountedOn {
-  /** The day's file the window saw (its own starts – never those the buffers of decompression lay over the plan, T2877). */
-  seen: RawRecord | null
-  /**
-   * The day the window counted the change on: its plan of the file (`basePlan ?? plan` – without the buffers) and its snapshot's blocks
-   * (a block of a template or a series not in the file). Left out – the blocks of the seen file stand for the plan.
-   */
-  ctx?: Pick<DayContext, 'plan' | 'basePlan' | 'snapshot'>
-  /** The blocks it moves, each from its place to its new start. */
-  starts: readonly PushedStart[]
-  /** The blocks it counts on that it does not move (the block a regeneration stands before): unchanged. */
-  kept?: readonly PlanBlock[]
-  /** What it puts in (the regeneration's place). */
-  spans?: readonly Span[]
+/** What a save counted on the window's plan finds in the day's file in its turn (T2927). */
+export type PlanStanding = 'stands' | 'already' | 'changed'
+
+/** The day the window counted a change on: its snapshot and the plan of its file (`basePlan ?? plan` – without the buffers). */
+export type CountedDay = Pick<DayContext, 'plan' | 'basePlan' | 'snapshot'>
+
+/** The plan the change was counted on (`basePlan ?? plan`) with `starts` (by id) laid on and the blocks it puts in (`added`). */
+export function planAfter(ctx: CountedDay, starts: readonly PushedStart[], added: readonly PlanBlock[] = []): PlanBlock[] {
+  const at = new Map(starts.map((p) => [p.block.id, p.startMin]))
+  return [...(ctx.basePlan ?? ctx.plan).map((b) => (at.has(b.id) ? { ...b, startMin: at.get(b.id)! } : b)), ...added]
 }
 
 /**
- * The plan a change was counted on still stands in the day's file in its turn (T2870, T2877, T2878, T2920–T2924):
- * - every block it moves stands where the window's plan had it (the file's own start, without the buffers), or at its new start already
- *   (another computer, an earlier click: nothing left to write there); every block it counts on (`kept`) has its place unchanged;
- * - every block of the window's plan on a place it moves or puts (each place on its own – the old and the new one of each block, T2923)
- *   is still there: not taken out of the file, cancelled nor moved to another day (T2924);
- * - no block the window's plan did not have (T2920: a block of a template written to the file by another „Ułóż” is not new; one restored
- *   since – an undone cancel, T2921 – is) stands on such a place in the foreground – the same proposal clicked on another computer, a block
- *   put in the gap meanwhile (T2878); a block anchored to another stands where its anchor ends (T2923).
- * False: the change was counted on a plan that is no more – nothing may be written over it.
+ * The one rule of a save counted on the window's plan („Ułóż”, „Zamień”, „Wstaw regenerację tutaj” – T2927, replaces T2870, T2878,
+ * T2920–T2924): the day's plan counted from the file as it is in the turn of the save, by the very function the window's plan was
+ * counted with (`dayPlan` of the model's snapshot – the template, the series, the sessions' answers, cancelled and moved blocks, anchors),
+ * compared with the window's plan by what the forecast lays the blocks by (`PLAN_FIELDS`, the order of the ids aside): the same –
+ * `stands` (it may be written); the plan after the change (`after`) – `already` („Plan już jest tak ułożony.”: another computer, an earlier
+ * click, T622); anything else – `changed` (nothing written: „Plan zmienił się…”).
  */
-export function countedPlanStands(raw: RawRecord, date: string, c: CountedOn): boolean {
-  const now = dayFileFrom(raw, date)
-  const seen = dayFileFrom(dayRaw(c.seen, date), date)
-  const plan = c.ctx ? (c.ctx.basePlan ?? c.ctx.plan) : seen.blocks
-  const fileNow = new Map(now.blocks.map((b) => [b.id, b]))
-  const fileSeen = new Map(seen.blocks.map((b) => [b.id, b]))
-  const known = new Map(plan.map((b) => [b.id, b]))
-  const snapshot = new Map((c.ctx?.snapshot.blocks ?? []).map((b) => [b.id, b]))
-  const left = new Set([...now.cancelled, ...Object.keys(now.movedTo)])
-  // The block as the window's plan had it (its own start), else as it was given.
-  const wasOf = (b: PlanBlock): PlanBlock => fileSeen.get(b.id) ?? known.get(b.id) ?? b
-  // The block as the file holds it now; one of the snapshot not in the file – as the plan had it; one gone (taken out of the file, cancelled,
-  // moved to another day) – null.
-  const nowOf = (b: PlanBlock): PlanBlock | null => (left.has(b.id) ? null : (fileNow.get(b.id) ?? (fileSeen.has(b.id) ? null : wasOf(b))))
-  const kept = c.kept ?? []
-  const moved = c.starts.every((p) => {
-    const x = nowOf(p.block)
-    return x != null && (x.startMin === wasOf(p.block).startMin || x.startMin === p.startMin)
-  })
-  const placed = kept.every((b) => {
-    const x = nowOf(b)
-    const was = wasOf(b)
-    return x != null && PLACE_FIELDS.every((k) => (x[k] ?? null) === (was[k] ?? null))
-  })
-  if (!moved || !placed) return false
-  // Each place the change moves from, moves to or puts (never one span from the first to the last – T2923).
-  const places: Span[] = [
-    ...(c.spans ?? []),
-    ...c.starts.flatMap((p) => {
-      const from = wasOf(p.block).startMin
-      const to = { startMin: p.startMin, endMin: p.startMin + p.block.durationMin }
-      return from == null ? [to] : [{ startMin: from, endMin: from + p.block.durationMin }, to]
-    })
-  ]
-  if (!places.length) return true
-  // Where a block stands on the plan's axis: its own start, else the end of the block it is anchored to (a few steps at most).
-  const lookup = (id: string): PlanBlock | undefined => fileNow.get(id) ?? known.get(id) ?? snapshot.get(id)
-  const placeOf = (b: PlanBlock, depth = 0): Span | null => {
-    if (b.startMin != null) return { startMin: b.startMin, endMin: b.startMin + b.durationMin }
-    const anchor = b.anchor != null && depth < 8 ? lookup(b.anchor) : undefined
-    const at = anchor ? placeOf(anchor, depth + 1) : null
-    return at ? { startMin: at.endMin, endMin: at.endMin + b.durationMin } : null
-  }
-  const across = (b: PlanBlock) => {
-    const at = b.background === true ? null : placeOf(b)
-    return at != null && places.some((s) => at.startMin < s.endMin && at.endMin > s.startMin)
-  }
-  const mine = new Set([...c.starts.map((p) => p.block.id), ...kept.map((b) => b.id)])
-  // A block of the window's plan on such a place, gone since (T2924).
-  if (plan.some((b) => !mine.has(b.id) && across(b) && nowOf(b) == null)) return false
-  // A block the plan did not have – new in the file, or one of the snapshot whose cancel was undone since (T2920, T2921).
-  const restored = seen.cancelled.filter((id) => !left.has(id) && !known.has(id)).flatMap((id) => {
-    const b = fileNow.get(id) ?? snapshot.get(id)
-    return b ? [b] : []
-  })
-  const fresh = [...now.blocks.filter((b) => !known.has(b.id) && !left.has(b.id)), ...restored]
-  return !fresh.some((b) => !mine.has(b.id) && across(b))
+export function countedPlan(raw: RawRecord, date: string, ctx: CountedDay, after: readonly PlanBlock[]): PlanStanding {
+  const now = planKey(dayPlan(ctx.snapshot, dayFileFrom(raw, date)))
+  if (now === planKey(ctx.basePlan ?? ctx.plan)) return 'stands'
+  return now === planKey(after) ? 'already' : 'changed'
 }
-
 
 /**
  * A change of the plan that pushes blocks apart (D367, rozsuwanie): the change and the pushed blocks' new starts as one
  * edit of the day's file, in its turn. Saved – the bar keeps „Przesunięto N bloków · Cofnij” (the main process, as after
  * a variant, D313): its „Cofnij” takes this one edit back, the day's file as it was before it. Nothing pushed – the change
  * alone, as before. `line` false – the window says it with its own „Cofnij” (N3 „Wstaw regenerację tutaj”, as „Dodaj” of the week,
- * D400): the bar gets the marker's trigger only, no second „Cofnij”. `stands` – the plan the change was counted on still stands in
- * the file in its turn (`countedPlanStands`); it does not – nothing is written, `sent.changed`.
+ * D400): the bar gets the marker's trigger only, no second „Cofnij”. `stands` – what the file in its turn says of the plan the change was
+ * counted on (`countedPlan`, T2927): anything but `stands` – nothing is written, `sent.standing` says why.
  */
 export async function pushDayBlocks(
   date: string,
   seen: RawRecord | null,
   change: (raw: RawRecord) => RawRecord,
   pushed: readonly PushedStart[],
-  sent: { entry: EditEntry | null; made: RawRecord | null; changed?: boolean } = { entry: null, made: null },
+  sent: { entry: EditEntry | null; made: RawRecord | null; standing?: PlanStanding } = { entry: null, made: null },
   line = true,
-  stands?: (raw: RawRecord) => boolean
+  stands?: (raw: RawRecord) => PlanStanding
 ): Promise<EditOutcome[] | null> {
   const out = await trySaveWith(async () => {
     const before = (await dayFilesNow([date], () => seen))[date] ?? null
-    sent.changed = stands != null && !stands(dayRaw(before, date))
-    if (sent.changed) return []
+    sent.standing = stands?.(dayRaw(before, date)) ?? 'stands'
+    if (sent.standing !== 'stands') return []
     const after = withPushed(dayRaw(before, date), date, change, pushed)
     sent.entry = editOf(paths.day(date), before, after)
     sent.made = sent.entry?.create ? after : null
@@ -388,7 +327,7 @@ export function variantStarts(plan: readonly PlanBlock[], v: Pick<Variant, 'chan
  * the block as the file holds it then. Saved – the bar keeps „Przestawiono: <label> · Cofnij” (the main process, as after
  * a variant picked in the bar, D313): its „Cofnij” takes this one edit back.
  */
-export async function arrangeDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], label: string, ctx?: CountedOn['ctx']): Promise<{ out: EditOutcome[] | null; already: boolean }> {
+export async function arrangeDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], label: string, ctx?: CountedDay): Promise<{ out: EditOutcome[] | null; already: boolean }> {
   const { out, sent } = await saveStarts(date, seen, starts, ctx)
   if (sent.already) return { out, already: true }
   if (isSaved(out) && sent.entry) {
@@ -405,17 +344,22 @@ export async function arrangeDayBlocks(date: string, seen: RawRecord | null, sta
  * New starts of blocks as one edit of the day's file, in its turn, each over the block as the file holds it then („Ułóż”, „Zamień”).
  * `sent.already` – the file in its turn already so (another computer, an earlier click): nothing written, the note said (D379, T622);
  * `sent.changed` – the plan the starts were counted on is no more in the file (a block moved meanwhile – an earlier click, another
- * computer, `countedPlanStands`, T2870): nothing written, the window says `PLAN_CHANGED_TEXT`; `sent.entry` – the edit sent,
+ * computer, `countedPlan` on the model's day `ctx`, T2927): nothing written, the window says `PLAN_CHANGED_TEXT`; `sent.entry` – the edit sent,
  * `sent.after` – the file it made when it had none.
  */
-async function saveStarts(date: string, seen: RawRecord | null, starts: readonly PushedStart[], ctx?: CountedOn['ctx']): Promise<{ out: EditOutcome[] | null; sent: { already: boolean; changed: boolean; entry: EditEntry | null; after: RawRecord | null } }> {
+async function saveStarts(date: string, seen: RawRecord | null, starts: readonly PushedStart[], ctx?: CountedDay): Promise<{ out: EditOutcome[] | null; sent: { already: boolean; changed: boolean; entry: EditEntry | null; after: RawRecord | null } }> {
   const sent: { made: boolean; already: boolean; changed: boolean; entry: EditEntry | null; after: RawRecord | null } = { made: false, already: false, changed: false, entry: null, after: null }
   const out = await trySaveWith(async () => {
     const before = (await dayFilesNow([date], () => seen))[date] ?? null
-    sent.changed = !countedPlanStands(dayRaw(before, date), date, { seen, ctx, starts })
+    const raw = dayRaw(before, date)
+    // T2927: the file in its turn counted to the plan the starts were counted on (`ctx` – the model's day; none – as before T2870).
+    const standing: PlanStanding = ctx ? countedPlan(raw, date, ctx, planAfter(ctx, starts)) : 'stands'
+    sent.changed = standing === 'changed'
     if (sent.changed) return []
-    const after = withPushed(dayRaw(before, date), date, (r) => r, starts)
+    // Already so (another computer, an earlier click): as an edit that changes nothing – „Plan już jest tak ułożony.”.
     sent.made = true
+    if (standing === 'already') return []
+    const after = withPushed(raw, date, (r) => r, starts)
     sent.entry = editOf(paths.day(date), before, after)
     sent.after = sent.entry?.create ? after : null
     return [sent.entry]
@@ -441,7 +385,7 @@ export const swappedText = (a: string, b: string): string => `Zamieniono: ${a} �
  * runs, nor after (a new file or a new key on the way) – and not done again when the save fails, or when its „Cofnij” takes it back
  * (the proposal comes back at once).
  */
-export async function swapDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], swap: Pick<CheapestSwap, 'a' | 'b' | 'changes'>, text: string, openId: string | null = null, ctx?: CountedOn['ctx']): Promise<{ out: EditOutcome[] | null; already: boolean; saved: boolean }> {
+export async function swapDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], swap: Pick<CheapestSwap, 'a' | 'b' | 'changes'>, text: string, openId: string | null = null, ctx?: CountedDay): Promise<{ out: EditOutcome[] | null; already: boolean; saved: boolean }> {
   swapGone(date, swap)
   const { out, sent } = await saveStarts(date, seen, starts, ctx)
   if (sent.already) return { out, already: true, saved: false }

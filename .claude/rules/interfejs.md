@@ -58,7 +58,7 @@ paths:
   null po „Zostaw” – `asked.energyOrder` w pliku dnia, `leaveEnergyOrder` przez `saveDay`, jak inne pytania planu porannego),
   „Ułóż” = `arrangeDayBlocks` (`variantStarts` → `withPushed`, jeden wpis `trySaveWith`; po `isSaved` – `window.rd.planArranged`,
   linia paska „Przestawiono: … · Cofnij”); tylko dziś (`MorningPlan` stoi tylko w dniu bieżącym).
-  „Najtańsza zamiana” (N22) i „Wstaw regenerację tutaj” (N3) przy ostrzeżeniu o rezerwie, `proposalMemory`, `countedPlanStands` (też „Ułóż”) – reguły `propozycje-energii.md`.
+  „Najtańsza zamiana” (N22) i „Wstaw regenerację tutaj” (N3) przy ostrzeżeniu o rezerwie, `proposalMemory`, `countedPlan` (też „Ułóż”) – reguły `propozycje-energii.md`.
   Pobudka dnia (`TodayPage`, `CalendarPage`) = `setDayWake`: zapis pobudki i jednorazowe przesunięcie własnych bloków
   elastycznych dnia przed pierwszym stałym (`wakeChange`/`wakeShifted`, D334) – liczone z migawki dnia silnika i planu pokazywanego
   (`WakeDay`: w „Dziś” z `model`, dla dziś w Kalendarzu `wakeDayOf`; zaczęte zostają), jeden „Cofnij” (pobudka i bloki tylko, gdy

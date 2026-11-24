@@ -48,17 +48,18 @@ paths:
   T2632, T2635). `swapMemory` (`dayActions.ts`, dawne `cheapestSwap*` / `swapGone` / `swapBack` to jej nakładki; `swapSignature` – a, b, nowe starty) i
   `regenMemory` (`regenActions.ts`; `regenSignature` – pula, blok, sposób; `regenOptionsOf` – `newId()` raz na szukanie, `bufferTakenBy`, `replanned` z
   `rd.settings`; `holds` – blok w planie i start po teraz; `live` – start po żywym zegarze, `pastStart`).
-- Zapis na planie okna – w turze zapisu `countedPlanStands(plik, data, { seen, ctx?, starts, kept?, spans? })` (T2870, T2877, T2878, T2920–T2924; `saveStarts`,
-  `arrangeDayBlocks` i `swapDayBlocks` biorą `ctx` modelu): przestawiany blok tam, gdzie miał go plan okna (`ctx.basePlan ?? ctx.plan`, start z pliku – nie po
-  buforach), albo już na nowym; `kept` bez zmiany miejsca; każde miejsce zmiany osobno (stare i nowe każdego bloku + `spans`) – blok planu okna na nim usunięty /
-  odwołany / przeniesiony – zmiana; blok, którego plan okna nie miał (nowy w pliku albo przywrócony – cofnięte odwołanie), na nim w pierwszym planie – zmiana
-  (zakotwiczony – na końcu kotwicy; blok szablonu zapisany do pliku przez inne „Ułóż” nie jest nowy). Bez `ctx` – plan to bloki widzianego pliku. Nie stoi – nic,
-  `PLAN_CHANGED_TEXT`, linia wraca.
+- Zapis na planie okna – jedna reguła (T2927, zastępuje T2870, T2878, T2920–T2924): w turze zapisu `countedPlan(plik, data, ctx, after)` liczy plan dnia z bieżącego
+  pliku tą samą funkcją co okno (`dayPlan(ctx.snapshot, plik)` – szablon, serie, odpowiedzi sesji, odwołane, przeniesione, kotwice, cykle) i porównuje z
+  `ctx.basePlan ?? ctx.plan` po polach prognozy (`PLAN_FIELDS`: start, długość, kotwica, stały, kategoria, wariant, tło, grupa; kolejność po id): równe –
+  `stands` (zapis); równe `after` (`planAfter(ctx, starty, dodane)` – plan po zmianie) – `already` („Plan już jest tak ułożony.”); inaczej – `changed` (nic,
+  `PLAN_CHANGED_TEXT`, linia wraca). `saveStarts` („Ułóż”, „Zamień” – `ctx` z modelu: `MorningPlan`, `CheapestSwap`; bez `ctx` – bez reguły, jak przed T2870),
+  `pushDayBlocks(…, stands)` → `sent.standing`. Zaczęcie bloku jest w logu, nie w planie – reguła go nie widzi.
 - „Zamień” = `swapDayBlocks` (`saveStarts` – ta sama droga co `arrangeDayBlocks`, bez `planArranged`): `swapGone` przed zapisem, `undoEditToast` „Zamieniono: A ↔ B ·
   Cofnij” (`swapToastText`: ukryty z pary „(1 ukryty)”, inne przesunięte – `pushedText` bez pary, `openId`; T2630, T2637), `swapBack` przy nieudanym i po „Cofnij”.
 - „Wstaw regenerację tutaj” = `insertRegen(dzień, propozycja, { way, openId, changes?, now? })`: start ≤ teraz na zegarze – nic, `REGEN_PAST_TEXT`, `nudge` (T2879,
   T2925); `regenMemory.done` przed zapisem; blok `newUserBlock` z `r.id`, `withTaken(…, r.takes)` (D582) i `withBufferPushes` (D583) przez `pushDayBlocks(…, sent,
-  false, stands)` – jeden wpis, `planPushed(…, false)` (sam wyzwalacz znacznika); `stands`: `countedPlanStands` z `kept` = blok „przed” i `spans` = regeneracja,
-  bufor `r.takes` nadal w planie, niezaczęty (fakty modelu), nieodwołany i niezapisany w pliku (T2926); `undoEditToast` „Wstawiono regenerację: … · Cofnij”
-  (`regenToastText`, D428), `onUndone`/nic nie zapisane → `back`. N20: `descentPlace` + `regenHereCached(dzień)` + `insertRegen(…)`.
+  false, stands)` – jeden wpis, `planPushed(…, false)`; `stands` = `countedPlan` z `after` = plan + przesunięcia + blok (ta sama propozycja zapisana wcześniej –
+  `already`, zostaje zrobiona; z innego komputera, z innym id – `changed`); blok „przed”, przesuwane i bufor `r.takes` w planie okna, bufor niezaczęty według
+  faktów modelu z chwili kliknięcia (T2926, T2928 – bufor zmieniony przez Ciebie jest w pliku, więc w liczonym planie); `undoEditToast` „Wstawiono regenerację: … ·
+  Cofnij” (`regenToastText`, D428), `onUndone`/nic nie zapisane (poza `already`) → `back`. N20: `descentPlace` + `regenHereCached(dzień)` + `insertRegen(…)`.
 - Testy czekają na policzenie obu linii warunkiem (`settle`), bez stałych opóźnień; web regen – zegar kliknięcia `vi.useFakeTimers({ toFake: ['Date'] })`.
