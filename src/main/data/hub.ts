@@ -10,6 +10,7 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import type { BarCostClick, BarCostResult } from '@shared/widget'
 import type { QuickClock, AddLinkResult, AttachPrepared, AttachResult, AttachmentOpen, CaseDays, CloseResult, GroupLogResult, GroupLogUndone, QuickAddManyResult, QuickAddResult, QuickUndoResult, TemplateApplyResult, TemplateDoneAsk, TemplateUndoAsk, TemplateUndoJudged, TemplateUndoResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RemovedList, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
 import { blockFactsOf, casePlan, type CasesRitual } from '@shared/engine/cases'
@@ -1092,6 +1093,18 @@ export class DataHub {
   async events(drafts: EventIn[]): Promise<void> {
     await this.need().userEvents(drafts)
     this.changed()
+  }
+
+  /** A click of the bar's „Koszt ▸” (D585): judged and written by the folder in its turn; the windows hear it at once (its tile, T2503). */
+  async barCost(c: BarCostClick): Promise<BarCostResult> {
+    const f = this.service?.folder
+    if (!f) return { ok: false, why: 'folder danych nie jest otwarty' }
+    const r = await f.barCost(c)
+    if (!r.ok || !r.wrote) return r
+    this.changed()
+    // Its write lays the ends a close interrupted first (`writeOn`), as a click of the timer: the leader's consequences without 15 s.
+    void this.service?.tick()
+    return r
   }
 
   /**

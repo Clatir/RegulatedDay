@@ -208,6 +208,7 @@ const widget = new WidgetEngine({
   folderStatus: () => (hub?.status === 'opening' ? 'opening' : hub?.status === 'failed' ? 'failed' : 'none'),
   timer: (click) => (hub ? hub.timer(click) : Promise.resolve({ ok: false, why: 'folder danych nie jest otwarty', confirm: null })),
   edit: (entries) => (hub ? hub.edit(entries) : Promise.reject(new Error('folder danych nie jest otwarty'))),
+  cost: (c) => (hub ? hub.barCost(c) : Promise.resolve({ ok: false as const, why: 'folder danych nie jest otwarty' })),
   answer: (id, a, value) => (hub ? hub.answer(id, a, value) : Promise.resolve({ ok: false, why: 'folder danych nie jest otwarty', confirm: null })),
   seen: (ids, how) => hub?.seen(ids, how) ?? Promise.resolve(0),
   clickedApp: () => hub?.clickedApp(),

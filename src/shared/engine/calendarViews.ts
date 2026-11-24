@@ -57,6 +57,8 @@ export interface MonthBlock {
   state: HorizonBlockState
   background: boolean
   outsidePlan: boolean
+  /** Its hour may be changed (`HorizonBlock.movable`) – the menu „Zmień N bloków” of the bars asks (N18, D597). No cost: the month counts none (T2608). */
+  movable: boolean
 }
 
 /** The block of the month's day of a block of the horizon (T1015): the fields `blockName` reads, the hour, the state. */
@@ -73,7 +75,8 @@ export function monthBlockOf(b: HorizonBlock): MonthBlock {
     session: b.session === true,
     state: b.state,
     background: b.background,
-    outsidePlan: b.outsidePlan
+    outsidePlan: b.outsidePlan,
+    movable: b.movable === true
   }
 }
 
