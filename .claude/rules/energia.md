@@ -28,6 +28,7 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
   T903): dzień przyszły od przyjętego check-inu (`ASSUMED_CHECKIN`, 04:00, `assumed`) – tylko dla energii, nie zdarzenie logu.
   Dziś bez check-inu (brak, „Pomiń”) – też `assumedEnergy` (T2430): w kolumnie (`columnEnergy` `today`) i przy osi „Dziś” (`dayAxis`, gdy
   `date >= today`); przyjęte zdarzenie żyje tylko w kopii `ctx.events` do `computeEnergy` – nigdy w logu, pliku dnia ani `DayState`.
+  `EnergyState.runs` → `EnergyTrack.runs` (T2571): biegi bloków, z których liczy się krzywa (log do teraz, prognoza od teraz) – z nich bierze właściciela zejścia obwódka przy przyczynie (`reserveCause.ts`).
   Rysunek: `EnergyLanes` (× `ASSUMED_FACTOR`, liczby „teraz” `ASSUMED_NOW_OPACITY`, podpis `energy-assumed`), `EnergyStrip` (`data-assumed`).
 - `engine/energyCurve.ts` (T1280, T1281, T2607) – wygładzona krzywa toru (`poolCurve` – każda pula ze swoich próbek, `curveAt`, `valuesAt`,
   `energySpan`), `stripState`, `eachStripMinute` – jedno przejście po minutach paska: `stripRuns` (pasek kolumny) i `dayEnergy` (kropka

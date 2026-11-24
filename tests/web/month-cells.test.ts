@@ -17,7 +17,7 @@ import type { CalendarSieve } from '@shared/model/calendars'
 
 const names = { rd: rdFrom({}), settings: DEFAULT_SETTINGS, routines: [], requests: [] }
 const named = { categoryId: 'inne', variantId: null, routine: null, requests: [], note: '', origin: 'user' as const, sourceId: null }
-const block = (id: string, startMin: number, o: Partial<MonthBlock> = {}): MonthBlock => ({ id, named, categoryId: 'inne', startMin, endMin: startMin + 60, fixed: false, session: false, state: 'planned', background: false, outsidePlan: false, ...o })
+const block = (id: string, startMin: number, o: Partial<MonthBlock> = {}): MonthBlock => ({ id, named, categoryId: 'inne', startMin, endMin: startMin + 60, fixed: false, session: false, state: 'planned', background: false, outsidePlan: false, movable: false, ...o })
 const month = (date: string, o: Partial<MonthDay>): MonthDay => ({ ...emptyMonthDay(date), read: 'full', dayType: 'roboczy', ...o })
 const event = (id: string, title: string, date: string): AllDayEvent => ({ ...allDayDraft(id, date), title })
 

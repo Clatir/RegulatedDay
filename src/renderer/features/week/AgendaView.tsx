@@ -1,35 +1,38 @@
 /**
  * „Agenda” (D418): the days from today as a list, one day after another – the all-day events on top, then the blocks by the
  * hour (its hour, its name, its length, its category); a day with nothing is one line. A click on a day opens it (`openDay`, as in
- * „Tydzień”), a click on a block opens the block in its day (`openPick`, as the result of Ctrl K does – D418).
+ * „Tydzień”), a click on a block opens the block in its day (`openPick`, as the result of Ctrl K does – D418). Ctrl or Shift on a block selects it
+ * instead (N18, D596: `group` – the selection of `useWeekGroup`, ringed, the menu of the right button).
  */
 import type { AgendaDay } from '@shared/engine/calendarViews'
 import { logicalClock } from '@shared/format'
 import { rangeText } from '@shared/model/allDay'
 import { settingsOn } from '@shared/model/settings'
 import { ALL_DAY_COLOR_HEX } from '@shared/theme'
+import { menuBind } from '../../components/ContextMenu'
 import { cx } from '../../components/ui'
 import { useData } from '../../store/data'
 import { openDay, openPick } from '../../store/ui'
 import { blockColor, type Names } from '../plan/blockView'
 import { blockStateText } from './weekText'
 import { AGENDA_EMPTY, agendaHeading, agendaRow } from './weekViews'
+import type { WeekGroup } from './weekSelect'
 
 /** `agenda` – the days as `agendaOf` makes them, with what the calendar filter lets through (D419, D425: `AgendaBody` of the page). */
-export function AgendaView({ agenda, hiddenByDate, today }: { agenda: readonly AgendaDay[]; hiddenByDate: Readonly<Record<string, number>>; today: string }) {
+export function AgendaView({ agenda, hiddenByDate, today, group }: { agenda: readonly AgendaDay[]; hiddenByDate: Readonly<Record<string, number>>; today: string; group: WeekGroup }) {
   const { rd, routines, requests } = useData()
   const namesOf = (date: string): Names => ({ rd, settings: settingsOn(rd.settings, date), routines, requests })
   return (
     <div className="flex flex-col gap-2" data-testid="agenda">
       {agenda.map((d) => (
-        <AgendaDayCard key={d.date} day={d} hidden={hiddenByDate[d.date] ?? 0} today={today} names={namesOf(d.date)} />
+        <AgendaDayCard key={d.date} day={d} hidden={hiddenByDate[d.date] ?? 0} today={today} names={namesOf(d.date)} group={group} />
       ))}
     </div>
   )
 }
 
 /** `hidden` – what the unchecked calendars hid of the day (blocks and events): a day with nothing left says so, not „nic” (D419). */
-function AgendaDayCard({ day, hidden, today, names }: { day: AgendaDay; hidden: number; today: string; names: Names }) {
+function AgendaDayCard({ day, hidden, today, names, group }: { day: AgendaDay; hidden: number; today: string; names: Names; group: WeekGroup }) {
   // A day that cannot be read now has no blocks to show – its all-day events (not part of any day's count) still are (as in the month).
   const unknown = day.read === 'unknown'
   const empty = day.allDay.length === 0 && day.blocks.length === 0
@@ -75,15 +78,23 @@ function AgendaDayCard({ day, hidden, today, names }: { day: AgendaDay; hidden: 
           )}
           {day.blocks.map((b) => {
             const row = agendaRow(b, names)
+            const marked = group.isMarked(day.date, b.id)
             return (
               <li key={b.id}>
                 <button
                   type="button"
-                  onClick={() => openPick({ page: 'today', day: day.date === today ? null : day.date }, { kind: 'block', id: b.id, date: day.date })}
-                  className="grid w-full grid-cols-[48px_minmax(0,1fr)_auto_minmax(0,150px)] items-center gap-2 rounded border-l-[3px] px-1.5 py-0.5 text-left text-[12.5px] hover:bg-hover"
+                  onClick={(e) => {
+                    // D596: Ctrl and Shift select the block – it stays closed; a plain click opens it in its day.
+                    if (e.ctrlKey || e.shiftKey) return group.mark(day.date, b.id, e)
+                    openPick({ page: 'today', day: day.date === today ? null : day.date }, { kind: 'block', id: b.id, date: day.date })
+                  }}
+                  // The right button and the menu key: the menu of the selection (this block is put into it first).
+                  {...menuBind((at) => group.context(day.date, b.id, at))}
+                  className={cx('grid w-full grid-cols-[48px_minmax(0,1fr)_auto_minmax(0,150px)] items-center gap-2 rounded border-l-[3px] px-1.5 py-0.5 text-left text-[12.5px] hover:bg-hover', marked && 'ring-2 ring-lamp')}
                   style={{ borderLeftColor: blockColor(b.categoryId, names) }}
                   data-testid={`agenda-block-${day.date}-${b.id}`}
                   data-state={b.state}
+                  data-marked={marked ? 'true' : undefined}
                 >
                   <span className="num text-fg">{logicalClock(b.startMin)}</span>
                   <span className="min-w-0 truncate text-fg">

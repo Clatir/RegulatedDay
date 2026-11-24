@@ -85,6 +85,7 @@ import { DayMenu } from './DayMenu'
 import { DayNumbers, DaySummary } from './DayNumbers'
 import { BlockDayNotes } from './DayNotes'
 import { DayWarnings, dayWarningTexts } from './DayWarnings'
+import { CheapestSwapLine } from './CheapestSwap'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
@@ -834,7 +835,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
             computers={view.computers}
             onChange={(patch) => changeBlock(block, patch, draft != null)}
             // D3, D8, D563 P10: what the side panel says of the day stands in the panel of the block, which replaces it – the warnings and a routine waiting.
-            dayNotes={<BlockDayNotes model={model} names={names} today={today} onShow={closePanel} />}
+            dayNotes={<BlockDayNotes model={model} names={names} today={today} onShow={closePanel} openId={block.id} />}
             // „Zamknij” leaves a new block – saved as it stands, a bare click of the axis untouched thrown away (D461, T1045); Esc
             // throws away only an untouched one whose save has not started, any other it leaves as „Zamknij” does (T1080).
             onClose={closePanel}
@@ -932,7 +933,7 @@ export function SidePanel({ model, names, routines, past, onSelect, onMove, case
       {routines && <RoutineCards model={model} names={names} />}
       {cases}
       <DayNumbers model={model} />
-      <DayWarnings warnings={dayWarningTexts(model, past)} />
+      <DayWarnings warnings={dayWarningTexts(model, past)} swap={<CheapestSwapLine model={model} names={names} past={past} />} />
       {parked.length > 0 && (
         <div className="flex flex-col gap-1.5">
           <h4 className="text-[12px] text-muted">Zaparkowane</h4>

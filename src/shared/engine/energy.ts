@@ -79,6 +79,11 @@ export interface EnergyState {
   charges: Charge[]
   /** The state at the start of every minute of the day (NaN before the check-in): the past and the forecast. */
   series: Record<Pool, Float64Array>
+  /**
+   * What the curve was counted from: every run of a block – the log's up to now, the forecast's from now (a block paused under a fixed session runs
+   * in two) – in minutes of the grid, `bg` behind another block, `forecast` a run still to come (T2571: the cause of a descent is the block that runs).
+   */
+  runs?: Array<{ id: string; from: number; to: number; bg: boolean; forecast: boolean }>
   warnings: string[]
 }
 
@@ -562,6 +567,7 @@ export function computeEnergy(ctx: DayContext, day: DayState, opts: EnergyOption
       .map(({ planned: _planned, ...ch }) => ch)
       .sort((a, b) => a.at - b.at),
     series,
+    runs: spans.filter((x) => x.to > x.from).map((x) => ({ id: x.block.id, from: x.from, to: x.to, bg: x.bg, forecast: x.planned })),
     warnings
   }
 }

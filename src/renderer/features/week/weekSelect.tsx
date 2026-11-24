@@ -4,9 +4,15 @@
  * the range, Ctrl+A selects the whole view, Esc clears; every selected block is ringed, the line „Zaznaczone: 4 · …” stands over the columns, the
  * right button or Shift+F10 opens „Zmień 4 bloki”. The ids of the selection are `blockKey(date, id)` (an id may repeat from day to day); the grid is
  * keyed by its first day, so another week, another three days or another view starts with nothing selected.
+ * N18 (D596, D597): the same model serves „Agenda” (the blocks of its list) and the bars of the blocks in the cells of the month – the screen gives the
+ * tiles in the order it draws them (`days`), the key presses it hears (`when`) and the line its changes are said in (`view`: „week” or „calendar”).
  */
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
-import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
+import type { MonthNamed } from '@shared/engine/calendarViews'
+import type { HorizonBlock } from '@shared/engine/week'
+import { groupCount } from '@shared/groupText'
+import type { Costs } from '@shared/model/categories'
+import type { GroupView } from '../../store/groupLine'
 import { removeBlocksTarget, blockKey, blockSummary, menuCtxOf, parseBlockKey, weekOrder, type MenuBlock, type MenuState } from '../plan/groupMenu'
 import { runBlockGroup } from '../plan/groupRun'
 import { BlockGroupMenu } from '../plan/BlockGroupMenu'
@@ -25,6 +31,40 @@ export function inWeek(e: KeyboardEvent): boolean {
   return t === document.body || t === document.documentElement || (t instanceof Element && t.closest('[data-testid="week-grid"]') != null)
 }
 
+/** The focus is in „Agenda”'s list, or on no element at all: the keys of its selection are heard there (N18). */
+export function inAgenda(e: KeyboardEvent): boolean {
+  const t = e.target
+  return t === document.body || t === document.documentElement || (t instanceof Element && t.closest('[data-testid="agenda"]') != null)
+}
+
+/** The focus is in the month's grid, or on no element at all: the keys of the selection of the bars are heard there (a checkbox of the filter or a button of the actions keeps its own, N18). */
+export function inMonthGrid(e: KeyboardEvent): boolean {
+  const t = e.target
+  return t === document.body || t === document.documentElement || (t instanceof Element && t.closest('[data-testid="month-grid"]') != null)
+}
+
+/**
+ * What a selectable block needs to be: its place in the day, what names it and what the menu asks of it. A block of the horizon (`HorizonBlock`)
+ * is one, and so is the block of a bar of the month (`MonthBlock`, which has no cost – the month counts none, T2608).
+ */
+export interface GroupTile {
+  id: string
+  categoryId: string
+  startMin: number
+  endMin: number
+  state: HorizonBlock['state']
+  movable?: boolean | undefined
+  named: MonthNamed
+  cost?: { costs: Costs } | null | undefined
+}
+
+/** „Zaznaczone: 3 bloki · 2 h” – the line of the month's bars in the calendar's actions: the count with its noun, then the time of the summary (one block – the count only). */
+export function blocksLine(count: number, summary: string | null): string {
+  const head = `Zaznaczone: ${groupCount(count, 'block')}`
+  const rest = summary?.split(' · ').slice(1) ?? []
+  return [head, ...rest].join(' · ')
+}
+
 export interface WeekGroup {
   sel: SelectionApi
   summary: string | null
@@ -36,22 +76,41 @@ export interface WeekGroup {
   overlay: ReactNode
 }
 
-export function useWeekGroup(o: { days: readonly HorizonDay[]; scope: string; today: string; energy: boolean; namesOf: (date: string) => Names }): WeekGroup {
+export function useWeekGroup(o: {
+  days: ReadonlyArray<{ date: string; blocks: readonly GroupTile[] }>
+  scope: string
+  today: string
+  energy: boolean
+  namesOf: (date: string) => Names
+  /** The line the changes are said in (default „week”: „Tydzień”, „3 dni” and „Agenda”). */
+  view?: Extract<GroupView, 'week' | 'calendar'>
+  /** Which key presses the selection hears (default: the focus in the columns of „Tydzień”). */
+  when?: (e: KeyboardEvent) => boolean
+  /** The arrows of Shift+arrow (default: vertical; the month has no arrows for its bars). */
+  arrows?: 'vertical' | false
+  enabled?: boolean
+  /** What Ctrl+A selects (default: every tile of `days`) – the month's grid shows the bars of the neighbouring months too, Ctrl+A takes the month's own. */
+  all?: readonly string[]
+  /** The view counted no costs of its blocks („Agenda”, the month): the menu's „Koszt…” is off (default: counted). */
+  costsKnown?: boolean
+}): WeekGroup {
+  const view = o.view ?? 'week'
   const order = useMemo(() => weekOrder(o.days), [o.days])
-  const sel = useSelection({ order, scope: o.scope, when: inWeek })
-  const byKey = useMemo(() => new Map(o.days.flatMap((d) => d.blocks.map((b): [string, HorizonBlock] => [blockKey(d.date, b.id), b]))), [o.days])
+  const sel = useSelection({ order, scope: o.scope, when: o.when ?? inWeek, arrows: o.arrows ?? 'vertical', enabled: o.enabled ?? true, ...(o.all ? { all: o.all } : {}) })
+  const byKey = useMemo(() => new Map(o.days.flatMap((d) => d.blocks.map((b): [string, GroupTile] => [blockKey(d.date, b.id), b]))), [o.days])
   const chosen = useMemo(() => sel.selected.flatMap((k) => (byKey.has(k) ? [byKey.get(k)!] : [])), [sel.selected, byKey])
   const summary = useMemo(() => blockSummary(chosen, o.energy), [chosen, o.energy])
   const [menu, setMenu] = useState<{ ids: readonly string[]; at: { x: number; y: number } } | null>(null)
   // Del: two or more – one question for all; one block selected (Ctrl+click – no panel holds it) – asked by its name (UX17, F8), the same removal.
   const only = sel.count === 1 ? sel.selected[0] : undefined
   const onlyBlock = only !== undefined ? byKey.get(only) : undefined
-  const removeKeys = () => runBlockGroup('week', [...sel.selected], { kind: 'remove' })
+  const removeKeys = () => runBlockGroup(view, [...sel.selected], { kind: 'remove' })
   const removeTargetOf: DeleteTarget | null =
-    sel.count >= 2 ? removeBlocksTarget(sel.count, removeKeys) : only !== undefined && onlyBlock ? removeTarget(blockName(onlyBlock.named, o.namesOf(parseBlockKey(only).date)), removeKeys) : null
+    sel.count >= 2 ? removeBlocksTarget(sel.count, removeKeys) : only !== undefined && onlyBlock ? removeTarget(blockName({ ...onlyBlock.named, note: '' }, o.namesOf(parseBlockKey(only).date)), removeKeys) : null
   // The subcategories, variants and routines to choose from are those of the first selected day (the settings of a date).
   const first = (menu?.ids[0] ? parseBlockKey(menu.ids[0]).date : o.today) || o.today
-  const ctx = useMemo(() => menuCtxOf(o.namesOf(first)), [first, o.namesOf])
+  const costsKnown = o.costsKnown ?? true
+  const ctx = useMemo(() => ({ ...menuCtxOf(o.namesOf(first)), costsKnown }), [first, o.namesOf, costsKnown])
   // Stable while the days are (the menu counts its entries again only when they change).
   const today = o.today
   const blocksOf = useCallback(
@@ -70,6 +129,6 @@ export function useWeekGroup(o: { days: readonly HorizonDay[]; scope: string; to
     mark: (date, id, e) => void sel.onItemClick(blockKey(date, id), { ctrlKey: e.ctrlKey, shiftKey: e.shiftKey }),
     context: (date, id, at) => setMenu({ ids: [...sel.onItemContext(blockKey(date, id))], at }),
     removeTarget: removeTargetOf,
-    overlay: <BlockGroupMenu view="week" menu={menu} onClose={() => setMenu(null)} blocksOf={blocksOf} ctx={ctx} today={o.today} />
+    overlay: <BlockGroupMenu view={view} menu={menu} onClose={() => setMenu(null)} blocksOf={blocksOf} ctx={ctx} today={o.today} />
   }
 }

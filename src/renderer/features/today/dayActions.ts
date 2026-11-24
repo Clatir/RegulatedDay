@@ -23,7 +23,7 @@ import { createDay } from '@shared/engine/createDay'
 import { copiedDay, moveBetweenDays, stayRuleOf, wakeChange } from '@shared/engine/planEdit'
 import type { DayContext, DayState } from '@shared/engine/day'
 import type { EnergyState } from '@shared/engine/energy'
-import { energyOrderVariant, lowestEnergy } from '@shared/engine/energyOrder'
+import { cheapestSwap, energyOrderVariant, lowestEnergy, reserveWarned, type CheapestSwap } from '@shared/engine/energyOrder'
 import type { Variant } from '@shared/engine/variants'
 import { nameById, type Names } from '@shared/blockName'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
@@ -155,7 +155,7 @@ export async function saveParallel(date: string, seen: RawRecord | null, plan: r
  * A saved edit of a day said for 10 s with „Cofnij” (D492): the edit taken back in its turn while the file stands as it left it
  * (`editStands`, `inverseEdit` – a field changed since is a question); changed since – it stays, and the toast says so.
  */
-export function undoEditToast(date: string, entry: EditEntry, made: RawRecord | null, text: string): void {
+export function undoEditToast(date: string, entry: EditEntry, made: RawRecord | null, text: string, onUndone?: () => void): void {
   undoToast(text, () => {
     let stood = true
     void trySaveWith(async () => {
@@ -164,6 +164,8 @@ export function undoEditToast(date: string, entry: EditEntry, made: RawRecord | 
       return [stood ? inverseEdit(entry, now, made) : null]
     }).then((o) => {
       if (isSaved(o) && !stood) toast(PLAN_CHANGED_TEXT, 'info', 6000)
+      // `onUndone` – the edit taken back (the cheapest swap's proposal comes back at once, T2643).
+      else if (isSaved(o)) onUndone?.()
     })
   })
 }
@@ -191,8 +193,8 @@ type EnergyOrderDay = { ctx: DayContext; state: DayState; energy: EnergyState; d
 export const ENERGY_ORDER_HOLD_MIN = 5
 
 /**
- * What „Ułóż pod energię” depends on in the day counted at a minute (T616): the plan and the snapshot, the wake of the day
- * and of the next one and the bedtime's forecast (where the lowest energy is looked for), the log, the energy module and
+ * What „Ułóż pod energię” depends on in the day counted at a minute (T616): the plan and the snapshot, the routines' costs (D512,
+ * T2627), the wake of the day and of the next one and the bedtime's forecast (where the lowest energy is looked for), the log, the energy module and
  * the calibration, the lowest energy from now, the answer „Zostaw”, where the forecast places the blocks (a running one by
  * its end – its start is now) and the clock in steps of `ENERGY_ORDER_HOLD_MIN` (the lowest from now moves with the time).
  * The window's count every 30 s changes it at most every 5 min, a block due now (placed at now) – each minute.
@@ -203,6 +205,8 @@ export function energyOrderKey(m: EnergyOrderDay): string {
   return [
     JSON.stringify(m.ctx.plan),
     JSON.stringify(m.ctx.snapshot),
+    // The costs of the routines (D512): a cost changed in „Rutyny” changes the blocks' costs, not the plan nor the log.
+    JSON.stringify(m.ctx.routineCosts ?? null),
     m.ctx.wakeMin,
     m.ctx.nextWakeMin,
     m.state.bedtime.forecast,
@@ -270,20 +274,8 @@ export function variantStarts(plan: readonly PlanBlock[], v: Pick<Variant, 'chan
  * a variant picked in the bar, D313): its „Cofnij” takes this one edit back.
  */
 export async function arrangeDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], label: string): Promise<{ out: EditOutcome[] | null; already: boolean }> {
-  const sent: { made: boolean; entry: EditEntry | null; after: RawRecord | null } = { made: false, entry: null, after: null }
-  const out = await trySaveWith(async () => {
-    const before = (await dayFilesNow([date], () => seen))[date] ?? null
-    const after = withPushed(dayRaw(before, date), date, (r) => r, starts)
-    sent.made = true
-    sent.entry = editOf(paths.day(date), before, after)
-    sent.after = sent.entry?.create ? after : null
-    return [sent.entry]
-  })
-  // The file in its turn already so (another computer, an earlier click): nothing written – the note (D379, T622).
-  if (sent.made && !sent.entry) {
-    toast(PLAN_ALREADY_TEXT, 'info')
-    return { out, already: true }
-  }
+  const { out, sent } = await saveStarts(date, seen, starts)
+  if (sent.already) return { out, already: true }
   if (isSaved(out) && sent.entry) {
     try {
       await window.rd.planArranged(date, label, sent.entry, sent.after)
@@ -292,6 +284,163 @@ export async function arrangeDayBlocks(date: string, seen: RawRecord | null, sta
     }
   }
   return { out, already: false }
+}
+
+/**
+ * New starts of blocks as one edit of the day's file, in its turn, each over the block as the file holds it then („Ułóż”, „Zamień”).
+ * `sent.already` – the file in its turn already so (another computer, an earlier click): nothing written, the note said (D379, T622);
+ * `sent.entry` – the edit sent, `sent.after` – the file it made when it had none.
+ */
+async function saveStarts(date: string, seen: RawRecord | null, starts: readonly PushedStart[]): Promise<{ out: EditOutcome[] | null; sent: { already: boolean; entry: EditEntry | null; after: RawRecord | null } }> {
+  const sent: { made: boolean; already: boolean; entry: EditEntry | null; after: RawRecord | null } = { made: false, already: false, entry: null, after: null }
+  const out = await trySaveWith(async () => {
+    const before = (await dayFilesNow([date], () => seen))[date] ?? null
+    const after = withPushed(dayRaw(before, date), date, (r) => r, starts)
+    sent.made = true
+    sent.entry = editOf(paths.day(date), before, after)
+    sent.after = sent.entry?.create ? after : null
+    return [sent.entry]
+  })
+  if (sent.made && !sent.entry) {
+    sent.already = true
+    toast(PLAN_ALREADY_TEXT, 'info')
+  }
+  return { out, sent }
+}
+
+/** The words of „Najtańsza zamiana” (N22, T2624): the line by the warning of energy and the toast after „Zamień”. */
+export const swapLineText = (a: string, b: string, s: Pick<CheapestSwap, 'before' | 'after'>): string => `Najtańsza zamiana: ${a} ↔ ${b} – najniższa energia dnia ${s.before} → ${s.after}`
+export const swappedText = (a: string, b: string): string => `Zamieniono: ${a} ↔ ${b}`
+
+/**
+ * „Zamień” of the cheapest swap (N22, D598, T2625): its new starts as one edit of the day's file, the way of „Ułóż” (`saveStarts`) –
+ * but no line in the bar (D229: the bar stays as it is): the window says „Zamieniono: A ↔ B” for 10 s with „Cofnij” (the edit taken
+ * back while the file stands as it left it, `undoEditToast`; a block changed since – it stays, and the toast says so) – with the
+ * blocks of an unchecked calendar it moves said (`swapToastText`, D428, T2630, T2637); `openId` – the block whose panel is open (shown
+ * in spite of its calendar, D427). The swap is done (`swapGone`, T2643) before the save starts – no line shows it while the save
+ * runs, nor after (a new file or a new key on the way) – and not done again when the save fails, or when its „Cofnij” takes it back
+ * (the proposal comes back at once).
+ */
+export async function swapDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], swap: Pick<CheapestSwap, 'a' | 'b' | 'changes'>, text: string, openId: string | null = null): Promise<{ out: EditOutcome[] | null; already: boolean; saved: boolean }> {
+  swapGone(date, swap)
+  const { out, sent } = await saveStarts(date, seen, starts)
+  if (sent.already) return { out, already: true, saved: false }
+  const saved = isSaved(out) && sent.entry != null
+  if (saved) undoEditToast(date, sent.entry!, sent.after, swapToastText(text, starts, [swap.a, swap.b], openId), () => swapBack(date, swap))
+  else swapBack(date, swap)
+  return { out, already: false, saved }
+}
+
+/**
+ * The toast of „Zamień” with what an unchecked calendar hides among the blocks it moves (D428, T2637), as the window's other lines
+ * say it: one of the pair hidden – at the pair, „Zamieniono: A ↔ B (1 ukryty)”; hidden among the other blocks it moves (those after
+ * `a` laid out anew, T2631) – „· Przesunięto 2 bloki (w tym 1 ukryty)”, counting only those other blocks. Nothing hidden – the words.
+ */
+export function swapToastText(text: string, starts: readonly PushedStart[], pair: readonly [string, string], openId: string | null = null): string {
+  const inPair = starts.filter((p) => pair.includes(p.block.id)).map((p) => p.block)
+  const others = starts.filter((p) => !pair.includes(p.block.id)).map((p) => p.block)
+  const pairHidden = hiddenBlocksAmong(inPair, openId)
+  const othersHidden = hiddenBlocksAmong(others, openId)
+  const atPair = pairHidden ? ` (${countLabel(pairHidden, 'ukryty', 'ukryte', 'ukrytych')})` : ''
+  return `${text}${atPair}${othersHidden ? ` · ${pushedText(others.length, othersHidden)}` : ''}`
+}
+
+/** What the cheapest swap is counted on: the day as counted (`DayModel`). */
+type SwapDay = EnergyOrderDay & { date: string }
+
+/** The last cheapest swap counted (T2624): by the day's key – as „Ułóż pod energię” (T616) – and its date (T2633). */
+let lastSwap: { key: string; date: string; value: CheapestSwap | null } | null = null
+/**
+ * The swaps done (T2628, T2634, T2638, T2640, T2643): by date, the swap's own words (`swapSignature`) – „Zamień” saving it, saved, or
+ * finding the plan already so; no line of that day shows that swap, whatever key it is counted for. The last `GONE_DAYS` days only
+ * (inserted last, kept).
+ */
+const gone = new Map<string, string>()
+export const GONE_DAYS = 14
+/** The window's lines of the swap, told when a swap is done or comes back (`onSwapsDone`). */
+const doneListeners = new Set<() => void>()
+
+/** A swap by what it does (T2643): its two blocks and the new starts it writes. */
+export const swapSignature = (s: Pick<CheapestSwap, 'a' | 'b' | 'changes'>): string =>
+  `${s.a}|${s.b}|${s.changes.map((c) => (c.k === 'start' ? `${c.block}@${c.startMin}` : c.k)).join(',')}`
+
+/**
+ * What the cheapest swap of a day depends on (T2624, T2636): its date and what „Ułóż pod energię” depends on (`energyOrderKey`);
+ * null – no warning of energy at the reserve, nothing to count (the side panel renders at every count of the day). Once per day
+ * counted – the window passes it on to `cheapestSwapPeek` and `cheapestSwapCached`.
+ */
+export const cheapestSwapKeyOf = (m: SwapDay): string | null => (reserveWarned(m.energy) ? `${m.date}|${energyOrderKey(m)}` : null)
+
+/**
+ * The cheapest swap of a day (N22) counted again only when the day changes (`cheapestSwapKeyOf`, T616): the search runs in the
+ * window's thread – not for a count of the day that only moved the clock within its step. Null – none (the engine says why). A
+ * search that throws (T2641) is said in the console and remembered as none for its key – the line never waits on it again.
+ */
+export function cheapestSwapCached(m: SwapDay, key: string | null = cheapestSwapKeyOf(m)): CheapestSwap | null {
+  if (key == null) return null
+  if (lastSwap && lastSwap.key === key) return lastSwap.value
+  let value: CheapestSwap | null = null
+  try {
+    value = cheapestSwap(m.ctx, m.state, m.energy)
+  } catch (e) {
+    console.warn('Najtańsza zamiana: nie policzono propozycji', e)
+  }
+  lastSwap = { key, date: m.date, value }
+  return value
+}
+
+/** What the line of the cheapest swap shows without the search (T2632, T2633): `fresh` – counted for this key, `due` – to count. */
+export interface SwapSeen {
+  swap: CheapestSwap | null
+  fresh: boolean
+  due: boolean
+}
+
+/**
+ * The cheapest swap as far as it is known without the search (T2632): counted for the day's key – that one; not yet – the swap
+ * this line showed last (`shownKey`, T2639), while it is still the last counted, of the same day and both its blocks still in the
+ * plan – not fresh (T2633: the line stays while the new key is counted, „Zamień” waits); anything else – none. A swap done that day
+ * (`swapGone`, by its words – T2643) – none, fresh or held. `key` null – nothing (no warning).
+ */
+export function cheapestSwapPeek(m: SwapDay, key: string | null, shownKey: string | null = null): SwapSeen {
+  if (key == null) return { swap: null, fresh: false, due: false }
+  const done = gone.get(m.date)
+  const open = (s: CheapestSwap | null | undefined): CheapestSwap | null => (s && swapSignature(s) !== done ? s : null)
+  if (lastSwap && lastSwap.key === key) return { swap: open(lastSwap.value), fresh: true, due: false }
+  const last = open(lastSwap?.value)
+  const inPlan = (id: string) => m.ctx.plan.some((b) => b.id === id)
+  const held = last && lastSwap!.key === shownKey && lastSwap!.date === m.date && inPlan(last.a) && inPlan(last.b) ? last : null
+  return { swap: held, fresh: false, due: true }
+}
+
+/**
+ * The swap is done on its day (T2628, T2634, T2638, T2643): „Zamień” saving it (marked before the save), saved, or the plan already
+ * so – no line of the day shows it, in any panel, for any key (another day's stays as it was – T2640).
+ */
+export function swapGone(date: string, swap: Pick<CheapestSwap, 'a' | 'b' | 'changes'>): void {
+  gone.delete(date)
+  gone.set(date, swapSignature(swap))
+  while (gone.size > GONE_DAYS) gone.delete(gone.keys().next().value!)
+  for (const f of doneListeners) f()
+}
+
+/** The swap is not done after all (T2643): its save failed, or its „Cofnij” took it back – shown again (while it is the one marked). */
+export function swapBack(date: string, swap: Pick<CheapestSwap, 'a' | 'b' | 'changes'>): void {
+  if (gone.get(date) !== swapSignature(swap)) return
+  gone.delete(date)
+  for (const f of doneListeners) f()
+}
+
+/** `f` told whenever a swap is done or comes back (the lines count again what they show); the way back – the unsubscription. */
+export function onSwapsDone(f: () => void): () => void {
+  doneListeners.add(f)
+  return () => void doneListeners.delete(f)
+}
+
+/** The memory of `cheapestSwapCached` and of `swapGone` emptied (tests: one file's day never answers for another's). */
+export function resetSwapCache(): void {
+  lastSwap = null
+  gone.clear()
 }
 
 /**

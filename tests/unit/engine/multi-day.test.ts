@@ -556,9 +556,16 @@ describe('D418 – komórka dnia w miesiącu', () => {
       session: false,
       state: 'ran',
       outsidePlan: true,
-      background: true
+      background: true,
+      movable: false
     })
     expect(monthBlockOf(hb('b', '10:00', 30, { fixed: true, session: true }))).toMatchObject({ id: 'b', fixed: true, session: true, state: 'planned' })
+  })
+
+  it('N18, D597: blok miesiąca niesie `movable` (menu „Zmień N bloków” pyta o godzinę), bez kosztu i bez notatki', () => {
+    expect(monthBlockOf(hb('m', '09:00', 30, { movable: true }))).toMatchObject({ id: 'm', movable: true })
+    expect(monthBlockOf(hb('f', '09:00', 30))).toMatchObject({ movable: false })
+    expect(monthBlockOf(hb('c', '09:00', 30, { movable: true }))).not.toHaveProperty('cost')
   })
 
   it('daty miesiąca od pierwszego do ostatniego dnia', () => {
