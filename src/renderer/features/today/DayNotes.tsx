@@ -8,15 +8,24 @@ import { useData } from '../../store/data'
 import type { DayModel } from '../../store/day'
 import type { Names } from '../plan/blockView'
 import { CheapestSwapLine } from './CheapestSwap'
+import { RegenHereLine } from './RegenHere'
 import { dayWarningTexts, DayWarnings } from './DayWarnings'
 import { RoutinesWaiting } from './RoutineCard'
+import { useReserveKey } from './useProposal'
 
 /** `openId` – the block whose panel this is (shown in spite of an unchecked calendar, D427). */
 export function BlockDayNotes({ model, names, today, onShow, openId = null }: { model: DayModel; names: Names; today: string; onShow: () => void; openId?: string | null }) {
   const routines = useData((s) => s.routines)
+  const past = model.date < today
+  // The day's key once for both proposals by the warning (T2636).
+  const dayKey = useReserveKey(model, past)
   return (
     <>
-      <DayWarnings warnings={dayWarningTexts(model, model.date < today)} swap={<CheapestSwapLine model={model} names={names} past={model.date < today} openId={openId} />} />
+      <DayWarnings
+        warnings={dayWarningTexts(model, past)}
+        swap={<CheapestSwapLine model={model} names={names} past={past} openId={openId} dayKey={dayKey} />}
+        regen={<RegenHereLine model={model} names={names} past={past} openId={openId} dayKey={dayKey} />}
+      />
       {model.date === today && <RoutinesWaiting due={routinesDue(model.ctx, model.state, routines, model.dayFile)} model={model} names={names} onShow={onShow} />}
     </>
   )

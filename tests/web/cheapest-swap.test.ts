@@ -488,4 +488,14 @@ describe('„Najtańsza zamiana” w oknie (N22)', () => {
     await vi.waitFor(() => expect(sent).toHaveLength(1))
     await vi.waitFor(() => expect(q('cheapest-swap-text')?.textContent).toBe(LINE))
   })
+
+  it('T2870: blok przestawiany przez zamianę przesunięty w międzyczasie (inny komputer) – nic nie zapisane, „Plan zmienił się…”, linia wraca', async () => {
+    // „Inne” moved to 09:30 elsewhere: the starts counted from 09:00 would write over it.
+    const { sent } = stub(fileWith({ c: lm('09:30') }))
+    await side(model())
+    await act(async () => void q('cheapest-swap-apply')!.click())
+    await vi.waitFor(() => expect(useUi.getState().toasts.map((t) => t.text)).toContain(PLAN_CHANGED_TEXT))
+    expect(sent).toEqual([])
+    await vi.waitFor(() => expect(q('cheapest-swap-text')?.textContent).toBe(LINE))
+  })
 })
