@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CaseDays, EditOutcome, QuickShortcut, RawRecord } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
-import { isRaw, putBlock } from '@shared/data/dayEdits'
+import { isRaw, putBlock, setCancelled } from '@shared/data/dayEdits'
 import { nextTaskRaw } from '@shared/engine/caseRepeat'
 import { copiedCase } from '@shared/engine/copy'
 import { sameContentAs } from '@shared/data/merge'
@@ -320,9 +320,11 @@ export function removeCase(id: string): Promise<CaseResult> {
  * block gone from the day (the sprawa's old one, one removed on another computer, one the day no longer makes) is never
  * written back. The file after and how many starts changed.
  */
-export function pushedInto(after: RawRecord, date: string, push: CasePush): { next: RawRecord; moved: number } {
-  const plan = new Map(push.planOf(dayFileFrom(after, date)).map((b) => [b.id, b]))
-  let next = after
+export function pushedInto(after: RawRecord, date: string, push: CasePush, made?: ReadonlySet<string>): { next: RawRecord; moved: number } {
+  // D582: the buffers the new blocks of the sprawy written take – out of the day first, so the plan after the change has none of them.
+  const freed = (push.taken ?? []).filter((t) => !made || made.has(t.caseId)).reduce((r, t) => setCancelled(r, t.id, true), after)
+  const plan = new Map(push.planOf(dayFileFrom(freed, date)).map((b) => [b.id, b]))
+  let next = freed
   let moved = 0
   for (const x of push.blocks) {
     const inDay = plan.get(x.block.id)
@@ -337,6 +339,8 @@ export function pushedInto(after: RawRecord, date: string, push: CasePush): { ne
 export interface CasePush {
   blocks: readonly CasePushed[]
   planOf: (file: DayFile) => readonly PlanBlock[]
+  /** The buffers of decompression the new blocks are laid on (D582), each with its sprawa: cancelled for the day in the same edit – only those of the sprawy written (T2484). */
+  taken?: ReadonlyArray<{ id: string; caseId: string }>
 }
 
 /** A block the drop pushes apart (D367, `dayPush.ts`): the block as the window knows it and its new start. */

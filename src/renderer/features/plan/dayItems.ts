@@ -24,7 +24,7 @@ import { stepsCounter } from '@shared/model/steps'
 import { logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import type { DayModel } from '../../store/day'
-import { blockColor, blockKind, blockMarks, blockName, type Names } from './blockView'
+import { blockColor, blockKind, blockMarks, blockName, DECOMPRESS_COLOR, type Names } from './blockView'
 import type { EnergyTrack, TimelineItem, TimelineMarker } from './Timeline'
 
 /**
@@ -110,7 +110,9 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
       // D430: its category beside its hours when its own name is in the category's place.
       ...(kind ? { kind } : {}),
       marks: [...blockMarks(p, { afterWork: info.afterWorkMark, fromYesterday: p.movedFrom === yesterday }), ...(f?.startedAt != null && f.endedAt == null && !swapped ? ['biegnie'] : [])],
-      color: blockColor(p.categoryId, names),
+      // D386: a buffer of decompression in the sea green, with its cup.
+      color: p.origin === 'decompress' ? DECOMPRESS_COLOR : blockColor(p.categoryId, names),
+      ...(p.origin === 'decompress' ? { decompress: true } : {}),
       categoryId: p.categoryId,
       background: info.bg,
       dim: gone != null || f?.endedAt != null || (nowIdx != null && f?.startedAt == null && to <= nowIdx),

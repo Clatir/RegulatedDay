@@ -12,7 +12,7 @@ import { allDayDraft } from '@shared/model/allDay'
 import { placeLogical } from '@shared/time/day'
 
 // Every field of what the day is counted from. A new one: add it here only if it is no event of the calendar.
-const CONTEXT_FIELDS: Record<keyof DayContext, true> = { date: true, snapshot: true, plan: true, wakeMin: true, nextWakeMin: true, events: true, now: true, typicalSessionMin: true, asWritten: true, routineCosts: true, changes: true }
+const CONTEXT_FIELDS: Record<keyof DayContext, true> = { date: true, snapshot: true, plan: true, basePlan: true, wakeMin: true, nextWakeMin: true, events: true, now: true, typicalSessionMin: true, asWritten: true, routineCosts: true, changes: true }
 const INPUT_FIELDS: Record<keyof PlanInputs, true> = { changes: true, templates: true, lectures: true, series: true, routines: true, routinesUnknown: true }
 const SOURCE_FIELDS: Record<keyof DaySource, true> = { date: true, events: true, dayFile: true, nextFile: true }
 

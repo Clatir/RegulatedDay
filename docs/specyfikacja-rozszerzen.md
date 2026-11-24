@@ -250,8 +250,8 @@ Przez 90 minut prowadzisz trudne spotkanie projektowe z klientem (duży koszt em
 * **Dzięki funkcji:** Aplikacja zna koszt kategorii „Spotkania”. Automatycznie wstawia bezpośrednio po nim 15-minutowy **bufor dekompresji** w kolorze uspokajającej zieleni morskiej z ikoną filiżanki. Bufor ten mówi: *„Czas na samotność i herbatę – nie planuj tu pracy”*. Jeśli położysz w tym miejscu blok pracy, aplikacja ostrzeże: *„Na miejscu dekompresji po spotkaniu”* – i zapisze zmianę, bo decyzja należy do Ciebie.
 
 ### Jak wygląda praca z tą funkcją
-* **Kiedy:** Po bloku trwającym co najmniej 45 minut z kosztem psychicznym albo sensorycznym co najmniej 3 na godzinę (próg zmienisz w ustawieniach), w każdej kategorii. W trybie sesji i zajęć – dopiero po ich końcu (D386).
-* **Dynamiczny czas na oddech:** Długość od 5 do 20 minut zależy od długości i kosztu bloku. Bufor zaczyna się od faktycznego końca bloku, a po „Przedłuż” jego długość liczy się na nowo; kolejne bloki elastyczne rozsuwają się, stałe zostają.
+* **Kiedy:** Po bloku trwającym co najmniej 45 minut (plan z „Przedłuż”) z kosztem głowy, emocji albo bodźców co najmniej 3 na godzinę, w każdej kategorii. Ustawienia → „Plan dnia” → „Bufory dekompresji” – domyślnie wyłączone, progi obok, od daty paska (D569, D580). W trybie sesji i zajęć – dopiero po ich końcu (D386, D583).
+* **Dynamiczny czas na oddech:** Długość od 5 do 20 minut zależy od długości i kosztu bloku (5 min za każde 2 „godzino-koszty”: 90 min przy koszcie 4 – 15 min). Bufor zaczyna się od faktycznego końca bloku, a po „Przedłuż” jego długość liczy się na nowo; kolejne bloki elastyczne rozsuwają się, stałe zostają. Po końcu bloku bufor zaczyna się sam, cicho, i biegnie swoją długość – wcześniej kończy go tylko „Dalej” albo start innego bloku (D581).
 * **Zasilanie puli energii:** Czas w buforze dekompresji podnosi energię jak regeneracja (widać to w pasku pulpitu), ale nie liczy się do minimum regeneracji dnia.
 * **Ostrzega, nie blokuje:** Bufor usuniesz jak każdy blok („Cofnij” po wstawieniu). Gdy położysz na nim blok pracy, zobaczysz ostrzeżenie „Na miejscu dekompresji po spotkaniu”, a zapis przejdzie od razu (D72).
 

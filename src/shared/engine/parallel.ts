@@ -135,6 +135,8 @@ export type ParallelDrop =
 export function parallelDrop(plan: readonly PlanBlock[], id: string, target: string, max: number, endMin: (root: string) => number): ParallelDrop | null {
   const map = new Map(plan.map((x) => [x.id, x]))
   if (!map.has(id) || !map.has(target)) return null
+  // A buffer of decompression is no group's block (T2482): nothing is dropped beside it.
+  if ((map.get(target) as { origin?: string }).origin === 'decompress') return null
   const root = groupRootOf(map, target) ?? target
   if (root === (groupRootOf(map, id) ?? id)) return { kind: 'same' }
   // The group's start waits for the dragged block itself (anchored after it): no drop there.

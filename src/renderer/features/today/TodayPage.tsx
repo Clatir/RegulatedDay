@@ -64,10 +64,11 @@ import { hasEnergy } from '../plan/energyDraw'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
 import { blockFill } from '@shared/theme'
 import { begunIds } from '@shared/engine/facts'
-import { clickResize, newBlocksToast, patchDayBlock, pushDayBlocks, putChange, removeDayBlock, saveDay, saveParallel, setDayWake, tellFreed } from './dayActions'
+import { clickResize, newBlocksToast, patchDayBlock, pushDayBlocks, putChange, removeDayBlock, saveDay, saveParallel, setDayWake, tellFreed, tellTaken, withTaken } from './dayActions'
 import { copyPreview } from '../plan/blockCopy'
 import { copyDayBlock } from '../week/weekMove'
-import { addChange, dragChange, parallelChange, parallelHint, pushedSpans, pushedStarts, type DayChange } from './dayPush'
+import { addChange, dragChange, dragTaken, panelTakes, parallelChange, parallelHint, pushedSpans, pushedStarts, warnsOnBuffer, withBufferPushes, type DayChange } from './dayPush'
+import { decompressWarning } from '@shared/engine/decompress'
 import { placePatch } from '@shared/engine/parallel'
 import { estimateOf, type CaseItem } from '@shared/engine/cases'
 import { CasesPanel } from '../cases/CasesPanel'
@@ -375,10 +376,14 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
   const saveChange = async (c: DayChange) => {
     // D368: a block shortened today by its bottom edge frees its end – the bar may ask about the gap (a move, the top edge: no).
     const freed = isToday && c.was ? freedByEdit(model.state, c.was, c.block) : null
-    const pushed = pushedStarts(plan, c)
-    const out = await pushDayBlocks(date, raw, (r) => putChange(r, date, plan, c), pushed)
+    // D583: with the blocks the buffers of decompression of the day after the change move – written and counted with the rest.
+    const pushed = pushedStarts(plan, { pushed: withBufferPushes(model, c, rd.settings, model.dayFile, pushes) })
+    // D386, D582: a block laid on a buffer of decompression takes it away – in the same edit (one „Cofnij”).
+    const out = await pushDayBlocks(date, raw, (r) => withTaken(putChange(r, date, plan, c), c.takes), pushed)
     if (isSaved(out)) {
       void tellFreed(date, freed)
+      // D386, D582: a block of work that took a buffer of decompression – said after the save (a drag, „Dodaj”, a draft, a range).
+      tellTaken(model, c)
       // D428: the pushing counts the blocks of an unchecked calendar too; the line of the bar (the desktop's, the same one) never
       // says so – the window does, here (the block whose panel is open is drawn, so not hidden).
       const hidden = hiddenBlocksAmong(pushed.map((p) => p.block), openId)
@@ -399,10 +404,15 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
     const state: SendState = { afterSend: false }
     // D492 (T1166): a new start or „po bloku” of a block of a group takes it out of the group; the others stay together.
     const placed = placePatch(plan, b.id, patch)
-    const out = placed.others.length
-      ? await saveDay(date, raw, (r) => putChange(r, date, plan, { was: b, block: { ...b, ...placed.patch }, patch: placed.patch, others: placed.others }), state)
-      : await patchDayBlock(date, raw, b, placed.patch, state)
+    // D386, D582: a block put on a buffer of decompression from its panel – the save at once, the buffer gone with it (a block of work: the warning).
+    const after = { ...b, ...placed.patch }
+    const takes = pushes && (patch.startMin !== undefined || patch.durationMin !== undefined || patch.categoryId !== undefined || patch.background !== undefined) ? panelTakes(model, b, after) : null
+    const out =
+      placed.others.length || takes
+        ? await saveDay(date, raw, (r) => withTaken(putChange(r, date, plan, { was: b, block: after, patch: placed.patch, others: placed.others }), takes), state)
+        : await patchDayBlock(date, raw, b, placed.patch, state)
     if (isSaved(out)) void tellFreed(date, freed)
+    if (isSaved(out) && takes && warnsOnBuffer(model, after)) toast(takenText(takes), 'info')
     return saveAnswer(out, state)
   }
   /**
@@ -426,7 +436,8 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
   }
   // D462: Del removes the selected block – asked first, then the very code of „Usuń” / „Odwołaj na ten dzień” (a block of a series asks
   // its scope itself). A tile focused but not selected is no target (the panel shows the selected one).
-  const cancelWord = block != null && byCancel && !started && block.origin !== 'series'
+  // A buffer of decompression (D386) is removed as any block of yours – „Usuń” (the day's file cancels it).
+  const cancelWord = block != null && byCancel && !started && block.origin !== 'series' && block.origin !== 'decompress'
   const singleTarget: DeleteTarget | null =
     block && !draft
       ? cancelWord
@@ -437,6 +448,17 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
   const deleteTarget = group.removeTarget ?? singleTarget
   useDeleteResolver('block', (id) => (group.removeTarget ? (group.sel.isSelected(id) ? group.removeTarget : null) : singleTarget && block!.id === id ? singleTarget : null))
   useDeleteSelected(deleteTarget)
+  /** The warning of a buffer of decompression a change takes away (D386): „Na miejscu dekompresji po <blok>”. */
+  const takenText = (buffer: PlanBlock) => {
+    const source = plan.find((x) => x.id === (buffer.anchor ?? buffer.sourceId))
+    return decompressWarning(source ? blockName(source, names) : 'bloku')
+  }
+  const takenWarning = (buffer: PlanBlock | null) => (buffer ? takenText(buffer) : null)
+  /** The buffer a drag of a movable block of work to `span` would take – without counting the push (the hint asks it at every place). */
+  const movableTaken = (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan, copy: boolean): PlanBlock | null => {
+    const was = axis.items.find((i) => i.id === id)?.movable ? plan.find((b) => b.id === id) : undefined
+    return was && warnsOnBuffer(model, was) ? dragTaken(model, was, span, edge, shown, copy) : null
+  }
   /** A block of the plan that may be dragged (D305): what its drag to `span` changes and pushes apart (D367). */
   const movableChange = (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan): DayChange | null => (axis.items.find((i) => i.id === id)?.movable ? dragChange(model, id, span, edge, shown, pushes) : null)
   /**
@@ -766,6 +788,8 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
               }
               resizeNote={resizeNote}
               edgeLimits={edgeLimits}
+              // D386: a block of work dragged onto a buffer of decompression – the warning while it is held.
+              warnPreview={pushes ? (id, span, edge, shown, copy) => takenWarning(movableTaken(id, span, edge, shown, copy)) : undefined}
               // D367: while a block is dragged, the blocks it pushes apart at their new places.
               pushPreview={pushes ? (id, span, edge, shown, copy) => pushedSpans(model, copy ? copyChange(id, span.startMin) : movableChange(id, span, edge, shown), isToday ? 'forecast' : 'plan') : undefined}
               // D492: a block dropped onto another one stands beside it (today and later – a day gone is history).

@@ -80,8 +80,9 @@ export function axisVersion(v: TemplateVersion, date: string): TemplateVersion {
 
 /**
  * The changes of the settings as the axis of „Szablony” counts its template (T1450): without the layer the move of sessions
- * took (`movedLayer`) – the template as it is written, never the layer of a template „not come yet”.
+ * took (`movedLayer`) – the template as it is written, never the layer of a template „not come yet”; without the buffers of decompression
+ * (`decompress`, D583, T2460: a template has none – the days it makes count them).
  */
 export function previewChanges(changes: readonly SettingsChange[]): SettingsChange[] {
-  return changes.map((c) => (isPlain(c.patch) && c.patch.movedLayer !== undefined ? { ...c, patch: { ...c.patch, movedLayer: undefined } } : c))
+  return changes.map((c) => (isPlain(c.patch) && (c.patch.movedLayer !== undefined || c.patch.decompress !== undefined) ? { ...c, patch: { ...c.patch, movedLayer: undefined, decompress: undefined } } : c))
 }

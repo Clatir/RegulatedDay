@@ -8,7 +8,7 @@
 import type { EditEntry, EditOutcome, RawRecord, TimerIn, TimerResult } from '@shared/api'
 import { blockJson, blockNow, dayRaw, patchedBlock, putBlock, setAsked, setCancelled, setDayField, takeBlock } from '@shared/data/dayEdits'
 import { editStands, inverseEdit } from '@shared/data/merge'
-import { pushedStarts, type ParallelChange } from './dayPush'
+import { pushedStarts, takenNotice, type DayChange, type ParallelChange } from './dayPush'
 import { pushedText } from '@shared/engine/pushApart'
 import { hiddenBlocksAmong } from '../calendars/calendarFilter'
 import { paths } from '@shared/data/paths'
@@ -25,7 +25,7 @@ import type { DayContext, DayState } from '@shared/engine/day'
 import type { EnergyState } from '@shared/engine/energy'
 import { energyOrderVariant, lowestEnergy } from '@shared/engine/energyOrder'
 import type { Variant } from '@shared/engine/variants'
-import { nameById, type Names } from '@shared/blockName'
+import { blockName, nameById, type Names } from '@shared/blockName'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
 import { countLabel, logicalClock, plDate, plural } from '@shared/format'
 import { keptText } from '@shared/groupText'
@@ -85,6 +85,20 @@ export function putChange(raw: RawRecord, date: string, plan: readonly PlanBlock
   }
   return c.was ? patchedBlock(r, date, c.was, c.patch) : putBlock(r, c.block)
 }
+
+/**
+ * After a saved change that took a buffer of decompression (D386, D582): a block of work – the toast „Na miejscu dekompresji po <blok>”
+ * (the names of the window now); another block, or none taken – nothing.
+ */
+export function tellTaken(day: { ctx: DayContext; state: DayState }, c: Pick<DayChange, 'block' | 'takes'>): void {
+  const { rd, routines, requests } = useData.getState()
+  const names: Names = { rd, settings: day.ctx.snapshot.settings, routines, requests }
+  const notice = takenNotice(day, c, (b) => blockName(b, names))
+  if (notice) toast(notice, 'info')
+}
+
+/** The day's file with the buffer of decompression a block of work took (D386, D582) cancelled for the day – nothing taken: as it is. */
+export const withTaken = (raw: RawRecord, taken: PlanBlock | null | undefined): RawRecord => (taken ? setCancelled(raw, taken.id, true) : raw)
 
 /** A block the change pushes apart (D367): the block as the window knows it, and its new planned start. */
 export interface PushedStart {

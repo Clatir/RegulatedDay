@@ -134,7 +134,8 @@ const NO_ONTO: ReadonlySet<HorizonBlock['state']> = new Set(['ran', 'missed', 'p
  */
 export function weekOnto(blocks: readonly HorizonBlock[], dragged: string, target: string, max: number, nameOf: (b: HorizonBlock) => string): WeekOnto | null {
   const t = blocks.find((b) => b.id === target)
-  if (!t || t.id === dragged || t.outsidePlan || NO_ONTO.has(t.state)) return null
+  // A buffer of decompression is no group's block (T2482).
+  if (!t || t.id === dragged || t.outsidePlan || NO_ONTO.has(t.state) || t.named.origin === 'decompress') return null
   // The rules of the drop are `parallelDrop`'s (T1263): the column's blocks as a plan – where each stands, beside whom.
   const inPlan = blocks.filter((b) => !b.outsidePlan)
   const plan = inPlan.map((b) => ({ id: b.id, alongside: b.alongside ?? null, anchor: null, startMin: b.startMin, durationMin: Math.max(1, b.endMin - b.startMin) }) as unknown as PlanBlock)

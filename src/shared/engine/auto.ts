@@ -15,6 +15,7 @@ import type { PlanBlock } from '../model/plan'
 import { lastInputAt, firstUseAfter, firstUseFrom, lastOutsideBefore, type Activity, type Interval } from './activity'
 import { isBoundaryWork, plannedSpan, startPlanned, type BlockInfo } from './blocks'
 import { settingsAtMinute, type DayContext, type DayState } from './day'
+import { DECOMPRESS_RULE } from './decompress'
 import { blockAt, endShiftOf, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
 import { requestAction, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
@@ -399,6 +400,44 @@ function awayStarts(inp: AutoInput, t: TimerNow, fixedFgAt: number): AutoEvent[]
 }
 
 /**
+ * D403, D581, T2456: a buffer of decompression of the plan, not begun, parked nor cancelled, begins by itself – quietly – once its block
+ * ended and nothing runs in the foreground: at that end, or at the end of a session or classes running then (D583), as long as the
+ * forecast gives it now (its room, „Przedłuż” counted). Not in „Odcinam się” nor while a request runs; one begun after the block's end in
+ * the foreground took its moment (the forecast gives it no place). Its id holds its block's end: undone by „Cofnij”, it never begins
+ * again for that end.
+ */
+function decompressStarts(inp: AutoInput, t: TimerNow): AutoEvent[] {
+  const { state } = inp
+  if (t.fg || state.facts.disconnect.some((d) => d.to === OPEN) || state.facts.requests.some((r) => r.to === OPEN)) return []
+  const date = state.grid.date
+  const at = (idx: number) => atOf(state.grid, idx)
+  for (const b of state.blocks) {
+    // Its block is its anchor – as the forecast places it (one set „po: …” in its panel follows that block).
+    const src = b.anchor
+    if (!b.inPlan || b.decompress?.source == null || src == null) continue
+    const f = state.facts.blocks.get(b.id)
+    if (f && (f.startedAt != null || f.parkedAt != null || f.cancelledAt != null)) continue
+    const sf = state.facts.blocks.get(src)
+    if (sf?.endedAt == null) continue
+    const p = state.forecast.find((x) => x.block.id === b.id)
+    if (!p || p.from > state.now) continue
+    // From the block's end – or the foreground's freeing, or the end of a session or classes after it (in the background too).
+    let from = Math.max(at(sf.endedAt), freeSince(state).at)
+    for (const x of state.blocks) {
+      if (x.rules.kind !== 'session' && !x.rules.classMode) continue
+      for (const r of state.facts.blocks.get(x.id)?.runs ?? []) if (r.to !== OPEN && r.to > sf.endedAt && r.from <= r.to) from = Math.max(from, at(r.to))
+    }
+    if (from > inp.now || from > inp.gate) continue
+    const id = derivedId(date, 'auto', DECOMPRESS_RULE, 'block.start', b.id, at(sf.endedAt))
+    if (state.facts.undone.has(id)) continue
+    // As long as the forecast has it (counted again after „Przedłuż”, cut to its room); one you changed – as you set it (D582, T2477).
+    const planned = { ...startPlanned(b, inp.ctx.plan), ...(b.decompress?.cost != null ? { durationMin: p.to - p.from } : {}) }
+    return [{ id, autoRule: DECOMPRESS_RULE, k: 'block.start', block: b.id, at: from, bg: false, planned, confirmUntil: null, how: 'auto' }]
+  }
+  return []
+}
+
+/**
  * The absences (spec „Bezczynność i nieobecność”) during a work or project block at the computer, in order: from the
  * threshold of the question without input on all computers, since the block's last start or resume.
  */
@@ -621,6 +660,8 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
   for (const list of fixedLists) for (const e of list) if (e.k === 'block.start' && e.bg === false && !list.some((x) => state.facts.undone.has(x.id))) fixedFgAt = Math.min(fixedFgAt, e.at)
   const awayList = awayStarts(inp, t, fixedFgAt)
   if (!(awayList.length && take(awayList))) for (const list of fixedLists) take(list)
+  // A buffer of decompression begins by itself at its block's end (D403, T2456) – after a fixed start of the same pass, never with it.
+  if (!out.some((e) => e.k === 'block.start' && e.bg === false)) take(decompressStarts(inp, t))
   const fg = t.fg
 
   // Running blocks.
@@ -660,6 +701,12 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
       continue
     }
     if (tb !== fg) continue
+    // A buffer of decompression runs its length (D581, T2456): only „Dalej” or another block's start ends it earlier – no use of a
+    // computer, no absence, no question.
+    if (b.decompress) {
+      if (due(endAt) && nowIdx >= tb.plannedEnd) take([auto(date, DECOMPRESS_RULE, { k: 'block.end', block: b.id, at: endAt, done: true, rule: DECOMPRESS_RULE, fin: true })])
+      continue
+    }
     // Away from the computer: the first use after at least 2 min without input, a limit, the bedtime.
     const away = awayEnd(c, b, f)
     if (away) {
