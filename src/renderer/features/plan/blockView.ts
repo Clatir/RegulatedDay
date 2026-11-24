@@ -6,6 +6,7 @@ import { pickTree } from '@shared/model/categoryTree'
 import { CLASS_COLORS, categoryName } from '@shared/model/rd'
 import type { PlanBlock } from '@shared/model/plan'
 import { blockKind, blockName, nameById, type Names } from '@shared/blockName'
+import { PALETTE } from '@shared/theme'
 
 export { blockKind, blockName, nameById, type Names }
 
@@ -51,7 +52,8 @@ export function groupedCategoryOptions(n: Pick<Names, 'rd' | 'settings'>, keep?:
 
 /**
  * The blocks a block may follow: neither itself nor one whose chain of anchors leads to it – a cycle takes every block
- * of it out of the plan, with no way left to pick one of them on the axis (A6-06).
+ * of it out of the plan, with no way left to pick one of them on the axis (A6-06). Never a buffer of decompression (T2459: one the plan counts
+ * is in no file – an anchor to it would take the block out of the day's plan; one you changed goes with the setting switched off).
  */
 export function anchorCandidates(plan: readonly PlanBlock[], id: string): PlanBlock[] {
   const byId = new Map(plan.map((b) => [b.id, b]))
@@ -63,7 +65,10 @@ export function anchorCandidates(plan: readonly PlanBlock[], id: string): PlanBl
     }
     return false
   }
-  return plan.filter((b) => b.id !== id && !leadsTo(b))
+  return plan.filter((b) => b.id !== id && b.origin !== 'decompress' && !leadsTo(b))
 }
 
 export const CLASS_NAMES = { work: 'praca', life: 'życie i opieka', free: 'wolne' } as const
+
+/** The colour of a buffer of decompression (D386, spec 5.3: „w kolorze uspokajającej zieleni morskiej”), whatever its category's. */
+export const DECOMPRESS_COLOR = PALETTE.sea

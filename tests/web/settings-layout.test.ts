@@ -50,7 +50,8 @@ describe('E2: co ma datę, co działa od razu', () => {
     expect(fieldGroupWhen('energy')).toBe('dated')
     expect(fieldGroupWhen('timer')).toBe('dated')
     expect(fieldGroupWhen('reminders')).toBe('dated')
-    expect(fieldGroupWhen('plan')).toBe('now')
+    // N7 (D569): the thresholds of the buffers of decompression are dated – „Plan dnia” has both.
+    expect(fieldGroupWhen('plan')).toBe('mixed')
     expect(fieldGroupWhen('care')).toBe('now')
     expect(fieldGroupWhen('cases')).toBe('now')
   })

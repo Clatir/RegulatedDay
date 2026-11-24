@@ -117,7 +117,19 @@ export interface RulesSettings {
    * planned end – done, without a question – and the next one begins by itself at once (`auto.ts`). Off by default.
    */
   awayChain: boolean
+  /** „Bufory dekompresji” (D386, D403, D569): after a block long and costly enough the plan has a block „Dekompresja” (`engine/decompress.ts`). Off by default. */
+  decompress: DecompressRules
   signalEffects: { glassesSenses: number; rockingAll: number; questionsEmotions: number }
+}
+
+/**
+ * The buffers of decompression (D386, D403, D569, D580): on – after a block of at least `minLengthMin` (its plan with „Przedłuż”)
+ * whose cost of the head, the emotions or the senses is at least `minCost` an hour (D568: 1 = 3 points an hour) stands a buffer.
+ */
+export interface DecompressRules {
+  on: boolean
+  minLengthMin: number
+  minCost: number
 }
 
 const H = 60
@@ -164,6 +176,7 @@ export const DEFAULT_SETTINGS: RulesSettings = {
   idleThresholdMin: 10,
   absenceQuestionMin: 30,
   awayChain: false,
+  decompress: { on: false, minLengthMin: 45, minCost: 3 },
   signalEffects: { glassesSenses: 10, rockingAll: 5, questionsEmotions: 10 }
 }
 
@@ -188,7 +201,9 @@ export const RANGES = {
   idleThresholdMin: [5, 60],
   absenceQuestionMin: [10, 120],
   signalEffect: [0, 30],
-  cost: [-100, 100]
+  cost: [-100, 100],
+  decompressLengthMin: [15, 4 * H],
+  decompressCost: [1, 100]
 } as const
 
 /** One change of the shared settings (rd.json „settings”), applying from `from` (and, for „od dziś”, from `at`). */
@@ -433,6 +448,7 @@ export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SET
   }
   const rem = isPlain(r.reminders) ? r.reminders : {}
   const sig = isPlain(r.signalEffects) ? r.signalEffects : {}
+  const dec = isPlain(r.decompress) ? r.decompress : {}
   return {
     dayTypes: Object.fromEntries(DAY_TYPES.map((t) => [t, dayTypeFrom(dt[t], fallback.dayTypes[t])])) as Record<DayTypeId, DayTypeParams>,
     weekTypes: weekTypesFrom(r.weekTypes, fallback.weekTypes),
@@ -457,12 +473,40 @@ export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SET
     idleThresholdMin: int(r.idleThresholdMin, RANGES.idleThresholdMin, fallback.idleThresholdMin),
     absenceQuestionMin: int(r.absenceQuestionMin, RANGES.absenceQuestionMin, fallback.absenceQuestionMin),
     awayChain: typeof r.awayChain === 'boolean' ? r.awayChain : fallback.awayChain,
+    decompress: decompressFrom(dec, fallback.decompress),
     signalEffects: {
       glassesSenses: int(sig.glassesSenses, RANGES.signalEffect, fallback.signalEffects.glassesSenses),
       rockingAll: int(sig.rockingAll, RANGES.signalEffect, fallback.signalEffects.rockingAll),
       questionsEmotions: int(sig.questionsEmotions, RANGES.signalEffect, fallback.signalEffects.questionsEmotions)
     }
   }
+}
+
+/** The buffers' settings read field by field (a wrong value – `fallback`'s). */
+function decompressFrom(raw: unknown, fallback: DecompressRules): DecompressRules {
+  const d = isPlain(raw) ? raw : {}
+  return {
+    on: typeof d.on === 'boolean' ? d.on : fallback.on,
+    minLengthMin: int(d.minLengthMin, RANGES.decompressLengthMin, fallback.minLengthMin),
+    minCost: int(d.minCost, RANGES.decompressCost, fallback.minCost)
+  }
+}
+
+/** Some change of the settings ever sets the buffers (T2454): without one they are off on every day – nothing to count. */
+export const setsDecompress = (changes: readonly SettingsChange[]): boolean => changes.some((c) => isPlain(c.patch) && c.patch.decompress !== undefined)
+
+/**
+ * The buffers' settings in force on `date` at the instant `at` (ms; null – the start of the day), as `settingsOn` lays the changes – only
+ * their part of the buffers (T2454: the plan judges a block by the settings at its planned end, cheaply, without the whole settings).
+ */
+export function decompressOn(changes: readonly SettingsChange[], date: string, at: number | null = null): DecompressRules {
+  let d = DEFAULT_SETTINGS.decompress
+  for (const ch of [...changes].sort(order)) {
+    if (ch.from > date) break
+    if (ch.from === date && ch.at != null && (at == null || ch.at > at)) continue
+    if (isPlain(ch.patch) && ch.patch.decompress !== undefined) d = decompressFrom(deepMerge<unknown>(d, ch.patch.decompress), d)
+  }
+  return d
 }
 
 export function changeFrom(v: unknown): SettingsChange | null {

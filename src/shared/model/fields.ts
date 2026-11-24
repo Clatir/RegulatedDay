@@ -36,7 +36,7 @@ export interface ToggleField {
   group: FieldGroup
 }
 
-/** „Bloki poza komputerem jednym ciągiem” (D553–D556): off by default. */
+/** „Bloki poza komputerem jednym ciągiem” (D553–D556) and „Bufory dekompresji” (D569): off by default. */
 export const TOGGLE_FIELDS: readonly ToggleField[] = [
   {
     key: 'awayChain',
@@ -44,6 +44,14 @@ export const TOGGLE_FIELDS: readonly ToggleField[] = [
     label: 'Bloki poza komputerem jednym ciągiem',
     hint: 'Gdy nikogo nie ma przy komputerze, każdy blok poza komputerem (posiłek, rutyna, sprawy domowe, spacer…) kończy się o swoim planowanym końcu i od razu zaczyna się następny – bez pytania po powrocie; każdy start i koniec jest na liście „zrobione automatycznie” z „Cofnij”. Powrót w trakcie bloku kończy go jak dotąd.',
     group: 'timer'
+  },
+  // „Bufory dekompresji” (D386, D403, D569): off by default, beside its thresholds.
+  {
+    key: 'decompress.on',
+    path: ['decompress', 'on'],
+    label: 'Bufory dekompresji',
+    hint: 'Po długim bloku o wysokim koszcie głowy, emocji albo bodźców plan wstawia blok „Dekompresja” (regeneracja, 5–20 min) i przesuwa kolejne elastyczne; stałe zostają. Bufor zaczyna się sam po końcu bloku; usuniesz go jak każdy blok.',
+    group: 'plan'
   }
 ]
 
@@ -110,6 +118,8 @@ export const NUMBER_FIELDS: readonly NumberField[] = [
   { key: 'breakAfterMin', scope: 'general', path: ['breakAfterMin'], label: 'Przerwa po ciągłej pracy', kind: 'duration', range: GENERAL_RANGES.breakAfterMin, offAllowed: true, group: 'care', hint: '0 wyłącza propozycję.' },
   { key: 'breakMin', scope: 'general', path: ['breakMin'], label: 'Długość przerwy', kind: 'duration', range: GENERAL_RANGES.breakMin, group: 'care' },
   { key: 'solitudeAfterMin', scope: 'general', path: ['solitudeAfterMin'], label: 'Samotność po kontakcie dłuższym niż', kind: 'duration', range: GENERAL_RANGES.solitudeAfterMin, offAllowed: true, group: 'care', hint: 'Po tak długim kontakcie z ludźmi aplikacja sugeruje chwilę samotności; 0 wyłącza sugestię.' },
+  { key: 'decompress.minLengthMin', scope: 'dated', path: ['decompress', 'minLengthMin'], label: 'Bufor dekompresji po bloku od', kind: 'duration', range: RANGES.decompressLengthMin, group: 'plan', hint: 'Długość bloku (z „Przedłuż”), po którym stoi bufor dekompresji.' },
+  { key: 'decompress.minCost', scope: 'dated', path: ['decompress', 'minCost'], label: 'Bufor dekompresji przy koszcie od', kind: 'integer', range: RANGES.decompressCost, unit: '/h', group: 'plan', hint: 'Koszt głowy, emocji albo bodźców na godzinę (1 = 3 punkty energii na godzinę).' },
   { key: 'parallelMax', scope: 'general', path: ['parallelMax'], label: 'Najwięcej bloków naraz', kind: 'integer', range: GENERAL_RANGES.parallelMax, group: 'plan', hint: 'Blok przeciągnięty na inny biegnie razem z nim; ponad tę liczbę staje zaraz po grupie.' },
   { key: 'deadlineDays', scope: 'general', path: ['deadlineDays'], label: 'Ostrzegaj o terminie na', kind: 'integer', range: GENERAL_RANGES.deadlineDays, unit: 'dni', group: 'cases', hint: 'Plan poranny pokazuje sprawy po terminie i z terminem do tylu dni naprzód (2 – dziś, jutro i pojutrze).' }
 ]

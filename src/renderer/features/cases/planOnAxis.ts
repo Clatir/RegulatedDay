@@ -16,6 +16,7 @@ import { editOf } from '../../store/data'
 import type { DayModel } from '../../store/day'
 import { undoToast } from '../../store/ui'
 import { addChange, pushedStarts } from '../today/dayPush'
+import { tellTaken } from '../today/dayActions'
 import { copiedText } from '../plan/blockCopy'
 
 /**
@@ -39,7 +40,8 @@ export function planningOf(model: DayModel, today: string, r: RequestRecord, sta
   const day = own ? { ctx, state: computeDay(ctx) } : model
   // D367: a day to come pushes the flexible blocks after the new one apart (a day gone is history).
   const change = addChange(day, block, model.date >= today)
-  return { block, pushed: pushedStarts(day.ctx.plan, change) }
+  // D582: the buffer of decompression it is laid on – taken in the same edit (`CasePush.taken`).
+  return { block, pushed: pushedStarts(day.ctx.plan, change), taken: change.takes ? [{ id: change.takes.id, caseId: r.id }] : [], change }
 }
 
 /** What the toast says after the sprawa was put on the axis. */
@@ -53,14 +55,16 @@ export const plannedText = (title: string, block: Pick<PlanBlock, 'startMin'>): 
  */
 export async function planOnAxis(model: DayModel, today: string, r: RequestRecord, title: string, startMin: number, durationMin?: number, copy = false): Promise<CaseResult & { block: PlanBlock | null; moved: number }> {
   // D513 (Ctrl held at the drop): a new sprawa of the same content – it has no block of before to take out of the day.
-  const { pushed } = planningOf(model, today, copy ? { ...r, day: null, block: null } : r, startMin, durationMin)
+  const { pushed, taken, change } = planningOf(model, today, copy ? { ...r, day: null, block: null } : r, startMin, durationMin)
   const res = await planCase(r.id, model.date, startMin, {
     ...(durationMin != null ? { durationMin } : {}),
     ...(copy ? { copy } : {}),
-    push: { blocks: pushed, planOf: (file) => dayPlan(model.ctx.snapshot, file) },
+    push: { blocks: pushed, planOf: (file) => dayPlan(model.ctx.snapshot, file), taken },
     seen: (date) => (date === model.date ? model.data.dayFile : undefined)
   })
   if (!res.saved || !res.block) return res
+  // D582: a block of work laid on a buffer of decompression – told so.
+  tellTaken(model, change)
   if (res.moved > 0) {
     // The pushed blocks' bar line „Przesunięto N bloków · Cofnij” – N as written (T764) – takes the day's edit back (the
     // sprawa then reads as not „zaplanowane” by itself – its block is gone, T752).

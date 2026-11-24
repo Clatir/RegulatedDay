@@ -26,7 +26,7 @@ T950–T955, T960–T969, T980–T986 (część A; D426), T936–T939 (ekrany).
 
 ## Dane (część A)
 - Dzień kolumny = `HorizonDay` (`engine/week.ts`, jedno przeliczenie dnia w procesie pomocniczym, pamięć w `folder.horizonDay`):
-  bloki z `movable` (D417 – `movableBlock`, ta sama reguła co oś „Dziś”), `fixed`, `session`; `energy` (`EnergyTrack`, T903 –
+  bloki z `movable` (D417 – `movableBlock`, ta sama reguła co oś „Dziś”), `pushable` (N17 – `pushable` rozsuwania), `fixed`, `session`; `energy` (`EnergyTrack`, T903 –
   przyszły i dziś bez check-inu / po „Pomiń” (T2430) z `assumed`: jaśniej, podpis „przyjęte”, D422; tylko `weekView`/`daysView`/`monthView` – T914, T2601; miniony – moduł z oceny, T950),
   `budget` (praca wobec budżetu; miniony bez obecności – null, T918). IPC: `weekView(data)`, `daysView(daty, { energy })` („3 dni”
   – `threeDays`, „Agenda” – `agendaDates` z `energy: false`, T954; 1–14 dat), `monthView('RRRR-MM')` (`MonthDay` z `blocks` – każdy blok dnia po godzinie (kolejność z `horizonDay`) `MonthBlock` z `monthBlockOf`: `{ id, named (bez note), categoryId, startMin, endMin, fixed, session, state, background, outsidePlan, movable }` (N18), bez zdjętych z dnia; T1013, T1015; `energy` – `DayEnergy` (`engine/energyTrack.ts`) z `dayEnergy` (`engine/energyCurve.ts`, ta sama minuta co pasek – T2607): `{ pool, value, state, reserve, assumed }` albo null, krzywa nie idzie do okna – N21, T2600–T2602).

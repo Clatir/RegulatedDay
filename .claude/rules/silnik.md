@@ -45,7 +45,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - `engine/forecast.ts` – prognoza planu od minuty m (tryby `window` i `typical`); `day.ts` `shownForecaster(ctx, state)` – ta sama
   prognoza co `DayState.forecast` dla innych bloków (widok, bufor, typowe długości raz), `typicalOf`; `grid.ts` `logicalSpan` – minuty osi
   jak zegar na obu końcach (jak przed J3: doba 25 h – powtórzona godzina raz, bloki po sobie się nie nakładają) – ta sama w `dayAxis` i podglądzie.
-- `engine/pushApart.ts` (D367) – `pushApart(ctx, state, planPoZmianie, id, { atMin, hold, onUnsettled, maxRounds, placed })` (`placed` – inne
+- `engine/pushApart.ts` (D367) – `pushApart(ctx, state, planPoZmianie, id, { atMin, only, hold, onUnsettled, maxRounds, placed })` (`only` – kolejne podane wprost, N17) (`placed` – inne
   bloki postawione tą samą zmianą, D528: trzymają starty, blok, który stanąłby tuż przed takim, idzie za nim; `ownMinuteIdx` – start z własnym numerem) →
   `PushedBlock[]` (stary start, zapisany `startMin`, `shown` – oś prognozy, dziś; `planned` – oś planu, inne dni i szablon):
   kolejne = pokazane w `state.forecast` od miejsca bloku; zaplanowane nie później idą za nim (ułamkowe starty w kolejności osi);
@@ -55,7 +55,8 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   jak najbliżej i `onUnsettled`); przeliczenie dla `shown`/`planned` tylko po zmianie w ostatniej rundzie lub przejściu. `axisMoves(ctx,
   state, plan, 'forecast' | 'plan')` – każdy blok, który zmienia miejsce na osi (podgląd: przesunięte, zakotwiczone, przepuszczone). Start z własnym numerem
   minuty (doba 25 h: druga 02:xx → 03:00), najwyżej `PLAN_MAX`, `hold` (szablon; przy końcu doby może dać wcześniej). Tylko
-  elastyczne z własną godziną, w pierwszym planie, niechronione, niezaczęte. `withBlock`, `pushedText`. Testy: `push-apart.test.ts`.
+  elastyczne z własną godziną, w pierwszym planie, niechronione, niezaczęte. `withBlock`, `pushedText`. Testy: `push-apart.test.ts`. Reszta dnia (N17, `shiftRest.ts`) – `zmiany-grupowe.md`.
+- `engine/decompress.ts` – bufory dekompresji (N7, D386, D403, D569, D580–D583, T2450–T2458): reguły `dekompresja.md`.
 - `engine/energyOrder.ts` (D369, D374, D377, T608–T616) – „Ułóż pod energię”: kolejność elastycznych (także chronionych) w
   przerwie między stałymi pod najniższą energię dnia (reguły `prosby-warianty.md`); `shownForecaster`, `orderable`, `judgeDay` + `computeEnergy`.
 - `engine/gaps.ts` (D368, D373, D375, T596–T601) – `logGapTriggers` z logu, każdy z id swojego zdarzenia (koniec przed planowanym –
@@ -77,7 +78,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `withoutZjazd`, `zjazdTypeRaw`, `classImport`, `sameDayFile`); bloki `origin: 'zjazd'` i zajęcia zdalne w dniu zjazdu
   (`blockInfos(…, routines, typeAt)`, D359) są `lectureOrCommute`; `PlanBlock.name` – nowe pole bloku dopisz w `planBlock()`,
   `planBlockFrom` i literale w `blockInfos`. `RULES_VERSION` 7 od 1.4.0 (`block.shorten`, D365), 8 – serie w `day.create` (T716), 9 – bez drugiej
-  zmiany (D467), 10 – bloki bez komputera same, zamiana przy „Zacznij” (D475, D478) i grupy w prognozie (T1162), 11 – timer grupy (D493), 12 – przejęcie przodu grupy (T1259), 13 – koszt zaczętego bloku od minuty (`block.cost`, dziedzina timera, bierne – `PASSIVE`; D501), 14 – koszt rutyny (`Routine.costs`, `planned.routineCosts`; D512, reguły `koszt.md`), 15 – sesje w szablonach (D511, D515), 16 – pula „ciało” (D520, T1524), 17 – bloki poza komputerem jednym ciągiem (D553, T1968), 18 – tolerancja trafności z ustawienia dnia (UX13), 19 – koszt −100…100 (D568, T2440; reguły `koszt.md`).
+  zmiany (D467), 10 – bloki bez komputera same, zamiana przy „Zacznij” (D475, D478) i grupy w prognozie (T1162), 11 – timer grupy (D493), 12 – przejęcie przodu grupy (T1259), 13 – koszt zaczętego bloku od minuty (`block.cost`, dziedzina timera, bierne – `PASSIVE`; D501), 14 – koszt rutyny (`Routine.costs`, `planned.routineCosts`; D512, reguły `koszt.md`), 15 – sesje w szablonach (D511, D515), 16 – pula „ciało” (D520, T1524), 17 – bloki poza komputerem jednym ciągiem (D553, T1968), 18 – tolerancja trafności z ustawienia dnia (UX13), 19 – koszt −100…100 (D568, T2440; reguły `koszt.md`), 20 – bufory dekompresji (N7, T2453).
 - Serie (OPS1, D381, D382, D401, D404, T700–T719): `model/series.ts` (rekord, `ruleFallsOn`, `seriesVersionOn`,
   `specialOutcome`, licznik `countedBefore`/`seriesLast`, `seriesPlans` – `SeriesPlan { series, last }`, `countDatesToRead`,
   `seriesOfBlock`, `currentSeries` – lista), `engine/series.ts` (`seriesBlocks` w `createDay`, `pushedBySeries` – rozsuwanie
@@ -99,7 +100,8 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
 - Siatka minut od 04:00 (T412). Przeszłość z faktów (`actual` – flagi minut), przyszłość z prognozy; każda minuta
   oceniana `evaluateAt(m)` na widoku sprzed niej (T413). Stan „teraz” – z `inclusive` (zdarzenia bieżącej minuty).
 - Flagi minuty (`F_END` praca do granicy i końca pracy, `F_EXT` minuty klasyfikowane, `F_BUDGET`, `F_PROJECT`,
-  `F_LIFE`, `F_REGEN`, `F_REQUEST`, `F_DISC`, `F_BLOCK`, `F_UPFRONT`; flag drugiej zmiany nie ma od D467).
+  `F_LIFE`, `F_REGEN`, `F_REQUEST`, `F_DISC`, `F_BLOCK`, `F_UPFRONT`; flag drugiej zmiany nie ma od D467) – `Uint32Array`; `F_DECOMP` – bufor
+  dekompresji (`dekompresja.md`).
 - Klasy minut pracy po granicy: `after` (przedłużenie), `max` (po maksimum), `empty` (przy pustej puli); `in` w granicy.
   Porę snu przesuwają tylko `empty` z `upfront` (potwierdzone z góry), najwyżej 2 h i nie po 03:59.
 - Koniec pracy: potwierdzony (`work.end`, `disconnect.start` w odcinku pracy) albo wyliczony – po odcinku pracy, gdy

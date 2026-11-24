@@ -6,14 +6,14 @@ import { putBlock } from '@shared/data/dayEdits'
 import { editStands } from '@shared/data/merge'
 import { plDateWithWeekday } from '@shared/format'
 import type { PlanBlock } from '@shared/model/plan'
-import { isSaved, readDayFiles, trySaveWith, withOwner } from '../../store/data'
+import { isSaved, readDayFiles, trySaveWith, useData, withOwner } from '../../store/data'
 import { takeBackDays } from '../../store/dayUndo'
-import { countedDay } from '../../store/day'
+import { countedDay, type DayModel } from '../../store/day'
 import { toast, undoToast } from '../../store/ui'
 import { hiddenBlocksAmong } from '../calendars/calendarFilter'
 import { dropWeekPushDays, useWeekPush, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
-import { dayFileEdit, withPushed, type PushedStart } from '../today/dayActions'
-import { addChange, pushedStarts } from '../today/dayPush'
+import { dayFileEdit, tellTaken, withPushed, withTaken, type PushedStart } from '../today/dayActions'
+import { addChange, pushedStarts, withBufferPushes, type DayChange } from '../today/dayPush'
 import { weekPushLineText } from './weekText'
 
 /** The toast for days whose files cannot be read now: named, with what was done about the rest. */
@@ -78,9 +78,13 @@ export interface WeekAdded extends WeekAdds {
  * does not use it). A day that cannot be counted now (its logs not read whole, the bridge fails) pushes nothing – the block is
  * added as before the pushing, never refused (D72).
  */
-async function pushedFor(date: string, base: RawRecord | null, block: PlanBlock): Promise<PushedStart[]> {
+async function pushedFor(date: string, base: RawRecord | null, block: PlanBlock): Promise<{ starts: PushedStart[]; taken: { model: DayModel; c: DayChange } | null }> {
   const model = await countedDay(date, base)
-  return model ? pushedStarts(model.ctx.plan, addChange(model, block, true)) : []
+  if (!model) return { starts: [], taken: null }
+  const c = addChange(model, block, true)
+  // D582: the buffer of decompression it is laid on – taken in the same edit, a block of work told so after the save.
+  // D583 (T2485): with the blocks the buffers of the day after it push – as in „Dziś”.
+  return { starts: pushedStarts(model.ctx.plan, { pushed: withBufferPushes(model, c, useData.getState().rd.settings, model.dayFile) }), taken: c.takes ? { model, c } : null }
 }
 
 
@@ -101,12 +105,13 @@ export async function addWeekBlocks(entries: ReadonlyArray<{ date: string; block
   // The dates of the edits sent, in their order: what the main process answers goes by it.
   const sent: string[] = []
   const written = new Map<string, WeekPushedDay>()
+  const takes = new Map<string, { model: DayModel; c: DayChange }>()
   let made = false
   const out = await trySaveWith(async () => {
     const files = await window.rd.dayFiles(dates)
     // The days to come counted at once (their reads go side by side – this turn holds the window's other edits back). Without
     // a known today nothing is told gone or to come: the blocks are added alone.
-    const counted = await Promise.all(entries.map((e) => (today && e.date >= today && e.date in files ? pushedFor(e.date, files[e.date] ?? null, e.block) : [])))
+    const counted = await Promise.all(entries.map((e) => (today && e.date >= today && e.date in files ? pushedFor(e.date, files[e.date] ?? null, e.block) : { starts: [], taken: null })))
     const edits: EditEntry[] = []
     for (const [i, e] of entries.entries()) {
       if (!(e.date in files)) {
@@ -114,9 +119,10 @@ export async function addWeekBlocks(entries: ReadonlyArray<{ date: string; block
         continue
       }
       try {
-        const starts = counted[i]!
+        const { starts, taken } = counted[i]!
         let after: RawRecord | null = null
-        const edit = dayFileEdit(e.date, files[e.date] ?? null, (raw) => (after = withPushed(raw, e.date, (r) => putBlock(r, e.block), starts)))
+        const edit = dayFileEdit(e.date, files[e.date] ?? null, (raw) => (after = withPushed(raw, e.date, (r) => withTaken(putBlock(r, e.block), taken?.c.takes), starts)))
+        if (taken) takes.set(e.date, taken)
         if (edit) {
           edits.push(edit)
           sent.push(e.date)
@@ -133,6 +139,10 @@ export async function addWeekBlocks(entries: ReadonlyArray<{ date: string; block
   if (unreadable.length) toast(unreadableText(unreadable), 'error', 6000)
   const r = weekAdds(dates, sent, out, made)
   if (r.unknown) toast(unknownText(r.pending), 'error', 8000)
+  for (const d of r.saved) {
+    const t = takes.get(d)
+    if (t) tellTaken(t.model, t.c)
+  }
   const days = r.saved.flatMap((d) => written.get(d) ?? [])
   const mine = days.find((d) => d.date === today && d.moved > 0)
   if (!days.some((d) => d.moved > 0)) return { ...r, push: null }
