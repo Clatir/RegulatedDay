@@ -23,9 +23,9 @@ T950–T955, T960–T969, T980–T986 (część A; D426), T936–T939 (ekrany).
 ## Dane (część A)
 - Dzień kolumny = `HorizonDay` (`engine/week.ts`, jedno przeliczenie dnia w procesie pomocniczym, pamięć w `folder.horizonDay`):
   bloki z `movable` (D417 – `movableBlock`, ta sama reguła co oś „Dziś”), `fixed`, `session`; `energy` (`EnergyTrack`, T903 –
-  przyszły i dziś bez check-inu / po „Pomiń” (T2430) z `assumed`: jaśniej, podpis „przyjęte”, D422; tylko `weekView`/`daysView` – T914; miniony – moduł z oceny, T950),
+  przyszły i dziś bez check-inu / po „Pomiń” (T2430) z `assumed`: jaśniej, podpis „przyjęte”, D422; tylko `weekView`/`daysView`/`monthView` – T914, T2601; miniony – moduł z oceny, T950),
   `budget` (praca wobec budżetu; miniony bez obecności – null, T918). IPC: `weekView(data)`, `daysView(daty, { energy })` („3 dni”
-  – `threeDays`, „Agenda” – `agendaDates` z `energy: false`, T954; 1–14 dat), `monthView('RRRR-MM')` (`MonthDay` z `blocks` – każdy blok dnia po godzinie (kolejność z `horizonDay`) `MonthBlock` z `monthBlockOf`: `{ id, named (bez note), categoryId, startMin, endMin, fixed, session, state, background, outsidePlan }`, bez zdjętych z dnia; T1013, T1015).
+  – `threeDays`, „Agenda” – `agendaDates` z `energy: false`, T954; 1–14 dat), `monthView('RRRR-MM')` (`MonthDay` z `blocks` – każdy blok dnia po godzinie (kolejność z `horizonDay`) `MonthBlock` z `monthBlockOf`: `{ id, named (bez note), categoryId, startMin, endMin, fixed, session, state, background, outsidePlan }`, bez zdjętych z dnia; T1013, T1015; `energy` – `DayEnergy` (`engine/energyTrack.ts`) z `dayEnergy` (`engine/energyCurve.ts`, ta sama minuta co pasek – T2607): `{ pool, value, state, reserve, assumed }` albo null, krzywa nie idzie do okna – N21, T2600–T2602).
   Okno: `useWeekView`, `useDaysView(daty, { energy })`, `useMonthView`.
 - Czyste (`engine/calendarViews.ts`): `mayMoveBetween`, `loadLevel` (T904), `monthDayOf`, `monthBlockOf`, `monthBarred`, `monthCell` (całodniowe z
   `DataView.allDay`, potem stałe, potem elastyczne po godzinie – bez sesji, bez elastycznych `missed` i w tle; 3 paski, „+N” – wszystko poza paskami, D422, D429, T1013–T1016; podpowiedź paska ze stanem – `blockStateText`), `agendaOf` (T906), `monthDates`.
@@ -58,9 +58,10 @@ T950–T955, T960–T969, T980–T986 (część A; D426), T936–T939 (ekrany).
   `BlockBox` eksportowany z `DayGrid` (T959). Przeciąganie bloku: nasłuch okna ustawiany przy naciśnięciu na bloku `movable`,
   miejsce z `dropStart` + `dropOn` (`mayMoveBetween`), podgląd `week-drop[data-start][data-denied]`, wynik `moveWeekBlock` →
   `showWeekPush`; klik po przeciągnięciu wyciszony do następnego kliknięcia (`BlockGrab.consumed`), Esc w fazie przechwytywania (T957). Agenda: klik w blok = `openPick` (T956).
-- `EnergyStrip` (D500, T1281–T1282: pasek `week-energy-<data>[data-assumed]` z odcinkami `rect[data-pool][data-state]`, bloki w `week-blocks-<data>` od 6 px, najechanie `week-energy-hit-` → `week-energy-hover-`, podpis `week-energy-assumed-<data>`, legenda `week-energy-legend` w `WeekPage`; wygładzenie i odcienie – `plan/energyDraw.ts`), `AgendaView` (`agenda-day-`,
+- `EnergyStrip` (D500, T1281–T1282: pasek `week-energy-<data>[data-assumed]` z odcinkami `rect[data-pool][data-state]`, bloki w `week-blocks-<data>` od 6 px, najechanie `week-energy-hit-` → `week-energy-hover-`, podpis `week-energy-assumed-<data>`, legenda `week-energy-legend` w `WeekPage`; wygładzenie i odcienie – `engine/energyCurve.ts` przez `plan/energyDraw.ts`), `AgendaView` (`agenda-day-`,
   `agenda-heading-`, `agenda-block-<dzień>-<id>`, `agenda-empty-`), komórka miesiąca – `monthCellView` + `MonthGrid` (`detail`):
-  `month-bar-`, `month-more-`, `month-load-` – **bez prefiksu `day-`** (E2E wybierają komórki przez `[data-testid^="day-"]`);
+  `month-bar-`, `month-more-`, `month-load-`, `month-energy-` – **bez prefiksu `day-`** (E2E wybierają komórki przez `[data-testid^="day-"]`);
+  kropka energii (N21, D595, T2604–T2606): `monthCellView.energy` (`MonthEnergy`: `monthEnergy` z `DayEnergy` – wypełnienie `POOL_COLOR[pool]` × `STRIP_OPACITY[state]` × `ASSUMED_FACTOR` przy przyjętej, obwódka 1 px pełna, `energyTitle` = „Energia: najsłabsza bodźce 18 · poniżej rezerwy (rezerwa 20)” + „ · przyjęte”), 8 px, `right-[20px]` – na lewo od kropki obciążenia, to samo miejsce bez niej; `data-state` / `data-pool` / `data-assumed="true"`; kreator i kopia dnia (bez `detail`) jej nie mają, filtr kalendarzy jej nie rusza;
   `data-counted` na stronie Kalendarza = miesiąc policzony (testy czekają na to przed odczytem tekstu komórki).
 - Koszt na kafelku (D501): `HorizonBlock.cost` (zaczęty – `begunCosts`, inny – `blockCosts`; `edit` – `costEditable`), `BlockBox` rysuje `plan/TileCost` („Tydzień” `tight` – „3·1·1”, „3 dni” „3 · 1 · 1”;
   miejsce: róg / koniec wiersza nazwy / po najechaniu przy 2+ ścieżkach), zapis `plan/costSave.ts` `saveTileCosts` – ta sama droga co „Dziś”, blok serii pyta o zakres (reguły `koszt.md`).

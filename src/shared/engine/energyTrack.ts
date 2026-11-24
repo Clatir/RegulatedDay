@@ -80,3 +80,6 @@ export function columnEnergy(ctx: DayContext, state: DayState, when: HorizonWhen
   if (when === 'past' || e.known || !e.enabled) return energyTrack(ctx.date, state.grid, e)
   return assumedEnergy(ctx, state, moduleOn)
 }
+
+/** What the dot of a day of the month and the strip share – the light module the window imports (`energyCurve.ts`, T2607). */
+export type { DayEnergy, EnergyShade, OnScreen } from './energyCurve'

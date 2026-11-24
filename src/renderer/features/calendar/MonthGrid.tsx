@@ -5,7 +5,8 @@
  * go through its model (anchor, the part kept before a Shift range, Ctrl+A, Shift+arrows, Esc are the hook's); the others (the wizard, the
  * copy of a day) keep `selected` / `onSelect`.
  * A host may give the day's all-day events (D405): the first one with its colour's dot and „+N” for the rest, read only – or the
- * detail of the day (D418, D422: up to three miniature bars, „+N” for all the rest, the dot of the load), which takes their place.
+ * detail of the day (D418, D422: up to three miniature bars, „+N” for all the rest, the dot of the load and, left of it, the dot of the
+ * energy – N21), which takes their place.
  */
 import { useRef, useState, type ReactNode } from 'react'
 import { WEEKDAY_SHORT } from '@shared/format'
@@ -185,6 +186,19 @@ export function MonthGrid({
                   aria-label={c.detail.load.title}
                   data-testid={`month-load-${d}`}
                   data-level={c.detail.load.level}
+                />
+              )}
+              {c.detail?.energy && (
+                // Left of the load dot's place (6 px from the edge + its 8 px + 6 px): where it stands whether the load dot is there or not.
+                <span
+                  className="absolute top-1.5 right-[20px] inline-block h-[8px] w-[8px] rounded-full"
+                  style={{ background: c.detail.energy.fill, boxShadow: `0 0 0 1px ${c.detail.energy.edge}` }}
+                  title={c.detail.energy.title}
+                  aria-label={c.detail.energy.title}
+                  data-testid={`month-energy-${d}`}
+                  data-state={c.detail.energy.state}
+                  data-pool={c.detail.energy.pool}
+                  data-assumed={c.detail.energy.assumed ? 'true' : undefined}
                 />
               )}
               {c.detail ? (

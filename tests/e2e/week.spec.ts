@@ -1109,6 +1109,11 @@ test('Miesiąc (SNT1, D418, D422): w komórce dnia do trzech pasków stałych bl
       const dot = page.getByTestId(`month-load-${next}`)
       await expect(dot).toHaveAttribute('data-level', /^(low|mid|high)$/)
       await expect(dot).toHaveAttribute('title', /^Praca .+ z .+$/)
+      // The dot of the energy beside it (N21, D595): a day to come – counted from the assumed check-in, in a shade of the strip.
+      const energy = page.getByTestId(`month-energy-${next}`)
+      await expect(energy).toHaveAttribute('data-assumed', 'true')
+      await expect(energy).toHaveAttribute('data-state', /^(ok|watch|low)$/)
+      await expect(energy).toHaveAttribute('title', /^Energia: najsłabsza .+ \d+ · .+ \(rezerwa \d+\) · przyjęte$/)
       await shot(page, 'snt1-04-month')
       // The colour of the day and the selection stay: a click with Ctrl selects the day.
       await page.getByTestId(`day-${next}`).click({ modifiers: ['Control'] })

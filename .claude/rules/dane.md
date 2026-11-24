@@ -96,7 +96,7 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
   (`zjazdyWrite`), PDF przez `main/import/pdfText.ts` (pdfjs leniwie, tylko proces główny).
   Tydzień i cele (T552, T553): `folder.horizonDays` (zadanie `horizon`, pamięć per dzień, `unknown` + `warn`),
   `weekView`, `goalsView`, `setGoals` (pola liściowe `goals.RRRR-MM.*` w `rd.json`, po kolei przez kolejkę); SNT1: `daysView`,
-  `monthView`, krzywa tylko dla tygodnia i dni (`horizonDays(…, energy)`, „Agenda” bez niej – T914, T954); moduł dnia minionego
+  `monthView`, krzywa dla tygodnia, dni i miesiąca (`horizonDays(…, energy)`; miesiąc – tylko podsumowanie `MonthDay.energy`, bez kosztów kafelków (`horizonDays(…, costs)`; w pamięci liczenie z kosztami służy miesiącowi, bez nich – nigdy tygodniowi), N21, T2601, T2608; „Agenda” i cele bez niej – T914, T954); moduł dnia minionego
   liczy `horizonDay` z oceny i logu dnia (T950 – bez `moduleStates`), pamięć 98 dni (T907, T908).
 - Serie (T700–T719): `series/<id>.json`; `inputs()` daje `series` (`SeriesPlan[]`) i `seriesDays` – typy dni licznika z plików
   (`countTypes`, równolegle; bez serii „odbywa się”; seria zakończona przed wczoraj – `settledTypes`, osobno z kolejką i bez, tylko

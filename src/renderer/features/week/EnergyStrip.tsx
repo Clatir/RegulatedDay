@@ -9,14 +9,14 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
-import { ASSUMED_CAPTION, ASSUMED_FACTOR, ENERGY_SCALE, hoverText, nearestSample, POOL_COLOR, POOL_LETTER, POOL_NAME, POOLS, STRIP_STATE_NAME, stripRuns, WATCH_ABOVE_RESERVE, type StripState } from '../plan/energyDraw'
+import { ASSUMED_CAPTION, ASSUMED_FACTOR, ENERGY_SCALE, hoverText, nearestSample, POOL_COLOR, POOL_LETTER, POOL_NAME, POOLS, STRIP_OPACITY, STRIP_STATE_NAME, stripRuns, WATCH_ABOVE_RESERVE, type StripState } from '../plan/energyDraw'
 import { axisY } from './weekLayout'
 
 export { ASSUMED_CAPTION, ASSUMED_FACTOR }
 /** The strip's width; the blocks of the column start one pixel right of it (D500: nothing under them). */
 export const STRIP_WIDTH = 5
-/** The opacity of each shade (dobrze faint, poniżej rezerwy full); counted from the assumed check-in – `ASSUMED_FACTOR` of it. */
-export const STRIP_OPACITY: Record<StripState, number> = { ok: 0.3, watch: 0.65, low: 1 }
+/** The opacity of each shade – `plan/energyDraw.ts` (shared with the dot of the month, N21). */
+export { STRIP_OPACITY }
 const STATES: readonly StripState[] = ['ok', 'watch', 'low']
 /** The room the hover takes beside the strip (its words are about 230 px); past the window's right edge it stands left. */
 export const HOVER_ROOM = 260
