@@ -8,6 +8,7 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { dayEnergy } from '@shared/engine/energyCurve'
 import { energyTrack, type EnergyTrack } from '@shared/engine/energyTrack'
 import { planBlock } from '@shared/model/plan'
 import { EnergyLanes, EnergyLegend, LANE_WIDTH, laneLeft, LANES_WIDTH, NOW_CHIP_HEIGHT } from '@renderer/features/plan/EnergyLanes'
@@ -446,5 +447,63 @@ describe('pasek „poniżej rezerwy” widzi dołek krótkiego bloku o koszcie 1
     expect(bend!.head).toBeLessThan(42)
     // The drawn curve at the bend is the true value (the old samples every 10 minutes put it at about 52).
     expect(Math.abs(valuesAt(poolCurves(t), 605)!.head - bend!.head)).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('kropka energii dnia miesiąca mówi to samo co pasek kolumny (N21, T2600, T2607)', () => {
+  const RANK = { ok: 0, watch: 1, low: 2 } as const
+  /** The strip's worst moment: its darkest shade and the pools of the runs in it. */
+  const worst = (t: EnergyTrack) => {
+    const runs = stripRuns(t)
+    const top = Math.max(...runs.map((r) => RANK[r.state]))
+    return { state: runs.find((r) => RANK[r.state] === top)!.state, pools: new Set(runs.filter((r) => RANK[r.state] === top).map((r) => r.pool)) }
+  }
+
+  it('dołek krótkiego bloku o koszcie 100 między próbkami co 10 min: pasek „poniżej rezerwy” głowy – kropka też', () => {
+    const plan = [
+      planBlock({ id: 'h', categoryId: 'inne', startMin: 601, durationMin: 12, costs: { head: 100, emotions: 0, senses: 0, body: 0 } }),
+      planBlock({ id: 'r', categoryId: 'inne', startMin: 613, durationMin: 12, costs: { head: -100, emotions: 0, senses: 0, body: 0 } })
+    ]
+    const DAY = '2026-10-28'
+    const s = new Scenario({ date: DAY, plan, settings: { transitionBufferMin: 0 } })
+      .checkin('08:00', { head: [1, 1], emotions: [0, 0], senses: [0, 0], body: [0, 0] })
+      .ran('h', '10:01', '10:13')
+      .ran('r', '10:13', '10:25')
+    const t = energyTrack(DAY, s.state('12:00').grid, s.energy('12:00'))!
+    const dot = dayEnergy(t)!
+    expect(dot).toMatchObject({ pool: 'head', state: 'low', assumed: false })
+    expect(worst(t)).toEqual({ state: dot.state, pools: new Set([dot.pool]) })
+  })
+
+  it('dzień z kilkoma blokami: najciemniejszy odcień paska i jego pula to kropka; tor bez krzywej – ani paska, ani kropki', () => {
+    const DAY = '2026-10-28'
+    const plan = [block({ id: 'a', cat: 'analiza', at: '09:00', min: 180, origin: 'user' }), block({ id: 'b', cat: 'inne', at: '14:00', min: 120, origin: 'user' })]
+    const checkins: Array<Parameters<Scenario['checkin']>[1]> = [
+      { head: [1, 1], emotions: [0, 0], senses: [0, 0], body: [0, 0] },
+      { head: [0, 0], emotions: [2, 1], senses: [0, 1], body: [0, 0] },
+      { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] }
+    ]
+    for (const answers of checkins) {
+      const s = new Scenario({ date: DAY, plan, settings: { transitionBufferMin: 0 } }).checkin('07:00', answers)
+      const t = energyTrack(DAY, s.state('08:00').grid, s.energy('08:00'))!
+      const dot = dayEnergy(t)!
+      const w = worst(t)
+      expect(dot.state).toBe(w.state)
+      expect(w.pools.has(dot.pool)).toBe(true)
+    }
+    const one = track([sample(600, 10, 10, 10)])
+    expect([stripRuns(one), dayEnergy(one)]).toEqual([[], null])
+  })
+
+  it('ostry spadek tuż na końcu krzywej: ostatnia próbka 29 przy rezerwie 30, minuta przed nią 30 – pasek „uwaga”, kropka też', () => {
+    const t = track([sample(600, 40, 90, 90), sample(609, 30.4, 90, 90), sample(610, 29, 90, 90)])
+    expect(worst(t)).toEqual({ state: 'watch', pools: new Set(['head']) })
+    expect(dayEnergy(t)).toMatchObject({ pool: 'head', value: 30, state: 'watch' })
+  })
+
+  it('próbka bez wartości jednej puli: krzywa innej puli ją ma (`poolCurve` filtruje każdą osobno) – pasek „poniżej” głowy, kropka też', () => {
+    const t = track([sample(600, 80, 90, 90), { ...sample(610, 20, 90, 90), emotions: Number.NaN }, sample(620, 70, 90, 90)])
+    expect(worst(t)).toEqual({ state: 'low', pools: new Set(['head']) })
+    expect(dayEnergy(t)).toMatchObject({ pool: 'head', value: 20, state: 'low' })
   })
 })

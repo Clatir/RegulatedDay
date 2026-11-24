@@ -996,8 +996,9 @@ export interface RdApi {
    */
   daysView(dates: string[], opts?: { energy?: boolean }): Promise<DaysView>
   /**
-   * The month shown in „Kalendarz” ('RRRR-MM', D418): each of its days with its blocks and its load (`monthDayOf`, D429); the
-   * cell with the all-day events – `monthCell`.
+   * The month shown in „Kalendarz” ('RRRR-MM', D418): each of its days with its blocks, its load (`monthDayOf`, D429) and the energy
+   * of its weakest pool – `MonthDay.energy`, the summary `DayEnergy` of its curve (N21, T2600–T2602, T2607); the curve itself never
+   * leaves the main process. The cell with the all-day events – `monthCell`.
    */
   monthView(month: string): Promise<MonthView>
   /** A month's goals ('RRRR-MM', D356): as rd.json holds them, the month before's, the progress „x z y” so far. */
