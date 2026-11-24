@@ -15,7 +15,7 @@ import { expect, test } from '@playwright/test'
 import { paths } from '../../src/shared/data/paths'
 import { dayFileFrom } from '../../src/shared/model/plan'
 import { addDays } from '../../src/shared/time/zone'
-import { launch, withMainLog } from './app'
+import { launch, withMainLog, DAY_NUMBER } from './app'
 import { seedAwake } from './seedAwake'
 
 type Json = Record<string, unknown>
@@ -177,8 +177,8 @@ test('Kalendarz: Ctrl+klik pierwszego dnia, Shift+klik siódmego, prawy przycisk
       await page.getByTestId('month-next').click()
       await expect(page.getByTestId('calendar')).toHaveAttribute('data-counted', 'true', { timeout: 30_000 })
       const cell = (d: string) => page.getByTestId(`day-${d}`)
-      await cell(days[0]!).click({ modifiers: ['Control'] })
-      await cell(days[6]!).click({ modifiers: ['Shift'] })
+      await cell(days[0]!).click({ modifiers: ['Control'], position: DAY_NUMBER })
+      await cell(days[6]!).click({ modifiers: ['Shift'], position: DAY_NUMBER })
       for (const d of days) await expect(cell(d)).toHaveAttribute('aria-pressed', 'true')
       await expect(page.getByTestId('calendar-selection')).toContainText('Zaznaczone dni: 7')
       await cell(days[6]!).click({ button: 'right' })
@@ -476,7 +476,7 @@ test('Kalendarz – paski miesiąca (N18, D597): dwa paski Ctrl+klik zaznaczają
       await expect(page.getByTestId('calendar-block-selection')).toHaveCount(0)
       await expect(bar(0)).not.toHaveAttribute('data-marked', 'true')
       // A cell is a day again: Ctrl+click selects the day, as before.
-      await page.getByTestId(`day-${sundays[0]}`).click({ modifiers: ['Control'] })
+      await page.getByTestId(`day-${sundays[0]}`).click({ modifiers: ['Control'], position: DAY_NUMBER })
       await expect(page.getByTestId(`day-${sundays[0]}`)).toHaveAttribute('aria-pressed', 'true')
     })
     expect(errors).toEqual([])

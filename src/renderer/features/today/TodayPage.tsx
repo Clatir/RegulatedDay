@@ -53,6 +53,7 @@ import { dayAxis } from '../plan/dayItems'
 import { menuCtxOf, type MenuState } from '../plan/groupMenu'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { useAxisGroup, type AxisTile } from '../plan/useAxisGroup'
+import { renameInfo, useTileRename } from '../plan/tileRename'
 import { judgeBlocks } from '../plan/groupRun'
 import { rememberNewBlockCategory } from '../plan/lastCategory'
 import { edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
@@ -313,6 +314,20 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
     stateOf,
     where,
     judge
+  })
+  // N9: F2 on the one selected block or a double click on a tile's name – its name in place, saved as the panel's „Nazwa” saves it but for this day alone
+  // (a block of a series asks no scope, D430); a block begun outside the plan, or one the axis does not draw, has no field.
+  const rename = useTileRename({
+    target: () => (group.sel.count === 1 ? (group.sel.selected[0] ?? null) : null),
+    info: (id) => {
+      const b = plan.find((x) => x.id === id)
+      return renameInfo(b, axisItems.items.some((i) => i.id === id), () => blockName({ ...b!, name: null }, names))
+    },
+    save: (id, name) => {
+      const b = plan.find((x) => x.id === id)
+      return b ? patchDayBlock(date, raw, b, { name }) : undefined
+    },
+    scope: date
   })
   // The scope picked for the steps of a block of a series holds while its panel stays open (T798): another block or none – asked again.
   const stepsScope = useRef<SeriesScope | null>(null)
@@ -702,6 +717,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
               // D501: the window of the cost on a tile – one path with „3 dni” and „Tydzień” (a block of a series not begun asks its scope as
               // the panel does, once a window; a begun block costs so from now on).
               onCosts={(id, costs, ask) => saveTileCosts({ date, blockId: id, names, ofSeries: plan.find((x) => x.id === id)?.origin === 'series' }, costs, { ask })}
+              rename={rename}
               markers={axis.markers}
               energy={axis.energy}
               selected={draft ? null : selected}

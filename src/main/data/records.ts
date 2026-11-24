@@ -9,6 +9,7 @@
 import { join } from 'node:path'
 import { classify, historyKey, paths } from '@shared/data/paths'
 import { deepEqual, merge3, type MergeConflict } from '@shared/data/merge'
+import { dayRemovals, type RemovalMarks } from '@shared/data/removed'
 import { earlierOnce } from '@shared/model/rd'
 import { isRootGone, type DataFs } from './fsio'
 import type { RecordHistory } from './history'
@@ -65,18 +66,28 @@ export class RecordStore {
 
   /**
    * Writes a record; `reason` 'edit' (your edit) keeps the version before it in the history. A broken file is never
-   * written over.
+   * written over. `at` – when the edit was made (the queue's entry; a removal of blocks is kept with it), `marks` – what its edit
+   * removed with it (the attachments, a series' change – `removalMarks`).
    */
-  async write(rel: string, value: Record<string, unknown>, reason: 'edit' | 'auto' | 'merge' = 'edit'): Promise<void> {
+  async write(rel: string, value: Record<string, unknown>, reason: 'edit' | 'auto' | 'merge' = 'edit', at?: number, marks: RemovalMarks = {}): Promise<void> {
     const before = await this.read(rel)
     if (before.status === 'broken') throw new BrokenRecordError(rel)
     if (before.status === 'unreadable') throw new Error(before.why)
     const c = classify(rel)
     if (before.status === 'ok' && c && reason !== 'auto' && !deepEqual(before.value, value)) {
       const { kind, id } = historyKey(c)
-      await this.o.history.snapshot(kind, id, before.value, reason === 'merge' ? 'merge' : 'edit')
+      // A series archived is a series removed (D381): its version just before it is kept whole, never merged with the minute's
+      // edits (N24 – „Przywróć” takes its end from it), with when you removed it – as `archive`, never `delete` (its file stays: a
+      // conflict copy of it found with no file is no removal on purpose – `joinCopy`).
+      const archived = c.kind === 'series' && reason === 'edit' && before.value.archived !== true && value.archived === true
+      await this.o.history.snapshot(kind, id, before.value, archived ? 'archive' : reason === 'merge' ? 'merge' : 'edit', archived ? at : undefined, archived ? marks.taken : undefined)
     }
-    await this.put(rel, value, before.status === 'ok' ? before.value : null)
+    const was = before.status === 'ok' ? before.value : null
+    await this.put(rel, value, was)
+    // Your edit of a day that took blocks out of its plan: kept for „Ostatnio usunięte” (N24) – also on a day without a file yet;
+    // only once the file is written (a write that failed is tried again by the queue – one note, not one per try).
+    // (An edit that changes a series too removes no block of yours: none.)
+    if (c?.kind === 'day' && c.date && !c.conflict && reason === 'edit' && !marks.series) await this.o.history.removal(c.date, dayRemovals(was, value), at, marks)
   }
 
   /** The file's content written whole (atomically), said to `written` – with the content only once it is there (`before` – what it held). */
@@ -103,13 +114,16 @@ export class RecordStore {
     }
   }
 
-  /** Removes a record, keeping its last version in the history. */
-  async remove(rel: string): Promise<void> {
+  /**
+   * Removes a record, keeping its last version in the history – with `at`, when you removed it (the queue's entry), and `taken`,
+   * the attachments its edit removed with it.
+   */
+  async remove(rel: string, at?: number, taken?: Record<string, number>): Promise<void> {
     const before = await this.read(rel)
     const c = classify(rel)
     if (before.status === 'ok' && c) {
       const { kind, id } = historyKey(c)
-      await this.o.history.snapshot(kind, id, before.value, 'delete')
+      await this.o.history.snapshot(kind, id, before.value, 'delete', at, taken)
     }
     await this.drop(rel, before.status === 'ok' ? before.value : null)
   }
