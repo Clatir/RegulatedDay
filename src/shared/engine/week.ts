@@ -180,13 +180,15 @@ function begunState(f: BlockFact, when: HorizonWhen): HorizonBlockState {
 }
 
 /**
- * What the curve of a day's energy is counted with (T966): `curve` false – none (the month, the goals, „Agenda” – T914,
- * T954), nor the cost on the blocks' tiles (D501, T1305: only the columns of „Tydzień” and „3 dni” draw tiles); `moduleOn` – the
- * energy module as the settings have it now, for today and a day to come (a day gone by has its own – `gradeEnergy`, T950). Both
+ * What the curve of a day's energy is counted with (T966): `curve` false – none (the goals, „Agenda” – T914, T954; the month counts
+ * it for the dot of its days – N21, T2601); `costs` – the cost on the blocks' tiles (D501, T1305: only the columns of „Tydzień” and
+ * „3 dni” draw tiles; the month has the curve without them – T2608), as `curve` when not given; `moduleOn` – the energy module as
+ * the settings have it now, for today and a day to come (a day gone by has its own – `gradeEnergy`, T950). `curve` and `moduleOn`
  * default to true.
  */
 export interface HorizonEnergy {
   curve?: boolean
+  costs?: boolean
   moduleOn?: boolean
 }
 
@@ -332,6 +334,7 @@ export function sessionsOf(ctx: DayContext, state: DayState, when: HorizonWhen):
  */
 export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay | null = null, opts: HorizonEnergy = {}): HorizonDay {
   const curve = opts.curve !== false
+  const costs = opts.costs ?? curve
   const moduleOn = opts.moduleOn !== false
   const past = when === 'past'
   if (past && !ctx.events.length && ctx.snapshot.dayType !== 'zjazd-stacjonarny') return quietDay(ctx)
@@ -372,7 +375,7 @@ export function horizonDay(ctx: DayContext, when: HorizonWhen, frozen: FrozenDay
     dayType: state.dayType,
     templateId: ctx.snapshot.templateId,
     frozen: frozen != null,
-    blocks: axisBlocks(axis.ctx, axis.state, when, curve),
+    blocks: axisBlocks(axis.ctx, axis.state, when, costs),
     wakeMin: lm(state.wake),
     bedtimeMin: lm(state.bedtime.forecast),
     boundary,

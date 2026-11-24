@@ -12,7 +12,8 @@ import { allDayDraft, type AllDayEvent } from '@shared/model/allDay'
 import { rdFrom } from '@shared/model/rd'
 import { DEFAULT_SETTINGS } from '@shared/model/settings'
 import { MonthGrid } from '@renderer/features/calendar/MonthGrid'
-import { emptyMonthDay, monthCellView } from '@renderer/features/calendar/monthCellView'
+import { emptyMonthDay, energyTitle, monthCellView, visibleMonthDay } from '@renderer/features/calendar/monthCellView'
+import type { CalendarSieve } from '@shared/model/calendars'
 
 const names = { rd: rdFrom({}), settings: DEFAULT_SETTINGS, routines: [], requests: [] }
 const named = { categoryId: 'inne', variantId: null, routine: null, requests: [], note: '', origin: 'user' as const, sourceId: null }
@@ -129,6 +130,62 @@ describe('komórka miesiąca z paskami (D418, D422)', () => {
     expect(dots[0]!.title).toBe('Praca 2 h z 6 h 40 min')
     expect(dots[2]!.getAttribute('aria-label')).toBe('Praca 7 h 40 min z 6 h 40 min')
     expect(q('month-load-2026-11-13')).toBeNull()
+  })
+
+  it('kropka energii (N21, D595): odcień z odcieni paska, obwódka w pełnym kolorze puli, przyjęta przygaszona, zdanie pod spodem', async () => {
+    const days = {
+      '2026-11-10': month('2026-11-10', { energy: { pool: 'senses', value: 18, state: 'low', reserve: 20, assumed: false } }),
+      '2026-11-11': month('2026-11-11', { energy: { pool: 'head', value: 30, state: 'watch', reserve: 20, assumed: false } }),
+      '2026-11-12': month('2026-11-12', { energy: { pool: 'body', value: 80, state: 'ok', reserve: 20, assumed: false } }),
+      '2026-11-13': month('2026-11-13', { energy: { pool: 'head', value: 64, state: 'ok', reserve: 20, assumed: true } }),
+      '2026-11-14': month('2026-11-14', { energy: { pool: 'emotions', value: 18, state: 'low', reserve: 20, assumed: true } }),
+      '2026-11-15': month('2026-11-15', { energy: null })
+    }
+    await mount(days, [])
+    const dot = (n: number) => q(`month-energy-2026-11-${n}`)!
+    expect([10, 11, 12, 13, 14].map((n) => dot(n).getAttribute('data-state'))).toEqual(['low', 'watch', 'ok', 'ok', 'low'])
+    expect([10, 11, 12, 13, 14].map((n) => dot(n).getAttribute('data-pool'))).toEqual(['senses', 'head', 'body', 'head', 'emotions'])
+    expect([10, 11, 12, 13, 14].map((n) => dot(n).getAttribute('data-assumed'))).toEqual([null, null, null, 'true', 'true'])
+    // The fill: the pool's colour at the strip's opacity (× 0.5 when assumed); the edge – the pool's colour whole, the dot itself fully visible.
+    expect(dot(10).style.background).toBe('rgb(121, 175, 171)')
+    expect(dot(11).style.background).toBe('rgba(242, 182, 109, 0.65)')
+    expect(dot(12).style.background).toBe('rgba(180, 159, 204, 0.3)')
+    expect(dot(13).style.background).toBe('rgba(242, 182, 109, 0.15)')
+    expect(dot(14).style.background).toBe('rgba(212, 154, 151, 0.5)')
+    expect(dot(10).style.boxShadow).toContain('#79AFAB')
+    expect(dot(13).style.boxShadow).toContain('#F2B66D')
+    expect(dot(13).style.opacity).toBe('')
+    expect(dot(10).title).toBe('Energia: najsłabsza bodźce 18 · poniżej rezerwy (rezerwa 20)')
+    expect(dot(13).getAttribute('aria-label')).toBe('Energia: najsłabsza głowa 64 · dobrze (rezerwa 20) · przyjęte')
+    expect(q('month-energy-2026-11-15')).toBeNull()
+  })
+
+  it('kropka energii stoi na lewo od kropki obciążenia; bez obciążenia – na tym samym miejscu; kreator jej nie ma', async () => {
+    const energy = { pool: 'head', value: 50, state: 'ok', reserve: 20, assumed: false } as const
+    await mount({ [D]: month(D, { energy, load: 'mid', workMin: 340, limitMin: 400 }), '2026-11-19': month('2026-11-19', { energy }) }, [])
+    expect(q(`month-energy-${D}`)!.className).toBe(q('month-energy-2026-11-19')!.className)
+    expect(q(`month-energy-${D}`)!.className).not.toBe(q(`month-load-${D}`)!.className)
+    expect(q('month-load-2026-11-19')).toBeNull()
+    await act(async () => root!.unmount())
+    host!.remove()
+    await mount({ [D]: month(D, { energy }) }, [], false)
+    expect(q(`month-energy-${D}`)).toBeNull()
+  })
+
+  it('zdanie kropki energii: pula, wartość, stan, rezerwa, „przyjęte” (czysta funkcja)', () => {
+    expect(energyTitle({ pool: 'senses', value: 18, state: 'low', reserve: 20, assumed: false })).toBe('Energia: najsłabsza bodźce 18 · poniżej rezerwy (rezerwa 20)')
+    expect(energyTitle({ pool: 'head', value: 64, state: 'ok', reserve: 20, assumed: true })).toBe('Energia: najsłabsza głowa 64 · dobrze (rezerwa 20) · przyjęte')
+    expect(energyTitle({ pool: 'body', value: 33, state: 'watch', reserve: 20, assumed: false })).toBe('Energia: najsłabsza ciało 33 · uwaga (rezerwa 20)')
+  })
+
+  it('widok komórki: energia z dnia, null – bez kropki; filtr kalendarzy jej nie rusza', () => {
+    const energy = { pool: 'emotions', value: 40, state: 'watch', reserve: 20, assumed: true } as const
+    const day = month(D, { energy, blocks: [block('a', 540, { fixed: true })] })
+    expect(monthCellView(day, [], names, 1).energy).toMatchObject({ pool: 'emotions', state: 'watch', assumed: true, title: 'Energia: najsłabsza emocje 40 · uwaga (rezerwa 20) · przyjęte' })
+    expect(monthCellView(month(D, { energy: null }), [], names, 1).energy).toBeNull()
+    const seen = visibleMonthDay(day, { none: false, hidesCategory: () => true } as unknown as CalendarSieve)
+    expect(seen.hiddenCount).toBe(1)
+    expect(monthCellView(seen.day, [], names, 1).energy?.title).toBe('Energia: najsłabsza emocje 40 · uwaga (rezerwa 20) · przyjęte')
   })
 
   it('kolor dnia i zaznaczenie zostają', async () => {

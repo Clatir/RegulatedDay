@@ -23,7 +23,7 @@ let rd: { panelClose: ReturnType<typeof vi.fn<RdApi['panelClose']>>; showMain: R
 
 beforeEach(() => {
   rd = { panelClose: vi.fn<RdApi['panelClose']>(), showMain: vi.fn<RdApi['showMain']>() }
-  const api: Partial<RdApi> = { ...rd, widgetAction: () => Promise.resolve(null as never), quickToday: () => Promise.resolve('2026-11-12'), onPanelTarget: () => () => undefined, panelTouch: () => undefined, barLayout: () => undefined }
+  const api: Partial<RdApi> = { ...rd, widgetAction: () => Promise.resolve(null as never), quickToday: () => Promise.resolve({ today: '2026-11-12', nowMin: null }), onPanelTarget: () => () => undefined, panelTouch: () => undefined, barLayout: () => undefined }
   ;(window as unknown as { rd: Partial<RdApi> }).rd = api
   if (!hadObserver)
     (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {

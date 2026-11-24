@@ -41,9 +41,12 @@ async function make() {
   const runs: string[] = []
   /** Each count of a day: its date and the module its curve was asked with (null – none). */
   const asked: Array<[string, boolean | null]> = []
+  /** Each count of a day: its date and whether it was asked with the cost on the tiles (T2608). */
+  const costs: Array<[string, boolean]> = []
   const run = (t: Parameters<typeof inProcess.run>[0]) => {
     runs.push(t.kind === 'horizon' ? `${t.kind}:${t.ctx.date}` : t.kind)
     if (t.kind === 'horizon') asked.push([t.ctx.date, t.curve === true ? (t.moduleOn !== false) : null])
+    if (t.kind === 'horizon') costs.push([t.ctx.date, t.costs ?? t.curve === true])
     return inProcess.run(t)
   }
   const folder = await DataFolder.open({
@@ -59,7 +62,7 @@ async function make() {
     worker: { run: run as never },
     log: () => undefined
   })
-  return { folder, runs, asked, clock }
+  return { folder, runs, asked, costs, clock }
 }
 
 describe('„3 dni” i „Agenda” w folderze danych', () => {
@@ -126,22 +129,33 @@ describe('krzywa energii w folderze danych – moduł dnia i kto ją liczy (T914
     expect(v.days[1]!.energy).toBeNull()
   })
 
-  it('miesiąc i cele nie liczą krzywej; tydzień po miesiącu liczy dzień od nowa z krzywą, miesiąc po tygodniu – z pamięci', async () => {
-    const { folder, asked } = await make()
+  it('miesiąc liczy krzywą każdego dnia bez kosztów kafelków (N21, T2601, T2608); „3 dni” po nim liczy dzień od nowa z kosztami, potem miesiąc i cele – z pamięci', async () => {
+    day(THU, [{ id: 'a', categoryId: 'inne', startMin: 11 * 60, durationMin: 60, fixed: false, origin: 'user' }])
+    const { folder, asked, costs } = await make()
+    const memo = (folder as unknown as { horizonMemo: Map<string, { day: { blocks: Array<{ id: string; cost?: unknown }> } }> }).horizonMemo
     await folder.monthView('2026-11')
     expect(asked.length).toBe(30)
-    expect(asked.every(([, e]) => e === null)).toBe(true)
+    expect(asked.every(([, e]) => e === true)).toBe(true)
+    expect(costs.every(([, c]) => c === false)).toBe(true)
+    expect(memo.get(THU)!.day.blocks.find((b) => b.id === 'a')!.cost).toBeUndefined()
     asked.length = 0
+    costs.length = 0
+    // A count without the tiles' costs never serves „3 dni” (its tiles show them): THU again, with them.
     const v = await folder.daysView([THU])
     expect(asked).toEqual([[THU, true]])
+    expect(costs).toEqual([[THU, true]])
+    expect(v.days[0]!.blocks.find((b) => b.id === 'a')!.cost).toBeDefined()
     expect(v.days[0]!.energy).toMatchObject({ assumed: true })
     asked.length = 0
-    await folder.monthView('2026-11')
-    // THU is remembered with its curve (it serves the month); the rest of the month too – only today goes on with the minute.
-    expect(asked.filter(([d]) => d === THU)).toEqual([])
-    asked.length = 0
+    // …and one with them serves the month and the goals; „3 dni” again – from memory too.
+    expect((await folder.monthView('2026-11')).days.find((d) => d.date === THU)!.energy).toMatchObject({ assumed: true })
+    await folder.goalsView('2026-11')
     await folder.daysView([THU])
     expect(asked).toEqual([])
+    // The goals alone (no curve): a day the month never counted is counted without one.
+    await folder.goalsView('2026-10')
+    expect(asked.length).toBe(31)
+    expect(asked.every(([, e]) => e === null)).toBe(true)
   })
 
   it('„Agenda” bez krzywych (T954): dni liczone bez nich; przez DataHub – opcja `energy: false`', async () => {
@@ -189,6 +203,49 @@ describe('miesiąc „Kalendarza” w folderze danych (D418, D429)', () => {
     expect(thu.blocks.some((b) => b.session)).toBe(true)
     expect(thu.load).not.toBeNull()
     expect(m.days.find((d) => d.date === '2026-11-06')!.load).toBe('high')
+  })
+})
+
+describe('kropka energii w miesiącu (N21, D595, T2600–T2602)', () => {
+  const MON = '2026-11-02'
+  const checkin = (folder: DataFolder, date: string, head: [0 | 1 | 2, 0 | 1 | 2] = [0, 0]) =>
+    folder.append({ day: date, dom: 'energy', k: 'energy.checkin', at: placeLogical(date, 7 * 60 + 30), answers: { head, emotions: [0, 0], senses: [0, 0], body: [0, 0] } })
+
+  it('dzień przyszły z długą analizą schodzi pod rezerwę – „poniżej”, z przyjętego check-inu; dziś bez check-inu – przyjęte', async () => {
+    day(THU, [{ id: 'a', categoryId: 'analiza', startMin: 7 * 60, durationMin: 720, fixed: false, origin: 'user' }])
+    const { folder } = await make()
+    const m = await folder.monthView('2026-11')
+    const thu = m.days.find((d) => d.date === THU)!
+    expect(thu.energy).toMatchObject({ pool: 'head', state: 'low', reserve: DEFAULT_SETTINGS.reserve, assumed: true })
+    expect(thu.energy!.value).toBeLessThan(DEFAULT_SETTINGS.reserve)
+    // Only the summary goes to the month, never the curve (T2601).
+    expect(Object.keys(thu.energy!).sort()).toEqual(['assumed', 'pool', 'reserve', 'state', 'value'])
+    expect(m.days.find((d) => d.date === WED)!.energy).toMatchObject({ assumed: true })
+    // Another day to come without such a block stays high.
+    expect(m.days.find((d) => d.date === '2026-11-20')!.energy).toMatchObject({ state: 'ok', assumed: true })
+  })
+
+  it('dzień miniony: bez check-inu – brak kropki; z check-inem – z logu (nie przyjęte); bez zdarzeń – brak', async () => {
+    const { folder } = await make()
+    folder.append({ day: MON, dom: 'meta', k: 'presence.first', at: placeLogical(MON, 7 * 60) })
+    folder.append({ day: TUE, dom: 'meta', k: 'presence.first', at: placeLogical(TUE, 7 * 60) })
+    checkin(folder, TUE, [2, 2])
+    const m = await folder.monthView('2026-11')
+    expect(m.days.find((d) => d.date === MON)!.energy).toBeNull()
+    expect(m.days.find((d) => d.date === TUE)!.energy).toMatchObject({ pool: 'head', assumed: false })
+    expect(m.days.find((d) => d.date === TUE)!.energy!.value).toBeLessThanOrEqual(25)
+    expect(m.days.find((d) => d.date === '2026-11-01')!.energy).toBeNull()
+  })
+
+  it('moduł energii wyłączony teraz: dziś i dni przyszłe bez kropki, dzień miniony – jak tamtego dnia (T950)', async () => {
+    const { folder } = await make()
+    folder.append({ day: TUE, dom: 'meta', k: 'presence.first', at: placeLogical(TUE, 7 * 60) })
+    checkin(folder, TUE)
+    expect((await folder.monthView('2026-11')).days.find((d) => d.date === THU)!.energy).not.toBeNull()
+    rd({ general: { modules: { energy: false } } })
+    const m = await folder.monthView('2026-11')
+    expect(m.days.filter((d) => d.date >= WED).every((d) => d.energy === null)).toBe(true)
+    expect(m.days.find((d) => d.date === TUE)!.energy).toMatchObject({ assumed: false })
   })
 })
 

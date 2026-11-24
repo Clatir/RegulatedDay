@@ -20,7 +20,9 @@ import { personName } from '@shared/model/rd'
 import { stepsProgress } from '@shared/model/steps'
 import { CASE_LIST_NAMES, CASE_LISTS, ESTIMATE_RANGE, PRIORITY_NAMES, priorityFrom, TITLE_MAX, CASE_NOTE_MAX, DEFAULT_ESTIMATE_MIN, DEFAULT_TASK_CATEGORY, type CaseList } from '@shared/model/requests'
 import { settingsOn } from '@shared/model/settings'
-import { parseQuickDates } from '@shared/quickDates'
+import { quickPreview } from '@shared/quickDates'
+import { quickCategories } from '@shared/quickCategories'
+import { quickNowMin } from '@shared/quickSaid'
 import { logicalDayOf, logicalMinuteOf } from '@shared/time/day'
 import { FilterBar, useFilters } from '../../components/FilterBar'
 import { GroupLine } from '../../components/GroupLine'
@@ -247,9 +249,12 @@ function ViewSwitch({ view, onChange }: { view: CasesView; onChange: (v: CasesVi
 function NewTask({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState('')
   const [busy, run] = useBusy()
-  // D409: the words of dates at the end of the title – what they set, said under the field before Enter.
-  const today = logicalDayOf(useNow(60_000))
-  const preview = parseQuickDates(title, today).preview
+  // D409, D600–D602: the words at the end of the title (dates, length, subcategory, hour) – what they set, said under the field before Enter.
+  const now = useNow(60_000)
+  const today = logicalDayOf(now)
+  const rd = useData((s) => s.rd)
+  const categories = useMemo(() => quickCategories(rd, today), [rd, today])
+  const preview = quickPreview(title, today, categories, quickNowMin(today, now))
   // Once: the field is cleared at once and a second Enter (or „Dodaj”) while it saves does nothing; a save that did not happen gives the title back.
   const add = () => submitTitle(run, title, { set: setTitle, save: async (t) => caseAnswer(await createTask({ title: t })), done: onClose })
   return (

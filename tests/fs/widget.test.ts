@@ -2704,6 +2704,27 @@ describe('szybki zapis „+” – potwierdzenie w pasku (D470)', () => {
     await w.act('quickAdd', 'Kup mleko !jutro', 'bar')
     expect(w.current().note).toMatchObject({ text: 'Dodano do Skrzynki: Tytuł z folderu', ok: true })
   })
+
+  it('szybki zapis z godziną (D601): pasek mówi, gdzie sprawa stanęła, albo dlaczego nie stanęła na osi', async () => {
+    const { w } = await make({ quickAdd: async () => ({ ok: true, error: null, title: 'Raport', placed: 'jutro 15:00' }) })
+    await w.refresh()
+    await w.act('quickAdd', 'Raport @jutro 15:00', 'bar')
+    expect(w.current().note).toMatchObject({ text: 'Dodano na oś: Raport – jutro 15:00', ok: true })
+    await w.quickSaid('Raport', { notPlaced: 'ten dzień już minął' })
+    expect(w.current().note).toMatchObject({ text: 'Zapisano: Raport – nie postawiono na osi: ten dzień już minął', ok: true })
+    // The same line from the bar's own field (the folder's answer) – and a long title is cut to 40 characters whatever the reason.
+    const long = `Zadzwonić ${'x'.repeat(100)}`
+    const asked = await make({ quickAdd: async () => ({ ok: true, error: null, title: long, notPlaced: 'ta godzina już minęła' }) })
+    await asked.w.refresh()
+    await asked.w.act('quickAdd', long, 'bar')
+    const text = asked.w.current().note!.text
+    expect(text).toBe(`Zapisano: Zadzwonić ${'x'.repeat(29)}… – nie postawiono na osi: ta godzina już minęła`)
+    // The queue asks about the day's file: waiting for the answer, not „Dodano na oś” (the answer „ich wersja” takes the block).
+    await w.quickSaid('Raport', { asked: true })
+    expect(w.current().note).toMatchObject({ text: 'Zapisano: Raport – czeka na odpowiedź o zmianie z innego komputera', ok: true })
+    await w.quickSaid('Raport', { placed: 'dziś 15:00' })
+    expect(w.current().note).toMatchObject({ text: 'Dodano na oś: Raport – dziś 15:00' })
+  })
 })
 
 describe('„+ Skrzynka” paska pulpitu – okienko „Do skrzynki” (D564 P15)', () => {

@@ -3,11 +3,12 @@
  * saves a task of your own with this title into „Skrzynka” (the window hides then), Esc hides it; the text stays while
  * it is hidden for another reason (a click elsewhere) and is gone once saved. A refusal (no folder, no title) is said
  * under the field. Prośby are added as before – this makes only tasks. The words of dates at the end of the title (`!jutro`,
- * `@pt` – D409) are told under the field before Enter, in the place of the refusal (the window's height stays).
+ * `@pt` – D409) are told under the field before Enter, in the place of the refusal (the window's height stays) – with a length, an hour and a subcategory (`#anal`, D600–D602).
  */
 import { useEffect, useRef, useState } from 'react'
 import { TITLE_MAX } from '@shared/model/requests'
 import { quickPreview } from '@shared/quickDates'
+import { quickSavedText } from '@shared/quickSaid'
 import { setWindowEscape } from '../lib/escape'
 import { useQuickToday } from './quickToday'
 
@@ -15,13 +16,16 @@ export function QuickApp() {
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // D601: saved, but the queue asks about the day's file – the window stays open and says it (a calm line, not an error).
+  const [asked, setAsked] = useState<string | null>(null)
   const input = useRef<HTMLInputElement>(null)
-  const { today, reload } = useQuickToday(text)
-  const preview = quickPreview(text, today)
+  const { today, nowMin, categories, reload } = useQuickToday(text)
+  const preview = quickPreview(text, today, categories, nowMin)
   useEffect(() => {
     setWindowEscape(() => window.rd.quickClose())
     const off = window.rd.onQuickShown(() => {
       setError(null)
+      setAsked(null)
       reload()
       input.current?.focus()
       input.current?.select()
@@ -38,6 +42,7 @@ export function QuickApp() {
       const r = await window.rd.quickAdd(text)
       if (r.ok) setText('')
       setError(r.ok ? null : r.error)
+      setAsked(r.ok && r.asked ? quickSavedText(r.title ?? '', { asked: true }) : null)
     } catch (e) {
       setError(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
@@ -60,6 +65,7 @@ export function QuickApp() {
         onChange={(e) => {
           setText(e.currentTarget.value)
           setError(null)
+          setAsked(null)
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
@@ -72,6 +78,10 @@ export function QuickApp() {
       {error ? (
         <span className="text-[12px] text-rose" data-testid="quick-error">
           {error}
+        </span>
+      ) : asked ? (
+        <span className="text-[12px] text-muted" data-testid="quick-asked">
+          {asked}
         </span>
       ) : (
         preview && (

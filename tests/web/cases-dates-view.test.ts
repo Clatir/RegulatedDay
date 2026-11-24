@@ -12,7 +12,8 @@ import { computeEnergy } from '@shared/engine/energy'
 import { newRequest, newTask, requestFrom, type NewTask } from '@shared/model/requests'
 import { planBlock } from '@shared/model/plan'
 import { rdFrom } from '@shared/model/rd'
-import { parseQuickDates } from '@shared/quickDates'
+import { parseQuickDates, parseQuickWords, quickPreview } from '@shared/quickDates'
+import { quickCategories } from '@shared/quickCategories'
 import { placeLogical } from '@shared/time/day'
 import { DATE_PRESETS, doDateNote, dueTone, morningDeadlines, presetDate, sectionsOf, statusParts } from '@renderer/features/cases/casesLogic'
 import { dayAxis } from '@renderer/features/plan/dayItems'
@@ -155,5 +156,26 @@ describe('podgląd szybkiego zapisu pod polem (D409, T856)', () => {
   it('„!jutro” i „@pt” – podgląd z dwoma polami; bez słów – brak podglądu', () => {
     expect(parseQuickDates('Raport !jutro @pt', WED)).toMatchObject({ title: 'Raport', preview: 'Termin: jutro · Wykonać: pt 13.11' })
     expect(parseQuickDates('Raport', WED).preview).toBeNull()
+  })
+})
+
+describe('podgląd szybkiego zapisu: długość, godzina, podkategoria (N10, D600–D602)', () => {
+  const rd = rdFrom({ schema: 1 })
+  const categories = quickCategories(rd, WED)
+
+  it('jeden tekst dla okienka, paska i strony: „Wykonać: jutro 15:00 · 1 h · Analiza”', () => {
+    expect(quickPreview('Raport @jutro 15:00 1h #anal', WED, categories)).toBe('Wykonać: jutro 15:00 · 1 h · Analiza')
+    expect(quickPreview('Raport !pt @jutro 9:05 1h30 #nauka', WED, categories)).toBe('Termin: pt 13.11 · Wykonać: jutro 09:05 · 1 h 30 min · Nauka (NotebookLM)')
+  })
+
+  it('niedopasowane słowa i brak dnia – bez podglądu; sam „#xyz” zostaje w tytule', () => {
+    expect(quickPreview('Raport #xyz', WED, categories)).toBeNull()
+    expect(quickPreview('Raport 1h', null, categories)).toBeNull()
+    expect(quickPreview('Raport 45min', WED, categories)).toBe('45 min')
+  })
+
+  it('kolejność listy jak w drzewie „Kategorie” – „#a…” bierze pierwszą od góry', () => {
+    const first = categories.find((c) => c.name.toLowerCase().startsWith('a'))!
+    expect(parseQuickWords('x #a', WED, categories).categoryId).toBe(first.id)
   })
 })
