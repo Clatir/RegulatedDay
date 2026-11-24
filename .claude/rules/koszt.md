@@ -35,7 +35,7 @@ T1360–T1374, T1395–T1399, T1430–T1437, T1440–T1447.
 - Kolejność (D512): własny bloku → rutyny → wariantu → kategorii (podkategorii). `model/blockCosts.ts`: `baseCosts(kategorie,
   kategoria, wariant, rezerwa, rutyna)` = `rutyna ?? costsOf(…)` – koszt bez własnego; `blockCosts(b)` = `own ?? base` (+ `base` –
   do niego wraca przycisk okienka, `own`, `baseFrom` z `baseFromOf`: 'routine' – „Jak rutyna (…)”, 'variant' – „Jak wariant (…)”,
-  brak – „Jak podkategoria (…)”, `TileCost.resetLabel`, D510; `b.routineCosts` wymagane); zakres puli tylko z `RANGES.cost` (`COST_MIN`/`COST_MAX`,
+  brak – „Jak podkategoria (…)”, `resetLabel` w `model/blockCosts.ts` – kafelek i pasek, D510; `b.routineCosts` wymagane); zakres puli tylko z `RANGES.cost` (`COST_MIN`/`COST_MAX`,
   `isPoolCost`, `poolCostsFrom` – rutyna i start; `costsFrom` w `plan.ts`, `block.cost`, krok okienka, kalibracja). Silnik
   (`energy.ts` `costOf`) liczy `own ?? baseCosts(…, routine)` bez obiektów w pętlach minut. Kopie: `energyOrder.ts`, `variants.ts`
   (`blockCosts`), `calibration.ts` `costKey` (blok z kosztem rutyny – bez dowodu, jak własny) – nowe miejsce liczące koszt bloku
@@ -108,6 +108,11 @@ T1360–T1374, T1395–T1399, T1430–T1437, T1440–T1447.
   (`ask.scope`); zaczęty blok serii – bez pytania, tylko on od teraz. W kolejce okna dzień czytany raz bez liczenia (`plannedDay`:
   `dayData` – plan, `foldFacts`, plik): niezaczęty → plik dnia (`patchedBlock` z `dayActions`), zaczęty → `logEvents` `block.cost`
   (chwila z zegara procesu głównego, `USER_EVENTS`); minięty zegarem (`windowPassed` – stały/czekający po końcu okna) – odmowa.
+- Pasek „⋯” → „Koszt ▸” (D585, reguły `widget.md`): trwający blok paska, ten sam zapis zaczętego – `block.cost` pisze proces główny
+  (`DataFolder.barCost` w kolejce kliknięć, `barCostAfter` = `costSet` nad najnowszą zmianą w kolejności logu – `barCostBasis`, chwila nie przed
+  `barCostBasis.after` – najpóźniejsza chwila startu i zmian; `after` > zegar folderu + `BAR_COST_AHEAD_MS` (60 s) – odmowa `BAR_COST_AHEAD_TEXT`);
+  widok i ocena – `barCostOf` (`begunCosts`, `costEditable`), `wideCostWarning`. Silnik (`costChangesOf`: minuta, potem log) bez zmian.
+  Powody odmowy `COST_*_TEXT` – `engine/costChange.ts` (kafelek i pasek; `costSave.ts` je przekazuje dalej).
 
 ## Przelicz koszty ×N (D566, D567, T2420–T2423, T2431)
 - Czysty plan i cofnięcie w `engine/costScale.ts`: `COST_SCALE_FACTORS` (0,5–3 co 0,25, domyślnie 2), własny mnożnik `parseScaleFactor`

@@ -3,7 +3,7 @@
  * fixed and flexible blocks, „+N” for everything else it holds, the dot of the load and the dot of the energy (N21, D595). From `monthCell` (`@shared/engine/calendarViews`, the
  * same count for every place) – here only the words and the colours of what is drawn.
  */
-import { monthCell, type LoadLevel, type MonthDay, type MoreOf } from '@shared/engine/calendarViews'
+import { monthCell, type LoadLevel, type MonthBlock, type MonthDay, type MoreOf } from '@shared/engine/calendarViews'
 import type { DayEnergy } from '@shared/engine/energyTrack'
 import { barTitle } from '../allday/allDayText'
 import { durationLabel, logicalClock, plural } from '@shared/format'
@@ -24,6 +24,8 @@ export interface MonthBar {
   edge: string
   /** What it says when pointed at. */
   title: string
+  /** The block of a bar of a block (N18: Ctrl+click selects it); an all-day event's bar has none. */
+  block?: MonthBlock
 }
 
 /** The dot of the load: its level and the sentence under it. */
@@ -116,7 +118,7 @@ export function monthCellView(day: MonthDay, allDay: readonly AllDayEvent[], nam
     const color = blockColor(b.categoryId, names)
     // `note` names nothing – the month does not carry it (T1015).
     const name = blockName({ ...b.named, note: '' }, names)
-    return { key: `block-${b.id}`, label: name, fill: blockFill(color, brightness), edge: color, title: `${name} · ${logicalClock(b.startMin)}–${logicalClock(b.endMin)} · ${blockStateText(b.state, b.outsidePlan)}` }
+    return { key: `block-${b.id}`, label: name, fill: blockFill(color, brightness), edge: color, title: `${name} · ${logicalClock(b.startMin)}–${logicalClock(b.endMin)} · ${blockStateText(b.state, b.outsidePlan)}`, block: b }
   })
   const load = cell.load && day.workMin != null && day.limitMin != null ? { level: cell.load, title: loadTitle(day.workMin, day.limitMin) } : null
   const more = moreWords(cell.moreOf)

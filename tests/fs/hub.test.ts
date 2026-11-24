@@ -199,6 +199,41 @@ describe('folder danych okna głównego (DataHub)', () => {
     expect(existsSync(join(other, paths.settings))).toBe(false)
   })
 
+  it('„Koszt ▸” paska (D585, T2503): zapis przez hub – okno dostaje zmianę od razu; nic niezapisane – nic nie mówi', async () => {
+    const { hub, o } = hubWith()
+    expect(await hub.open(dirA)).toBe(true)
+    try {
+      const now = hub.service!.folder.clock.now()
+      const today = logicalDayOf(now)
+      expect((await hub.timer({ a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 60, day: today, confirm: true })).ok).toBe(true)
+      for (let before = -1; before !== o.changes; ) {
+        before = o.changes
+        await hub.changed()
+      }
+      const n = o.changes
+      // As a click of the timer: the leader's check at once (the ends a close interrupted, laid first by the write). Only asked for here –
+      // its own check would tell the window of its own changes, and the count is of the hub's.
+      const tick = vi.spyOn(hub.service!, 'tick').mockResolvedValue(undefined)
+      expect(await hub.barCost({ day: today, block: 'x', op: { k: 'step', pool: 'head', by: 1 }, at: hub.service!.folder.clock.now() })).toEqual({ ok: true, wrote: true })
+      expect(tick).toHaveBeenCalledTimes(1)
+      await tick.mock.results[0]?.value
+      await vi.waitFor(() => expect(o.changes).toBe(n + 1))
+      expect(await hub.barCost({ day: today, block: 'x', op: { k: 'set', pool: 'head', value: 200 }, at: hub.service!.folder.clock.now() })).toEqual({ ok: true, wrote: true })
+      await vi.waitFor(() => expect(o.changes).toBe(n + 2))
+      // At the end of the range: nothing written, the window told nothing.
+      expect(await hub.barCost({ day: today, block: 'x', op: { k: 'step', pool: 'head', by: 1 }, at: hub.service!.folder.clock.now() })).toEqual({ ok: true, wrote: false })
+      await hub.changed()
+      expect(o.changes).toBe(n + 2)
+    } finally {
+      await hub.close('quit')
+    }
+  })
+
+  it('„Koszt ▸” przy zamkniętym folderze: odmowa z powodem, bez wyjątku', async () => {
+    const { hub } = hubWith()
+    expect(await hub.barCost({ day: '2026-11-24', block: 'x', op: { k: 'reset' }, at: Date.now() })).toEqual({ ok: false, why: 'folder danych nie jest otwarty' })
+  })
+
   it('plik dzisiejszego dnia zmieniony na innym komputerze: okno dostaje zmianę', async () => {
     const { hub, o } = hubWith()
     expect(await hub.open(dirA)).toBe(true)

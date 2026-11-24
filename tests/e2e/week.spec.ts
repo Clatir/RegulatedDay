@@ -17,7 +17,7 @@ import { defaultTemplates, firstComputerRecords } from '../../src/shared/model/d
 import { previousMonth } from '../../src/shared/model/goals'
 import { newTask } from '../../src/shared/model/requests'
 import { logicalMinuteOf } from '../../src/shared/time/day'
-import { launch, logicalToday, withMainLog } from './app'
+import { launch, logicalToday, withMainLog, DAY_NUMBER } from './app'
 
 const shots = process.env.RD_E2E_SHOTS
 async function shot(page: Page, name: string): Promise<void> {
@@ -1116,7 +1116,7 @@ test('Miesiąc (SNT1, D418, D422): w komórce dnia do trzech pasków stałych bl
       await expect(energy).toHaveAttribute('title', /^Energia: najsłabsza .+ \d+ · .+ \(rezerwa \d+\) · przyjęte$/)
       await shot(page, 'snt1-04-month')
       // The colour of the day and the selection stay: a click with Ctrl selects the day.
-      await page.getByTestId(`day-${next}`).click({ modifiers: ['Control'] })
+      await page.getByTestId(`day-${next}`).click({ modifiers: ['Control'], position: DAY_NUMBER })
       await expect(page.getByTestId(`day-${next}`)).toHaveAttribute('aria-pressed', 'true')
     })
     expect(errors).toEqual([])

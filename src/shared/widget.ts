@@ -3,6 +3,8 @@
  * and the icon by the clock): the engine's view (E4b) – without a data folder one neutral line (`noFolderView`, D327).
  */
 import { eventsOn, type AllDayEvent } from './model/allDay'
+import { costSet, sameCosts, type BlockCosts } from './model/blockCosts'
+import { POOLS, type Costs, type Pool } from './model/categories'
 import { ALL_DAY_COLOR_HEX, ENGINE_TONE_SET, iconColor, TONE_SETS, toneColor, type Tone, type ToneSetId, type WarnStep } from './theme'
 
 /**
@@ -172,7 +174,75 @@ export interface WidgetView {
   allDay: BarAllDay | null
   /** The steps of the block in the foreground (D440): its first step not ticked off, or all ticked; null – none. */
   steps: BarSteps | null
+  /** „Koszt ▸” of „⋯” (D585): the cost per hour of the block in front, begun and not ended (also paused), now; null – none. */
+  cost: BarCost | null
 }
+
+/**
+ * The cost of the bar's block (D585, N12): the block in front – or, with nothing in front, the paused one „Wznów” resumes –, begun and not
+ * ended, as its tile counts it now (`begunCosts`: its start's cost changed from a minute on); `base` – what „Jak podkategoria” / „Jak
+ * wariant” / „Jak rutyna” goes back to. Plain data: the view goes over IPC.
+ */
+export interface BarCost extends BlockCosts {
+  block: string
+  name: string
+  /** The tile's warning under a cost past ±5 while a computer of an older version is in the folder (D568, `wideCostWarning`); absent – none. */
+  warning?: string
+}
+
+/** A click of „Koszt ▸” (D585): a step of a pool (±1, with Shift ±10), a typed number, „Jak podkategoria” – an intent over what is written. */
+export type BarCostOp = { k: 'step'; pool: Pool; by: number } | { k: 'set'; pool: Pool; value: number } | { k: 'reset' }
+
+/** The argument of the action `cost`: `<block>|<pool>|<±n>`, `<block>|<pool>|=<n>`, `<block>|reset`. */
+export function barCostArg(block: string, op: BarCostOp): string {
+  if (op.k === 'reset') return `${block}|reset`
+  return op.k === 'set' ? `${block}|${op.pool}|=${op.value}` : `${block}|${op.pool}|${op.by < 0 ? op.by : `+${op.by}`}`
+}
+
+/** The action `cost`'s argument read back (`barCostArg`); anything else – null. */
+export function barCostOp(arg: string): { block: string; op: BarCostOp } | null {
+  const parts = arg.split('|')
+  if (parts.length === 2 && parts[0] && parts[1] === 'reset') return { block: parts[0], op: { k: 'reset' } }
+  if (parts.length !== 3 || !parts[0]) return null
+  const [block, pool, n] = parts as [string, string, string]
+  if (!(POOLS as readonly string[]).includes(pool)) return null
+  const set = /^=(-?\d{1,4})$/.exec(n)
+  if (set) return { block, op: { k: 'set', pool: pool as Pool, value: Number(set[1]) } }
+  const step = /^[+-](1|10)$/.exec(n)
+  return step ? { block, op: { k: 'step', pool: pool as Pool, by: Number(n) } } : null
+}
+
+/**
+ * What a click of „Koszt ▸” makes of the cost written now (`now`): its own cost (null – none, „Jak podkategoria”), kept in −100…100 as the
+ * tile's window keeps it (`costSet`); null – nothing changes (the end of the range, „Jak podkategoria” on a block without its own).
+ */
+export function barCostAfter(now: Pick<BlockCosts, 'costs' | 'own'>, op: BarCostOp): { costs: Costs | null } | null {
+  if (op.k === 'reset') return now.own ? { costs: null } : null
+  const costs = costSet(now.costs, op.pool, op.k === 'set' ? op.value : now.costs[op.pool] + op.by)
+  return now.own && sameCosts(costs, now.costs) ? null : { costs }
+}
+
+/** Why the bar's „Koszt ▸” wrote nothing (D585): its block ended, went behind or another one came in front meanwhile – said after „Nie zapisano: ”. */
+export const BAR_COST_GONE_TEXT = 'ten blok nie trwa teraz na pasku'
+
+/**
+ * Why the bar's „Koszt ▸” wrote nothing (T2513): the block's newest change comes from a clock more than `BAR_COST_AHEAD_MS` ahead of this
+ * computer's – a change written after it would count only from its minute, maybe past the day's end.
+ */
+export const BAR_COST_AHEAD_TEXT = 'zegar innego komputera jest przed tym – koszt zmienisz, gdy nadejdzie chwila jego zmiany'
+/** How far ahead of this computer's clock the block's last change may be for a click of „Koszt ▸” to go after it. */
+export const BAR_COST_AHEAD_MS = 60_000
+
+/** A click of „Koszt ▸” as the folder judges it in its turn (D585, T2503): the bar's day and block, the intent, the instant of the bar's clock. */
+export interface BarCostClick {
+  day: string
+  block: string
+  op: BarCostOp
+  at: number
+}
+
+/** What the folder made of it: written (`wrote` false – nothing changes: the end of the range, „Jak podkategoria” without an own cost), or why not. */
+export type BarCostResult = { ok: true; wrote: boolean } | { ok: false; why: string }
 
 /**
  * The step line of the bar (D440): „☐ <krok> · krok 1/4” with its tick (the action `step` – `<block>|<step>`), after the
@@ -322,7 +392,8 @@ export function noFolderView(status: 'none' | 'opening' | 'failed' = 'none'): Wi
     ritual: false,
     routines: [],
     allDay: null,
-    steps: null
+    steps: null,
+    cost: null
   }
 }
 

@@ -85,6 +85,8 @@ export interface MenuCtx {
   template?: boolean
   /** The engine's judgement of the selection (see `MenuJudge`); left out – the states of the blocks. */
   judge?: MenuJudge
+  /** The view counted no costs of its blocks („Agenda”, the month – N18, T2614): their `costs` are unknown, not none – „Koszt…” is off (the window would show a false 0 and save over the real cost). Default: known. */
+  costsKnown?: boolean
 }
 
 /** What the menu does besides the plain actions: the two that need a window of their own. */
@@ -111,6 +113,7 @@ const ALL_PAST = 'Wszystkie wybrane bloki już minęły'
 const ALL_OFF = 'Wszystkie wybrane bloki są już zdjęte z planu (zaparkowane albo odwołane)'
 const NONE_OPEN = 'Żaden z wybranych bloków nie jest do zrobienia (zaczęte, minione albo zdjęte z planu)'
 const NOT_TODAY = 'Odwołać i zaparkować można tylko dzisiejsze bloki'
+const COSTS_UNKNOWN = 'Koszt zmienisz w „Tygodniu”, „3 dniach” albo w „Dziś”'
 const ROUTINE_ONLY = 'Rutynę wybierzesz tylko blokom podkategorii z rodzaju „rutyna”'
 
 /** The words of a menu's entry none of the blocks takes, by the one reason they all have (`SkipWhy` of the engine). */
@@ -169,7 +172,7 @@ export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockM
   const moveWhy = v ? verdictWhy(v.place, true) : statesMove
   const dayWhy = v ? verdictWhy(v.day) : statesDay
   const fieldWhy = verdictWhy(v?.fields)
-  const costWhy = verdictWhy(v?.cost)
+  const costWhy = ctx.costsKnown === false ? COSTS_UNKNOWN : verdictWhy(v?.cost)
   const routineWhy = verdictWhy(v?.routine)
 
   const shiftBy = (sign: 1 | -1, name: string, testId: string): MenuEntry => ({

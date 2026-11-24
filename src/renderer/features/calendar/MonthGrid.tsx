@@ -7,13 +7,15 @@
  * A host may give the day's all-day events (D405): the first one with its colour's dot and „+N” for the rest, read only – or the
  * detail of the day (D418, D422: up to three miniature bars, „+N” for all the rest, the dot of the load and, left of it, the dot of the
  * energy – N21), which takes their place.
+ * The bar of a block can be picked (N18, D597): Ctrl or Shift on it selects the block and never reaches the cell (the day is not selected), the right
+ * button on a bar of a selected block opens the menu of the selection – on any other bar the cell's own menu opens; a plain click on a bar opens the day.
  */
 import { useRef, useState, type ReactNode } from 'react'
 import { WEEKDAY_SHORT } from '@shared/format'
 import type { AllDayEvent } from '@shared/model/allDay'
 import { ALL_DAY_COLOR_HEX, PALETTE } from '@shared/theme'
 import { addDays, weekday } from '@shared/time/zone'
-import { menuBind } from '../../components/ContextMenu'
+import { menuBind, menuPoint } from '../../components/ContextMenu'
 import { cx } from '../../components/ui'
 import type { SelectionApi } from '../../lib/useSelection'
 import { monthLabel } from '../allday/allDayText'
@@ -50,6 +52,15 @@ export function gridDates(month: string): string[] {
   return out
 }
 
+/** What the bars of the blocks of a cell ask of the screen that selects them (N18, `useWeekGroup` – the keys are `blockKey(date, id)`). */
+export interface BarPicking {
+  isMarked: (date: string, id: string) => boolean
+  /** Ctrl or Shift on a bar. */
+  mark: (date: string, id: string, e: { ctrlKey: boolean; shiftKey: boolean }) => void
+  /** The right button on a bar of a marked block: where the menu of the selection opens. */
+  context: (date: string, id: string, at: { x: number; y: number }) => void
+}
+
 /** How the grid keeps its selection: a set the host owns, or the hook's model (then the right button and the menu key ask the host for its menu). */
 type Picking =
   | { selected: ReadonlySet<string>; onSelect: (dates: Set<string>) => void; selection?: undefined; onContext?: undefined }
@@ -70,6 +81,7 @@ export function MonthGrid({
   onOpen,
   cell,
   today,
+  bars,
   ...rest
 }: Picking & {
   month: string
@@ -85,6 +97,8 @@ export function MonthGrid({
     detail?: MonthCellView
   }
   today: string
+  /** The picking of the blocks' bars (the calendar); none – the bars only show. */
+  bars?: BarPicking
   'data-testid'?: string
 }) {
   const dates = gridDates(month)
@@ -203,11 +217,36 @@ export function MonthGrid({
               )}
               {c.detail ? (
                 <span className="flex w-full min-w-0 flex-col gap-px" data-testid={`month-bars-${d}`}>
-                  {c.detail.bars.map((b) => (
-                    <span key={b.key} className="block h-[12px] truncate rounded-[2px] border-l-2 px-1 text-[9.5px] leading-[12px] text-fg" style={{ background: b.fill, borderLeftColor: b.edge }} title={b.title} data-testid={`month-bar-${d}`}>
-                      {b.label}
-                    </span>
-                  ))}
+                  {c.detail.bars.map((b) => {
+                    const block = bars ? b.block : undefined
+                    const marked = block ? bars!.isMarked(d, block.id) : false
+                    return (
+                      <span
+                        key={b.key}
+                        className={cx('block h-[12px] truncate rounded-[2px] border-l-2 px-1 text-[9.5px] leading-[12px] text-fg', marked && 'ring-2 ring-lamp ring-inset')}
+                        style={{ background: b.fill, borderLeftColor: b.edge }}
+                        title={b.title}
+                        data-testid={`month-bar-${d}`}
+                        data-block-id={block?.id}
+                        data-marked={marked ? 'true' : undefined}
+                        // N18: Ctrl or Shift on the bar of a block selects it – the press goes no further, so the day under it is not selected nor dragged from.
+                        onMouseDown={block ? (e) => {
+                          if (e.button !== 0 || !(e.ctrlKey || e.shiftKey)) return
+                          e.stopPropagation()
+                          bars!.mark(d, block.id, e)
+                        } : undefined}
+                        // The right button on a bar of a selected block: the menu of the selection; any other bar leaves it to the cell (the menu of the day).
+                        onContextMenu={block ? (e) => {
+                          if (!marked) return
+                          e.preventDefault()
+                          e.stopPropagation()
+                          bars!.context(d, block.id, menuPoint(e.nativeEvent, e.currentTarget))
+                        } : undefined}
+                      >
+                        {b.label}
+                      </span>
+                    )
+                  })}
                   {c.detail.more > 0 && (
                     <span className="num truncate text-[10px] leading-tight text-muted" title={c.detail.moreTitle} data-testid={`month-more-${d}`}>
                       {c.detail.moreText}
