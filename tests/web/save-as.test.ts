@@ -27,7 +27,7 @@ import { countDay } from '@renderer/store/day'
 
 vi.mock('@renderer/features/plan/saveAs', async (orig) => ({
   ...(await orig<typeof import('@renderer/features/plan/saveAs')>()),
-  saveAsTemplate: vi.fn(async () => ({ saved: true, added: 0, skipped: [], inTemplate: 0 })),
+  saveAsTemplate: vi.fn(async () => ({ saved: true, unchanged: false, added: 0, skipped: [], inTemplate: 0 })),
   saveAsRoutine: vi.fn(async () => true)
 }))
 
@@ -44,7 +44,9 @@ const template = (id: string, name: string, dayType: Template['dayType'] = 'zwyk
   archived: false,
   versions: [{ from: '2098-01-01', blocks: [planBlock({ id: 'old', categoryId: 'inne', startMin: 8 * 60, durationMin: 60, origin: 'template' })], budgetMin: null, maxMin: null }]
 })
-const TEMPLATES = [template(TPL, 'Roboczy'), template('wolny', 'Weekend', 'weekend')]
+// „Środa” – a template of Wednesdays with no version before February: Wednesday 07.01 is made by „Roboczy” until a save gives „Środa” a version.
+const WEDNESDAYS: Template = { id: 'sroda', name: 'Środa', dayType: 'zwykly', weekdays: [3], archived: false, versions: [{ from: '2099-02-01', blocks: [], budgetMin: null, maxMin: null }] }
+const TEMPLATES = [template(TPL, 'Roboczy'), template('wolny', 'Weekend', 'weekend'), WEDNESDAYS]
 
 /** The day `date` counted as the window counts it: the template's block, two of yours, a series' occurrence. */
 function modelOf(date: string) {
@@ -72,6 +74,9 @@ afterEach(() => {
   vi.mocked(saveAsTemplate).mockClear()
   vi.mocked(saveAsRoutine).mockClear()
 })
+async function render(el: ReturnType<typeof createElement>) {
+  await act(async () => root!.render(el))
+}
 async function mount(el: ReturnType<typeof createElement>) {
   offEsc = installEscape()
   useData.setState({ templates: TEMPLATES, routines: [], requests: [], series: [], rd: rdFrom({}), view: { today: TODAY } as never })
@@ -162,6 +167,49 @@ describe('okno „Zapisz jako szablon” (D615–D617)', () => {
   })
 })
 
+describe('okno „Zapisz jako szablon” – przegląd N15', () => {
+  const open = { kind: 'template' as const, date: TODAY, ids: null }
+
+  it('nie zapisano (odmowa, pytanie, nieczytelne) – okno zostaje; zapisane albo bez zmian – zamyka się', async () => {
+    const onClose = vi.fn()
+    await mount(createElement(SaveAsTemplateDialog, { model: modelOf(TODAY), open, today: TODAY, view: 'today', onClose }))
+    vi.mocked(saveAsTemplate).mockResolvedValueOnce({ saved: false, unchanged: false, added: 3, skipped: [], inTemplate: 0 })
+    await click(q('save-template-apply'))
+    expect(onClose).not.toHaveBeenCalled()
+    expect(q('save-template')).not.toBeNull()
+    vi.mocked(saveAsTemplate).mockResolvedValueOnce({ saved: false, unchanged: true, added: 0, skipped: [], inTemplate: 0 })
+    await click(q('save-template-apply'))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('okno otwarte przez 04:00: „Od” nie zostaje na dniu, który jest już dziś – jutro nowego dnia, i tak idzie do zapisu', async () => {
+    await mount(createElement(SaveAsTemplateDialog, { model: modelOf(TODAY), open, today: TODAY, view: 'today', onClose: () => undefined }))
+    expect(q<HTMLInputElement>('save-template-from')!.value).toBe('06.01.2099')
+    await render(createElement(SaveAsTemplateDialog, { model: modelOf(TODAY), open, today: '2099-01-06', view: 'today', onClose: () => undefined }))
+    expect(q<HTMLInputElement>('save-template-from')!.value).toBe('07.01.2099')
+    await click(q('save-template-apply'))
+    expect(vi.mocked(saveAsTemplate).mock.calls[0]![0].from).toBe('2099-01-07')
+  })
+
+  it('ostrzeżenie „dwa razy” także dla dnia, który przez ten zapis przechodzi na wybrany szablon', async () => {
+    const wed = '2099-01-07'
+    await mount(createElement(SaveAsTemplateDialog, { model: modelOf(wed), open: { kind: 'template', date: wed, ids: null }, today: TODAY, view: 'week', onClose: () => undefined }))
+    await act(async () => {
+      const el = q<HTMLSelectElement>('save-template-which')!
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(el, 'sroda')
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(q('save-template-twice')).toBeNull()
+    await typeIn('save-template-from', '06.01.2099')
+    expect(q('save-template-twice')!.textContent).toContain('Dzień 07.01.2099 też powstaje z tego szablonu')
+  })
+
+  it('tytuł liczy bloki dnia, nie id zaznaczenia, których w planie już nie ma', async () => {
+    await mount(createElement(SaveAsTemplateDialog, { model: modelOf(TODAY), open: { kind: 'template', date: TODAY, ids: ['a', 'gone'] }, today: TODAY, view: 'today', onClose: () => undefined }))
+    expect(document.querySelector('[data-testid="save-template"]')!.textContent).toContain('Zapisz 1 blok jako szablon')
+  })
+})
+
 describe('okno „Zapisz jako rutynę” (D618)', () => {
   it('nazwa pierwszego bloku, kroki w kolejności startu (blok ponad 4 h – 4 h), seria pominięta; „Zapisz” – rutyna z tymi krokami', async () => {
     await mount(createElement(SaveAsRoutineDialog, { model: modelOf(TODAY), open: { kind: 'routine', date: TODAY, ids: ['a', 'b', 's'] }, view: 'today', onClose: () => undefined }))
@@ -179,5 +227,15 @@ describe('okno „Zapisz jako rutynę” (D618)', () => {
       [],
       'today'
     ])
+  })
+
+  it('początek okna liczony raz: dzień policzony od nowa (co 30 s) nie zmienia notek obok kroków, z których okno ruszyło', async () => {
+    const open = { kind: 'routine' as const, date: TODAY, ids: ['a', 'b', 's'] }
+    await mount(createElement(SaveAsRoutineDialog, { model: modelOf(TODAY), open, view: 'today', onClose: () => undefined }))
+    const counted = modelOf(TODAY)
+    // The day counted again without the occurrence of the series (removed meanwhile): the window keeps what it started with.
+    const again = { ...counted, ctx: { ...counted.ctx, plan: counted.ctx.plan.filter((b) => b.id !== 's') } }
+    await render(createElement(SaveAsRoutineDialog, { model: again, open, view: 'today', onClose: () => undefined }))
+    expect(q('save-routine-skipped')!.textContent).toContain('Pominięto 1 blok (seria)')
   })
 })

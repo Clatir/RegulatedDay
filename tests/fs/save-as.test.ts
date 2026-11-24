@@ -46,6 +46,8 @@ const OLD_FROM = '2026-01-01'
 let root: string
 let dir: string
 let hub: DataHub
+// The list of attachments cannot be read now (the view says so).
+let unread = false
 
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'rd-save-as-'))
@@ -68,13 +70,14 @@ beforeEach(async () => {
   expect(await hub.open(dir)).toBe(true)
   ;(globalThis as unknown as { window: { rd: Partial<RdApi> } }).window = {
     rd: {
-      dataView: () => hub.view(),
+      dataView: async () => ({ ...(await hub.view()), ...(unread ? { attachmentsUnread: true } : {}) }),
       dayFiles: (dates) => hub.dayFiles(dates),
       dayData: (date) => hub.day(date),
       edit: (entries) => hub.edit(entries),
       logEvents: (events) => hub.events(events)
     }
   }
+  unread = false
   useUi.setState({ toasts: [] })
   // „Roboczy” – the default template of the ordinary day: one block 08:00–09:00 since long ago.
   write(paths.record('template', TPL), {
@@ -191,6 +194,61 @@ describe('dzień jako szablon od jutra (N15)', () => {
     await undoGroupLine('today')
     expect(Object.keys(versions())).toEqual([OLD_FROM])
     expect(read(paths.record('template', TPL)).name).toBe('Roboczy 2')
+  })
+})
+
+describe('godziny szablonu przy pobudce dnia innej niż szablonu (D617, jak „Szablony”)', () => {
+  it('pobudka dziś 09:00 (szablonu 06:00): poranne bloki w godzinach szablonu; dzień z tą samą pobudką pokazuje je jak dziś, dzień bez niej – godziny szablonu', async () => {
+    const t = today()
+    const tomorrow = addDays(t, 1)
+    // Today woken at 09:00: the template's 08:00 shown at 11:00; yours at 10:00 before the first fixed block (18:00).
+    const file = read(paths.day(t))
+    write(paths.day(t), { ...file, wakeMin: 9 * 60, blocks: (file.blocks as Array<Record<string, unknown>>).filter((b) => b.origin !== 'template') })
+    write(paths.day(addDays(t, 2)), { schema: 1, date: addDays(t, 2), dayType: 'zwykly', sessions: NO_SESSIONS, wakeMin: 9 * 60 })
+    await reloadData()
+    const before = await planOf(t)
+    expect(before).toEqual([
+      [10 * 60, 'Raport', false],
+      [11 * 60, null, false],
+      [18 * 60, 'Trening', true]
+    ])
+    expect((await saveAsTemplate({ date: t, ids: null, templateId: TPL, from: tomorrow, mode: 'replace', view: 'today' })).saved).toBe(true)
+    expect(versions()[tomorrow]!.blocks.map((b) => [b.startMin, b.name ?? null]).sort((x, y) => (x[0] as number) - (y[0] as number))).toEqual([
+      [7 * 60, 'Raport'],
+      [8 * 60, null],
+      [18 * 60, 'Trening']
+    ])
+    expect(await planOf(addDays(t, 2))).toEqual(before)
+    expect(await planOf(addDays(t, 3))).toEqual([
+      [7 * 60, 'Raport', false],
+      [8 * 60, null, false],
+      [18 * 60, 'Trening', true]
+    ])
+  })
+})
+
+describe('zapis od daty i nieczytelne załączniki', () => {
+  it('„Od” sprzed jutra (okno otwarte przez 04:00) – wersja od jutra, nigdy od dziś', async () => {
+    const t = today()
+    const r = await saveAsTemplate({ date: t, ids: ['a'], templateId: TPL, from: t, mode: 'add', view: 'today' })
+    expect(r.saved).toBe(true)
+    expect(Object.keys(versions()).sort()).toEqual([OLD_FROM, addDays(t, 1)])
+    expect(line()?.text).toBe(`Zapisano 1 blok w szablonie „Roboczy” od ${plDayMonth(addDays(t, 1))}`)
+  })
+
+  it('lista załączników nieczytelna: „Zastąp”, które zdejmuje blok z wersji (choć późniejsza wersja go ma) – odmowa, nic nie zapisane (T848)', async () => {
+    const t = today()
+    const later = addDays(t, 30)
+    // A later version keeps „old”: the save would take it out of its own version only.
+    await updateRecord(paths.record('template', TPL), (raw) => ({ ...raw, versions: { ...(raw.versions as object), [later]: { blocks: [{ id: 'old', categoryId: 'inne', startMin: 8 * 60, durationMin: 60, fixed: false, origin: 'template' }], budgetMin: null, maxMin: null } } }))
+    unread = true
+    await reloadData()
+    const r = await saveAsTemplate({ date: t, ids: ['a'], templateId: TPL, from: addDays(t, 1), mode: 'replace', view: 'today' })
+    expect(r.saved).toBe(false)
+    expect(Object.keys(versions()).sort()).toEqual([OLD_FROM, later])
+    expect(useUi.getState().toasts.map((x) => x.text)).toContain('Listy załączników nie da się teraz odczytać – nic nie zostało zapisane, spróbuj za chwilę.')
+    // „Dołóż” takes nothing out: saved.
+    expect((await saveAsTemplate({ date: t, ids: ['a'], templateId: TPL, from: addDays(t, 1), mode: 'add', view: 'today' })).saved).toBe(true)
   })
 })
 

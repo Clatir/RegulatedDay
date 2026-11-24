@@ -9,19 +9,24 @@
  * series, the sessions, the lectures and the classes of a „zjazd” (they come from records of their own) and the blocks taken off the plan
  * (parked, cancelled) – each counted with its word.
  */
-import { BLOCK_NAME_MAX, isSessionEntry, planBlock, sessionIdOf, withTemplateVersion, type PlanBlock, type Template, type TemplateVersion } from '../model/plan'
+import type { DaySnapshot } from '../model/events'
+import { BLOCK_NAME_MAX, isSessionEntry, planBlock, sessionIdOf, templateFor, withTemplateVersion, type DayFile, type PlanBlock, type Template, type TemplateVersion } from '../model/plan'
 import { MAX_STEPS, STEP_RANGE, type RoutineStep } from '../model/routines'
+import type { DayTypeId } from '../model/settings'
 import { freshSteps } from '../model/steps'
-import { addDays } from '../time/zone'
-import { SESSION_ANCHOR } from './createDay'
+import { addDays, weekday } from '../time/zone'
+import { dayWakeMin, morningBound, SESSION_ANCHOR, unshiftedStart } from './createDay'
 import { plannedStartMin } from './planEdit'
 import { isOfTemplate } from './templateApply'
 
 /** „Zastąp bloki szablonu” – the version's blocks become these (its sessions stay); „Dołóż” – these join the version's blocks. */
 export type SaveAsMode = 'replace' | 'add'
 
-/** Why a block of the day does not go (the words of the window and of the line, as `SkipWhy` of the group's changes). */
-export type SaveAsWhy = 'seria' | 'sesja' | 'wykład' | 'zjazd' | 'zdjęty'
+/**
+ * Why a block of the day does not go (the words of the window and of the line, as `SkipWhy` of the group's changes); „bez godziny” – a block
+ * with no place in the plan (no hour, no anchor that has one), and those anchored to it.
+ */
+export type SaveAsWhy = 'seria' | 'sesja' | 'wykład' | 'zjazd' | 'zdjęty' | 'bez godziny'
 
 export interface SaveAsPick {
   /** The blocks that go, in the order of their planned start (ties – the plan's order; one without a place – last). */
@@ -66,20 +71,36 @@ export interface TemplateSave {
   blocks: PlanBlock[]
   /** „Dołóż”: the day's blocks that are this template's own blocks of the version already – left, not twice. */
   inTemplate: number
+  /** The blocks of `take` with no place in the plan (`bez godziny`) – left out with those anchored to them. */
+  left: SaveAsWhy[]
 }
+
+/**
+ * How the day's wake moved its morning (D617, as „Szablony”): `delta` – the day's wake less the template's (a wake of the day's own, the week of
+ * the session shift), `firstFixed` – the first fixed block that bounds the morning (`morningBound`, the bound `dayPlan` moved it by).
+ */
+export interface WakeFrame {
+  delta: number
+  firstFixed: number
+}
+
+/** The frame of the day's wake (`dayPlan`'s own rule): what `templateBlocksOf` takes back to the template's hours. */
+export const wakeFrameOf = (snapshot: DaySnapshot, dayFile: DayFile | null): WakeFrame => ({ delta: dayWakeMin(snapshot, dayFile) - snapshot.templateWakeMin, firstFixed: morningBound(snapshot, dayFile) })
 
 /**
  * The template's blocks made of the day's `take` (of `plan`, the day `date`): a block the template `templateId` gave the day keeps its id in the
  * template (its attachments and the days' changes of it go on), any other gets a new one (`newId`). `version` – the template's version in force from
  * the date of the save (null – none yet): „Dołóż” leaves a block of the template the version has already (`inTemplate`); an anchor goes to a
  * block of the version as it will be (one saved, or – „Dołóż” – one it keeps), or to a session of it (`session:<id>`), else the block takes the hour
- * the plan gives it. A block beside another (D492) keeps its hour without the group – a template has no parallel blocks. `taskTitle` – the title of
- * the task of „Sprawy” that names a block of a task (the template has no task: the title is its name).
+ * the plan gives it. A block with no place at all is left (`left`), and the blocks anchored to it with it – no anchor points at a block that is not
+ * there. The hours go in the template's hours (`wake` – the frame of the day's wake: a morning the day's wake moved is moved back, as a drag on the
+ * axis of „Szablony” is, `unshiftedStart`). A block beside another (D492) keeps its hour without the group – a template has no parallel blocks.
+ * `taskTitle` – the title of the task of „Sprawy” that names a block of a task (the template has no task: the title is its name).
  */
 export function templateBlocksOf(
   take: readonly PlanBlock[],
   plan: readonly PlanBlock[],
-  o: { date: string; templateId: string; version: TemplateVersion | null; mode: SaveAsMode; newId: () => string; taskTitle?: (task: string) => string | null }
+  o: { date: string; templateId: string; version: TemplateVersion | null; mode: SaveAsMode; newId: () => string; taskTitle?: (task: string) => string | null; wake?: WakeFrame }
 ): TemplateSave {
   const versionBlocks = o.version?.blocks ?? []
   const own = new Set(versionBlocks.filter((b) => !isSessionEntry(b)).map((b) => b.id))
@@ -113,15 +134,28 @@ export function templateBlocksOf(
     going.push({ b, id })
   }
   const byId = new Map(plan.map((b) => [b.id, b]))
+  const anchorOf = (b: PlanBlock): string | null => {
+    if (!b.anchor) return null
+    const a = byId.get(b.anchor)
+    return idOf.get(b.anchor) ?? (a?.origin === 'session' && a.sourceId && sessions.has(a.sourceId) ? `${SESSION_ANCHOR}${a.sourceId}` : null)
+  }
+  // A block with no place leaves the version's ids first – then a block anchored to it has none either (to the fixed point: chains of anchors).
+  const placeless = new Set<string>()
+  for (let changed = true; changed; ) {
+    changed = false
+    for (const { b } of going) {
+      if (placeless.has(b.id) || anchorOf(b) != null || plannedStartMin(b, plan) != null) continue
+      placeless.add(b.id)
+      idOf.delete(b.id)
+      changed = true
+    }
+  }
   const blocks: PlanBlock[] = []
   for (const { b, id } of going) {
-    let anchor: string | null = null
-    if (b.anchor) {
-      const a = byId.get(b.anchor)
-      anchor = idOf.get(b.anchor) ?? (a?.origin === 'session' && a.sourceId && sessions.has(a.sourceId) ? `${SESSION_ANCHOR}${a.sourceId}` : null)
-    }
-    const startMin = anchor ? null : plannedStartMin(b, plan)
-    if (!anchor && startMin == null) continue
+    if (placeless.has(b.id)) continue
+    const anchor = anchorOf(b)
+    const dayStart = anchor ? null : plannedStartMin(b, plan)
+    const startMin = dayStart == null ? null : o.wake ? unshiftedStart({ ...b, anchor: null }, dayStart, o.wake.delta, o.wake.firstFixed) : dayStart
     const title = b.task ? (o.taskTitle?.(b.task) ?? null) : null
     blocks.push(
       planBlock({
@@ -143,7 +177,7 @@ export function templateBlocksOf(
       })
     )
   }
-  return { blocks, inTemplate }
+  return { blocks, inTemplate, left: [...placeless].map((): SaveAsWhy => 'bez godziny') }
 }
 
 /**
@@ -165,10 +199,19 @@ export function saveAsFrom(date: string, today: string): string {
 }
 
 /**
- * The day saved takes the template's blocks itself (D616): it is on or after `from` and the template makes it – its own blocks and the template's
- * copies of them would stand twice. The window says it (D72 – nothing is refused).
+ * The day saved takes the template's blocks itself (D616): it is on or after `from` and the template makes it after the save (`dayTemplateId` –
+ * `dayTemplateAfter`) – its own blocks and the template's copies of them would stand twice. The window says it (D72 – nothing is refused).
  */
 export const savedDayTwice = (date: string, from: string, dayTemplateId: string | null, templateId: string): boolean => from <= date && dayTemplateId === templateId
+
+/**
+ * The template that makes the day `date` of the type `dayType` once the save wrote `next` (`templateFor` – its weekday's, else its type's default):
+ * a template without a version on the day before the save may be the day's one after it. Null – none.
+ */
+export function dayTemplateAfter(templates: readonly Template[], next: Template, dayType: DayTypeId, date: string): string | null {
+  const after = templates.some((t) => t.id === next.id) ? templates.map((t) => (t.id === next.id ? next : t)) : [...templates, next]
+  return templateFor(after, dayType, weekday(date), date)?.template.id ?? null
+}
 
 export interface RoutineSave {
   steps: RoutineStep[]

@@ -10,13 +10,13 @@
 import type { RawRecord } from '@shared/api'
 import { deepEqual, sameContentAs } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
-import { blocksToSave, savedTemplate, templateBlocksOf, type SaveAsMode, type SaveAsPick, type SaveAsWhy } from '@shared/engine/saveAs'
+import { blocksToSave, savedTemplate, templateBlocksOf, wakeFrameOf, type SaveAsMode, type SaveAsPick, type SaveAsWhy } from '@shared/engine/saveAs'
 import { countLabel, plDayMonth } from '@shared/format'
 import { groupCount, skippedText } from '@shared/groupText'
 import { ATTACHMENTS_UNREAD_TEXT, restoreEdits, type AttachmentUndo } from '@shared/model/attachment'
 import { templateJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
-import { isSessionEntry, templateBlockAlive, templateFrom, templateVersionOn } from '@shared/model/plan'
+import { isSessionEntry, templateFrom, templateVersionOn } from '@shared/model/plan'
 import { ROUTINE_SCHEMA, type RoutineStep } from '@shared/model/routines'
 import { seriesOfBlock } from '@shared/model/series'
 import { addDays } from '@shared/time/zone'
@@ -45,7 +45,13 @@ export function pickOf(day: Pick<DayModel, 'date' | 'state' | 'ctx'>, ids: reado
 /** „Pominięto 2 bloki (seria, sesja)” – what the window says of the blocks left out; null – none. */
 export function skippedNote(skipped: readonly SaveAsWhy[]): string | null {
   if (!skipped.length) return null
-  return `Pominięto ${groupCount(skipped.length, 'block')} (${[...new Set(skipped)].join(', ')}) – pochodzą z innych rekordów albo są zdjęte z planu`
+  return `Pominięto ${groupCount(skipped.length, 'block')} (${[...new Set(skipped)].join(', ')})`
+}
+
+/** The first day a save may start from: tomorrow (today is made already) – also for a window opened before 04:00 and saved after it. */
+export const firstFrom = (): string => {
+  const today = useData.getState().view?.today
+  return today ? addDays(today, 1) : ''
 }
 
 /** The title of the task of „Sprawy” that names a block (a template has no task: its title becomes the block's name). */
@@ -73,9 +79,14 @@ export interface TemplateSaveArgs {
   at?: number
 }
 
-/** What a save to a template came to: `saved` – the template's version written (or waiting for the folder). */
+/**
+ * What a save to a template came to: `saved` – the template's version written (or waiting for the folder); `unchanged` – nothing to write (the
+ * template has those blocks already, or none of the day's go) – said in the corner; neither – not saved (refused, unreadable, a question): the window
+ * stays.
+ */
 export interface TemplateSaveDone {
   saved: boolean
+  unchanged: boolean
   added: number
   skipped: SaveAsWhy[]
   inTemplate: number
@@ -86,7 +97,10 @@ export interface TemplateSaveDone {
  * template as it is already, the day or the template unreadable, the list of attachments unreadable while „Zastąp” would take a block's attachments
  * – said in the corner, nothing written.
  */
-export async function saveAsTemplate(a: TemplateSaveArgs): Promise<TemplateSaveDone> {
+export async function saveAsTemplate(args: TemplateSaveArgs): Promise<TemplateSaveDone> {
+  // Never before tomorrow: a window opened before 04:00 would else write a version from today, which is made already.
+  const first = firstFrom()
+  const a = first && args.from < first ? { ...args, from: first } : args
   const rel = paths.record('template', a.templateId)
   const made = { before: null as RawRecord | null, after: null as RawRecord | null, attachments: null as AttachmentUndo | null, name: '', added: 0, skipped: [] as SaveAsWhy[], inTemplate: 0, unread: false, same: false }
   const out = await trySaveWith(async () => {
@@ -98,8 +112,9 @@ export async function saveAsTemplate(a: TemplateSaveArgs): Promise<TemplateSaveD
     const t = before ? templateFrom(before) : null
     if (!before || !t) throw new Error('tego szablonu nie ma już')
     const pick = pickOf(day, a.ids)
-    const tpl = templateBlocksOf(pick.take, day.ctx.plan, { date: a.date, templateId: a.templateId, version: templateVersionOn(t, a.from), mode: a.mode, newId: () => newId(10), taskTitle })
-    Object.assign(made, { name: t.name, skipped: pick.skipped, inTemplate: tpl.inTemplate, added: tpl.blocks.length })
+    const version = templateVersionOn(t, a.from)
+    const tpl = templateBlocksOf(pick.take, day.ctx.plan, { date: a.date, templateId: a.templateId, version, mode: a.mode, newId: () => newId(10), taskTitle, wake: wakeFrameOf(day.snapshot, day.dayFile) })
+    Object.assign(made, { name: t.name, skipped: [...pick.skipped, ...tpl.left], inTemplate: tpl.inTemplate, added: tpl.blocks.length })
     if (!tpl.blocks.length) return []
     const next = savedTemplate(t, a.from, tpl.blocks, a.mode)
     const after = templateJson(next, before)
@@ -108,11 +123,10 @@ export async function saveAsTemplate(a: TemplateSaveArgs): Promise<TemplateSaveD
       made.same = true
       return []
     }
-    // „Zastąp” may take blocks out of the template for good (no version from tomorrow keeps them): their attachments go with them (D415) – not
-    // while the list of attachments cannot be read (unknown is never „none”, T848).
-    const tomorrow = addDays(useData.getState().view?.today ?? a.date, 1)
-    const lost = t.versions.some((v) => v.blocks.some((b) => !isSessionEntry(b) && templateBlockAlive(t, b.id, tomorrow) && !templateBlockAlive(next, b.id, tomorrow)))
-    if (lost && useData.getState().view?.attachmentsUnread) {
+    // „Zastąp” that takes a block out of the version may take its attachments with it (D415 – which, the list says): not while the list cannot be
+    // read (unknown is never „none”, T848), as „Usuń z szablonu”.
+    const drops = a.mode === 'replace' && (version?.blocks ?? []).some((b) => !isSessionEntry(b) && !tpl.blocks.some((x) => x.id === b.id))
+    if (drops && useData.getState().view?.attachmentsUnread) {
       made.unread = true
       return []
     }
@@ -120,7 +134,7 @@ export async function saveAsTemplate(a: TemplateSaveArgs): Promise<TemplateSaveD
     Object.assign(made, { before, after, attachments: w.undo })
     return w.entries
   })
-  const done = { saved: false, added: made.added, skipped: made.skipped, inTemplate: made.inTemplate }
+  const done: TemplateSaveDone = { saved: false, unchanged: false, added: made.added, skipped: made.skipped, inTemplate: made.inTemplate }
   if (made.unread) {
     toast(ATTACHMENTS_UNREAD_TEXT, 'error', 8000)
     return done
@@ -129,7 +143,7 @@ export async function saveAsTemplate(a: TemplateSaveArgs): Promise<TemplateSaveD
   if (!out.length) {
     if (made.same) toast(`Szablon „${made.name}” ma już te bloki od ${plDayMonth(a.from)} – bez zmian`, 'info')
     else if (made.name) toast([made.inTemplate ? `Bez zmian – ${made.inTemplate} już w szablonie` : 'Bez zmian – nie ma bloków do zapisania', ...(made.skipped.length ? [skippedText(made.skipped)!] : [])].join(' · '), 'info')
-    return done
+    return { ...done, unchanged: made.name !== '' }
   }
   // The template's change is the first entry (an attachment's record that met a question is not it, T931).
   if (!isSaved(out.slice(0, 1)) || !made.before || !made.after) return done

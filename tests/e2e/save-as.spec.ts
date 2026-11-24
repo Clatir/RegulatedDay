@@ -1,6 +1,7 @@
 /**
  * „Zapisz jako szablon / rutynę…” (N15, D615–D619): today's plan from the menu „⋯” saved as the template of its day („Dzień zwykły”) from tomorrow –
- * the line „Zapisano 2 bloki w szablonie „Dzień zwykły” od DD.MM · Cofnij”, a later ordinary day has the same blocks at the same hours, the version
+ * the line „Zapisano 2 bloki w szablonie „Dzień zwykły” od DD.MM · Cofnij”, a later ordinary day woken as today has the same blocks at the same hours
+ * (the template has them in its own hours – D617), the version
  * the days before take stays as it was; „Cofnij” takes the version back and the later day is empty again. Then the same plan as a routine – the
  * steps of the blocks' names and lengths, the line „Zapisano rutynę …”. The days are counted from `logicalToday()` (nothing depends on the hour).
  */
@@ -38,9 +39,10 @@ test('plan dnia jako szablon od jutra: późniejszy dzień zwykły ma te same bl
     { id: 'b', categoryId: 'inne', startMin: 20 * 60, durationMin: 30, fixed: false, name: 'Trening E2E' }
   ])
   const tomorrow = addDays(today, 1)
-  // A later day of the ordinary type without blocks of its own and without sessions (only the template's blocks stand on it).
+  // A later day of the ordinary type without blocks of its own and without sessions (only the template's blocks stand on it), woken as today
+  // (04:00 – the template's 06:00 two hours later): it shows the template's blocks at today's hours.
   const later = addDays(today, 2)
-  write(dataDir, paths.day(later), { schema: 1, date: later, dayType: 'zwykly', sessions: Object.fromEntries(DEFAULT_SESSIONS.map((s) => [s.id, 'no'])) })
+  write(dataDir, paths.day(later), { schema: 1, date: later, dayType: 'zwykly', wakeMin: 4 * 60, sessions: Object.fromEntries(DEFAULT_SESSIONS.map((s) => [s.id, 'no'])) })
   const oldVersions = versionsOf(dataDir)
   const todayBefore = readFileSync(dayFile, 'utf8')
   const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
@@ -61,14 +63,15 @@ test('plan dnia jako szablon od jutra: późniejszy dzień zwykły ma te same bl
       await expect(dialog).toHaveCount(0)
       await expect(page.getByTestId('group-line-today')).toContainText(`Zapisano 2 bloki w szablonie „Dzień zwykły” od ${plDayMonth(tomorrow)}`)
 
-      // The template: a new version from tomorrow with the day's blocks; the versions before it as they were.
+      // The template: a new version from tomorrow with the day's blocks – in the template's hours (D617: today's wake 04:00 is two hours before the
+      // template's 06:00, the morning goes back by them, as on the axis of „Szablony”); the versions before it as they were.
       await expect.poll(() => Object.keys(versionsOf(dataDir)).includes(tomorrow), { timeout: 15_000 }).toBe(true)
       const v = versionsOf(dataDir)
       for (const [from, version] of Object.entries(oldVersions)) expect(v[from]).toEqual(version)
       const made = v[tomorrow]!.blocks.filter((b) => b.name === 'Raport E2E' || b.name === 'Trening E2E')
       expect(made.map((b) => [b.name, b.startMin])).toEqual([
-        ['Raport E2E', 18 * 60],
-        ['Trening E2E', 20 * 60]
+        ['Raport E2E', 20 * 60],
+        ['Trening E2E', 22 * 60]
       ])
       // Today (before the date) as it was.
       expect(readFileSync(dayFile, 'utf8')).toBe(todayBefore)

@@ -10,7 +10,7 @@
  * start; the blocks themselves do not change.
  */
 import { useMemo, useState } from 'react'
-import { saveAsFrom, savedDayTwice, routineStepsOf, templateBlocksOf, type SaveAsMode } from '@shared/engine/saveAs'
+import { dayTemplateAfter, saveAsFrom, savedDayTwice, savedTemplate, routineStepsOf, templateBlocksOf, wakeFrameOf, type SaveAsMode } from '@shared/engine/saveAs'
 import { plDate, plDayMonth } from '@shared/format'
 import { groupCount } from '@shared/groupText'
 import { newId } from '@shared/model/ids'
@@ -64,24 +64,36 @@ export function SaveAsTemplateDialog({ model, open, today, view, onClose }: { mo
   const templateId = chosen ?? startTemplate(templates, model)
   const template = list.find((t) => t.id === templateId) ?? null
   const [mode, setMode] = useState<SaveAsMode>('replace')
-  const [from, setFrom] = useState(() => saveAsFrom(open.date, today))
+  const [chosenFrom, setFrom] = useState(() => saveAsFrom(open.date, today))
+  // Never before tomorrow – also when the window stood open past 04:00 (today moved on): the write says the same (`saveAsTemplate`).
+  const from = chosenFrom < tomorrow ? tomorrow : chosenFrom
   const [busy, run] = useBusy()
   const pick = useMemo(() => (model ? pickOf(model, open.ids) : null), [model, open.ids])
   // What the save would make on the day as the window has it (the write counts again in its turn): how many go, how many the template has already.
   const preview = useMemo(
-    () => (model && pick && template ? templateBlocksOf(pick.take, model.ctx.plan, { date: open.date, templateId: template.id, version: templateVersionOn(template, from), mode, newId: () => newId(10) }) : null),
+    () =>
+      model && pick && template
+        ? templateBlocksOf(pick.take, model.ctx.plan, { date: open.date, templateId: template.id, version: templateVersionOn(template, from), mode, newId: () => newId(10), wake: wakeFrameOf(model.snapshot, model.dayFile) })
+        : null,
     [model, pick, template, from, mode, open.date]
   )
   const going = preview?.blocks.length ?? 0
-  const twice = model && template ? savedDayTwice(open.date, from, model.snapshot.templateId, template.id) : false
+  // The day saved would take the template's copies of its blocks: the template makes it after the save (also one that becomes its template by it).
+  const twice = useMemo(
+    () => (model && template && preview ? savedDayTwice(open.date, from, dayTemplateAfter(templates, savedTemplate(template, from, preview.blocks, mode), dayTypeNow(model), open.date), template.id) : false),
+    [model, template, preview, templates, from, mode, open.date]
+  )
   const save = () =>
     run(async () => {
       commitActiveField()
       if (!template || !going) return
-      await saveAsTemplate({ date: open.date, ids: open.ids, templateId: template.id, from, mode, view })
-      onClose()
+      const done = await saveAsTemplate({ date: open.date, ids: open.ids, templateId: template.id, from, mode, view })
+      // Not saved (refused, a question, unreadable – the corner says why): the window stays, with what you chose.
+      if (done.saved || done.unchanged) onClose()
     })
-  const title = open.ids ? `Zapisz ${groupCount(open.ids.length, 'block')} jako szablon` : `Zapisz dzień ${plDate(open.date)} jako szablon`
+  // The blocks of the day the window is for (an id of the selection no longer in the plan is not one of them).
+  const count = pick ? pick.take.length + pick.skipped.length : (open.ids?.length ?? 0)
+  const title = open.ids ? `Zapisz ${groupCount(count, 'block')} jako szablon` : `Zapisz dzień ${plDate(open.date)} jako szablon`
   return (
     <Dialog
       title={title}
@@ -145,9 +157,9 @@ export function SaveAsTemplateDialog({ model, open, today, view, onClose }: { mo
               {groupCount(preview.inTemplate, 'block')} już w szablonie – nie dojdą drugi raz.
             </p>
           )}
-          {pick && skippedNote(pick.skipped) && (
+          {pick && skippedNote([...pick.skipped, ...(preview?.left ?? [])]) && (
             <p className="text-[12px] text-muted" data-testid="save-template-skipped">
-              {skippedNote(pick.skipped)}.
+              {skippedNote([...pick.skipped, ...(preview?.left ?? [])])}.
             </p>
           )}
           {twice && going > 0 && (
@@ -178,10 +190,12 @@ export function SaveAsRoutineDialog({ model, open, view, onClose }: { model: Day
     )
   }
   const names: Names = { rd, settings: model.state.settings, routines, requests }
-  return <RoutineSaveForm key={model.date} start={routineStart(model, open.ids, names)} view={view} onClose={onClose} />
+  return <RoutineSaveForm key={model.date} model={model} ids={open.ids} names={names} view={view} onClose={onClose} />
 }
 
-function RoutineSaveForm({ start, view, onClose }: { start: ReturnType<typeof routineStart>; view: GroupView; onClose: () => void }) {
+function RoutineSaveForm({ model, ids, names, view, onClose }: { model: DayModel; ids: readonly string[] | null; names: Names; view: GroupView; onClose: () => void }) {
+  // Counted once, when the window opens: the form starts from it, and the notes beside it say what it started from (the day counted again every 30 s does not change them).
+  const [start] = useState(() => routineStart(model, ids, names))
   const [form, set, ref] = useForm<RoutineForm>(start.form)
   const [busy, run] = useBusy()
   const save = () =>
