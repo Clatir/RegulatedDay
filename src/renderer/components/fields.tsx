@@ -5,12 +5,13 @@
  * fraction. Durations („90”, „1:30”, „1h30”), times of the logical day („+1” before 04:00) and dates without a year
  * („3.01” – the nearest such date) are parsed by @shared/format.
  */
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { clock, durationLabel, logicalClock, parseDate, parseDuration, parseInteger, parseLogicalTime, plDate, type Parsed } from '@shared/format'
 import { parseField } from '@shared/model/fields'
 import { nextDayNote, parseEnd } from '@shared/blockEnd'
 import { refusalToast } from '../store/ui'
 import { useEscapeLayer } from '../lib/escape'
+import { trackWheel, wheelClaim, wheelInput, wheelSteps } from '../lib/wheel'
 import { cx } from './ui'
 
 interface CommitFieldProps<T> {
@@ -44,6 +45,15 @@ interface CommitFieldProps<T> {
   onEnter?: () => void
   /** Esc in a field with no typed text (the first Esc already threw it away): the editor around it is cancelled (UX4, B8). A refused text's message goes first. */
   onEscape?: () => void
+  /**
+   * The mouse wheel over the field (N8): one call per step (`lib/wheel.ts`), `dir` +1 for a turn up (a number up), −1 down; `big` with
+   * Shift. The holder shows and sends the number itself (`useWheelValue`: one save per gesture). The page does not scroll over the field (a native non-passive listener – React's `onWheel` is passive) – except while a page
+   * scroll is in progress, and not with Ctrl / Meta; a typed text and a refusal are dropped first, the handler counts from the saved
+   * value. Without it the wheel scrolls as usual.
+   */
+  onWheelStep?: (dir: 1 | -1, big: boolean) => void
+  /** The focus left the field (before its typed text is committed): what the wheel has not sent yet goes now (N8). */
+  onLeave?: () => void
   'aria-label'?: string
   'data-testid'?: string
 }
@@ -90,10 +100,37 @@ export function FieldShell({ error, errorId, className, placement = 'float', tes
 
 // The refused value's message goes away with Esc – wherever the focus is (the layer is the newest, so it is first). Only the message
 // and the frame: the value stays refused (A6-14: `onAccept` is not called, „Zapisz” of an answer still refuses).
-export function CommitField<T>({ value, onCommit, parse, format, placeholder, className, shellClassName, errorPlacement, readOnly, check, onReject, onAccept, commitSame, onEnter, onEscape, ...rest }: CommitFieldProps<T>) {
+export function CommitField<T>({ value, onCommit, parse, format, placeholder, className, shellClassName, errorPlacement, readOnly, check, onReject, onAccept, commitSame, onEnter, onEscape, onWheelStep, onLeave, ...rest }: CommitFieldProps<T>) {
   const [draft, setDraft] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const errorId = useId()
+  const input = useRef<HTMLInputElement>(null)
+  const wheelStep = useRef(onWheelStep)
+  useLayoutEffect(() => {
+    wheelStep.current = onWheelStep
+  })
+  const wheelOn = onWheelStep != null && !readOnly
+  useEffect(() => {
+    const el = input.current
+    if (!wheelOn || !el) return
+    trackWheel()
+    const wheel = (e: WheelEvent) => {
+      // Ctrl / Meta (the zoom), a horizontal scroll without Shift or of a touchpad are not the field's: the event goes on as it is.
+      const read = wheelInput(e)
+      if (!read) return
+      // A page scroll in progress wins over the field the cursor came to (D590).
+      if (!wheelClaim(el)) return
+      // Over the field the page does not scroll, a turn that is no step yet (a touchpad's small deltas) included.
+      e.preventDefault()
+      const n = wheelSteps(el, read)
+      if (n === 0) return
+      setDraft(null)
+      setError(null)
+      for (let i = 0; i < Math.abs(n); i++) wheelStep.current?.(n > 0 ? 1 : -1, e.shiftKey)
+    }
+    el.addEventListener('wheel', wheel, { passive: false })
+    return () => el.removeEventListener('wheel', wheel)
+  }, [wheelOn])
   useEscapeLayer(error != null, () => setError(null))
   // The value changed from outside while the refusal stood (a step [−] / [+] beside the field, another save): the reason was about the
   // text before it – it goes (T2440: a window whose action waits on the field's refusal would stay dead under a valid number).
@@ -116,6 +153,7 @@ export function CommitField<T>({ value, onCommit, parse, format, placeholder, cl
   const entered = useRef(false)
   const shown = draft ?? (value == null ? '' : format(value))
   const commit = () => {
+    onLeave?.()
     const enter = entered.current
     entered.current = false
     if (cancelled.current) {
@@ -143,6 +181,7 @@ export function CommitField<T>({ value, onCommit, parse, format, placeholder, cl
   return (
     <FieldShell error={error} errorId={errorId} className={shellClassName} placement={errorPlacement} testId={rest['data-testid']}>
       <input
+        ref={input}
         className={cx('input num', className)}
         value={shown}
         placeholder={placeholder}

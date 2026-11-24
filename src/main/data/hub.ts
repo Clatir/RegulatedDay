@@ -10,14 +10,19 @@
 import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { AddLinkResult, AttachPrepared, AttachResult, AttachmentOpen, CaseDays, CloseResult, GroupLogResult, GroupLogUndone, QuickAddResult, TemplateApplyResult, TemplateDoneAsk, TemplateUndoAsk, TemplateUndoJudged, TemplateUndoResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RemovedList, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
+import type { QuickClock, AddLinkResult, AttachPrepared, AttachResult, AttachmentOpen, CaseDays, CloseResult, GroupLogResult, GroupLogUndone, QuickAddManyResult, QuickAddResult, QuickUndoResult, TemplateApplyResult, TemplateDoneAsk, TemplateUndoAsk, TemplateUndoJudged, TemplateUndoResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RemovedList, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
-import { blockFactsOf, type CasesRitual } from '@shared/engine/cases'
+import { blockFactsOf, casePlan, type CasesRitual } from '@shared/engine/cases'
 import { newId } from '@shared/model/ids'
 import { newTask } from '@shared/model/requests'
-import { parseQuickDates } from '@shared/quickDates'
+import { dayWord, parseQuickWords, type QuickCategory } from '@shared/quickDates'
+import { quickCategories } from '@shared/quickCategories'
+import { LIST_MAX, quickUndoPartialText } from '@shared/quickList'
+import { NOT_PLACED, notPlacedBefore, quickNowMin } from '@shared/quickSaid'
+import { logicalClock } from '@shared/format'
+import { settingsOn } from '@shared/model/settings'
 import type { CloseHow } from '@shared/model/events'
-import { deepEqual, diffRecords, recordEdit } from '@shared/data/merge'
+import { deepEqual, diffRecords, editStands, inverseEdit, recordEdit } from '@shared/data/merge'
 import { isRaw } from '@shared/data/dayEdits'
 import { hasZjazdImport, sameDayFile, ZJAZD_SKIP_TEXT, zjazdDayRaw, zjazdSkipOf } from '@shared/import/zjazdDay'
 import { zjazdDayFrom, type ZjazdDay, type ZjazdWarning } from '@shared/import/zjazdy'
@@ -32,7 +37,7 @@ import type { GoalsView } from '@shared/engine/goals'
 import { DAYS_VIEW_MAX, type DaysView, type WeekView } from '@shared/engine/week'
 import type { MonthView } from '@shared/engine/calendarViews'
 import { goalsPatchFrom, isMonth } from '@shared/model/goals'
-import { keptOnRestore, rdFrom } from '@shared/model/rd'
+import { keptOnRestore, rdFrom, type RdFile } from '@shared/model/rd'
 import { requestCounters } from '@shared/engine/requests'
 import type { AnyEvent } from '@shared/model/events'
 import { logicalDayOf, placeLogical, weekStart } from '@shared/time/day'
@@ -201,6 +206,32 @@ function cleanEntries(entries: readonly EditEntry[]): EditIn[] {
 /** What became of an edit, as a window reads it. */
 const outcomeOut = (o: StepOutcome): EditOutcome => ({ status: o.status, ...(o.status === 'waiting' || o.status === 'withdrawn' ? { why: o.why } : {}), ...('routineCostKept' in o && o.routineCostKept ? { routineCostKept: true as const } : {}) })
 
+/** One sprawa of a quick capture before it is written: its record (with its block when it has one), the day and the words that say where it stands. */
+interface QuickLine {
+  id: string
+  title: string
+  record: RawRecord
+  /** The day whose axis holds its block; null – none. */
+  date: string | null
+  placed: string | null
+  notPlaced: string | null
+}
+
+/** The sprawy of a quick capture and the days' files the blocks of them need – each day once, as the lines left it. */
+interface QuickDraft {
+  lines: QuickLine[]
+  days: Array<{ date: string; entry: EditEntry; made: RawRecord | null }>
+}
+
+/** What `quickUndo` needs of a pasted list: the entries as written (a day's file, the records – each with the place of its day's entry) and what they made. */
+interface QuickBatch {
+  days: Array<{ entry: EditEntry; made: RawRecord | null }>
+  records: Array<{ entry: EditEntry; made: RawRecord; day: number | null }>
+}
+
+/** How many pasted lists keep their „Cofnij” in the main process (the oldest go first). */
+const QUICK_BATCHES_KEPT = 8
+
 export class DataHub {
   status: DataView['status'] = 'none'
   folder: string | null = null
@@ -211,6 +242,8 @@ export class DataHub {
   private lastSignature = ''
   /** The series the window saw last, of its folder (`records`: a read that fails gives these). */
   private lastSeries: { folder: string | null; records: RawRecord[]; days: Record<string, string> } | null = null
+  /** The pasted lists a „Cofnij” can still take back (N11, D606), by the id `quickAddMany` gave. */
+  private readonly quickBatches = new Map<string, QuickBatch>()
   /** The facts of the days gone by `caseDays` read, by the signature of their logs (T768). */
   private readonly caseDayMemo = new Map<string, { key: string; facts: { gone: string[]; begun: string[] } }>()
   /** How many days `caseDays` folded the facts of (the tests: its memory works). */
@@ -1075,28 +1108,220 @@ export class DataHub {
 
   /**
    * The quick capture (D385, D402): a task of your own – only its title – into „Skrzynka”, from the window „Do skrzynki”
-   * and the bar's field; the words of dates at the title's end („!jutro”, „@pt”, „!20.11” – D409) set its due date and
-   * its date of doing and leave the title. Without an open folder, or without a title – not saved, with why; a folder
-   * away – it waits in the queue as every new record (saved).
+   * and the bar's field; the words at the title's end (`parseQuickWords`: „!jutro”, „@pt”, „!20.11” – D409; a length „1h30”,
+   * „#anal” – its subcategory, D600, D602) set its due date, its date of doing, its estimate and its subcategory and leave
+   * the title. „@jutro 15:00” (D601): the task is put on that day's axis at once, as „Zaplanuj” of one sprawa does (`casePlan`,
+   * nothing pushed apart) – a day gone by, a file of the day or the settings that cannot be read now: saved without a block,
+   * `notPlaced` says why. Without an open folder, or without a title – not saved, with why; a folder away – it waits in the
+   * queue as every new record (saved).
    */
   async quickAdd(title: unknown): Promise<QuickAddResult> {
     const f = this.service?.folder
     if (!f) return { ok: false, error: 'Folder danych nie jest otwarty – nic nie zapisano.', id: null, title: null }
-    const now = f.clock.now()
-    const id = newId()
+    const draft = await this.quickDraft(f, [typeof title === 'string' ? title : ''], f.clock.now())
+    const line = draft.lines[0]
+    if (!line) return { ok: false, error: 'Wpisz, co zapisać.', id: null, title: null }
+    const w = await this.quickWrite(draft, false)
+    return { ok: w.ok, error: w.ok ? null : 'Nie zapisano – spróbuj jeszcze raz.', id: w.ok ? line.id : null, title: w.ok ? line.title : null, ...(w.ok && line.placed && !w.asked ? { placed: line.placed } : {}), ...(w.ok && w.asked ? { asked: true as const } : {}), ...(w.ok && line.notPlaced ? { notPlaced: line.notPlaced } : {}) }
+  }
+
+  /**
+   * A list pasted into the quick capture (N11, D605, D606): each line is taken as `quickAdd` takes a title – the words of dates, the length,
+   * the subcategory, the hour with its block on the axis (the blocks of one day in that day's one edit, as the lines come, nothing pushed apart) –
+   * at most `LIST_MAX` lines, those left without a title (only words) left out; all of it one edit of the queue, one „Cofnij” (`quickUndo` of
+   * the `batch` returned). A line whose hour cannot be put on the axis is saved without a block and counted in `notPlaced`.
+   */
+  async quickAddMany(lines: unknown): Promise<QuickAddManyResult> {
+    const none = (error: string): QuickAddManyResult => ({ ok: false, error, count: 0, notPlaced: 0, batch: null })
+    const f = this.service?.folder
+    if (!f) return none('Folder danych nie jest otwarty – nic nie zapisano.')
+    const titles = (Array.isArray(lines) ? lines : []).filter((x): x is string => typeof x === 'string' && x.trim() !== '').slice(0, LIST_MAX)
+    const draft = titles.length ? await this.quickDraft(f, titles, f.clock.now()) : null
+    if (!draft || !draft.lines.length) return none('Wpisz, co zapisać.')
+    const w = await this.quickWrite(draft, true)
+    if (!w.ok) return none('Nie zapisano – spróbuj jeszcze raz.')
+    return { ok: true, error: null, count: draft.lines.length, notPlaced: draft.lines.filter((l) => l.notPlaced).length, ...(w.asked ? { asked: true as const } : {}), batch: w.batch }
+  }
+
+  /**
+   * The sprawy of `titles` as the quick capture makes them, nothing written yet: each title through its words (a title left empty – no
+   * sprawa), the day's file of a „@dzień godzina” read once and carried from line to line (`casePlan` on what the lines before it left), so
+   * the blocks of a day are one edit of its file. A day, the settings or a placement that cannot be had – the sprawa without its block, why in `notPlaced`.
+   */
+  private async quickDraft(f: DataFolder, titles: readonly string[], now: number): Promise<QuickDraft> {
     const today = logicalDayOf(now)
-    const q = parseQuickDates(typeof title === 'string' ? title : '', today)
-    const raw = newTask(id, now, today, { title: q.title, dueDate: q.dueDate, doDate: q.doDate })
-    if (!raw) return { ok: false, error: 'Wpisz, co zapisać.', id: null, title: null }
-    const out = await this.edit([recordEdit(paths.record('request', id), null, raw)!])
-    const ok = out.every((o) => o.status === 'applied' || o.status === 'waiting')
-    return { ok, error: ok ? null : 'Nie zapisano – spróbuj jeszcze raz.', id: ok ? id : null, title: ok ? String(raw.title) : null }
+    const rd = await this.quickRd(f)
+    const categories = rd ? quickCategories(rd, today) : []
+    const nowMin = quickNowMin(today, now)
+    const origin = new Map<string, RawRecord | null>()
+    const working: Record<string, RawRecord | null> = {}
+    const lines: QuickLine[] = []
+    for (const title of titles) {
+      const q = parseQuickWords(title, today, categories, nowMin)
+      const id = newId()
+      const raw = newTask(id, now, today, { title: q.title, dueDate: q.dueDate, doDate: q.doDate, estimateMin: q.estimateMin, categoryId: q.categoryId })
+      if (!raw) continue
+      const line: QuickLine = { id, title: String(raw.title), record: raw, date: null, placed: null, notPlaced: null }
+      lines.push(line)
+      if (q.startMin == null || !q.doDate) continue
+      const date = q.doDate
+      line.notPlaced = notPlacedBefore(date, q.startMin, now) ?? (rd ? null : NOT_PLACED.settingsUnreadable)
+      if (!line.notPlaced && !(date in working)) {
+        try {
+          const file = (await f.recordView(paths.day(date))) ?? null
+          origin.set(date, file)
+          working[date] = file
+        } catch {
+          line.notPlaced = NOT_PLACED.dayUnreadable
+        }
+      }
+      if (!rd || line.notPlaced) continue
+      const p = casePlan({ record: raw, date, startMin: q.startMin, files: working, rules: settingsOn(rd.settings, date).categories, at: now, begun: () => undefined })
+      const ready = p && !('refused' in p) && recordEdit(paths.day(date), working[date] ?? null, p.days[date]!) != null ? p : null
+      if (!ready) {
+        line.notPlaced = NOT_PLACED.refused
+        continue
+      }
+      working[date] = ready.days[date]!
+      line.record = ready.record
+      line.date = date
+      line.placed = `${dayWord(date, today)} ${logicalClock(q.startMin)}`
+    }
+    const days: QuickDraft['days'] = []
+    for (const date of new Set(lines.flatMap((l) => (l.date ? [l.date] : [])))) {
+      const entry = recordEdit(paths.day(date), origin.get(date) ?? null, working[date]!)
+      if (entry) days.push({ date, entry, made: entry.create ? working[date]! : null })
+    }
+    return { lines, days }
+  }
+
+  /**
+   * The draft written as one edit: the days' files with their blocks first, then each sprawa after the day that holds its block (T923 – the
+   * record only after the day's file). The outcomes read as the window's `outcomeFate`: written or waiting for the folder – saved; a question
+   * about a change on another computer – it waits for the answer (never „try again”: a second Enter would make a second sprawa), no „Cofnij”;
+   * only a refusal or a broken file is no save. `undo` – the written is kept for `quickUndo`; the id of that „Cofnij” comes back.
+   */
+  private async quickWrite(draft: QuickDraft, undo: boolean): Promise<{ ok: boolean; asked: boolean; batch: string | null }> {
+    const dayAt = new Map(draft.days.map((x, i) => [x.date, i]))
+    const records = draft.lines.map((l) => ({ line: l, entry: recordEdit(paths.record('request', l.id), null, l.record)! }))
+    const entries = [...draft.days.map((x) => x.entry), ...records.map((r) => (r.line.date != null && dayAt.has(r.line.date) ? { ...r.entry, after: [dayAt.get(r.line.date)!] } : r.entry))]
+    const out = await this.edit(entries)
+    const ok = out.every((o) => o.status === 'applied' || o.status === 'waiting' || o.status === 'conflict' || o.status === 'removedElsewhere' || o.status === 'changedElsewhere')
+    // Any entry put or waiting for the folder – the block stands; a question about one of them (the day's file, the sprawa) – nothing is „put” yet:
+    // the answer „ich wersja” takes the sprawa with its block (the record goes after the day's file), so it is said as waiting, never „Dodano na oś”.
+    const asked = ok && out.some((o) => o.status !== 'applied' && o.status !== 'waiting')
+    let batch: string | null = null
+    if (ok && !asked && undo) {
+      batch = newId()
+      this.quickBatches.set(batch, { days: draft.days.map((x) => ({ entry: x.entry, made: x.made })), records: records.map((r) => ({ entry: r.entry, made: r.line.record, day: r.line.date != null ? (dayAt.get(r.line.date) ?? null) : null })) })
+      // Only the latest few lists can be taken back: a „Cofnij” is offered for minutes, not for good.
+      for (const old of [...this.quickBatches.keys()].slice(0, -QUICK_BATCHES_KEPT)) this.quickBatches.delete(old)
+    }
+    return { ok, asked, batch }
+  }
+
+  /**
+   * „Cofnij” of a pasted list (N11, D606, D607): each sprawa the list made is taken away only while it stands as the save made it (`editStands` –
+   * the record whole); a day's file is turned back only while the fields the save set hold (the blocks of the list; the blocks of others stay)
+   * AND every sprawa of the list tied to that day goes – one that stays (changed since) keeps the day, and then all the sprawy of the list on that
+   * day stay with it (a list never plans a sprawa again – no old day to follow, as in `undoGroup`), counted in `kept`: never a sprawa pointing at a block that was taken off, nor a block of the list left without its sprawa.
+   * A sprawa gone already is no one's to take. One edit for all of it; nothing that stands – `ok` with 0. The list is given back for another
+   * „Cofnij” only when nothing of the edit was written nor waits for a question (all entries refused); a question of the queue about a change
+   * on another computer is `asked` – the list is spent (the answer decides, as for a save).
+   */
+  async quickUndo(batch: unknown): Promise<QuickUndoResult> {
+    const b = typeof batch === 'string' ? this.quickBatches.get(batch) : undefined
+    const fail = (error: string, again = false): QuickUndoResult => ({ ok: false, error, undone: 0, kept: 0, ...(again ? { again: true as const } : {}) })
+    const f = this.service?.folder
+    // Nothing was tried: the list stays for another „Cofnij” (the line of the bar and of the window keeps its button).
+    if (!f) return fail('Folder danych nie jest otwarty – nic nie cofnięto.', b != null)
+    if (!b || typeof batch !== 'string') return fail('Tego zapisu nie da się już cofnąć.')
+    this.quickBatches.delete(batch)
+    const view = async (rel: string): Promise<RawRecord | null> => ((await f.recordView(rel)) as RawRecord | undefined) ?? null
+    const back: EditEntry[] = []
+    const recordAt: number[] = []
+    let undone = 0
+    let kept = 0
+    try {
+      // Each sprawa of the list: gone already, standing as the save made it, or changed since.
+      const state: Array<{ now: RawRecord | null; stands: boolean }> = []
+      for (const r of b.records) {
+        const now = await view(r.entry.rel)
+        state.push({ now, stands: now != null && editStands(r.entry, now, r.made) })
+      }
+      const dayAt: Array<number | null> = []
+      for (const [i, d] of b.days.entries()) {
+        const now = await view(d.entry.rel)
+        const tiedStay = b.records.some((r, j) => r.day === i && state[j]!.now != null && !state[j]!.stands)
+        const inv = !tiedStay && editStands(d.entry, now, d.made) ? inverseEdit(d.entry, now, d.made) : null
+        dayAt.push(inv ? back.push(inv) - 1 : null)
+      }
+      for (const [j, r] of b.records.entries()) {
+        const { now, stands } = state[j]!
+        if (!now) continue
+        const inv = stands && (r.day == null || dayAt[r.day] != null) ? inverseEdit(r.entry, now, r.made) : null
+        if (!inv) {
+          kept++
+          continue
+        }
+        recordAt.push(back.push(r.day != null ? { ...inv, after: [dayAt[r.day]!] } : inv) - 1)
+        undone++
+      }
+    } catch {
+      // A read failed before anything was written: the list is given back for another „Cofnij”.
+      this.quickBatches.set(batch, b)
+      return fail('Nie cofnięto – spróbuj jeszcze raz.', true)
+    }
+    let out: EditOutcome[] = []
+    try {
+      out = back.length ? await this.edit(back) : []
+    } catch {
+      // The edit threw: whether any of it was written is not known – the list is spent, never offered again (the user looks at the list).
+      return fail('Nie wiadomo, co cofnięto – sprawdź listę spraw.')
+    }
+    const saved = (o: { status: string }) => o.status === 'applied' || o.status === 'waiting'
+    const asked = (o: { status: string }) => o.status === 'conflict' || o.status === 'removedElsewhere' || o.status === 'changedElsewhere'
+    if (out.length && !out.some((o) => saved(o) || asked(o))) {
+      this.quickBatches.set(batch, b)
+      return fail('Nie cofnięto – spróbuj jeszcze raz.', true)
+    }
+    if (out.some((o) => !saved(o) && !asked(o))) {
+      // Only a part was written: the real count – only what was written, not what waits for a question – and what became of the rest; the list is spent.
+      const of = (pick: (o: { status: string }) => boolean) => recordAt.filter((i) => out[i] != null && pick(out[i]!)).length
+      const done = of(saved)
+      const refused = of((o) => !saved(o) && !asked(o))
+      return { ok: false, error: quickUndoPartialText({ done, total: undone + kept, kept, waiting: of(asked), refused, dayRefused: refused === 0 }), undone: done, kept }
+    }
+    return { ok: true, error: null, undone, kept, ...(out.some(asked) ? { asked: true as const } : {}) }
+  }
+
+  /** The settings file as the quick capture reads it (the subcategories of „#…”, the rules of the day's block); null – not readable now. */
+  private async quickRd(f: DataFolder): Promise<RdFile | null> {
+    try {
+      return rdFrom(((await f.recordView(SETTINGS_FILE)) ?? undefined) as RawRecord | undefined)
+    } catch {
+      return null
+    }
+  }
+
+  /** The subcategories „#…” may name, in the order of the tree, as the settings of today have them (the preview under the field – D600). */
+  async quickCategories(): Promise<QuickCategory[]> {
+    const f = this.service?.folder
+    const rd = f ? await this.quickRd(f) : null
+    return rd ? quickCategories(rd, logicalDayOf(f ? f.clock.now() : Date.now())) : []
   }
 
   /** The logical day of the clock `quickAdd` saves with (D454: the preview of the words of dates counts from it, not from the window's clock). */
   quickToday(): string {
+    return this.quickClock().today
+  }
+
+  /** The day and the logical minute of that clock, taken at one moment – the preview counts both from it (T869, D604). */
+  quickClock(): QuickClock {
     const f = this.service?.folder
-    return logicalDayOf(f ? f.clock.now() : Date.now())
+    const at = f ? f.clock.now() : Date.now()
+    const today = logicalDayOf(at)
+    return { today, nowMin: quickNowMin(today, at) }
   }
 
   /** What a day's evening ritual says about „Sprawy” (D383, D384, D402). */

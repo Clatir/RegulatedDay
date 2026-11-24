@@ -43,7 +43,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; remindersNotice?: boolean; opened?: string[]; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>; openQuick?: () => void; timerHook?: (c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null } = {}) {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; remindersNotice?: boolean; opened?: string[]; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>; quickUndo?: (batch: string) => Promise<{ ok: boolean; error: string | null; undone: number; kept: number }>; openQuick?: () => void; timerHook?: (c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null } = {}) {
   // `now` is the wall clock; setting it moves the monotonic one by the same step (time passes), `jump` moves the wall clock
   // alone (Windows sets the time back or forward – the monotonic clock goes on).
   const clock = {
@@ -114,6 +114,7 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
       batterySaver: () => o.batterySaver ?? false,
       backup: () => (o.backupFailed ? { failed: { error: 'plik zajęty' } } : null),
       ...(o.quickAdd ? { quickAdd: o.quickAdd } : {}),
+      ...(o.quickUndo ? { quickUndo: o.quickUndo } : {}),
       ...(o.openQuick ? { openQuick: o.openQuick } : {})
     })
   const w = build()
@@ -2698,11 +2699,134 @@ describe('szybki zapis „+” – potwierdzenie w pasku (D470)', () => {
     expect(w.current().note).toMatchObject({ text: 'Dodano do Skrzynki: Kup mleko', ok: true })
   })
 
+  it('wklejona lista z pola okna / panelu (N11, D606): linia „Dodano 5 spraw · Cofnij” 15 min; „Cofnij” woła cofnięcie listy i mówi, co poszło i co zostało', async () => {
+    const undone: string[] = []
+    const { w, clock } = await make({
+      quickUndo: async (batch) => {
+        undone.push(batch)
+        return { ok: true, error: null, undone: 3, kept: 2 }
+      }
+    })
+    await w.refresh()
+    await w.quickListSaid('Dodano 5 spraw', 'b1')
+    expect(w.current().lines.find((l) => l.id === 'quick:b1')).toMatchObject({ text: 'Dodano 5 spraw', actions: [{ id: 'undo', label: 'Cofnij' }] })
+    // Still there before the 15 minutes pass, gone after.
+    clock.now += 14 * 60_000
+    await w.refresh()
+    expect(w.current().lines.some((l) => l.id === 'quick:b1')).toBe(true)
+    await w.act('line', 'quick:b1|undo', 'bar')
+    expect(undone).toEqual(['b1'])
+    expect(w.current().lines.some((l) => l.id.startsWith('quick:'))).toBe(false)
+    expect(w.current().note).toMatchObject({ text: 'Cofnięto 3 sprawy · 2 sprawy zmienione od tego czasu – zostały', ok: true })
+    // The second click on a line that is gone does nothing; the line of an older list is no „Cofnij” of the newer one.
+    await w.act('line', 'quick:b1|undo', 'bar')
+    expect(undone).toEqual(['b1'])
+    await w.quickListSaid('Dodano 2 sprawy', 'b2')
+    await w.quickListSaid('Dodano 3 sprawy', 'b3')
+    await w.act('line', 'quick:b2|undo', 'bar')
+    expect(undone).toEqual(['b1'])
+    clock.now += 16 * 60_000
+    await w.refresh()
+    expect(w.current().lines.some((l) => l.id.startsWith('quick:'))).toBe(false)
+  })
+
+  it('lista z okienka „Do skrzynki” (batch null) i „Cofnij”, którego nie da się wykonać: pasek mówi tylko zdanie / powód, bez linii', async () => {
+    const { w } = await make({ quickUndo: async () => ({ ok: false, error: 'Tego zapisu nie da się już cofnąć.', undone: 0, kept: 0 }) })
+    await w.refresh()
+    await w.quickListSaid('Dodano 5 spraw · 1 bez miejsca na osi', null)
+    expect(w.current().note).toMatchObject({ text: 'Dodano 5 spraw · 1 bez miejsca na osi', ok: true })
+    expect(w.current().lines.some((l) => l.id.startsWith('quick:'))).toBe(false)
+    await w.quickListSaid('Dodano 2 sprawy', 'b9')
+    await w.act('line', 'quick:b9|undo', 'bar')
+    expect(w.current().note).toMatchObject({ text: 'Tego zapisu nie da się już cofnąć.' })
+    expect(w.current().note).not.toHaveProperty('ok')
+  })
+
+  it('„Cofnij” listy odmówione w całości (paczka oddana – `again`) albo rzucające: linia zostaje z „Cofnij” (bez „Cofam…”), pasek mówi powód; bez `again` linia znika (runda 2)', async () => {
+    let mode: 'again' | 'throws' | 'gone' = 'again'
+    const { w, clock } = await make({
+      quickUndo: async () => {
+        if (mode === 'throws') throw new Error('EIO')
+        return mode === 'again' ? { ok: false, error: 'Nie cofnięto – spróbuj jeszcze raz.', undone: 0, kept: 0, again: true } : { ok: false, error: 'Tego zapisu nie da się już cofnąć.', undone: 0, kept: 0 }
+      }
+    })
+    await w.refresh()
+    await w.quickListSaid('Dodano 3 sprawy', 'b1')
+    await w.act('line', 'quick:b1|undo', 'bar')
+    expect(w.current().lines.find((l) => l.id === 'quick:b1')).toMatchObject({ actions: [{ id: 'undo', label: 'Cofnij' }] })
+    expect(w.current().note).toMatchObject({ text: 'Nie cofnięto – spróbuj jeszcze raz.' })
+    // The same click again within half a second is a double click – the test lets time pass between them.
+    clock.now += 2_000
+    mode = 'throws'
+    await w.act('line', 'quick:b1|undo', 'bar')
+    expect(w.current().lines.find((l) => l.id === 'quick:b1')).toMatchObject({ actions: [{ id: 'undo', label: 'Cofnij' }] })
+    expect(w.current().note!.text).toContain('Nie cofnięto')
+    clock.now += 2_000
+    mode = 'gone'
+    await w.act('line', 'quick:b1|undo', 'bar')
+    expect(w.current().lines.some((l) => l.id.startsWith('quick:'))).toBe(false)
+  })
+
+  it('„Cofnij” listy odmówione w całości, gdy linia wygasła w trakcie cofania (runda 3): wraca na minutę, dopóki nie zajęła jej nowsza lista', async () => {
+    let expire = true
+    const holder: { w?: Awaited<ReturnType<typeof make>>['w']; clock?: Awaited<ReturnType<typeof make>>['clock'] } = {}
+    const made = await make({
+      quickUndo: async () => {
+        if (expire) {
+          holder.clock!.now += 16 * 60_000
+          await holder.w!.refresh()
+        }
+        return { ok: false, error: 'Nie cofnięto – spróbuj jeszcze raz.', undone: 0, kept: 0, again: true }
+      }
+    })
+    holder.w = made.w
+    holder.clock = made.clock
+    await made.w.refresh()
+    await made.w.quickListSaid('Dodano 3 sprawy', 'b1')
+    await made.w.act('line', 'quick:b1|undo', 'bar')
+    // The 15 minutes ran out during the undo, nothing newer took the line's place: it is back, with its button.
+    expect(made.w.current().lines.find((l) => l.id === 'quick:b1')).toMatchObject({ actions: [{ id: 'undo', label: 'Cofnij' }] })
+    // A newer list in the meantime keeps its place: the old line does not push it away.
+    made.clock.now += 2_000
+    expire = false
+    await made.w.quickListSaid('Dodano 2 sprawy', 'b2')
+    expect(made.w.current().lines.filter((l) => l.id.startsWith('quick:')).map((l) => l.id)).toEqual(['quick:b2'])
+  })
+
+  it('„Cofnij” listy, gdy kolejka pyta o zmianę z innego komputera (D607): pasek mówi, że cofnięcie czeka na odpowiedź – nie „spróbuj jeszcze raz”', async () => {
+    const { w } = await make({ quickUndo: async () => ({ ok: true, error: null, undone: 3, kept: 0, asked: true }) })
+    await w.refresh()
+    await w.quickListSaid('Dodano 3 sprawy', 'b1')
+    await w.act('line', 'quick:b1|undo', 'bar')
+    expect(w.current().note).toMatchObject({ text: 'Cofnięcie czeka na odpowiedź o zmianie z innego komputera', ok: true })
+  })
+
   it('pasek powtarza tytuł zapisany przez folder (zwrócony z zapisu), nie liczy go od nowa z surowego tekstu i zegara paska', async () => {
     const { w } = await make({ quickAdd: async () => ({ ok: true, error: null, title: 'Tytuł z folderu' }) })
     await w.refresh()
     await w.act('quickAdd', 'Kup mleko !jutro', 'bar')
     expect(w.current().note).toMatchObject({ text: 'Dodano do Skrzynki: Tytuł z folderu', ok: true })
+  })
+
+  it('szybki zapis z godziną (D601): pasek mówi, gdzie sprawa stanęła, albo dlaczego nie stanęła na osi', async () => {
+    const { w } = await make({ quickAdd: async () => ({ ok: true, error: null, title: 'Raport', placed: 'jutro 15:00' }) })
+    await w.refresh()
+    await w.act('quickAdd', 'Raport @jutro 15:00', 'bar')
+    expect(w.current().note).toMatchObject({ text: 'Dodano na oś: Raport – jutro 15:00', ok: true })
+    await w.quickSaid('Raport', { notPlaced: 'ten dzień już minął' })
+    expect(w.current().note).toMatchObject({ text: 'Zapisano: Raport – nie postawiono na osi: ten dzień już minął', ok: true })
+    // The same line from the bar's own field (the folder's answer) – and a long title is cut to 40 characters whatever the reason.
+    const long = `Zadzwonić ${'x'.repeat(100)}`
+    const asked = await make({ quickAdd: async () => ({ ok: true, error: null, title: long, notPlaced: 'ta godzina już minęła' }) })
+    await asked.w.refresh()
+    await asked.w.act('quickAdd', long, 'bar')
+    const text = asked.w.current().note!.text
+    expect(text).toBe(`Zapisano: Zadzwonić ${'x'.repeat(29)}… – nie postawiono na osi: ta godzina już minęła`)
+    // The queue asks about the day's file: waiting for the answer, not „Dodano na oś” (the answer „ich wersja” takes the block).
+    await w.quickSaid('Raport', { asked: true })
+    expect(w.current().note).toMatchObject({ text: 'Zapisano: Raport – czeka na odpowiedź o zmianie z innego komputera', ok: true })
+    await w.quickSaid('Raport', { placed: 'dziś 15:00' })
+    expect(w.current().note).toMatchObject({ text: 'Dodano na oś: Raport – dziś 15:00' })
   })
 })
 

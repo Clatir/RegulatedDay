@@ -32,7 +32,7 @@ beforeEach(() => {
     widgetAction: () => Promise.resolve(null as never),
     barClose: () => undefined,
     panelTouch: () => undefined,
-    quickToday: () => Promise.resolve('2026-11-20'),
+    quickToday: () => Promise.resolve({ today: '2026-11-20', nowMin: null }),
     barLayout: () => undefined,
     barDrag: () => undefined,
     onBarDragOver: () => () => undefined

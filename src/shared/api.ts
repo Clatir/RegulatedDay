@@ -12,6 +12,7 @@ import type { MonthView } from './engine/calendarViews'
 import type { GoalsPatch } from './model/goals'
 import type { RitualValue, RitualView } from './engine/ritual'
 import type { CasesRitual } from './engine/cases'
+import type { QuickCategory } from './quickDates'
 import type { ResultCode } from './engine/timer'
 import type { GroupSkip } from './engine/groupEdit'
 import type { DayRun, DoneSkipWhy } from './engine/templateApply'
@@ -128,8 +129,11 @@ export const CH = {
   openAttachments: 'rd:openAttachments',
   showAttachment: 'rd:showAttachment',
   quickAdd: 'rd:quickAdd',
+  quickAddMany: 'rd:quickAddMany',
+  quickUndo: 'rd:quickUndo',
   quickClose: 'rd:quickClose',
   quickToday: 'rd:quickToday',
+  quickCategories: 'rd:quickCategories',
   onQuickShown: 'rd:onQuickShown',
   quickShortcut: 'rd:quickShortcut',
   onQuickShortcut: 'rd:onQuickShortcut',
@@ -159,6 +163,48 @@ export interface QuickAddResult {
   error: string | null
   id: string | null
   title: string | null
+  /** D601: put on the axis at once – „jutro 15:00” (its day and hour); absent – not asked for or not put. */
+  placed?: string
+  /** D601: the queue asks about the day's file (a change on another computer) – saved, the block waits for the answer (never „placed”). */
+  asked?: true
+  /** D601: „@jutro 15:00” asked for, but the block was not put (saved in „Skrzynka” with its date) – why („ten dzień już minął”). */
+  notPlaced?: string
+}
+
+/**
+ * A pasted list saved (N11, D605, D606): how many sprawy it made, how many of them asked for a place on the axis that could not be given
+ * (saved without a block – the reasons of `quickSavedText`), the id of its „Cofnij” (`quickUndo`); `asked` – the queue asks about a change
+ * on another computer (saved, waiting – no „Cofnij”, `batch` null). Refused – why (no folder, no title, a file that could not be written).
+ */
+export interface QuickAddManyResult {
+  ok: boolean
+  error: string | null
+  count: number
+  notPlaced: number
+  asked?: true
+  batch: string | null
+}
+
+/** „Cofnij” of a pasted list: how many sprawy went away and how many stayed because they (or their day's file) changed since the save (D606). */
+export interface QuickUndoResult {
+  ok: boolean
+  error: string | null
+  undone: number
+  kept: number
+  /** The queue asks about a change on another computer (D607): the undo waits for the answer – said as such, never „try again”. */
+  asked?: true
+  /** Nothing of the undo was written and the list was given back (a refusal in full, a read that failed): „Cofnij” can be pressed again (runda 2). */
+  again?: true
+}
+
+/**
+ * The clock the quick capture saves with (D454, T869, D604) as the main process has it: the logical day and the logical minute now (null – not
+ * known). The preview under the field counts from both, never from the window's own `Date.now()` – the day goes over at 04:00 and the night after
+ * the date (00:00–03:59) counts for a bare „@15:00”.
+ */
+export interface QuickClock {
+  today: string
+  nowMin: number | null
 }
 
 /**
@@ -1041,8 +1087,9 @@ export interface RdApi {
    */
   daysView(dates: string[], opts?: { energy?: boolean }): Promise<DaysView>
   /**
-   * The month shown in „Kalendarz” ('RRRR-MM', D418): each of its days with its blocks and its load (`monthDayOf`, D429); the
-   * cell with the all-day events – `monthCell`.
+   * The month shown in „Kalendarz” ('RRRR-MM', D418): each of its days with its blocks, its load (`monthDayOf`, D429) and the energy
+   * of its weakest pool – `MonthDay.energy`, the summary `DayEnergy` of its curve (N21, T2600–T2602, T2607); the curve itself never
+   * leaves the main process. The cell with the all-day events – `monthCell`.
    */
   monthView(month: string): Promise<MonthView>
   /** A month's goals ('RRRR-MM', D356): as rd.json holds them, the month before's, the progress „x z y” so far. */
@@ -1113,10 +1160,16 @@ export interface RdApi {
   showAttachment(id: string): Promise<AttachmentOpen>
   /** The quick capture (D385): a task of your own with this title into „Skrzynka” (the window „Do skrzynki”). */
   quickAdd(title: string): Promise<QuickAddResult>
+  /** A pasted list (N11, D605): each line as the quick capture takes a title, at most 50, in one edit; its „Cofnij” is `quickUndo(batch)`. */
+  quickAddMany(lines: string[]): Promise<QuickAddManyResult>
+  /** „Cofnij” of a pasted list saved by `quickAddMany` (D606): its sprawy and blocks taken away – except what changed since. */
+  quickUndo(batch: string): Promise<QuickUndoResult>
   /** The window „Do skrzynki” closes (Esc, after Enter saved). */
   quickClose(): void
   /** The logical day by the main process's clock – the one the quick capture saves with; the preview of its words counts from it (D454). */
-  quickToday(): Promise<string>
+  quickToday(): Promise<QuickClock>
+  /** The subcategories „#…” of the quick capture may name, in the order of the tree of „Kategorie” (D600) – the preview names the one chosen. */
+  quickCategories(): Promise<QuickCategory[]>
   /** The window „Do skrzynki” was shown by the shortcut: its field takes the keys. */
   onQuickShown(cb: () => void): () => void
   /** The global shortcut of the quick capture on this computer, for the settings (D402: „Skrót zajęty przez inny program”). */

@@ -10,7 +10,8 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
+import { dayFileFrom } from '../../src/shared/model/plan'
 import { addDays } from '../../src/shared/time/zone'
 import { dataOpen, launch, viewPage, withMainLog } from './app'
 
@@ -150,6 +151,122 @@ test('szybki zapis z „!jutro” (D409): podgląd „Termin: jutro” pod polem
         ['Odebrać paczkę', false],
         ['Zapłacić rachunek', true]
       ])
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('szybki zapis z długością, godziną i podkategorią (N10, D600–D602): podgląd mówi wszystko, blok stoi na osi jutra', async () => {
+  const { app, page, userData, errors } = await launch({ data: true })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('bar-main')).toBeVisible({ timeout: 30_000 })
+      await dataOpen(page)
+      const today = await page.evaluate(() => window.rd.dataView().then((v) => v.today))
+      const tomorrow = addDays(today, 1)
+      await showAsShortcut(app)
+      const q = await quickPage(app)
+      await q.getByTestId('quick-title').fill('Raport @jutro 15:00 1h #anal')
+      await expect(q.getByTestId('quick-preview')).toHaveText('Wykonać: jutro 15:00 · 1 h · Analiza')
+      await q.getByTestId('quick-title').press('Enter')
+      await expect.poll(() => tasks(app)).toEqual([expect.objectContaining({ title: 'Raport', estimateMin: 60, categoryId: 'analiza', doDate: tomorrow, day: tomorrow, block: expect.any(String) })])
+      const [task] = await tasks(app)
+      await expect
+        .poll(async () => {
+          const raw = (await page.evaluate((d) => window.rd.dayFiles([d]), tomorrow))[tomorrow]
+          return raw ? dayFileFrom(raw, tomorrow).blocks.map((b) => ({ id: b.id, categoryId: b.categoryId, startMin: b.startMin, durationMin: b.durationMin })) : []
+        })
+        .toEqual([{ id: task!.block, categoryId: 'analiza', startMin: 900, durationMin: 60 }])
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+/** A paste of `text` into the field as the clipboard brings it (the test cannot press Ctrl+V into a page it does not own the clipboard of). */
+async function pasteText(field: Locator, text: string): Promise<void> {
+  await field.focus()
+  await field.evaluate((el, t) => {
+    const data = new DataTransfer()
+    data.setData('text/plain', t)
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+  }, text)
+}
+
+const LIST = '- Kup mleko\r\n\r\n- [ ] Raport @jutro 15:00 1h #anal\n1. Telefon do mamy\n* Zamówić karmę !jutro\n• Oddać książki'
+
+test('wklejona lista (N11, D605, D606): okienko pyta, Enter zapisuje 5 spraw z blokiem jednej z nich i zostaje z „Cofnij”, „Cofnij” zdejmuje wszystkie; Esc – jeden tytuł', async () => {
+  const { app, page, userData, errors } = await launch({ data: true })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('bar-main')).toBeVisible({ timeout: 30_000 })
+      await dataOpen(page)
+      const today = await page.evaluate(() => window.rd.dataView().then((v) => v.today))
+      const tomorrow = addDays(today, 1)
+      const blocks = () =>
+        page.evaluate((d) => window.rd.dayFiles([d]), tomorrow).then((files) => (files[tomorrow] ? dayFileFrom(files[tomorrow], tomorrow).blocks.map((b) => b.startMin) : []))
+      await showAsShortcut(app)
+      const q = await quickPage(app)
+      const field = q.getByTestId('quick-title')
+      await pasteText(field, LIST)
+      // The field takes no text; the question stands under it.
+      await expect(field).toHaveValue('')
+      await expect(q.getByTestId('quick-paste')).toHaveText('Dodać 5 spraw? · Enter · Esc – jeden tytuł')
+      await field.press('Enter')
+      await expect.poll(async () => (await tasks(app)).map((t) => t.title).sort()).toEqual(['Kup mleko', 'Oddać książki', 'Raport', 'Telefon do mamy', 'Zamówić karmę'])
+      expect((await tasks(app)).find((t) => t.title === 'Raport')).toMatchObject({ estimateMin: 60, categoryId: 'analiza', doDate: tomorrow, day: tomorrow })
+      await expect.poll(blocks).toEqual([900])
+      // The window stays – with the line and its „Cofnij”.
+      await expect(q.getByTestId('quick-list-text')).toHaveText('Dodano 5 spraw')
+      await expect.poll(() => quickWindow(app)).toMatchObject({ visible: true })
+      await q.getByTestId('quick-undo').click()
+      await expect(q.getByTestId('quick-list-text')).toHaveText('Cofnięto 5 spraw')
+      await expect.poll(() => tasks(app)).toEqual([])
+      await expect.poll(blocks).toEqual([])
+
+      // Esc: the paste becomes one title in the field – the window stays; Enter saves that one title.
+      await pasteText(field, 'Wizyta\n- u lekarza')
+      await expect(q.getByTestId('quick-paste')).toHaveText('Dodać 2 sprawy? · Enter · Esc – jeden tytuł')
+      await field.press('Escape')
+      await expect(field).toHaveValue('Wizyta - u lekarza')
+      await expect(q.getByTestId('quick-paste')).toHaveCount(0)
+      expect(await quickWindow(app)).toMatchObject({ visible: true })
+      await field.press('Enter')
+      await expect.poll(async () => (await tasks(app)).map((t) => t.title)).toEqual(['Wizyta - u lekarza'])
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('wklejona lista w polu „+ Skrzynka” paska okna (N11): Enter zapisuje, pasek mówi „Dodano 3 sprawy · Cofnij”, „Cofnij” zdejmuje wszystkie', async () => {
+  const { app, page, userData, errors } = await launch({ data: true })
+  try {
+    await withMainLog(userData, async () => {
+      const bar = page.getByTestId('bar-main')
+      await expect(bar).toBeVisible({ timeout: 30_000 })
+      await dataOpen(page)
+      await bar.getByTestId('bar-quick').click()
+      const field = bar.getByTestId('bar-quick-title')
+      await pasteText(field, '- jeden\n- dwa\n- trzy')
+      await expect(bar.getByTestId('bar-quick-paste')).toHaveText('Dodać 3 sprawy? · Enter · Esc – jeden tytuł')
+      await field.press('Enter')
+      await expect.poll(async () => (await tasks(app)).map((t) => t.title).sort()).toEqual(['dwa', 'jeden', 'trzy'])
+      await expect(bar.getByTestId('bar-quick-field')).toHaveCount(0)
+      // The line of the list stands after every line of the day: at some hours of the run a morning question or water fill the bar and it waits in „⋯”.
+      const line = page.locator('[data-testid^="bar-line-quick:"]')
+      const more = bar.getByTestId('bar-group-more')
+      await expect(async () => {
+        if (!(await line.count()) && (await more.count()) && (await more.getAttribute('aria-pressed')) !== 'true') await more.click()
+        await expect(line).toContainText('Dodano 3 sprawy', { timeout: 1_000 })
+      }).toPass({ timeout: 10_000 })
+      await page.getByTestId('bar-act-quick-undo').click()
+      await expect.poll(() => tasks(app)).toEqual([])
+      await expect(line).toHaveCount(0)
     })
     expect(errors).toEqual([])
   } finally {
