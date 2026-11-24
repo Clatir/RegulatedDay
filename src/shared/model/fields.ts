@@ -43,8 +43,8 @@ export interface ToggleField {
 }
 
 /**
- * „Bloki poza komputerem jednym ciągiem” (D553–D556), „… przy komputerze …” (D570) and „Bufory dekompresji” (D569): off by default;
- * „Podpowiedzi długości z historii” (N6, D569, D625): on by default, at once.
+ * „Bloki poza komputerem jednym ciągiem” (D553–D556), „… przy komputerze …” (D570), „Bufory dekompresji” (D569) and the proposal
+ * „Gorszy dzień” (D570): off by default; „Podpowiedzi długości z historii” (N6, D569, D625): on by default, at once.
  */
 export const TOGGLE_FIELDS: readonly ToggleField[] = [
   {
@@ -68,6 +68,14 @@ export const TOGGLE_FIELDS: readonly ToggleField[] = [
     path: ['decompress', 'on'],
     label: 'Bufory dekompresji',
     hint: 'Po długim bloku o wysokim koszcie głowy, emocji albo bodźców plan wstawia blok „Dekompresja” (regeneracja, 5–20 min) i przesuwa kolejne elastyczne; stałe zostają. Bufor zaczyna się sam po końcu bloku; usuniesz go jak każdy blok.',
+    group: 'plan'
+  },
+  // „Gorszy dzień” (D570, D587): the proposal after the check-in off by default; the button of the morning plan is there always.
+  {
+    key: 'worseDay.propose',
+    path: ['worseDay', 'propose'],
+    label: 'Proponuj „Gorszy dzień” po check-inie',
+    hint: 'Gdy check-in pokaże gorzej w co najmniej dwóch pulach (wynik puli 65 albo niżej – jedno „tak” albo dwa razy „trochę”), plan poranny zaproponuje „Gorszy dzień” – rutyny w wersji na gorsze dni i wcześniejszą granicę. Przycisk „Gorszy dzień” w planie porannym działa zawsze.',
     group: 'plan'
   },
   // „Podpowiedzi długości z historii” (N6, D569, D625): on by default, beside its thresholds; only a hint of the window – at once.
@@ -146,6 +154,7 @@ export const NUMBER_FIELDS: readonly NumberField[] = [
   { key: 'solitudeAfterMin', scope: 'general', path: ['solitudeAfterMin'], label: 'Samotność po kontakcie dłuższym niż', kind: 'duration', range: GENERAL_RANGES.solitudeAfterMin, offAllowed: true, group: 'care', hint: 'Po tak długim kontakcie z ludźmi aplikacja sugeruje chwilę samotności; 0 wyłącza sugestię.' },
   { key: 'decompress.minLengthMin', scope: 'dated', path: ['decompress', 'minLengthMin'], label: 'Bufor dekompresji po bloku od', kind: 'duration', range: RANGES.decompressLengthMin, group: 'plan', hint: 'Długość bloku (z „Przedłuż”), po którym stoi bufor dekompresji.' },
   { key: 'decompress.minCost', scope: 'dated', path: ['decompress', 'minCost'], label: 'Bufor dekompresji przy koszcie od', kind: 'integer', range: RANGES.decompressCost, unit: '/h', group: 'plan', hint: 'Koszt głowy, emocji albo bodźców na godzinę (1 = 3 punkty energii na godzinę).' },
+  { key: 'worseDay.earlierMin', scope: 'dated', path: ['worseDay', 'earlierMin'], label: 'O ile wcześniej kończyć pracę w gorszy dzień', kind: 'duration', range: RANGES.worseDayEarlierMin, group: 'plan', hint: 'Tyle wcześniej staje granica po przyjęciu „Gorszego dnia” – nie przed chwilą przyjęcia; 0 zostawia granicę.' },
   { key: 'parallelMax', scope: 'general', path: ['parallelMax'], label: 'Najwięcej bloków naraz', kind: 'integer', range: GENERAL_RANGES.parallelMax, group: 'plan', hint: 'Blok przeciągnięty na inny biegnie razem z nim; ponad tę liczbę staje zaraz po grupie.' },
   // The thresholds of „Podpowiedzi długości z historii” (N6, D569: thresholds in the settings; D625).
   { key: 'durationHintBlocks', scope: 'general', path: ['durationHintBlocks'], label: 'Podpowiedź długości od bloków', kind: 'integer', range: GENERAL_RANGES.durationHintBlocks, group: 'plan', hint: 'Tyle zakończonych bloków podkategorii w ostatnich 90 dniach potrzeba do podpowiedzi.' },

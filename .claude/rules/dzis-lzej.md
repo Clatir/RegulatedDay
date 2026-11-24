@@ -25,6 +25,7 @@ paths:
 - Plan poranny: `MorningHeader` (zwijanie i „Zatwierdź” to dwa osobne przyciski – przycisk w przycisku nie istnieje; jedno `busy` z `MorningPlan` dla niego i dla `Boundary`); „Zatwierdź” w nagłówku tylko, gdy
   stoi krok „plan” (nie Strona B, cele ani check-in) i jest propozycja granicy bez zatwierdzenia; zdarzenie z `approveEvents`, to samo co przycisk na dole
   karty (`boundary-approve` zostaje w `MorningPlan.tsx` z napisem „Zatwierdź” – pilnuje go `ritual-close-undo.test.ts`).
+  W nagłówku zawsze `WorseDayHead`, na górze kroku planu `WorseDayProposal` (N4 – reguły `gorszy-dzien.md`).
 - Karta rutyny: „Zakończ rutynę (N z M)” (`routine-card-save`, wyłączone przy N = 0), „✓ Wszystkie” bez zmian.
 - Szkic nowego bloku (`BlockEditor newBlock`): nagłówek „Nowy blok”, `block-draft-hint` (`newBlock.discards` = `escapeDraft`: po ruszeniu szkicu albo rozpoczętym zapisie bez „Esc – odrzuć”); okienko „Tygodnia” – `week-new-hint`; „Tydzień” i „3 dni” – `week-hint`
   nad siatką (bez „Agendy”); notatka – `note-esc-hint` „Esc – cofnij zmiany”, w „Powiększ” „Esc – pomniejsz” (Esc zachowuje się jak dotąd, P11).

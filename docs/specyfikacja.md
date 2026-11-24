@@ -258,6 +258,19 @@ Każda funkcja korzysta z tych samych definicji dnia i czasu; nie ma drugiego sp
   ile opóźnia prognozowany koniec pracy, bez czasu potwierdzonego potem jako praca, najwyżej do maksimum. Przy „Odcinam
   się” opóźnienie liczy się względem prognozy sprzed kliknięcia. Odpoczynek zaplanowany wcześniej albo wypadający w
   wolnej przerwie planu granicy nie przesuwa.
+- „Gorszy dzień” (D587, „Plan poranny”): od chwili przyjęcia do jego „Cofnij” propozycja granicy jest wcześniejsza o ustawienie
+  (60 min), nie wcześniej niż chwila przyjęcia zaokrąglona w górę do pełnej minuty i do 5 min (propozycja już wcześniejsza zostaje);
+  minuty przed przyjęciem i po „Cofnij” liczą się według propozycji, która wtedy obowiązywała, a minuty między nimi – według
+  wcześniejszej. Granicę zatwierdzoną przed przyjęciem (także samą, jeszcze niezapisaną) przesuwa nowe zatwierdzenie według tej samej
+  reguły – dopiero gdy plan dnia jest zapisany. Plan czekający na folder zostawia granicę i dymek gorszego dnia to mówi; przy pytaniu o
+  zmianę z innego komputera dymku gorszego dnia nie ma – jest tylko pytanie u góry okna, a granica zostaje. „Cofnij” zmienia granicę
+  tylko wtedy, gdy wciąż obowiązuje zatwierdzenie zapisane przy przyjęciu – ostatnie niecofnięte według kolejności zapisów (D588):
+  wraca zatwierdzenie sprzed niego (tego samego rodzaju). Gdy obowiązuje zatwierdzenie sprzed przyjęcia, nic się nie zmienia i dymek o
+  granicy milczy; każde inne zatwierdzenie (Twoje, samo przy starcie pierwszego bloku pracy, z paska) zostaje, a dymek je nazywa
+  („zostaje: granica 15:00 – zmienisz ją w karcie granicy”). Gdy zatwierdzenie z przyjęcia nie doszło jeszcze z logu komputera, który
+  przyjął gorszy dzień, „Cofnij” cofa rutyny i znak, granicy nie rusza, a dymek mówi: „granicę cofniesz ręcznie w karcie granicy – log
+  komputera, który przyjął gorszy dzień, jeszcze nie doszedł”. Nic nie jest blokowane. „Wstałeś później?” skraca pracę do tej samej,
+  wcześniejszej granicy (przesuniętej raz).
 - Gdy prognoza dnia nie mieści się, plan poranny ostrzega i proponuje wymianę albo wyjątek granicy. Ostrzeżenie pojawia się, gdy praca kończy się po maksimum albo gdy twardy koniec projektów wypada przed końcem pracy, czyli minimum regeneracji nie zmieści się przed porą snu. Możesz zostawić plan bez zmian; minuty po maksimum będą wtedy przekroczeniem.
 - Wyjątek granicy w planie porannym przesuwa maksimum o wybraną wartość, do +3 h, z powodem wybranym jednym kliknięciem (np. NFP, CPI, FOMC). Propozycja granicy liczy się wtedy od nowego maksimum. Trzeci wyjątek w miesiącu daje ostrzeżenie, ale jest możliwy.
 - Po każdej prośbie, w dowolnym trybie i także dopisanej po fakcie, aplikacja sprawdza prognozowany koniec pracy. Gdy wypada po granicy, w pasku raz pojawia się znacznik wariantów.
@@ -929,6 +942,22 @@ Wersja 1.0 zawiera wszystko, co działa jako hamulec w czasie i energii, wraz z 
 - Kolejność: niezamknięte dni, w poniedziałek „Strona B tygodnia”, „Cele na <miesiąc>” (dopóki cele miesiąca nie są ustawione albo krok pominięty, D360), pytania o objawy, plan. Każdy krok można pominąć.
 - Plan: dzień ze szkicu z wyjątkami, pobudka tego dnia, bloki przeniesione z wczoraj („z wczoraj +2 h 10”), pytania warstwy sesji i świąt, wybór próśb z kolejki, „Rozłóż w luki” (D624, niżej), wariant „Ułóż pod energię” (D369, D374, D377 – „Konwencje interfejsu”), propozycja granicy, prognoza czasu i energii.
 - Wyjątek granicy na dni z danymi makro, propozycja lżejszego dnia po zjeździe stacjonarnym, zapowiedź tygodnia przesunięcia sesji.
+- „Gorszy dzień” (D570, D587): przycisk w nagłówku planu porannego – zawsze, w każdym kroku. Przyjęcie jednym kliknięciem przełącza
+  każdą rutynę dnia, która się nie zaczęła, nie minęła (jej planowany koniec jest jeszcze przed Tobą) i ma wersję na gorsze dni, na tę wersję (jak
+  przełącznik wersji, D473); propozycja granicy staje wcześniej o ustawienie „O ile wcześniej kończyć pracę w gorszy dzień” (60 min),
+  a zatwierdzona granica – nowym zatwierdzeniem o tyle samo; nigdy przed chwilą przyjęcia (zaokrągloną w górę do pełnej minuty i do
+  5 min). Dymek mówi, co zmieniono („Gorszy dzień: 2 rutyny na gorsze dni, granica 16:00 → 15:00 · Cofnij”; zatwierdzenie, którego nie
+  udało się zapisać – „granica 16:00 bez zmian – nie zapisano zatwierdzenia”; zapisane, ale bez powiązania ze znakiem – „… – granicę
+  cofniesz ręcznie w karcie granicy”), a w nagłówku zamiast przycisku stoi znak „Gorszy dzień”
+  z „Cofnij”; karta granicy mówi, o ile propozycja jest teraz wcześniej. „Cofnij” (z dymku albo ze znaku, także później i na innym
+  komputerze) przywraca tylko to, co od przyjęcia się nie zmieniło: rutynę nadal na gorsze dni, której od tego czasu nie zacząłeś,
+  nie zaparkowałeś, nie odwołałeś ani nie zapisałeś; granicę – tylko póki obowiązuje zatwierdzenie z przyjęcia – do zatwierdzenia sprzed
+  niego (D588, „Model dnia”, „Granica i koniec pracy”); resztę zostawia i mówi o tym (inne zatwierdzenie – „zostaje: granica 15:00 –
+  zmienisz ją w karcie granicy”). Minuty od przyjęcia do „Cofnij”
+  zostają ocenione według wcześniejszej propozycji (gorszy dzień nie znika z historii dnia), a propozycja nie wraca tego dnia. Z
+  ustawieniem „Proponuj „Gorszy dzień” po check-inie” (domyślnie wyłączone) po check-inie z gorszym stanem w co najmniej dwóch pulach
+  (wynik puli 65 albo niżej – jedno „tak” albo dwa razy „trochę”) plan ma linię „Gorszy dzień? Check-in: gorzej – głowa, bodźce ·
+  Przyjmij · ×” („×” – nie dziś). Nic nie jest blokowane.
 - **„Rozłóż w luki” (D624, N5):** przycisk przy wyborze spraw, póki „Dziś” ma sprawę bez bloku. Niezaplanowane zadania i prośby z „Dziś” (prośby tylko z modułem próśb), w kolejności listy, idą po kolei w pierwszą wolną lukę dnia, która mieści cały szacunek; luka kurczy się za każdą, a sprawa, która nie mieści się nigdzie, jest pominięta i policzona – kolejne dalej szukają. Luka to wolne miejsce prognozy na pierwszym planie (to samo, które znajduje „następne wolne miejsce”; blok w tle jej nie zajmuje), od teraz (minuta zaokrąglona w górę do 5 min, nie przed pobudką) do maksimum dnia (z przesunięciem sesją, wykładem albo wyjątkiem; nie dalej niż pora snu). Start na siatce 5 min; sprawa staje tylko tam, gdzie prognoza ją pokaże, a żaden inny blok się nie przesunie – bez rozsuwania (D367), z buforem przejścia między kategoriami; sprawa kategorii zaczynanej w tle staje na początku pierwszej luki i jej nie zmniejsza. Przy włączonych buforach dekompresji (N7) bufor ciężkiej sprawy też musi zmieścić się w luce, nie przesuwając innych bloków. Zadanie to blok swojej kategorii, prośba – blok próśb (jak „Zaplanuj”). Miejsca liczą się w chwili zapisu na pliku dnia przeczytanym właśnie wtedy (blok dopisany na innym komputerze się liczy), a sprawa zaplanowana w międzyczasie albo na dniu, którego nie da się teraz odczytać, jest pominięta („już zaplanowana” – jej blok zostaje na miejscu), zdjęta z „Dziś” – „nie na Dziś”. Jedna zmiana pliku dnia i spraw; linia „Dziś” „Zaplanowano 3 sprawy w lukach · 1 się nie zmieściła · najniższa energia 52 → 44 · Cofnij” („Cofnij” zdejmuje bloki, sprawy wracają na „Dziś” bez bloku); nic nie zaplanowano – dymek „Żadna sprawa nie mieści się w lukach dnia” (albo „Nic nie zaplanowano w lukach · pominięto 1: już zaplanowana”), bez linii i zapisu.
 - „Strona B tygodnia” trwa minutę i jest wstępna, dopóki niedziela nie jest zamrożona. Pokazuje pomiar „czy to pomaga”:
   liczbę użyć „Odcinam się” i sygnałów przeciążenia, dotrzymane granice (x z y), godziny projektów (osobno nauka i
@@ -2269,6 +2298,7 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
 | Bloki przy komputerze jednym ciągiem (D570, D620) | wyłączone | włączone, wyłączone | wspólne, z datą obowiązywania (liczone w minucie planowanego końca bloku) |
 | Podpowiedzi długości z historii (N6, D569, D625; „Plan dnia”): „zwykle trwa … · Przyjmij” przy „Długość” bloku i „Szacunek” sprawy | włączone; od 5 bloków, różnica od 20 % i co najmniej 10 min | włączone, wyłączone; 3–30 bloków; 5–100%; 5–60 min | wspólne, działa od razu |
 | Bufory dekompresji (D386, D403, D569; „Plan dnia”): po bloku od progu długości (plan z „Przedłuż”) i kosztu głowy, emocji albo bodźców blok „Dekompresja” 5–20 min | wyłączone; próg 45 min i koszt 3/h | włączone, wyłączone; długość 15 min – 4 h; koszt 1–100/h | wspólne, z datą obowiązywania (próg liczony w chwili planowanego końca bloku) |
+| „Gorszy dzień” (D570, D587; „Plan dnia”): propozycja po check-inie z gorszym stanem (wynik puli ≤ 65) w co najmniej dwóch pulach; o ile wcześniej kończyć pracę w gorszy dzień (przycisk w planie porannym jest zawsze) | propozycja wyłączona; 60 min | włączona, wyłączona; 0–4 h | wspólne, z datą obowiązywania (minuty – w chwili przyjęcia) |
 | Pasek pulpitu pod oknami (D229) i jego miejsce, pulsowanie paska przy 5 i 0 min (D225), tryb sesji, tryb zajęć | włączony, lewy dolny róg, wyłączone, tak, tak | — | ten komputer |
 | Zawsze na wierzchu (D291) | wyłączone | wyłączone, pasek pulpitu, pasek pulpitu i panel ikony | ten komputer |
 | Powiadomienia Windows i dźwięki dla każdego zdarzenia (także świętowania), głośność | powiadomienia włączone tylko według D230, dźwięk wyłączony, głośność 50% | 0–100% | ten komputer |

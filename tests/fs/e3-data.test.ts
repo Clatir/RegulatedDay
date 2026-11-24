@@ -191,13 +191,15 @@ describe('folder danych dla okna głównego', () => {
   it('zdarzenia z okna: tylko dozwolone rodzaje, sprawdzone jak linia logu; migawka „od dziś” dostaje ustawienia z tej chwili', async () => {
     write(paths.settings, { schema: 1, settings: [{ id: 's', from: DAY, at: placeLogical(DAY, 9 * 60), patch: { boundaryBufferMin: 25 } }] })
     const { folder } = await make()
-    await folder.userEvents([{ k: 'boundary.approve', day: DAY, boundary: placeLogical(DAY, 17 * 60), auto: false }])
+    // The ids of the events written come back, in their order (D587: „Gorszy dzień” keeps the id of the approval it wrote).
+    const ids = await folder.userEvents([{ k: 'boundary.approve', day: DAY, boundary: placeLogical(DAY, 17 * 60), auto: false }])
+    expect(ids).toHaveLength(1)
     await folder.userEvents([{ k: 'day.snapshot', day: DAY, dayType: 'zwykly', reason: 'today' }])
     await expect(folder.userEvents([{ k: 'block.start', day: DAY, block: 'x', planned: {} }])).rejects.toThrow(/nie pochodzi z okna/)
     await expect(folder.userEvents([{ k: 'boundary.exception', day: DAY, minutes: -5 }])).rejects.toThrow(/minutes/)
     await expect(folder.userEvents([{ k: 'day.snapshot', day: DAY, dayType: 'świąteczny', reason: 'type' }])).rejects.toThrow(/typ dnia/)
     const events = readLogText(readFileSync(join(dataDir, paths.log(DAY, 'pca')), 'utf8')).events
-    expect(events.find((e) => e.k === 'boundary.approve')).toMatchObject({ dom: 'timer', auto: false })
+    expect(events.find((e) => e.k === 'boundary.approve')).toMatchObject({ id: ids[0], dom: 'timer', auto: false })
     const snap = events.find((e) => e.k === 'day.snapshot') as unknown as { settings: { boundaryBufferMin: number }; at: number }
     expect(snap.settings.boundaryBufferMin).toBe(25)
     expect(snap.at).toBe(placeLogical(DAY, 10 * 60))

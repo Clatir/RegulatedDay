@@ -22,6 +22,9 @@ export function gridOf(date: string): Grid {
 /** The index of an instant, rounded to the nearest minute (may fall outside the day). */
 export const idxOf = (g: Grid, at: number): number => Math.round((at - g.start) / MINUTE)
 
+/** The index of an instant rounded up – the first whole minute not before it (a floor never before a click, D587). */
+export const idxCeilOf = (g: Grid, at: number): number => Math.ceil((at - g.start) / MINUTE)
+
 /** The instant of an index. */
 export const atOf = (g: Grid, idx: number): number => g.start + idx * MINUTE
 

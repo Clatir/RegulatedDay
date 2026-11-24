@@ -124,7 +124,18 @@ export interface RulesSettings {
   deskChain: boolean
   /** „Bufory dekompresji” (D386, D403, D569): after a block long and costly enough the plan has a block „Dekompresja” (`engine/decompress.ts`). Off by default. */
   decompress: DecompressRules
+  /** „Gorszy dzień” (D570, D587): its proposal after a check-in worse in two pools or more (off by default) and how much earlier work ends. */
+  worseDay: WorseDayRules
   signalEffects: { glassesSenses: number; rockingAll: number; questionsEmotions: number }
+}
+
+/**
+ * „Gorszy dzień” (D570, D587, N4): `propose` – after the day's check-in worse in two pools or more the morning plan proposes it (the
+ * button „Gorszy dzień” is there always); `earlierMin` – how much earlier its acceptance puts the boundary (`engine/worseDay.ts`).
+ */
+export interface WorseDayRules {
+  propose: boolean
+  earlierMin: number
 }
 
 /**
@@ -183,6 +194,7 @@ export const DEFAULT_SETTINGS: RulesSettings = {
   awayChain: false,
   deskChain: false,
   decompress: { on: false, minLengthMin: 45, minCost: 3 },
+  worseDay: { propose: false, earlierMin: 60 },
   signalEffects: { glassesSenses: 10, rockingAll: 5, questionsEmotions: 10 }
 }
 
@@ -209,7 +221,8 @@ export const RANGES = {
   signalEffect: [0, 30],
   cost: [-100, 100],
   decompressLengthMin: [15, 4 * H],
-  decompressCost: [1, 100]
+  decompressCost: [1, 100],
+  worseDayEarlierMin: [0, 4 * H]
 } as const
 
 /** One change of the shared settings (rd.json „settings”), applying from `from` (and, for „od dziś”, from `at`). */
@@ -455,6 +468,7 @@ export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SET
   const rem = isPlain(r.reminders) ? r.reminders : {}
   const sig = isPlain(r.signalEffects) ? r.signalEffects : {}
   const dec = isPlain(r.decompress) ? r.decompress : {}
+  const worse = isPlain(r.worseDay) ? r.worseDay : {}
   return {
     dayTypes: Object.fromEntries(DAY_TYPES.map((t) => [t, dayTypeFrom(dt[t], fallback.dayTypes[t])])) as Record<DayTypeId, DayTypeParams>,
     weekTypes: weekTypesFrom(r.weekTypes, fallback.weekTypes),
@@ -481,6 +495,10 @@ export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SET
     awayChain: typeof r.awayChain === 'boolean' ? r.awayChain : fallback.awayChain,
     deskChain: typeof r.deskChain === 'boolean' ? r.deskChain : fallback.deskChain,
     decompress: decompressFrom(dec, fallback.decompress),
+    worseDay: {
+      propose: typeof worse.propose === 'boolean' ? worse.propose : fallback.worseDay.propose,
+      earlierMin: int(worse.earlierMin, RANGES.worseDayEarlierMin, fallback.worseDay.earlierMin)
+    },
     signalEffects: {
       glassesSenses: int(sig.glassesSenses, RANGES.signalEffect, fallback.signalEffects.glassesSenses),
       rockingAll: int(sig.rockingAll, RANGES.signalEffect, fallback.signalEffects.rockingAll),

@@ -17,6 +17,7 @@ import type { DayContext } from './day'
 import { planWithBuffers } from './decompress'
 import type { DayFacts } from './facts'
 import { withSeriesOccurrences } from './series'
+import { worsePeriodsOf } from '../model/worseDay'
 
 export interface PlanInputs {
   changes: readonly SettingsChange[]
@@ -92,7 +93,9 @@ export function dayContextOf(inp: PlanInputs, src: DaySource, holidays: HolidayL
     routineCosts,
     // Only for a change of the day's settings an older version wrote without the body (T1532): the context goes to the helper process
     // as a copy, and the list of changes is no part of a day otherwise.
-    ...(src.events.some(lacksBody) ? { changes: inp.changes } : {})
+    ...(src.events.some(lacksBody) ? { changes: inp.changes } : {}),
+    // „Gorszy dzień” (D587): the proposal of the boundary earlier in each period of its mark (a period taken back too, T2543).
+    ...(src.dayFile?.worseDay ? { worseDays: worsePeriodsOf(src.dayFile.worseDay) } : {})
   }
 }
 
