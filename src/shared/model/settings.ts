@@ -117,6 +117,11 @@ export interface RulesSettings {
    * planned end – done, without a question – and the next one begins by itself at once (`auto.ts`). Off by default.
    */
   awayChain: boolean
+  /**
+   * „Bloki przy komputerze jednym ciągiem” (D570, D620): a block at the computer that reaches its planned end while you are active ends
+   * there, done, and the next flexible block at the computer within 5 min begins by itself (`deskChainOf` in `auto.ts`). Off by default.
+   */
+  deskChain: boolean
   /** „Bufory dekompresji” (D386, D403, D569): after a block long and costly enough the plan has a block „Dekompresja” (`engine/decompress.ts`). Off by default. */
   decompress: DecompressRules
   signalEffects: { glassesSenses: number; rockingAll: number; questionsEmotions: number }
@@ -176,6 +181,7 @@ export const DEFAULT_SETTINGS: RulesSettings = {
   idleThresholdMin: 10,
   absenceQuestionMin: 30,
   awayChain: false,
+  deskChain: false,
   decompress: { on: false, minLengthMin: 45, minCost: 3 },
   signalEffects: { glassesSenses: 10, rockingAll: 5, questionsEmotions: 10 }
 }
@@ -473,6 +479,7 @@ export function settingsFrom(raw: unknown, fallback: RulesSettings = DEFAULT_SET
     idleThresholdMin: int(r.idleThresholdMin, RANGES.idleThresholdMin, fallback.idleThresholdMin),
     absenceQuestionMin: int(r.absenceQuestionMin, RANGES.absenceQuestionMin, fallback.absenceQuestionMin),
     awayChain: typeof r.awayChain === 'boolean' ? r.awayChain : fallback.awayChain,
+    deskChain: typeof r.deskChain === 'boolean' ? r.deskChain : fallback.deskChain,
     decompress: decompressFrom(dec, fallback.decompress),
     signalEffects: {
       glassesSenses: int(sig.glassesSenses, RANGES.signalEffect, fallback.signalEffects.glassesSenses),

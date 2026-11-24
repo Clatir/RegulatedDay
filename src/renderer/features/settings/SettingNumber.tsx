@@ -111,6 +111,7 @@ export function SettingNumber({
   className,
   errorPlacement,
   wheel,
+  onShown,
   ...rest
 }: {
   field: { kind: FieldKind; range: readonly [number, number]; offAllowed?: boolean; label?: string; unit?: string }
@@ -120,11 +121,18 @@ export function SettingNumber({
   errorPlacement?: ErrorPlacement
   /** The mouse wheel over the field changes the number (N8) – the fields of a cost: one save per gesture, or at every turn (`WheelMode`, T2551). */
   wheel?: WheelMode
+  /** The number the wheel turned and shows instead of `value` (null – none): told on every change, for what says what the number would do before it is saved (N19). */
+  onShown?: (v: number | null) => void
   'aria-label'?: string
   'data-testid'?: string
 }) {
   const commit = (v: number) => checkField(field, v).ok && onCommit(v)
   const turned = useWheelValue(value, field.range, commit, wheel)
+  const told = useRef(onShown)
+  told.current = onShown
+  useEffect(() => {
+    told.current?.(turned.shown)
+  }, [turned.shown])
   return (
     <span className="inline-flex items-center gap-1.5">
       <CommitField

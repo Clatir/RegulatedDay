@@ -52,6 +52,7 @@ const END_RULE: Record<string, string> = {
   fixedNoReaction: 'koniec według planu',
   awayPlan: 'koniec według planu',
   awayChain: 'koniec według planu (jednym ciągiem)',
+  deskChain: 'koniec według planu (jednym ciągiem przy komputerze)',
   groupPlan: 'koniec według planu'
 }
 const EXPLAIN: Record<string, string> = { work: 'praca', project: 'projekt', rest: 'odpoczynek' }

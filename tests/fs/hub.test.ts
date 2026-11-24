@@ -309,3 +309,17 @@ describe('pytanie „usunąłeś tutaj, zmieniono tam” pokazuje zmiany (A3-09,
     ])
   })
 })
+
+describe('kliknięcie timera przez hub (N1, D621, T2862)', () => {
+  it('odmowa „moved” – także próby (koszt kroku „Przedłuż”) – niesie kod i blok z przodu', async () => {
+    const refusal = { ok: false, why: 'w międzyczasie zaczął się inny blok', confirm: null, code: 'moved', front: 'b' }
+    const folder = { timerClick: async () => refusal }
+    const service = { folder, stop: async () => undefined, refreshGuardPlan: async () => undefined, hint: () => undefined, tick: async () => undefined } as unknown as DataService
+    const { hub } = hubWith({ start: async () => service })
+    writeFileSync(join(dirA, paths.settings), '{"schema":1}')
+    expect(await hub.open(dirA)).toBe(true)
+    expect(await hub.timer({ a: 'extend', minutes: 30, probe: true })).toMatchObject({ ok: false, code: 'moved', front: 'b' })
+    expect(await hub.timer({ a: 'next' })).toMatchObject({ ok: false, code: 'moved', front: 'b' })
+  })
+})
+
