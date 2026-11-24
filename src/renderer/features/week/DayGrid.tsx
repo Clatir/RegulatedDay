@@ -9,7 +9,7 @@
  * of two and more drags the whole group (D531): every selected block by the same difference of days and minutes, each shown at its new place
  * while it is held (`week-group-drop`), Esc ends it, the drop is `dragDayGroup` (with Ctrl – the group's copy).
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent, type ReactNode } from 'react'
 import type { HorizonBlock, HorizonDay } from '@shared/engine/week'
 import type { Costs } from '@shared/model/categories'
 import { logicalClock, plDate } from '@shared/format'
@@ -43,6 +43,8 @@ import { attachBadge, attachBadgeTitle, dayPlace } from '../attachments/attachVi
 import { EnergyStrip, STRIP_WIDTH } from './EnergyStrip'
 import { costRoom, TileCost } from '../plan/TileCost'
 import { hasEnergy } from '../plan/energyDraw'
+import { ReserveCauseHint, ReserveRing, reserveTileProps, useReserveHint } from '../plan/ReserveCauseHint'
+import { reserveCauses, type ReserveCause } from '@shared/engine/reserveCause'
 import { NewBlockPopover } from './NewBlockPopover'
 import { freeHourStart, newBlockDay, NO_NEW_DAY_TEXT, dayWakeMin } from './weekNew'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
@@ -159,7 +161,8 @@ export function DayGrid({
   onCardOpened,
   opened,
   onPicking,
-  allDays
+  allDays,
+  reserveAction
 }: {
   days: HorizonDay[]
   from: number
@@ -178,6 +181,8 @@ export function DayGrid({
   onPicking?: (open: boolean) => void
   /** The days as counted, with the blocks of the unchecked calendars too (`days` has them taken out): the free hour of Ctrl+N is looked for among all. */
   allDays?: readonly HorizonDay[]
+  /** An action under the words of a tile's reserve hint (N20 – a slot for the page; N3 puts „Wstaw regenerację tutaj” there); `date` – the column's day. Left out – the hint only tells. */
+  reserveAction?: (id: string, cause: ReserveCause, date: string) => ReactNode
 }) {
   const { rd, routines, requests, templates } = useData()
   // UX19 (P28): the right button on a day's heading – „Zastosuj szablon ▸” for that day, through the flow of „Zastosuj do…”.
@@ -615,6 +620,9 @@ export function DayGrid({
             group={group}
             rename={rename}
             openWait={openWait}
+            reserveAction={reserveAction}
+            counted={allDays?.find((x) => x.date === d.date)?.blocks}
+            lifted={() => lift.current != null || flight != null}
           />
         ))}
         {pick && (
@@ -721,7 +729,10 @@ function DayColumn({
   tight,
   group,
   rename,
-  openWait
+  openWait,
+  reserveAction,
+  lifted,
+  counted
 }: {
   day: HorizonDay
   index: number
@@ -749,6 +760,11 @@ function DayColumn({
   rename: TimelineRename
   /** N9: the grid's one wait for a second click on a name. */
   openWait: OpenWait
+  reserveAction?: (id: string, cause: ReserveCause, date: string) => ReactNode
+  /** The day's blocks before the filter of the calendars (`allDays`): a block of an unchecked calendar is still a cause – no visible tile has its ring then. Left out – `day.blocks`. */
+  counted?: readonly HorizonBlock[]
+  /** Whether any block of the grid is held (a drag, a copy with Ctrl): no tile opens its hint then. */
+  lifted?: () => boolean
 }) {
   const lanes = useMemo(() => laneLayout(day.blocks), [day.blocks])
   // D410: the attachments of each block (its own, the template's, the series') – 📎N on its tile.
@@ -772,6 +788,8 @@ function DayColumn({
   const shown = held ?? (waiting ? { startMin: waiting.startMin, endMin: waiting.startMin + waiting.durationMin } : null)
   // Not at every move of a drag: once a day's energy (T1293).
   const stripped = useMemo(() => hasEnergy(day.energy), [day.energy])
+  // N20: the block at whose time a pool first goes below the reserve – once a day's curve and blocks, not in the loop of the tiles; a block that is not on the curve (missed, parked, cancelled) is never one.
+  const causes = useMemo(() => reserveCauses(day.energy, (counted ?? day.blocks).filter((b) => b.state !== 'missed' && b.state !== 'parked' && b.state !== 'cancelled')), [day.energy, day.blocks, counted])
   return (
     <div
       className={cx('relative overflow-hidden rounded-sm border-x border-line', day.when === 'today' ? 'bg-panel' : 'bg-transparent')}
@@ -792,7 +810,7 @@ function DayColumn({
       <EnergyStrip date={day.date} track={day.energy} lo={lo} ppm={ppm} height={height} />
       <div className="absolute inset-y-0 right-0" style={{ left: stripped ? STRIP_WIDTH + 1 : 0 }} data-testid={`week-blocks-${day.date}`}>
         {lanes.map(({ item, lane, lanes: n }) => (
-          <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} marked={group.isMarked(day.date, item.id)} onPick={(e) => group.mark(day.date, item.id, e)} onContext={(at) => group.context(day.date, item.id, at)} rename={renameOf(rename, day.date, item.id)} openWait={openWait} onCosts={(costs, ask) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs, { ask })} />
+          <BlockBox key={item.id} block={item} reserve={causes.get(item.id)} reserveAction={reserveAction} lifted={lifted} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} marked={group.isMarked(day.date, item.id)} onPick={(e) => group.mark(day.date, item.id, e)} onContext={(at) => group.context(day.date, item.id, at)} rename={renameOf(rename, day.date, item.id)} openWait={openWait} onCosts={(costs, ask) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs, { ask })} />
         ))}
         {/* The place a new or a dragged block would take – where the blocks stand, right of the strip (T1288). */}
         {shown && <RangeBand range={shown} lo={lo} ppm={ppm} testId={held ? 'week-range' : 'week-range-waiting'} />}
@@ -839,8 +857,10 @@ function DropBand({ range, lo, ppm, denied, note, testId = 'week-drop', of }: { 
 }
 
 /** A block on the axis: its colour as on the day's axis; not begun on a day gone by – dimmed; taken off – dimmed too. A click opens its day (D366). */
-export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, marked = false, onPick, onContext, onCosts, rename, openWait }: { block: HorizonBlock; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; marked?: boolean; onPick?: (e: { ctrlKey: boolean; shiftKey: boolean }) => void; onContext?: (at: { x: number; y: number }) => void; onCosts?: (costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>; rename?: BlockRename; openWait?: OpenWait }) {
+export function BlockBox({ block: b, reserve, reserveAction, lifted, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, marked = false, onPick, onContext, onCosts, rename, openWait }: { block: HorizonBlock; reserve?: ReserveCause; reserveAction?: (id: string, cause: ReserveCause, date: string) => ReactNode; lifted?: () => boolean; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; marked?: boolean; onPick?: (e: { ctrlKey: boolean; shiftKey: boolean }) => void; onContext?: (at: { x: number; y: number }) => void; onCosts?: (costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>; rename?: BlockRename; openWait?: OpenWait }) {
   const { top, height } = blockSpan(b, lo, ppm)
+  // N20: the hint of a block that is a cause (its ring is in the tile's style).
+  const reserveHint = useReserveHint(() => reserve != null)
   const color = blockColor(b.categoryId, names)
   const dim = b.state === 'missed' || b.state === 'parked' || b.state === 'cancelled'
   const name = blockName(b.named, names)
@@ -893,6 +913,7 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
     else openPick({ page: 'today', day: date }, { kind: 'block', id: b.id, date })
   }
   const renamable = rename?.info != null
+  const menu = onContext ? menuBind(onContext) : undefined
   const tile = (
     <button
       type="button"
@@ -913,9 +934,12 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
         rename.start()
       }}
       // D528: the right button and the menu key – the menu of the selection (this block is put into it first).
-      {...(onContext ? menuBind(onContext) : {})}
+      {...(menu ? { onContextMenu: menu.onContextMenu } : {})}
+      // N20: the hint of a tile that is a cause (its pointer, focus and Tab) – the key handler of the menu goes on through it. Not while any block of the grid is held.
+      {...reserveTileProps(reserveHint, b.id, reserve, () => lifted?.() === true, menu?.onKeyDown)}
       onPointerDown={(e) => {
         wait.cancel()
+        if (reserve) reserveHint.hide(true)
         grab?.down(e)
       }}
       {...NO_GRID}
@@ -928,6 +952,7 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
       data-marked={marked ? 'true' : undefined}
       data-open-wait={waiting ? 'true' : undefined}
       data-movable={grab ? 'true' : undefined}
+      data-reserve-cause={reserve?.drops[0]?.pool}
       className={cx('group absolute overflow-hidden rounded-[3px] border-l-[3px] px-1 text-left text-[11px] leading-tight', grab ? 'cursor-grab' : 'cursor-pointer', grab?.dragging && 'opacity-40', blockRinged(b.state) && 'ring-1 ring-lamp', marked && 'ring-2 ring-lamp', blockDashed(b.state) && 'border-dashed', b.state === 'cancelled' && 'line-through')}
       // Dimmed by its fill and edge, never its text (as on the day's axis, A8-05).
       style={{
@@ -939,6 +964,8 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
         borderLeftColor: dim ? blockEdgeDim(color) : color
       }}
     >
+      {/* N20: the pool that first goes below the reserve in this block's time – a ring in its colour. */}
+      <ReserveRing cause={reserve} />
       {costAt === 'row' ? (
         <span className="flex items-baseline gap-1 pt-px text-fg">
           <span className="min-w-0 flex-1 truncate" data-tile-name="">
@@ -970,6 +997,11 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
   return (
     <>
       {tile}
+      {reserve && reserveHint.open?.key === b.id && (
+        <ReserveCauseHint id={b.id} cause={reserve} anchor={reserveHint.open.anchor} hint={reserveHint}>
+          {reserveAction?.(b.id, reserve, date)}
+        </ReserveCauseHint>
+      )}
       {rename?.active && rename.info && (
         <TileNameField
           text={rename.info.text}

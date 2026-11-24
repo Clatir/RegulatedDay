@@ -18,6 +18,7 @@ import type { EnergyTrack } from '@shared/engine/energyTrack'
 import type { DragPreview } from '@shared/engine/groupDrag'
 import type { TileCost as TileCostInfo } from '@shared/model/blockCosts'
 import type { Costs } from '@shared/model/categories'
+import type { ReserveCause } from '@shared/engine/reserveCause'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
 import type { DueBadge } from '@shared/engine/caseDates'
 import type { Priority } from '@shared/model/requests'
@@ -35,6 +36,7 @@ import { EnergyLanes } from './EnergyLanes'
 import { hasEnergy } from './energyDraw'
 import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
+import { ReserveCauseHint, ReserveRing, reserveTileProps, useReserveHint } from './ReserveCauseHint'
 import { inParallelZone, tileAt, tileLanes } from './parallelDrag'
 import type { CostAsk } from './costSave'
 import { costRoom, TileCost } from './TileCost'
@@ -89,6 +91,11 @@ export interface TimelineItem {
    * `edit` – a click on it opens the window that changes it (`Timeline.onCosts`).
    */
   cost?: TileCostInfo
+  /**
+   * The pools that first go below the reserve in this block's time (N20): the tile has a ring in the first one's colour and the hint
+   * „Tu głowa schodzi poniżej rezerwy (28 → 19)” (`dayAxis`, `reserveCauses`); absent – not a cause.
+   */
+  reserve?: ReserveCause
 }
 
 /**
@@ -303,6 +310,7 @@ export function Timeline({
   attached,
   onAttachDrop,
   onCosts,
+  reserveAction,
   rename,
   ghost,
   draft,
@@ -389,6 +397,8 @@ export function Timeline({
   onAttachDrop?: (id: string, dt: DataTransfer) => void
   /** The block's own cost set in the window of its tile (D501), or null – the category's again; left out – the cost is only told. */
   onCosts?: (id: string, costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>
+  /** An action under the words of a tile's reserve hint (N20 – a slot; N3 puts „Wstaw regenerację tutaj” there); left out – the hint only tells. */
+  reserveAction?: (id: string, cause: ReserveCause) => ReactNode
   /**
    * The name changed in place (N9, `useTileRename`): a double click on a tile's name starts it, the field stands over the tile's name row while
    * `rename.active` is the tile's id. Left out – a tile's name is only told (the wizard's axis).
@@ -510,6 +520,8 @@ export function Timeline({
     onRange: (r) => onCreate?.(r.startMin, r.endMin - r.startMin)
   })
   const gridBind = onCreate ? grid.bind : {}
+  // N20: the hint of the tile that is a cause (one at a time) – opens under the pointer on it, never while a block is held.
+  const reserveHint = useReserveHint((key) => items.find((x) => x.id === key)?.reserve != null)
   const y = (min: number) => (min - lo) * PPM
   const height = (hi - lo) * PPM
 
@@ -648,6 +660,7 @@ export function Timeline({
       i.cost && costAt && (
         <TileCost cost={i.cost} id={`tile:${i.id}`} testId={`block-${i.id}-cost`} className={className} place={costAt} onChange={onCosts ? (costs, ask) => onCosts(i.id, costs, ask) : undefined} />
       )
+    const menu = onContext ? menuBind((at) => onContext(i.id, at)) : undefined
     return (
       <button
         key={i.id}
@@ -657,6 +670,7 @@ export function Timeline({
         data-lane={lane.lanes > 1 ? `${lane.lane}/${lane.lanes}` : undefined}
         {...NO_GRID}
         data-block-title={i.title}
+        data-reserve-cause={i.reserve?.drops[0]?.pool}
         data-movable={draggable ? 'true' : undefined}
         data-selected={selected === i.id ? 'true' : undefined}
         data-marked={marked?.(i.id) ? 'true' : undefined}
@@ -689,12 +703,15 @@ export function Timeline({
           rename.start(i.id)
         }}
         // D528: the right button and the menu key open the menu of the selection (the screen puts this block into it first).
-        {...(onContext ? menuBind((at) => onContext(i.id, at)) : {})}
+        {...(menu ? { onContextMenu: menu.onContextMenu } : {})}
+        // N20: the hint of a tile that is a cause (its pointer, focus and Tab) – the key handler of the menu goes on through it.
+        {...reserveTileProps(reserveHint, i.id, i.reserve, () => !!dragRef.current, menu?.onKeyDown)}
         // D305: the left button drags a movable block from where it is shown; its start goes on the 5-min grid. D365: from
         // an edge's handle the edge goes (never both at once), a block with no handle under the pointer is moved as before.
         onPointerDown={(e) => {
           if (e.button !== 0) return
           pressed.current = { x: e.clientX, y: e.clientY }
+          if (i.reserve) reserveHint.hide(true)
           const at = (e.target as HTMLElement).dataset.edge
           const edge: DragEdge | null = at === 'top' && topEdge ? 'top' : at === 'end' && endEdge ? 'end' : null
           if (edge == null && !draggable) return
@@ -825,6 +842,8 @@ export function Timeline({
         {...(onAttachDrop && i.attach !== undefined ? tileDrop(i.id, onAttachDrop, dropOver, setDropOver) : {})}
       >
         {i.priority && <PriorityMark priority={i.priority} testId="block-priority" apart />}
+        {/* N20: the pool that first goes below the reserve in this block's time – a ring in its colour. */}
+        <ReserveRing cause={i.reserve} />
         {/* The edges over everything in the tile (z-30 – the cost's label in the corner or shown on hover is z-20): the whole width resizes (D365, D501). */}
         {topEdge && <span data-edge="top" data-testid={`block-${i.id}-edge-top`} className={cx('absolute inset-x-0 top-0 z-30 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
         {endEdge && <span data-edge="end" data-testid={`block-${i.id}-edge-end`} className={cx('absolute inset-x-0 bottom-0 z-30 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
@@ -989,6 +1008,11 @@ export function Timeline({
           </div>
         ))}
       </div>
+      {/* N20: the hint of the tile that is a cause. */}
+      {reserveHint.open && (() => {
+        const at = items.find((x) => x.id === reserveHint.open!.key)
+        return at?.reserve && <ReserveCauseHint id={at.id} cause={at.reserve} anchor={reserveHint.open!.anchor} hint={reserveHint}>{reserveAction?.(at.id, at.reserve)}</ReserveCauseHint>
+      })()}
       {/* D500: the energy beside the axis – four lanes G · E · B · C (`EnergyLanes`). */}
       {hasEnergy(energy) && <EnergyLanes track={energy} lo={lo} ppm={PPM} height={height} nowAt={nowMarker?.at ?? null} nowColor={TONE[nowMarker?.tone ?? 'fg']} />}
     </div>
