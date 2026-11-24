@@ -57,7 +57,8 @@ export function regenWaysOf(state: DayState): Record<string, number> {
     if (min > 0) out[k] = (out[k] ?? 0) + min
   }
   for (const f of state.facts.blocks.values()) {
-    if (f.startedAt == null || f.planned?.categoryId !== REGEN_CATEGORY) continue
+    // A buffer of decompression is no way of regeneration (D386: no reward for it, T2452).
+    if (f.startedAt == null || f.planned?.categoryId !== REGEN_CATEGORY || f.planned.decompress === true) continue
     add(f.planned.variantId ?? REGEN_CATEGORY, ranMinutes(f, state.now))
   }
   for (const d of state.facts.disconnect) add(DISCONNECT_WAY, Math.max(0, Math.min(d.to === OPEN ? state.now : d.to, state.now) - d.from))

@@ -18,7 +18,8 @@ import { planCases, type GroupPlanResult } from '../../store/casesGroup'
 import type { CasePushed } from '../../store/cases'
 import { useData } from '../../store/data'
 import { countDay, type DayModel } from '../../store/day'
-import { addChange, changedPlan } from '../today/dayPush'
+import { addChange, axisSpanOf, changedPlan, type DayChange } from '../today/dayPush'
+import { tellTaken } from '../today/dayActions'
 import { nextFreeStart, type StartWhere } from './casesUi'
 
 /** The sprawy of `items` that „Zaplanuj” puts on the axis, in their order: the done ones are left out (a copy takes every one; one already planned is planned again). */
@@ -29,7 +30,7 @@ export const plannableOf = (items: readonly CaseItem[], copy = false): CaseItem[
  * the day the ones before it made (and pushed), the blocks of the sprawy's own before – not begun – are out of the day (as for one,
  * `planningOf`); a day gone is history, nothing is pushed there. Returns the new blocks and the pushed ones with their last starts.
  */
-export function planningOfGroup(model: DayModel, today: string, rs: readonly RequestRecord[], startMin: number, copy = false): { blocks: PlanBlock[]; pushed: CasePushed[] } {
+export function planningOfGroup(model: DayModel, today: string, rs: readonly RequestRecord[], startMin: number, copy = false): { blocks: PlanBlock[]; pushed: CasePushed[]; taken: Array<{ id: string; caseId: string }>; changes: Array<{ caseId: string; change: Pick<DayChange, 'block' | 'takes'> }> } {
   const own = new Set(
     copy
       ? []
@@ -43,13 +44,32 @@ export function planningOfGroup(model: DayModel, today: string, rs: readonly Req
   const pushes = model.date >= today
   const starts = new Map<string, number>()
   const blocks: PlanBlock[] = []
+  // D582: the buffers of decompression the new blocks are laid on – out of the day the next ones are added to, taken in the same edit.
+  // Each sprawa whose block lies on a taken buffer holds it too (T2489): one left out at the write hands the buffer on to the next one.
+  const taken: Array<{ id: string; caseId: string }> = []
+  const spans: Array<{ buffer: PlanBlock; span: { startMin: number; endMin: number } }> = []
+  const changes: Array<{ caseId: string; change: Pick<DayChange, 'block' | 'takes'> }> = []
   let at = startMin
   for (const r of rs) {
     // D513: a copy is a new sprawa – it has no block of before.
     const block = caseBlock(copy ? { ...r, day: null, block: null } : r, at, model.state.settings.categories)
     const change = addChange(day, block, pushes)
     for (const p of change.pushed) starts.set(p.id, p.startMin)
-    const plan = changedPlan(day.ctx.plan, change).map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b))
+    if (change.takes) {
+      const span = axisSpanOf(day, change.takes.id)
+      if (span) spans.push({ buffer: change.takes, span })
+      taken.push({ id: change.takes.id, caseId: r.id })
+      changes.push({ caseId: r.id, change })
+    }
+    for (const t of spans) {
+      if (t.buffer.id === change.takes?.id || block.startMin == null || block.startMin >= t.span.endMin || block.startMin + block.durationMin <= t.span.startMin) continue
+      taken.push({ id: t.buffer.id, caseId: r.id })
+      changes.push({ caseId: r.id, change: { block, takes: t.buffer } })
+    }
+    const gone = new Set(taken.map((t) => t.id))
+    const plan = changedPlan(day.ctx.plan, change)
+      .filter((b) => !gone.has(b.id))
+      .map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b))
     const ctx = { ...day.ctx, plan }
     day = { ctx, state: computeDay(ctx) }
     blocks.push(block)
@@ -59,7 +79,7 @@ export function planningOfGroup(model: DayModel, today: string, rs: readonly Req
     const block = model.ctx.plan.find((b) => b.id === id)
     return block ? [{ block, startMin }] : []
   })
-  return { blocks, pushed }
+  return { blocks, pushed, taken, changes }
 }
 
 /** The lowest energy of the day before and after a change (D529), as shown – only for a day with a forecast of energy. */
@@ -98,13 +118,23 @@ export interface GroupAxisResult extends GroupPlanResult {
  * blocks are counted without them and written while the day's plan after the change has them (`planCases`).
  */
 export async function planGroupOnAxis(model: DayModel, today: string, items: readonly CaseItem[], startMin: number, copy = false): Promise<GroupAxisResult> {
-  const { pushed } = planningOfGroup(model, today, plannableOf(items, copy).map((x) => x.record), startMin, copy)
+  const { pushed, taken, changes } = planningOfGroup(model, today, plannableOf(items, copy).map((x) => x.record), startMin, copy)
   const r = await planCases(
     items.map((x) => x.record.id),
     model.date,
     startMin,
-    { copy, push: { blocks: pushed, planOf: (file) => dayPlan(model.ctx.snapshot, file) }, seen: (date) => (date === model.date ? model.data.dayFile : undefined) }
+    { copy, push: { blocks: pushed, planOf: (file) => dayPlan(model.ctx.snapshot, file), taken }, seen: (date) => (date === model.date ? model.data.dayFile : undefined) }
   )
+  // D582: the blocks of work of the sprawy written laid on buffers of decompression – told so (T2484).
+  const written = new Set(r.saved ? r.blocks.map((b) => b.id) : [])
+  // Once a buffer – by the first sprawa written that lies on it.
+  const told = new Set<string>()
+  for (const x of changes) {
+    const id = x.change.takes?.id
+    if (!id || !written.has(x.caseId) || told.has(id)) continue
+    told.add(id)
+    tellTaken(model, x.change)
+  }
   return { ...r, energy: r.saved && r.changed > 0 ? lowestEnergyChange(model, r.undo.find((u) => u.rel === paths.day(model.date))?.after) : null }
 }
 

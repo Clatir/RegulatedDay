@@ -15,14 +15,14 @@ import { mayMoveBetween } from '@shared/engine/calendarViews'
 import { moveBetweenDays, movedBlock, stayRuleOf } from '@shared/engine/planEdit'
 import { pushApart, withBlock } from '@shared/engine/pushApart'
 import { plDateWithWeekday } from '@shared/format'
-import type { PlanBlock } from '@shared/model/plan'
+import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
 import { logicalDayOf } from '@shared/time/day'
 import { countedDay, type DayModel } from '../../store/day'
 import { editOf, isSaved, trySaveWith, useData, withOwner, type SendState, outcomeFate } from '../../store/data'
 import { hiddenBlocksAmong } from '../calendars/calendarFilter'
 import { MOVE_GONE_TEXT, movedDay, stayedOf, type Stayed, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
-import { blockNow, putChange, withPushed, type PushedStart } from '../today/dayActions'
-import { axisEndOf, dragChange, onUnsettled, parallelChange, pushedStarts } from '../today/dayPush'
+import { blockNow, putChange, tellTaken, withPushed, withTaken, type PushedStart } from '../today/dayActions'
+import { axisEndOf, dragChange, onUnsettled, parallelChange, pushedStarts, withBufferPushes, type DayChange } from '../today/dayPush'
 import { blockName } from '../plan/blockView'
 import { copyBlockTo } from '../plan/blockCopy'
 import { dayPlace } from '../attachments/attachView'
@@ -124,6 +124,7 @@ export function statusOf(out: readonly EditOutcome[] | null, state: SendState): 
  */
 async function moveWithinDay(m: WeekMove, today: string, at: number): Promise<WeekMoved> {
   let day: WeekPushedDay | null = null
+  let taken: { source: DayModel; c: DayChange } | null = null
   let text: string | null = null
   let same = false
   const state: SendState = { afterSend: false }
@@ -144,16 +145,21 @@ async function moveWithinDay(m: WeekMove, today: string, at: number): Promise<We
     }
     if (onto) text = onto.text
     const c = onto ?? dragChange(source, m.blockId, span, null, span, true)!
-    const starts = pushedStarts(source.ctx.plan, c)
+    // D583 (T2485): with the blocks the buffers of the day after the move push – as in „Dziś”.
+    const starts = pushedStarts(source.ctx.plan, { pushed: withBufferPushes(source, c, useData.getState().rd.settings, file ? dayFileFrom(file, m.from) : null, m.from >= today) })
+    taken = c.takes ? { source, c } : null
     // Its start over the block as the file holds it then (as `draggedBlock` of „Dziś” is saved) – out of its group, the others of
     // it together (D492, T1166) – then the pushed ones.
-    const after = withPushed(dayRaw(file, m.from), m.from, (r) => putChange(r, m.from, source.ctx.plan, { ...c, was }), starts)
+    // D582: the block laid on a buffer of decompression takes it – in the same edit.
+    const after = withPushed(dayRaw(file, m.from), m.from, (r) => withTaken(putChange(r, m.from, source.ctx.plan, { ...c, was }), c.takes), starts)
     const entry = editOf(paths.day(m.from), file, after)
     if (entry) day = { date: m.from, entry, made: entry.create ? after : null, moved: starts.length, hidden: hiddenBlocksAmong(starts.map((s) => s.block)) }
     return [entry]
   }, state)
   if (same) return { status: 'saved', push: null, pushed: 0 }
   const status = statusOf(out, state)
+  const t = taken as { source: DayModel; c: DayChange } | null
+  if (status === 'saved' && t) tellTaken(t.source, t.c)
   const d = day as WeekPushedDay | null
   const said = text
   const parallel = status === 'saved' && d && said != null ? { parallel: { text: said, undo: d.moved === 0 ? { date: d.date, entry: d.entry, made: d.made } : null } } : {}

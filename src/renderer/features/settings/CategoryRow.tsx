@@ -21,7 +21,9 @@ import { CLASS_NAMES, blockColor } from '../plan/blockView'
 import { saveCalendars } from './calendarEdits'
 import { ColorSwatches, CostNumbers, FLAGS, PLACE_OPTIONS, setMeta } from './categoryFields'
 import { saveTree } from './categoryTreeEdits'
+import { categoryKey } from '@shared/model/categoryGroup'
 import { removeSubcategory } from './plannedWithdraw'
+import type { TreeRowsOf } from './useTreeSelection'
 import { VariantRows } from './VariantRows'
 
 export function CategoryRow({
@@ -33,7 +35,8 @@ export function CategoryRow({
   open,
   onToggle,
   save,
-  showArchived
+  showArchived,
+  rows
 }: {
   id: string
   rules: CategoryRules
@@ -45,6 +48,8 @@ export function CategoryRow({
   onToggle: () => void
   save: (patch: Record<string, unknown>) => Promise<boolean>
   showArchived: boolean
+  /** The props of the rows of the selection (D608): the row and its variants; none – no selecting. */
+  rows?: TreeRowsOf
 }) {
   const brightness = useMachine((x) => x.prefs.brightness)
   const meta = rd.categories[id]
@@ -59,7 +64,12 @@ export function CategoryRow({
   const own = rd.categoryGroups.find((g) => g.id === groupId)
   const choices = own && !groups.some((g) => g.id === groupId) ? [...groups, own] : groups
   return (
-    <div className={cx('flex flex-col gap-2 rounded border border-line px-2.5 py-1.5', meta?.archived && 'border-dashed')} data-testid="category-row" data-category={id}>
+    <div
+      className={cx('flex flex-col gap-2 rounded border border-line px-2.5 py-1.5 data-[selected=true]:border-lamp data-[selected=true]:bg-lamp-soft', meta?.archived && 'border-dashed')}
+      {...rows?.(categoryKey(id))}
+      data-testid="category-row"
+      data-category={id}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ background: blockFill(color, brightness), border: `1px solid ${color}` }} />
         <TextField value={meta?.name ?? ''} onCommit={(n) => void setMeta(id, { name: n })} required max={60} shellClassName="w-[200px]" aria-label="Nazwa podkategorii" />
@@ -103,7 +113,7 @@ export function CategoryRow({
               <Toggle key={k} checked={c[k] as boolean} onChange={(v) => save({ categories: { [id]: { [k]: v } } })} label={label} />
             ))}
           </div>
-          <VariantRows categoryId={id} rules={c} showArchived={showArchived} />
+          <VariantRows categoryId={id} rules={c} showArchived={showArchived} rows={rows} />
           <button
             type="button"
             className="self-start text-[12px] text-muted hover:text-fg"

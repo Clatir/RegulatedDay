@@ -40,6 +40,11 @@ export type PushHold = (b: BlockInfo, startMin: number) => number
 export interface PushOptions {
   /** Where the block stands on the axis after the change when that is not its planned start (its bottom edge). */
   atMin?: number
+  /**
+   * The blocks after the block put, when the change says which (N17, T2465 – the rest of the day, `restOf`: its own rule of „after”, also a
+   * 25-hour day's doubled hour and a day to come by its plan) instead of those shown from its place; still only the ones that may be pushed.
+   */
+  only?: ReadonlySet<string>
   hold?: PushHold
   /** The rounds ran out before nothing moved (the result is still what the day shows with the starts written). */
   onUnsettled?: () => void
@@ -113,8 +118,9 @@ export function pushApart(ctx: DayContext, state: DayState, plan: readonly PlanB
   // what comes after its group when it is not „w tle” by its kind (the forecast lets the group hold the foreground to its end).
   if (!x || x.start == null || x.bg) return []
   const at = opts.atMin != null ? idxOfLogical(g, opts.atMin) : x.start
+  const isAfter = (b: BlockInfo) => (opts.only ? opts.only.has(b.id) : before.get(b.id)!.from >= at)
   // The block's own group stays where the block joined it (D492): only what comes after the group makes room.
-  const following = after.filter((b) => b.id !== id && b.id !== x.alongside && !opts.placed?.has(b.id) && pushable(b, state.facts) && before.has(b.id) && before.get(b.id)!.from >= at)
+  const following = after.filter((b) => b.id !== id && b.id !== x.alongside && !opts.placed?.has(b.id) && pushable(b, state.facts) && before.has(b.id) && isAfter(b))
   if (!following.length) return []
   const forecastOf = shownForecaster(ctx, state)
   const lm = (idx: number) => logicalMinuteOf(g.date, atOf(g, idx))

@@ -128,8 +128,8 @@ describe('E2: od razu, od jutra i zaplanowane zmiany', () => {
   it('znacznik „od razu” przy sekcjach bez daty, nie przy tych z datą', async () => {
     await mount()
     const tagged = (id: string) => q(id)!.querySelector('[data-testid="now-tag"]') !== null
-    for (const id of ['settings-modules', 'settings-plan', 'settings-care', 'settings-cases', 'settings-calendars', 'settings-bar', 'settings-notices', 'settings-machine']) expect(tagged(id), id).toBe(true)
-    for (const id of ['settings-daytypes', 'settings-sleep', 'settings-energy', 'settings-timer', 'settings-reminders', 'settings-accuracy', 'settings-categories', 'settings-data', 'settings-updates']) expect(tagged(id), id).toBe(false)
+    for (const id of ['settings-modules', 'settings-care', 'settings-cases', 'settings-calendars', 'settings-bar', 'settings-notices', 'settings-machine']) expect(tagged(id), id).toBe(true)
+    for (const id of ['settings-daytypes', 'settings-plan', 'settings-sleep', 'settings-energy', 'settings-timer', 'settings-reminders', 'settings-accuracy', 'settings-categories', 'settings-data', 'settings-updates']) expect(tagged(id), id).toBe(false)
   })
 
   it('jeden pasek „od jutra”, nad pierwszą sekcją z datą i pod „Moduły”', async () => {

@@ -6,7 +6,7 @@
  */
 import type { NamingDay } from '../blockName'
 import { daySnapshotOf, isKnown, type AnyEvent, type DaySnapshot } from '../model/events'
-import type { DayFile, LectureSeries, Template } from '../model/plan'
+import type { DayFile, LectureSeries, PlanBlock, Template } from '../model/plan'
 import { routineCostsOf, type Routine } from '../model/routines'
 import { seriesOfBlock, seriesVersionOn, type SeriesPlan } from '../model/series'
 import { settingsLackBody, settingsOn, type SettingsChange } from '../model/settings'
@@ -14,6 +14,7 @@ import { freshSteps } from '../model/steps'
 import { addDays } from '../time/zone'
 import { createDay, dayPlan, dayWakeMin, nextWakeForBedtime, snapshotEntries, type HolidayLookup } from './createDay'
 import type { DayContext } from './day'
+import { planWithBuffers } from './decompress'
 import type { DayFacts } from './facts'
 import { withSeriesOccurrences } from './series'
 
@@ -74,19 +75,37 @@ const lacksBody = (e: AnyEvent): boolean => isKnown(e) && e.k === 'day.snapshot'
 export function dayContextOf(inp: PlanInputs, src: DaySource, holidays: HolidayLookup, at: number): DayContext {
   const { snapshot } = snapshotOf(inp, src, holidays, at)
   const nextDate = addDays(src.date, 1)
+  const base = dayPlan(snapshot, src.dayFile)
+  const nextWakeMin = nextWakeForBedtime(null, src.nextFile, inp.changes, nextDate)
+  const routineCosts = routineCostsOf(inp.routines, inp.routinesUnknown)
+  // The buffers of decompression (T2450): off – the very plan of the file.
+  const plan = planWithBuffers({ date: src.date, snapshot, plan: base, nextWakeMin, events: src.events, routineCosts, changes: inp.changes, gone: goneOf(src.dayFile), now: at })
   return {
     date: src.date,
     snapshot,
-    plan: dayPlan(snapshot, src.dayFile),
+    plan,
+    ...(plan !== base ? { basePlan: base } : {}),
     wakeMin: dayWakeMin(snapshot, src.dayFile),
-    nextWakeMin: nextWakeForBedtime(null, src.nextFile, inp.changes, nextDate),
+    nextWakeMin,
     events: src.events,
     now: at,
-    routineCosts: routineCostsOf(inp.routines, inp.routinesUnknown),
+    routineCosts,
     // Only for a change of the day's settings an older version wrote without the body (T1532): the context goes to the helper process
     // as a copy, and the list of changes is no part of a day otherwise.
     ...(src.events.some(lacksBody) ? { changes: inp.changes } : {})
   }
+}
+
+/** The ids a day's file cancels or moves to another day. */
+const goneOf = (file: DayFile | null): ReadonlySet<string> => new Set([...(file?.cancelled ?? []), ...Object.keys(file?.movedTo ?? {})])
+
+/**
+ * The plan of a day after a change of its file's plan (`base` – the plan without the buffers, T2457): the buffers of decompression laid
+ * again, by the same rule as `dayContextOf` – the day's context gives the rest (its settings' changes are those its buffers were counted
+ * with: `changes` given, else the rd.json of the caller).
+ */
+export function replanned(ctx: DayContext, base: readonly PlanBlock[], changes: readonly SettingsChange[], file: DayFile | null = null): readonly PlanBlock[] {
+  return planWithBuffers({ date: ctx.date, snapshot: ctx.snapshot, plan: base, nextWakeMin: ctx.nextWakeMin, events: ctx.events, routineCosts: ctx.routineCosts, changes, gone: goneOf(file), now: ctx.now })
 }
 
 /** What names the day's blocks (`nameById`): its plan, its snapshot's entries, what each start wrote. */
