@@ -24,7 +24,7 @@ import { useCalendarFilter } from '@renderer/features/calendars/calendarFilter'
 import { BlockDayNotes } from '@renderer/features/today/DayNotes'
 import { SidePanel } from '@renderer/features/today/TodayPage'
 import { CheapestSwapLine } from '@renderer/features/today/CheapestSwap'
-import { PLAN_ALREADY_TEXT, PLAN_CHANGED_TEXT, cheapestSwapCached, cheapestSwapKeyOf, cheapestSwapPeek, energyOrderCached, energyOrderKey, resetEnergyOrderCache, resetSwapCache, swapLineText, swappedText } from '@renderer/features/today/dayActions'
+import { GONE_DAYS, PLAN_ALREADY_TEXT, PLAN_CHANGED_TEXT, cheapestSwapCached, cheapestSwapKeyOf, cheapestSwapPeek, energyOrderCached, energyOrderKey, resetEnergyOrderCache, resetSwapCache, swapGone, swapLineText, swappedText } from '@renderer/features/today/dayActions'
 import { useData } from '@renderer/store/data'
 import type { DayModel } from '@renderer/store/day'
 import { NO_MEMORY, useUi } from '@renderer/store/ui'
@@ -85,19 +85,21 @@ afterEach(() => {
   useData.setState(data, true)
 })
 
-/** The search the line puts off past the paint (T2635): its timer run, in an act. */
-const flushSearch = () => act(() => new Promise<void>((done) => setTimeout(done, 0)))
+/** In an act, until the line's search put off past the paint (T2635) has counted the day's key – a condition, no fixed delay. */
+const settle = (m: DayModel) => act(() => vi.waitFor(() => expect(cheapestSwapPeek(m, cheapestSwapKeyOf(m)).due).toBe(false)))
 
-async function render(node: Parameters<Root['render']>[0], flush = true): Promise<void> {
+/** `node` rendered; with `m` – also until its line's search has counted `m` (`settle`). */
+async function render(node: Parameters<Root['render']>[0], m?: DayModel): Promise<void> {
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
   await act(async () => root!.render(node))
-  if (flush) await flushSearch()
+  if (m) await settle(m)
 }
 const sideProps = (m: DayModel, past = false) => ({ model: m, names: NAMES, routines: false, past, onSelect: () => undefined, onMove: () => undefined })
 const q = (id: string) => document.body.querySelector<HTMLElement>(`[data-testid="${id}"]`)
-const side = (m: DayModel, past = false) => render(createElement(SidePanel, sideProps(m, past)))
+const side = (m: DayModel, past = false) => render(createElement(SidePanel, sideProps(m, past)), past ? undefined : m)
+const notes = (m: DayModel, openId: string | null = null) => render(createElement(BlockDayNotes, { model: m, names: NAMES, today: DATE, onShow: () => undefined, openId }), m)
 
 /** The data folder as the window talks to it: the day's file now, the edits sent (each applied to it), the bar told nothing. */
 function stub(file: RawRecord | null = FILE) {
@@ -138,7 +140,7 @@ describe('„Najtańsza zamiana” w oknie (N22)', () => {
 
   it('panel bloku (BlockDayNotes) ma tę samą linię; dzień miniony i dzień bez ostrzeżenia – bez niej', async () => {
     stub()
-    await render(createElement(BlockDayNotes, { model: model(), names: NAMES, today: DATE, onShow: () => undefined }))
+    await notes(model())
     expect(q('cheapest-swap-text')!.textContent).toBe(LINE)
     act(() => root!.unmount())
     await side(model(), true)
@@ -183,9 +185,12 @@ describe('„Najtańsza zamiana” w oknie (N22)', () => {
       ['blocks.#e.startMin', lm('08:00'), lm('10:00')]
     ])
 
-    // Once more – but „Analiza” moved by hand meanwhile: nothing taken back, the toast says the plan changed.
+    // Once more (the clock's next step – the line is back) – but „Analiza” moved by hand meanwhile: nothing taken back, the
+    // toast says the plan changed.
     useUi.setState({ toasts: [] })
     state.file = FILE
+    act(() => root!.unmount())
+    await side(model({ at: '07:35' }))
     await act(async () => void q('cheapest-swap-apply')!.click())
     await vi.waitFor(() => expect(useUi.getState().toasts.map((t) => t.text)).toContain(SWAPPED))
     state.file = fileWith({ r: lm('11:00'), c: lm('10:00'), e: lm('08:30') })
@@ -277,7 +282,7 @@ describe('„Najtańsza zamiana” w oknie (N22)', () => {
   it('T2630: blok z otwartym panelem (D427) nie liczy się jako ukryty', async () => {
     hide()
     stub()
-    await render(createElement(BlockDayNotes, { model: model(), names: NAMES, today: DATE, onShow: () => undefined, openId: 'e' }))
+    await notes(model(), 'e')
     await act(async () => void q('cheapest-swap-apply')!.click())
     await vi.waitFor(() => expect(useUi.getState().toasts.map((t) => t.text)).toEqual([SWAPPED]))
   })
@@ -288,30 +293,31 @@ describe('„Najtańsza zamiana” w oknie (N22)', () => {
     expect(q('cheapest-swap-text')!.textContent).toBe(LINE)
     expect((q('cheapest-swap-apply') as HTMLButtonElement).disabled).toBe(false)
     // Five minutes on (another step of the clock – another key): before the search, the day's last swap, „Zamień” waiting.
-    await act(async () => root!.render(createElement(SidePanel, sideProps(model({ at: '07:35' })))))
+    const later = model({ at: '07:35' })
+    await act(async () => root!.render(createElement(SidePanel, sideProps(later))))
     expect(q('cheapest-swap-text')!.textContent).toBe(LINE)
     expect((q('cheapest-swap-apply') as HTMLButtonElement).disabled).toBe(true)
-    await flushSearch()
+    await settle(later)
     expect((q('cheapest-swap-apply') as HTMLButtonElement).disabled).toBe(false)
     // Another day: nothing of this one's.
     const other = model({ date: '2026-10-29' })
     expect(cheapestSwapPeek(other, cheapestSwapKeyOf(other))).toEqual({ swap: null, fresh: false, due: true })
   })
 
-  it('T2634: „Plan już jest tak ułożony” chowa linię dnia także w innym panelu (panel bloku po panelu bocznym), do zmiany klucza', async () => {
+  it('T2634, T2643: „Plan już jest tak ułożony” chowa tę zamianę w każdym panelu (panel bloku po panelu bocznym) i przy innym kluczu', async () => {
     stub(fileWith({ r: lm('11:00'), c: lm('10:00'), e: lm('08:00') }))
     const m = model()
     await side(m)
     await act(async () => void q('cheapest-swap-apply')!.click())
     await vi.waitFor(() => expect(q('cheapest-swap')).toBeNull())
     act(() => root!.unmount())
-    await render(createElement(BlockDayNotes, { model: m, names: NAMES, today: DATE, onShow: () => undefined }))
+    await notes(m)
     expect(q('day-warnings')).not.toBeNull()
     expect(q('cheapest-swap')).toBeNull()
-    // Another key (the clock's next step): the line again.
+    // Another key (the clock's next step) counts the same swap again: it is done – still no line (T2643).
     act(() => root!.unmount())
     await side(model({ at: '07:35' }))
-    expect(q('cheapest-swap-text')!.textContent).toBe(LINE)
+    expect(q('cheapest-swap')).toBeNull()
   })
 
   it('T2635: szukanie odłożone za rysunek (timer) – po samym renderze z efektami jeszcze nie biegło', async () => {
@@ -320,7 +326,7 @@ describe('„Najtańsza zamiana” w oknie (N22)', () => {
       stub()
       const search = vi.mocked(cheapestSwap)
       search.mockClear()
-      await render(createElement(SidePanel, sideProps(model())), false)
+      await render(createElement(SidePanel, sideProps(model())))
       expect(search).not.toHaveBeenCalled()
       expect(q('cheapest-swap')).toBeNull()
       await act(async () => void vi.runAllTimers())
@@ -339,5 +345,147 @@ describe('„Najtańsza zamiana” w oknie (N22)', () => {
     // `energyOrderKey` asks the lowest energy once: so many keys, so many asks.
     expect(renderToStaticMarkup(createElement('ul', null, createElement(CheapestSwapLine, { model: m, names: NAMES, past: false })))).toContain('cheapest-swap-text')
     expect(key).toHaveBeenCalledTimes(1)
+  })
+
+  it('T2638: po zapisanej zamianie linia znika (bez tej samej propozycji z czynnym „Zamień”) i nic jej nie trzyma do policzenia nowego planu', async () => {
+    const { sent } = stub()
+    const m = model()
+    await side(m)
+    await act(async () => void q('cheapest-swap-apply')!.click())
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    await vi.waitFor(() => expect(q('cheapest-swap')).toBeNull())
+    // The plan as saved, counted at once (another key): while it is counted the swap just made is not held.
+    const swapped = { ...m, ctx: { ...m.ctx, plan: m.ctx.plan.map((b) => ({ ...b, startMin: ({ r: lm('11:00'), c: lm('10:00'), e: lm('08:00') } as Record<string, number>)[b.id] ?? b.startMin })) } } as DayModel
+    expect(cheapestSwapPeek(swapped, cheapestSwapKeyOf(swapped), cheapestSwapKeyOf(m)).swap).toBeNull()
+    await act(async () => root!.render(createElement(SidePanel, sideProps(swapped))))
+    expect(q('cheapest-swap')).toBeNull()
+  })
+
+  it('T2639: przed policzeniem nowego klucza trzymana tylko zamiana, którą ta linia pokazała, i tylko gdy oba bloki są w planie', async () => {
+    stub()
+    const m = model()
+    await side(m)
+    const shown = cheapestSwapKeyOf(m)
+    // „Analiza” gone from the plan (another key): the held swap would name a block that is not there – none.
+    const without = { ...m, ctx: { ...m.ctx, plan: m.ctx.plan.filter((b) => b.id !== 'e') } } as DayModel
+    expect(cheapestSwapPeek(without, cheapestSwapKeyOf(without), shown)).toEqual({ swap: null, fresh: false, due: true })
+    await act(async () => root!.render(createElement(SidePanel, sideProps(without))))
+    expect(q('cheapest-swap')).toBeNull()
+    // Both blocks there – held only for the line that showed it.
+    const later = model({ at: '07:35' })
+    expect(cheapestSwapPeek(later, cheapestSwapKeyOf(later), shown).swap).toMatchObject({ a: 'r', b: 'e' })
+    expect(cheapestSwapPeek(later, cheapestSwapKeyOf(later), null).swap).toBeNull()
+  })
+
+  it(`T2640: zrobione zamiany po dniu (najwyżej ${GONE_DAYS} dni) – drugi dzień nie przywraca linii pierwszego`, () => {
+    const m = model()
+    const key = cheapestSwapKeyOf(m)!
+    const swap = cheapestSwapCached(m)!
+    const other = { a: 'x', b: 'y', changes: [] }
+    swapGone(DATE, swap)
+    swapGone('2026-10-29', other)
+    expect(cheapestSwapPeek(m, key)).toEqual({ swap: null, fresh: true, due: false })
+    // Fourteen other days later the first one is forgotten: its line is back.
+    for (let i = 1; i <= GONE_DAYS; i++) swapGone(`2026-11-${String(i).padStart(2, '0')}`, other)
+    expect(cheapestSwapPeek(m, key).swap).toMatchObject({ a: 'r', b: 'e' })
+  })
+
+  it('T2641: szukanie, które rzuca wyjątek – ostrzeżenie w konsoli, dla klucza „brak”, linia nie czeka w nieskończoność', async () => {
+    stub()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const search = vi.mocked(cheapestSwap)
+    search.mockClear()
+    search.mockImplementationOnce(() => {
+      throw new Error('zepsute')
+    })
+    try {
+      const m = model()
+      await side(m)
+      expect(search).toHaveBeenCalledTimes(1)
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(cheapestSwapPeek(m, cheapestSwapKeyOf(m))).toEqual({ swap: null, fresh: true, due: false })
+      expect(q('cheapest-swap')).toBeNull()
+      expect(q('day-warnings')).not.toBeNull()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  // A slow save left held by a failing test would hold the window's queue of saves for the next ones (T517): released after each.
+  const gates: Array<() => void> = []
+  afterEach(() => gates.splice(0).forEach((release) => release()))
+
+  /** The folder's `edit` held until `release` (a slow save): the edits sent so far in `sent`. */
+  function slowSave() {
+    const { sent, state } = stub()
+    const gate: { release: () => void } = { release: () => undefined }
+    const held = new Promise<void>((done) => (gate.release = done))
+    gates.push(() => gate.release())
+    ;(window.rd as Partial<RdApi>).edit = async (entries) => {
+      sent.push(entries)
+      await held
+      return entries.map(() => ({ status: 'applied' as const }))
+    }
+    return { sent, state, gate }
+  }
+
+  it('T2643: nowy plik dnia przychodzi przed końcem zapisu – ta sama zamiana (nowy klucz) się nie pokazuje', async () => {
+    const { sent, gate } = slowSave()
+    const m = model()
+    await side(m)
+    await act(async () => void q('cheapest-swap-apply')!.click())
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    // Done before the save ends: the line went at the click.
+    expect(q('cheapest-swap')).toBeNull()
+    // The day's file changed meanwhile (a note on the class): another key, the same swap counted again – not shown.
+    const noted = { ...m, ctx: { ...m.ctx, plan: m.ctx.plan.map((b) => (b.id === 'w' ? { ...b, note: 'nowa' } : b)) } } as DayModel
+    expect(cheapestSwapKeyOf(noted)).not.toBe(cheapestSwapKeyOf(m))
+    await act(async () => root!.render(createElement(SidePanel, sideProps(noted))))
+    await settle(noted)
+    expect(cheapestSwapCached(noted)).toMatchObject({ a: 'r', b: 'e' })
+    expect(q('cheapest-swap')).toBeNull()
+    await act(async () => gate.release())
+    await vi.waitFor(() => expect(useUi.getState().toasts.map((t) => t.text)).toContain(SWAPPED))
+    expect(q('cheapest-swap')).toBeNull()
+  })
+
+  it('T2643: krok zegara (nowy klucz) w czasie wolnego zapisu – ta sama zamiana bez czynnego „Zamień”, w ogóle bez linii', async () => {
+    const { sent, gate } = slowSave()
+    await side(model())
+    await act(async () => void q('cheapest-swap-apply')!.click())
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    const later = model({ at: '07:35' })
+    await act(async () => root!.render(createElement(SidePanel, sideProps(later))))
+    expect(q('cheapest-swap')).toBeNull()
+    await settle(later)
+    expect(q('cheapest-swap')).toBeNull()
+    await act(async () => gate.release())
+    await vi.waitFor(() => expect(useUi.getState().toasts.map((t) => t.text)).toContain(SWAPPED))
+  })
+
+  it('T2643: udane „Cofnij” przywraca propozycję od razu (ten sam klucz dnia), bez czekania na zmianę klucza', async () => {
+    const { sent, state } = stub()
+    await side(model())
+    await act(async () => void q('cheapest-swap-apply')!.click())
+    await vi.waitFor(() => expect(useUi.getState().toasts.map((t) => t.text)).toContain(SWAPPED))
+    expect(q('cheapest-swap')).toBeNull()
+    state.file = fileWith({ r: lm('11:00'), c: lm('10:00'), e: lm('08:00') })
+    await act(async () => useUi.getState().toasts.find((t) => t.text === SWAPPED)!.action!.run())
+    await vi.waitFor(() => expect(sent).toHaveLength(2))
+    // The plan as before the swap – the day counted as before (the same key): the line is back.
+    await vi.waitFor(() => expect(q('cheapest-swap-text')?.textContent).toBe(LINE))
+    expect((q('cheapest-swap-apply') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('T2643: zapis odrzucony (konflikt) – zamiana nie jest zrobiona, linia wraca', async () => {
+    const { sent } = stub()
+    ;(window.rd as Partial<RdApi>).edit = async (entries) => {
+      sent.push(entries)
+      return entries.map(() => ({ status: 'conflict' as const }))
+    }
+    await side(model())
+    await act(async () => void q('cheapest-swap-apply')!.click())
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    await vi.waitFor(() => expect(q('cheapest-swap-text')?.textContent).toBe(LINE))
   })
 })
