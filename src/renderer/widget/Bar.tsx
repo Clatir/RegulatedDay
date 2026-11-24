@@ -26,6 +26,7 @@ import { useStepPicks } from '../lib/stepPicks'
 import { termHolds } from '../lib/viewTerms'
 import { useEscapeLayer } from '../lib/escape'
 import { useQuickToday } from './quickToday'
+import { usePasteList } from './usePasteList'
 import { pressFromMove, releasedUnheard, type GripState } from './barGrip'
 import { freeSpot, secondRelease, type BarRelease } from './barDouble'
 
@@ -472,7 +473,10 @@ function RequestUnfold({ view, mode, close }: { view: WidgetView; mode: BarMode;
  * The field of the quick capture (D385, D402): a title, Enter saves it as a task into „Skrzynka” (the main process says
  * why when it cannot), Esc folds it – in the main window's bar and in the icon's panel (the desktop bar takes no keys: its
  * „+ Skrzynka” opens the window „Do skrzynki”, D564 P15). The words of dates at the end of the title (`!jutro`, `@pt` – D409) are told in a line
- * under the field before Enter – the field is never in the desktop bar itself, so its height does not change (D229).
+ * under the field before Enter – the field is never in the desktop bar itself, so its height does not change (D229). A list of lines pasted into it
+ * (N11, D605) is asked about under the field first (`usePasteList`); Enter saves the lines as sprawy – the bar then says „Dodano 5 spraw · Cofnij” as a
+ * line of its own (the main process), a refusal is said under the field. D607: what was typed before the paste stays – the field neither clears nor
+ * folds; one empty at Enter clears and folds after the save, but only while it is still empty (what was typed meanwhile is never taken).
  */
 function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: BarMode; close: () => void; text: string; setText: (t: string) => void; takeFocus: () => boolean; input: React.RefObject<HTMLInputElement | null> }) {
   useEscapeLayer(true, close)
@@ -488,6 +492,43 @@ function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: Ba
   }
   const { today, nowMin, categories } = useQuickToday(text)
   const preview = quickPreview(text, today, categories, nowMin)
+  const [listError, setListError] = useState<string | null>(null)
+  const saving = useRef(false)
+  // The text of the field now – what a save finds in it when it is answered.
+  const nowText = useRef(text)
+  nowText.current = text
+  // The field that saved may be gone when the answer comes (Esc folded it, „+” opened it again): its answer then touches nothing.
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+    }
+  }, [])
+  const saveList = (lines: string[]): boolean => {
+    if (saving.current) return false
+    saving.current = true
+    setListError(null)
+    // D607: what was typed before the paste stays – the field neither clears nor folds; an empty one does, as after a title.
+    const at = text
+    window.rd.quickAddMany(lines).then(
+      (r) => {
+        saving.current = false
+        if (!alive.current) return
+        if (!r.ok) return setListError(r.error)
+        if (at.trim() !== '' || nowText.current !== at) return
+        setText('')
+        close()
+      },
+      (e: unknown) => {
+        saving.current = false
+        if (!alive.current) return
+        setListError(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    )
+    return true
+  }
+  const paste = usePasteList({ value: text, setValue: setText, input, save: saveList })
   return (
     <div className="flex flex-col gap-0.5" data-testid="bar-quick-field">
       <div className="flex items-center gap-1.5">
@@ -498,8 +539,13 @@ function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: Ba
           value={text}
           maxLength={TITLE_MAX}
           placeholder="Enter zapisuje"
-          onChange={(e) => setText(e.currentTarget.value)}
+          onChange={(e) => {
+            setText(e.currentTarget.value)
+            setListError(null)
+          }}
+          onPaste={paste.onPaste}
           onKeyDown={(e) => {
+            if (paste.onKeyDown(e)) return
             if (e.key === 'Enter') {
               e.preventDefault()
               save()
@@ -511,10 +557,20 @@ function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: Ba
           Zapisz
         </BarButton>
       </div>
-      {preview && (
-        <span className="text-[12px] text-muted" data-testid="bar-quick-preview">
-          {preview}
+      {paste.question ? (
+        <span className="text-[12px] text-muted" data-testid="bar-quick-paste">
+          {paste.question}
         </span>
+      ) : listError ? (
+        <span className="text-[12px] text-rose" data-testid="bar-quick-error">
+          {listError}
+        </span>
+      ) : (
+        preview && (
+          <span className="text-[12px] text-muted" data-testid="bar-quick-preview">
+            {preview}
+          </span>
+        )
       )}
     </div>
   )
@@ -743,7 +799,7 @@ export const beatsNow = (beaten: string | null, id: string | null): boolean => i
 export function barLines(lines: readonly BarLine[], quiet: boolean): { shown: BarLine[]; extra: BarLine[] } {
   const fit = quiet ? 1 : 2
   const folds = (l: BarLine) => quiet && (l.id.startsWith('routine:') || l.id.startsWith('task:'))
-  const moved = lines.filter((l) => l.id.startsWith('moved:'))
+  const moved = lines.filter((l) => l.id.startsWith('moved:') || l.id.startsWith('quick:'))
   const later = new Set([...lines.filter(folds), ...moved.slice(1)])
   const front = lines.filter((l) => !later.has(l))
   return { shown: front.slice(0, fit), extra: [...front.slice(fit), ...lines.filter((l) => later.has(l))] }

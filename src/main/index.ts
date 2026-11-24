@@ -19,6 +19,7 @@ import {
   type BarScreens,
   type EditEntry,
   type EventIn,
+  type QuickAddManyResult,
   type QuickAddResult,
   type SystemSettingsPage,
   type TimerIn,
@@ -31,6 +32,7 @@ import {
 import type { RitualValue } from '@shared/engine/ritual'
 import type { CloseHow } from '@shared/model/events'
 import type { BarSpot, MachinePrefs } from '@shared/machine'
+import { quickListSavedText } from '@shared/quickList'
 import { quitNotice } from '@shared/sync/syncLines'
 import { MAX_STEPS, ROUTINE_VERSIONS } from '@shared/model/routines'
 import { BAR_SPOTS, patchMachinePrefs } from '@shared/machine'
@@ -220,6 +222,7 @@ const widget = new WidgetEngine({
   batterySaver: () => batterySaverOn && inOneDriveNow(),
   backup: () => hub?.service?.backup ?? null,
   quickAdd: (title) => quickAdd(title),
+  quickUndo: (batch) => (hub ? hub.quickUndo(batch) : Promise.resolve({ ok: false, error: 'Aplikacja jeszcze się uruchamia – nic nie cofnięto.', undone: 0, kept: 0 })),
   // „+ Skrzynka” of the desktop bar (D564 P15): the bar takes no keys (D229) – the window „Do skrzynki”, as by its shortcut.
   openQuick: () => quick?.openFromBar()
 })
@@ -1127,6 +1130,17 @@ function registerIpc(): void {
     }
     return r
   })
+  // A pasted list (N11, D605, D606): saved at once as one edit. The window „Do skrzynki” stays open (its „Cofnij” is under its field) and the bar
+  // only says it; the main window's bar and the panel's say it as a line with its own „Cofnij” (`quickUndo`).
+  handle(CH.quickAddMany, async (e, lines: unknown) => {
+    const r = hub ? await hub.quickAddMany(Array.isArray(lines) ? lines.map((x) => (typeof x === 'string' ? x.slice(0, 1000) : '')).slice(0, 500) : []) : ({ ok: false, error: 'Aplikacja jeszcze się uruchamia – nic nie zapisano.', count: 0, notPlaced: 0, batch: null } satisfies QuickAddManyResult)
+    if (r.ok) {
+      const text = quickListSavedText(r.count, { notPlaced: r.notPlaced, ...(r.asked ? { asked: true } : {}) })
+      void widget.quickListSaid(text, viewOf(e.sender) === 'quick' ? null : r.batch)
+    }
+    return r
+  })
+  handle(CH.quickUndo, (_e, batch: unknown) => needHub().quickUndo(batch))
   ipcMain.on(CH.quickClose, () => quick?.close('Esc'))
   handle(CH.quickToday, () => needHub().quickClock())
   handle(CH.quickCategories, () => needHub().quickCategories())

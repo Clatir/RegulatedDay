@@ -128,6 +128,8 @@ export const CH = {
   openAttachments: 'rd:openAttachments',
   showAttachment: 'rd:showAttachment',
   quickAdd: 'rd:quickAdd',
+  quickAddMany: 'rd:quickAddMany',
+  quickUndo: 'rd:quickUndo',
   quickClose: 'rd:quickClose',
   quickToday: 'rd:quickToday',
   quickCategories: 'rd:quickCategories',
@@ -166,6 +168,32 @@ export interface QuickAddResult {
   asked?: true
   /** D601: „@jutro 15:00” asked for, but the block was not put (saved in „Skrzynka” with its date) – why („ten dzień już minął”). */
   notPlaced?: string
+}
+
+/**
+ * A pasted list saved (N11, D605, D606): how many sprawy it made, how many of them asked for a place on the axis that could not be given
+ * (saved without a block – the reasons of `quickSavedText`), the id of its „Cofnij” (`quickUndo`); `asked` – the queue asks about a change
+ * on another computer (saved, waiting – no „Cofnij”, `batch` null). Refused – why (no folder, no title, a file that could not be written).
+ */
+export interface QuickAddManyResult {
+  ok: boolean
+  error: string | null
+  count: number
+  notPlaced: number
+  asked?: true
+  batch: string | null
+}
+
+/** „Cofnij” of a pasted list: how many sprawy went away and how many stayed because they (or their day's file) changed since the save (D606). */
+export interface QuickUndoResult {
+  ok: boolean
+  error: string | null
+  undone: number
+  kept: number
+  /** The queue asks about a change on another computer (D607): the undo waits for the answer – said as such, never „try again”. */
+  asked?: true
+  /** Nothing of the undo was written and the list was given back (a refusal in full, a read that failed): „Cofnij” can be pressed again (runda 2). */
+  again?: true
 }
 
 /**
@@ -1086,6 +1114,10 @@ export interface RdApi {
   showAttachment(id: string): Promise<AttachmentOpen>
   /** The quick capture (D385): a task of your own with this title into „Skrzynka” (the window „Do skrzynki”). */
   quickAdd(title: string): Promise<QuickAddResult>
+  /** A pasted list (N11, D605): each line as the quick capture takes a title, at most 50, in one edit; its „Cofnij” is `quickUndo(batch)`. */
+  quickAddMany(lines: string[]): Promise<QuickAddManyResult>
+  /** „Cofnij” of a pasted list saved by `quickAddMany` (D606): its sprawy and blocks taken away – except what changed since. */
+  quickUndo(batch: string): Promise<QuickUndoResult>
   /** The window „Do skrzynki” closes (Esc, after Enter saved). */
   quickClose(): void
   /** The logical day by the main process's clock – the one the quick capture saves with; the preview of its words counts from it (D454). */
