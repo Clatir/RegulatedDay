@@ -27,8 +27,8 @@ import { countDay } from '@renderer/store/day'
 
 vi.mock('@renderer/features/plan/saveAs', async (orig) => ({
   ...(await orig<typeof import('@renderer/features/plan/saveAs')>()),
-  saveAsTemplate: vi.fn(async () => ({ saved: true, unchanged: false, added: 0, skipped: [], inTemplate: 0 })),
-  saveAsRoutine: vi.fn(async () => true)
+  saveAsTemplate: vi.fn(async () => ({ saved: true, fate: 'saved' as const, added: 0, skipped: [], inTemplate: 0 })),
+  saveAsRoutine: vi.fn(async () => 'saved' as const)
 }))
 
 // Far ahead of the real clock: a Monday, an ordinary day; the window's clock 06:00 of it.
@@ -170,16 +170,28 @@ describe('okno „Zapisz jako szablon” (D615–D617)', () => {
 describe('okno „Zapisz jako szablon” – przegląd N15', () => {
   const open = { kind: 'template' as const, date: TODAY, ids: null }
 
-  it('nie zapisano (odmowa, pytanie, nieczytelne) – okno zostaje; zapisane albo bez zmian – zamyka się', async () => {
+  it('odmowa (nieczytelne, folder) – okno zostaje; zapisane, bez zmian albo pytanie o zmianę z innego komputera – zamyka się (drugi „Zapisz” nie wyśle drugiej zmiany)', async () => {
     const onClose = vi.fn()
     await mount(createElement(SaveAsTemplateDialog, { model: modelOf(TODAY), open, today: TODAY, view: 'today', onClose }))
-    vi.mocked(saveAsTemplate).mockResolvedValueOnce({ saved: false, unchanged: false, added: 3, skipped: [], inTemplate: 0 })
+    vi.mocked(saveAsTemplate).mockResolvedValueOnce({ saved: false, fate: 'refused', added: 3, skipped: [], inTemplate: 0 })
     await click(q('save-template-apply'))
     expect(onClose).not.toHaveBeenCalled()
     expect(q('save-template')).not.toBeNull()
-    vi.mocked(saveAsTemplate).mockResolvedValueOnce({ saved: false, unchanged: true, added: 0, skipped: [], inTemplate: 0 })
-    await click(q('save-template-apply'))
-    expect(onClose).toHaveBeenCalledTimes(1)
+    for (const fate of ['unchanged', 'asked', 'saved'] as const) {
+      vi.mocked(saveAsTemplate).mockResolvedValueOnce({ saved: fate === 'saved', fate, added: 0, skipped: [], inTemplate: 0 })
+      await click(q('save-template-apply'))
+    }
+    expect(onClose).toHaveBeenCalledTimes(3)
+  })
+
+  it('ostrzeżenie „dwa razy” nie dla samych bloków, które dzień ma już z tego szablonu', async () => {
+    const wed = '2099-01-07'
+    const ownOnly = { kind: 'template' as const, date: wed, ids: [templateBlockId(wed, TPL, 'old')] }
+    await mount(createElement(SaveAsTemplateDialog, { model: modelOf(wed), open: ownOnly, today: TODAY, view: 'week', onClose: () => undefined }))
+    await typeIn('save-template-from', '06.01.2099')
+    expect(q('save-template-twice')).toBeNull()
+    await render(createElement(SaveAsTemplateDialog, { model: modelOf(wed), open: { ...ownOnly, ids: [templateBlockId(wed, TPL, 'old'), 'a'] }, today: TODAY, view: 'week', onClose: () => undefined }))
+    expect(q('save-template-twice')).not.toBeNull()
   })
 
   it('okno otwarte przez 04:00: „Od” nie zostaje na dniu, który jest już dziś – jutro nowego dnia, i tak idzie do zapisu', async () => {
@@ -227,6 +239,17 @@ describe('okno „Zapisz jako rutynę” (D618)', () => {
       [],
       'today'
     ])
+  })
+
+  it('rutyna: odmowa – okno zostaje; zapisana albo pytanie – zamyka się', async () => {
+    const onClose = vi.fn()
+    await mount(createElement(SaveAsRoutineDialog, { model: modelOf(TODAY), open: { kind: 'routine', date: TODAY, ids: ['a'] }, view: 'today', onClose }))
+    vi.mocked(saveAsRoutine).mockResolvedValueOnce('refused')
+    await click(q('new-thing-save'))
+    expect(onClose).not.toHaveBeenCalled()
+    vi.mocked(saveAsRoutine).mockResolvedValueOnce('asked')
+    await click(q('new-thing-save'))
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('początek okna liczony raz: dzień policzony od nowa (co 30 s) nie zmienia notek obok kroków, z których okno ruszyło', async () => {

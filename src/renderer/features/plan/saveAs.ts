@@ -7,10 +7,10 @@
  * template puts its version from the date back as it was (none – gone), when that version still stands as the save left it; of a routine – the
  * routine out, when it still stands as made. Changed since – it stays, and says so (D313).
  */
-import type { RawRecord } from '@shared/api'
+import type { EditOutcome, RawRecord } from '@shared/api'
 import { deepEqual, sameContentAs } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
-import { blocksToSave, savedTemplate, templateBlocksOf, wakeFrameOf, type SaveAsMode, type SaveAsPick, type SaveAsWhy } from '@shared/engine/saveAs'
+import { blocksToSave, sameVersionBody, savedTemplate, templateBlocksOf, wakeFrameOf, type SaveAsMode, type SaveAsPick, type SaveAsWhy } from '@shared/engine/saveAs'
 import { countLabel, plDayMonth } from '@shared/format'
 import { groupCount, skippedText } from '@shared/groupText'
 import { ATTACHMENTS_UNREAD_TEXT, restoreEdits, type AttachmentUndo } from '@shared/model/attachment'
@@ -20,7 +20,7 @@ import { isSessionEntry, templateFrom, templateVersionOn } from '@shared/model/p
 import { ROUTINE_SCHEMA, type RoutineStep } from '@shared/model/routines'
 import { seriesOfBlock } from '@shared/model/series'
 import { addDays } from '@shared/time/zone'
-import { editOf, isSaved, rawRecord, trySaveWith, useData, withOwner } from '../../store/data'
+import { editOf, isSaved, outcomeFate, rawRecord, trySaveWith, useData, withOwner, type SendState } from '../../store/data'
 import { countedDay, type DayModel } from '../../store/day'
 import { showGroupLine, UndoNotDone, type GroupView } from '../../store/groupLine'
 import { toast } from '../../store/ui'
@@ -80,13 +80,24 @@ export interface TemplateSaveArgs {
 }
 
 /**
- * What a save to a template came to: `saved` – the template's version written (or waiting for the folder); `unchanged` – nothing to write (the
- * template has those blocks already, or none of the day's go) – said in the corner; neither – not saved (refused, unreadable, a question): the window
- * stays.
+ * What became of a save (the windows close on all but `refused`): `saved` – written or waiting for the folder (the line with „Cofnij”); `unchanged` –
+ * nothing to write (the template has those blocks already, none of the day's go) – said in the corner; `asked` – it met a change on another computer
+ * (your answer to the question decides it), or it was sent and its result is not known: never sent again from the window – a second „Zapisz” would
+ * write it twice; `refused` – nothing written (the day, the template or the list of attachments unreadable, the folder refused it) – said why, the
+ * window stays.
  */
+export type SaveFate = 'saved' | 'unchanged' | 'asked' | 'refused'
+
+/** The fate of a save of one record by its first entry (`out` null – not sent, or sent with the result unknown: `state.afterSend`). */
+function fateOf(out: readonly EditOutcome[] | null, state: SendState): Exclude<SaveFate, 'unchanged'> {
+  if (out == null) return state.afterSend ? 'asked' : 'refused'
+  return outcomeFate(out[0])
+}
+
+/** What a save to a template came to: `saved` – the template's version written (`fate` 'saved'). */
 export interface TemplateSaveDone {
   saved: boolean
-  unchanged: boolean
+  fate: SaveFate
   added: number
   skipped: SaveAsWhy[]
   inTemplate: number
@@ -103,6 +114,7 @@ export async function saveAsTemplate(args: TemplateSaveArgs): Promise<TemplateSa
   const a = first && args.from < first ? { ...args, from: first } : args
   const rel = paths.record('template', a.templateId)
   const made = { before: null as RawRecord | null, after: null as RawRecord | null, attachments: null as AttachmentUndo | null, name: '', added: 0, skipped: [] as SaveAsWhy[], inTemplate: 0, unread: false, same: false }
+  const state: SendState = { afterSend: false }
   const out = await trySaveWith(async () => {
     const files = await window.rd.dayFiles([a.date])
     if (!(a.date in files)) throw new Error(moveUnreadableText(a.date))
@@ -113,13 +125,16 @@ export async function saveAsTemplate(args: TemplateSaveArgs): Promise<TemplateSa
     if (!before || !t) throw new Error('tego szablonu nie ma już')
     const pick = pickOf(day, a.ids)
     const version = templateVersionOn(t, a.from)
-    const tpl = templateBlocksOf(pick.take, day.ctx.plan, { date: a.date, templateId: a.templateId, version, mode: a.mode, newId: () => newId(10), taskTitle, wake: wakeFrameOf(day.snapshot, day.dayFile) })
+    const allIds = new Set(t.versions.flatMap((v) => v.blocks.map((b) => b.id)))
+    const tpl = templateBlocksOf(pick.take, day.ctx.plan, { date: a.date, templateId: a.templateId, version, mode: a.mode, newId: () => newId(10), taskTitle, wake: wakeFrameOf(day.snapshot, day.dayFile), allIds })
     Object.assign(made, { name: t.name, skipped: [...pick.skipped, ...tpl.left], inTemplate: tpl.inTemplate, added: tpl.blocks.length })
     if (!tpl.blocks.length) return []
     const next = savedTemplate(t, a.from, tpl.blocks, a.mode)
     const after = templateJson(next, before)
     const edit = editOf(rel, before, after)
-    if (!edit) {
+    // The version the days from `from` take is what they took before (the same blocks, perhaps in another order): nothing to write – no new version.
+    const nowIn = templateVersionOn(next, a.from)
+    if (!edit || (version && nowIn && sameVersionBody(version, nowIn))) {
       made.same = true
       return []
     }
@@ -133,23 +148,23 @@ export async function saveAsTemplate(args: TemplateSaveArgs): Promise<TemplateSa
     const w = await withAttachments(edit, a.templateId, t, next)
     Object.assign(made, { before, after, attachments: w.undo })
     return w.entries
-  })
-  const done: TemplateSaveDone = { saved: false, unchanged: false, added: made.added, skipped: made.skipped, inTemplate: made.inTemplate }
+  }, state)
+  const done: TemplateSaveDone = { saved: false, fate: 'refused', added: made.added, skipped: made.skipped, inTemplate: made.inTemplate }
   if (made.unread) {
     toast(ATTACHMENTS_UNREAD_TEXT, 'error', 8000)
     return done
   }
-  if (!out) return done
-  if (!out.length) {
+  if (out && !out.length) {
     if (made.same) toast(`Szablon „${made.name}” ma już te bloki od ${plDayMonth(a.from)} – bez zmian`, 'info')
     else if (made.name) toast([made.inTemplate ? `Bez zmian – ${made.inTemplate} już w szablonie` : 'Bez zmian – nie ma bloków do zapisania', ...(made.skipped.length ? [skippedText(made.skipped)!] : [])].join(' · '), 'info')
-    return { ...done, unchanged: made.name !== '' }
+    return { ...done, fate: made.name !== '' ? 'unchanged' : 'refused' }
   }
   // The template's change is the first entry (an attachment's record that met a question is not it, T931).
-  if (!isSaved(out.slice(0, 1)) || !made.before || !made.after) return done
+  const fate = fateOf(out, state)
+  if (fate !== 'saved' || !made.before || !made.after) return { ...done, fate }
   const { before, after, attachments } = made
   showGroupLine(a.view, { text: templateLineText({ ...made, from: a.from }), undo: () => undoTemplateSave(rel, a.from, before, after, attachments) })
-  return { ...done, saved: true }
+  return { ...done, saved: true, fate }
 }
 
 /**
@@ -188,19 +203,21 @@ export async function undoTemplateSave(rel: string, from: string, before: RawRec
 /**
  * A new routine of the steps the window shows (D618): saved as „Rutyny” and „+ Nowa…” save one (no cost of its own – „jak podkategoria”); the
  * blocks stay as they are. The line „Zapisano rutynę „Poranek” · 4 kroki · Cofnij” – „Cofnij” takes the routine out while it stands as made.
- * True once saved.
+ * Answers what became of it (`SaveFate`: the window stays only when it was refused).
  */
-export async function saveAsRoutine(o: { name: string; normal: readonly RoutineStep[]; worse: readonly RoutineStep[]; view: GroupView }): Promise<boolean> {
+export async function saveAsRoutine(o: { name: string; normal: readonly RoutineStep[]; worse: readonly RoutineStep[]; view: GroupView }): Promise<Exclude<SaveFate, 'unchanged'>> {
   const name = o.name.trim().slice(0, 80)
   const normal = cleanSteps(o.normal)
-  if (!name || !normal.length) return false
+  if (!name || !normal.length) return 'refused'
   const id = newId()
   const rel = paths.record('routine', id)
   const record: RawRecord = { schema: ROUTINE_SCHEMA, id, name, normal, worse: cleanSteps(o.worse), archived: false }
-  const out = await trySaveWith(() => [editOf(rel, null, record)])
-  if (!out?.length || !isSaved(out)) return false
+  const state: SendState = { afterSend: false }
+  const out = await trySaveWith(() => [editOf(rel, null, record)], state)
+  const fate = out && !out.length ? 'refused' : fateOf(out, state)
+  if (fate !== 'saved') return fate
   showGroupLine(o.view, { text: `Zapisano rutynę „${name}” · ${countLabel(normal.length, 'krok', 'kroki', 'kroków')}`, undo: () => undoRoutineSave(rel, record) })
-  return true
+  return 'saved'
 }
 
 /** „Cofnij” of a new routine: out while it stands as made; changed since (a step, its name) – it stays, and says so. */

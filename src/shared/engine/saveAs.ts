@@ -3,11 +3,13 @@
  * from the menu of the day – as the blocks of a template's version from a date (a new version, as a change in „Szablony”: the days before it
  * stay as they are), or as the steps of a new routine. Pure – the window reads and counts the day in the turn of the write and saves.
  *
- * What goes: the blocks of the plan at their planned hours (a begun or done block as it was planned – no facts), with their subcategory, variant,
- * routine, own cost, name, note, steps (no ticks) and place (fixed, background); a block anchored to another keeps its anchor when that one goes too
- * (or is the template's session, „po sesji NY”), else it gets the hour its anchor gives it in the plan. What stays out (D615): the occurrences of a
- * series, the sessions, the lectures and the classes of a „zjazd” (they come from records of their own) and the blocks taken off the plan
- * (parked, cancelled) – each counted with its word.
+ * What goes: the blocks of the plan at their planned hours (a begun or done block as it was planned – no facts) in the template's hours (D617: a
+ * block of the snapshot the day did not change – its own hour there; any other – the plan's hour with the morning the day's wake moved taken back, as
+ * on the axis of „Szablony”), with their subcategory, variant, routine, own cost, name, note, steps (no ticks) and place (fixed, background); a block
+ * anchored to another keeps its anchor when that one goes too (or is the template's session, „po sesji NY”), else it gets the hour its anchor gives
+ * it in the plan. What stays out (D615): the occurrences of a series, the sessions, the lectures and the classes of a „zjazd” (they come from records
+ * of their own) and the blocks taken off the plan (parked, cancelled) – each counted with its word; a template also leaves out a block with no place
+ * in the plan and those anchored to it („bez godziny”, `TemplateSave.left`) – a routine takes them as steps after the others, in the plan's order.
  */
 import type { DaySnapshot } from '../model/events'
 import { BLOCK_NAME_MAX, isSessionEntry, planBlock, sessionIdOf, templateFor, withTemplateVersion, type DayFile, type PlanBlock, type Template, type TemplateVersion } from '../model/plan'
@@ -15,7 +17,8 @@ import { MAX_STEPS, STEP_RANGE, type RoutineStep } from '../model/routines'
 import type { DayTypeId } from '../model/settings'
 import { freshSteps } from '../model/steps'
 import { addDays, weekday } from '../time/zone'
-import { dayWakeMin, morningBound, SESSION_ANCHOR, unshiftedStart } from './createDay'
+import { deepEqual } from '../data/merge'
+import { dayWakeMin, firstFixedStart, SESSION_ANCHOR, unshiftedStart } from './createDay'
 import { plannedStartMin } from './planEdit'
 import { isOfTemplate } from './templateApply'
 
@@ -77,36 +80,58 @@ export interface TemplateSave {
 
 /**
  * How the day's wake moved its morning (D617, as „Szablony”): `delta` – the day's wake less the template's (a wake of the day's own, the week of
- * the session shift), `firstFixed` – the first fixed block that bounds the morning (`morningBound`, the bound `dayPlan` moved it by).
+ * the session shift); `asMade` – the blocks of the day's snapshot its file does not change, by their id on the day: the template's own hour of
+ * each (the snapshot keeps it – `dayPlan` moves it for the day), taken as it is, never counted back (a move past the first fixed block, a cut at the
+ * day's end cannot be undone from the hour the day shows).
  */
 export interface WakeFrame {
   delta: number
-  firstFixed: number
+  asMade: ReadonlyMap<string, number>
 }
 
-/** The frame of the day's wake (`dayPlan`'s own rule): what `templateBlocksOf` takes back to the template's hours. */
-export const wakeFrameOf = (snapshot: DaySnapshot, dayFile: DayFile | null): WakeFrame => ({ delta: dayWakeMin(snapshot, dayFile) - snapshot.templateWakeMin, firstFixed: morningBound(snapshot, dayFile) })
+/** The frame of the day's wake (`dayPlan`'s own difference) and the snapshot's own hours of the blocks the day did not change. */
+export function wakeFrameOf(snapshot: DaySnapshot, dayFile: DayFile | null): WakeFrame {
+  const changed = new Set((dayFile?.blocks ?? []).map((b) => b.id))
+  const asMade = new Map<string, number>()
+  for (const b of snapshot.blocks) if (b.startMin != null && !b.anchor && !changed.has(b.id)) asMade.set(b.id, b.startMin)
+  return { delta: dayWakeMin(snapshot, dayFile) - snapshot.templateWakeMin, asMade }
+}
 
 /**
  * The template's blocks made of the day's `take` (of `plan`, the day `date`): a block the template `templateId` gave the day keeps its id in the
- * template (its attachments and the days' changes of it go on), any other gets a new one (`newId`). `version` – the template's version in force from
- * the date of the save (null – none yet): „Dołóż” leaves a block of the template the version has already (`inTemplate`); an anchor goes to a
- * block of the version as it will be (one saved, or – „Dołóż” – one it keeps), or to a session of it (`session:<id>`), else the block takes the hour
- * the plan gives it. A block with no place at all is left (`left`), and the blocks anchored to it with it – no anchor points at a block that is not
- * there. The hours go in the template's hours (`wake` – the frame of the day's wake: a morning the day's wake moved is moved back, as a drag on the
- * axis of „Szablony” is, `unshiftedStart`). A block beside another (D492) keeps its hour without the group – a template has no parallel blocks.
- * `taskTitle` – the title of the task of „Sprawy” that names a block of a task (the template has no task: the title is its name).
+ * template (its attachments and the days' changes of it go on), any other gets a new one (`newId`) – never an id the template has had in any version
+ * (`allIds`: its attachments stay its own). `version` – the template's version in force from the date of the save (null – none yet): „Dołóż” leaves
+ * a block of the template the version has already (`inTemplate`); an anchor goes to a block of the version as it will be (one saved, or – „Dołóż” –
+ * one it keeps), or to a session of it (`session:<id>`), else the block takes the hour the plan gives it. A block with no place at all is left
+ * (`left`), and the blocks anchored to it with it – no anchor points at a block that is not there. The hours are the template's (`wake`, D617): a
+ * block of the snapshot the day did not change – its own hour in the snapshot; any other – the plan's hour taken back by the day's wake as a drag on
+ * the axis of „Szablony” is (`unshiftedStart`), the morning bounded by the first fixed block of the version as the save leaves it (the days made of
+ * it bound theirs so). A block beside another (D492) keeps its hour without the group – a template has no parallel blocks. `taskTitle` – the title
+ * of the task of „Sprawy” that names a block of a task (the template has no task: the title is its name).
  */
 export function templateBlocksOf(
   take: readonly PlanBlock[],
   plan: readonly PlanBlock[],
-  o: { date: string; templateId: string; version: TemplateVersion | null; mode: SaveAsMode; newId: () => string; taskTitle?: (task: string) => string | null; wake?: WakeFrame }
+  o: {
+    date: string
+    templateId: string
+    version: TemplateVersion | null
+    mode: SaveAsMode
+    newId: () => string
+    taskTitle?: (task: string) => string | null
+    wake?: WakeFrame
+    allIds?: ReadonlySet<string>
+  }
 ): TemplateSave {
   const versionBlocks = o.version?.blocks ?? []
   const own = new Set(versionBlocks.filter((b) => !isSessionEntry(b)).map((b) => b.id))
   const sessions = new Set(versionBlocks.filter(isSessionEntry).map(sessionIdOf))
-  // The ids the version will have besides the ones made here: its sessions, and – „Dołóż” – every block it keeps.
-  const used = new Set(versionBlocks.filter((b) => o.mode === 'add' || isSessionEntry(b)).map((b) => b.id))
+  // What the version keeps besides the blocks made here: its sessions, and – „Dołóż” – every block of it.
+  const kept = versionBlocks.filter((b) => o.mode === 'add' || isSessionEntry(b))
+  // The ids the version will have: a block of this template takes its own id when no other has taken it.
+  const taken = new Set(kept.map((b) => b.id))
+  // The ids a new block never gets: those, and every id the template has had (`allIds`).
+  const known = new Set([...taken, ...(o.allIds ?? [])])
   // The day's id → the template's id of every block of the version as it will be (for the anchors).
   const idOf = new Map<string, string>()
   const ofThis = (b: PlanBlock): string | null => (b.sourceId && isOfTemplate(b, o.date, o.templateId) ? b.sourceId : null)
@@ -117,7 +142,7 @@ export function templateBlocksOf(
     }
   const fresh = (): string => {
     let id = o.newId()
-    while (used.has(id)) id = o.newId()
+    while (known.has(id) || taken.has(id)) id = o.newId()
     return id
   }
   const going: Array<{ b: PlanBlock; id: string }> = []
@@ -128,8 +153,9 @@ export function templateBlocksOf(
       inTemplate++
       continue
     }
-    const id = src && !used.has(src) ? src : fresh()
-    used.add(id)
+    const id = src && !taken.has(src) ? src : fresh()
+    taken.add(id)
+    known.add(id)
     idOf.set(b.id, id)
     going.push({ b, id })
   }
@@ -150,19 +176,25 @@ export function templateBlocksOf(
       changed = true
     }
   }
+  // The first fixed block of the version as the save leaves it (a fixed block keeps its hour on any wake): what bounds the morning of its days.
+  const placed = going.filter(({ b }) => !placeless.has(b.id))
+  const firstFixed = firstFixedStart([...kept, ...placed.flatMap(({ b }) => (b.fixed && !anchorOf(b) ? [{ ...b, startMin: plannedStartMin(b, plan) }] : []))])
+  const hourOf = (b: PlanBlock, dayStart: number): number => {
+    if (!o.wake) return dayStart
+    const asMade = b.anchor ? undefined : o.wake.asMade.get(b.id)
+    return asMade ?? unshiftedStart({ ...b, anchor: null }, dayStart, o.wake.delta, firstFixed)
+  }
   const blocks: PlanBlock[] = []
-  for (const { b, id } of going) {
-    if (placeless.has(b.id)) continue
+  for (const { b, id } of placed) {
     const anchor = anchorOf(b)
     const dayStart = anchor ? null : plannedStartMin(b, plan)
-    const startMin = dayStart == null ? null : o.wake ? unshiftedStart({ ...b, anchor: null }, dayStart, o.wake.delta, o.wake.firstFixed) : dayStart
     const title = b.task ? (o.taskTitle?.(b.task) ?? null) : null
     blocks.push(
       planBlock({
         id,
         categoryId: b.categoryId,
         variantId: b.variantId,
-        startMin,
+        startMin: dayStart == null ? null : hourOf(b, dayStart),
         anchor,
         durationMin: b.durationMin,
         fixed: b.fixed,
@@ -178,6 +210,21 @@ export function templateBlocksOf(
     )
   }
   return { blocks, inTemplate, left: [...placeless].map((): SaveAsWhy => 'bez godziny') }
+}
+
+/** What a version holds without its date – its blocks by id (their order in the file is not what it makes), its budget, limit and the move of sessions. */
+const bodyOf = (v: TemplateVersion) => ({ blocks: [...v.blocks].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), budgetMin: v.budgetMin, maxMin: v.maxMin, sessionsMoved: v.sessionsMoved ?? null })
+
+/** Two versions make the same days (the save's version and the one in force before it): a save that changes nothing writes nothing – „bez zmian”. */
+export const sameVersionBody = (a: TemplateVersion, b: TemplateVersion): boolean => deepEqual(bodyOf(a), bodyOf(b))
+
+/**
+ * The day saved would take blocks it has not got from the template (D616): some block of the save is not one of the day's own blocks of this very
+ * template (by its id in the template – `isOfTemplate`). A save of the day's template blocks alone gives the day what it has already – no warning.
+ */
+export function bringsNewBlocks(blocks: readonly PlanBlock[], plan: readonly PlanBlock[], date: string, templateId: string): boolean {
+  const own = new Set(plan.flatMap((b) => (b.sourceId && isOfTemplate(b, date, templateId) ? [b.sourceId] : [])))
+  return blocks.some((b) => !own.has(b.id))
 }
 
 /**

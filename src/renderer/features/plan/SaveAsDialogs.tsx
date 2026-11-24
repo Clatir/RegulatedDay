@@ -10,7 +10,7 @@
  * start; the blocks themselves do not change.
  */
 import { useMemo, useState } from 'react'
-import { dayTemplateAfter, saveAsFrom, savedDayTwice, savedTemplate, routineStepsOf, templateBlocksOf, wakeFrameOf, type SaveAsMode } from '@shared/engine/saveAs'
+import { bringsNewBlocks, dayTemplateAfter, saveAsFrom, savedDayTwice, savedTemplate, routineStepsOf, templateBlocksOf, wakeFrameOf, type SaveAsMode } from '@shared/engine/saveAs'
 import { plDate, plDayMonth } from '@shared/format'
 import { groupCount } from '@shared/groupText'
 import { newId } from '@shared/model/ids'
@@ -78,9 +78,14 @@ export function SaveAsTemplateDialog({ model, open, today, view, onClose }: { mo
     [model, pick, template, from, mode, open.date]
   )
   const going = preview?.blocks.length ?? 0
-  // The day saved would take the template's copies of its blocks: the template makes it after the save (also one that becomes its template by it).
+  // The day saved would take the template's copies of its blocks: the template makes it after the save (also one that becomes its template by it),
+  // and some block of the save is not one the day has from this template already (those it gives the day again in their place).
   const twice = useMemo(
-    () => (model && template && preview ? savedDayTwice(open.date, from, dayTemplateAfter(templates, savedTemplate(template, from, preview.blocks, mode), dayTypeNow(model), open.date), template.id) : false),
+    () =>
+      model && template && preview
+        ? bringsNewBlocks(preview.blocks, model.ctx.plan, open.date, template.id) &&
+          savedDayTwice(open.date, from, dayTemplateAfter(templates, savedTemplate(template, from, preview.blocks, mode), dayTypeNow(model), open.date), template.id)
+        : false,
     [model, template, preview, templates, from, mode, open.date]
   )
   const save = () =>
@@ -88,8 +93,9 @@ export function SaveAsTemplateDialog({ model, open, today, view, onClose }: { mo
       commitActiveField()
       if (!template || !going) return
       const done = await saveAsTemplate({ date: open.date, ids: open.ids, templateId: template.id, from, mode, view })
-      // Not saved (refused, a question, unreadable – the corner says why): the window stays, with what you chose.
-      if (done.saved || done.unchanged) onClose()
+      // Refused (unreadable, the folder – the corner says why): the window stays, with what you chose. A question about a change on another computer
+      // closes it: your answer decides the save, a second „Zapisz” would send it again (twice the blocks with „Dołóż”).
+      if (done.fate !== 'refused') onClose()
     })
   // The blocks of the day the window is for (an id of the selection no longer in the plan is not one of them).
   const count = pick ? pick.take.length + pick.skipped.length : (open.ids?.length ?? 0)
@@ -202,7 +208,8 @@ function RoutineSaveForm({ model, ids, names, view, onClose }: { model: DayModel
     run(async () => {
       commitActiveField()
       const d = ref.current
-      if (await saveAsRoutine({ name: d.name, normal: d.normal, worse: d.worse, view })) onClose()
+      // As the template's window: only a refusal keeps it (a question closes it – the answer decides, never a second routine).
+      if ((await saveAsRoutine({ name: d.name, normal: d.normal, worse: d.worse, view })) !== 'refused') onClose()
     })
   const ok = form.name.trim() !== '' && form.normal.some((s) => s.name.trim())
   return (

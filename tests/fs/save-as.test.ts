@@ -36,8 +36,8 @@ const { useGroupLine, clearGroupLine, undoGroupLine } = await load<{
   undoGroupLine: (view: string) => Promise<void>
 }>('../../src/renderer/store/groupLine')
 const { saveAsTemplate, saveAsRoutine } = await load<{
-  saveAsTemplate: (a: { date: string; ids: string[] | null; templateId: string; from: string; mode: 'replace' | 'add'; view: string }) => Promise<{ saved: boolean; added: number; skipped: string[]; inTemplate: number }>
-  saveAsRoutine: (o: { name: string; normal: Array<{ id: string; name: string; min: number }>; worse: []; view: string }) => Promise<boolean>
+  saveAsTemplate: (a: { date: string; ids: string[] | null; templateId: string; from: string; mode: 'replace' | 'add'; view: string }) => Promise<{ saved: boolean; fate: string; added: number; skipped: string[]; inTemplate: number }>
+  saveAsRoutine: (o: { name: string; normal: Array<{ id: string; name: string; min: number }>; worse: []; view: string }) => Promise<string>
 }>('../../src/renderer/features/plan/saveAs')
 
 const TPL = 'roboczy'
@@ -48,6 +48,8 @@ let dir: string
 let hub: DataHub
 // The list of attachments cannot be read now (the view says so).
 let unread = false
+// The edits meet a change on another computer (a question) instead of being written.
+let asked = false
 
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'rd-save-as-'))
@@ -73,11 +75,12 @@ beforeEach(async () => {
       dataView: async () => ({ ...(await hub.view()), ...(unread ? { attachmentsUnread: true } : {}) }),
       dayFiles: (dates) => hub.dayFiles(dates),
       dayData: (date) => hub.day(date),
-      edit: (entries) => hub.edit(entries),
+      edit: async (entries) => (asked ? entries.map(() => ({ status: 'conflict' as const })) : hub.edit(entries)),
       logEvents: (events) => hub.events(events)
     }
   }
   unread = false
+  asked = false
   useUi.setState({ toasts: [] })
   // „Roboczy” – the default template of the ordinary day: one block 08:00–09:00 since long ago.
   write(paths.record('template', TPL), {
@@ -227,6 +230,45 @@ describe('godziny szablonu przy pobudce dnia innej niż szablonu (D617, jak „S
   })
 })
 
+describe('dzień nietknięty, pytanie o zmianę z innego komputera (przegląd r2)', () => {
+  it('„Zastąp” własnego szablonu na dniu, którego nic nie zmieniło (pobudka +3 h przesunęła blok za stały) – „bez zmian”, żadnej nowej wersji', async () => {
+    const t = today()
+    // The template: 11:00 flexible, 13:00 fixed; today woken at 09:00 (3 h after the template's 06:00) and nothing else changed – 11:00 shows at 14:00.
+    await updateRecord(paths.record('template', TPL), (raw) => ({
+      ...raw,
+      versions: {
+        [OLD_FROM]: {
+          blocks: [
+            { id: 'late', categoryId: 'inne', startMin: 11 * 60, durationMin: 60, fixed: false, origin: 'template' },
+            { id: 'fx', categoryId: 'inne', startMin: 13 * 60, durationMin: 30, fixed: true, origin: 'template' }
+          ],
+          budgetMin: null,
+          maxMin: null
+        }
+      }
+    }))
+    write(paths.day(t), { schema: 1, date: t, dayType: 'zwykly', sessions: NO_SESSIONS, wakeMin: 9 * 60 })
+    expect(await planOf(t)).toEqual([
+      [13 * 60, null, true],
+      [14 * 60, null, false]
+    ])
+    const r = await saveAsTemplate({ date: t, ids: null, templateId: TPL, from: addDays(t, 1), mode: 'replace', view: 'today' })
+    expect([r.saved, r.fate]).toEqual([false, 'unchanged'])
+    expect(Object.keys(versions())).toEqual([OLD_FROM])
+    expect(line()).toBeUndefined()
+  })
+
+  it('zapis spotkał zmianę z innego komputera – los „asked” (okno się zamyka, odpowiedź rozstrzyga), bez linii; rutyna tak samo', async () => {
+    const t = today()
+    asked = true
+    const r = await saveAsTemplate({ date: t, ids: ['a'], templateId: TPL, from: addDays(t, 1), mode: 'add', view: 'today' })
+    expect([r.saved, r.fate]).toEqual([false, 'asked'])
+    expect(line()).toBeUndefined()
+    expect(await saveAsRoutine({ name: 'Poranek', normal: [{ id: 's1', name: 'Raport', min: 45 }], worse: [], view: 'today' })).toBe('asked')
+    expect(line()).toBeUndefined()
+  })
+})
+
 describe('zapis od daty i nieczytelne załączniki', () => {
   it('„Od” sprzed jutra (okno otwarte przez 04:00) – wersja od jutra, nigdy od dziś', async () => {
     const t = today()
@@ -273,7 +315,7 @@ describe('bloki jako rutyna (N15)', () => {
   it('nowa rutyna z krokami; bloki dnia bez zmian; „Cofnij” ją usuwa', async () => {
     const t = today()
     const before = read(paths.day(t))
-    expect(await saveAsRoutine({ name: 'Poranek', normal: [{ id: 's1', name: 'Raport', min: 45 }, { id: 's2', name: 'Trening', min: 30 }], worse: [], view: 'today' })).toBe(true)
+    expect(await saveAsRoutine({ name: 'Poranek', normal: [{ id: 's1', name: 'Raport', min: 45 }, { id: 's2', name: 'Trening', min: 30 }], worse: [], view: 'today' })).toBe('saved')
     const routines = (await hub.view()).routines
     expect(routines.map((r) => [r.name, r.normal])).toEqual([
       [

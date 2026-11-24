@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { templateBlockId } from '@shared/engine/createDay'
-import { blocksToSave, dayTemplateAfter, routineStepsOf, saveAsFrom, savedDayTwice, savedTemplate, templateBlocksOf, wakeFrameOf } from '@shared/engine/saveAs'
+import { blocksToSave, bringsNewBlocks, dayTemplateAfter, routineStepsOf, saveAsFrom, savedDayTwice, savedTemplate, sameVersionBody, templateBlocksOf, wakeFrameOf } from '@shared/engine/saveAs'
 import type { DaySnapshot } from '@shared/model/events'
 import { planBlock, templateVersionOn, type DayFile, type PlanBlock, type Template } from '@shared/model/plan'
 
@@ -145,13 +145,20 @@ describe('bloki szablonu z bloków dnia', () => {
     expect(r.blocks.map((b) => b.id)).toEqual(['fresh'])
   })
 
-  it('„Zastąp”: nowe id nie powtarza id wpisu sesji, który wersja zachowuje (id zwykłego bloku wersji – wolne)', () => {
-    const ids = ['ny', 'x']
+  it('„Zastąp”: nowe id nie powtarza żadnego id szablonu – wpisu sesji, bloku tej wersji ani bloku innej wersji (ich załączniki zostają ich)', () => {
+    const ids = ['ny', 'x', 'dawny', 'fresh']
     const plan = [blk('a', h(9))]
-    const version = template([session, blk('x', h(9))]).versions[0]!
-    const r = templateBlocksOf(plan, plan, { date: DATE, templateId: TPL, version, mode: 'replace', newId: () => ids.shift()! })
+    const t = { ...template([session, blk('x', h(9))]), versions: [{ from: '2026-01-01', blocks: [blk('dawny', h(7))], budgetMin: null, maxMin: null }, ...template([session, blk('x', h(9))]).versions] }
+    const r = templateBlocksOf(plan, plan, { date: DATE, templateId: TPL, version: t.versions[1]!, mode: 'replace', newId: () => ids.shift()!, allIds: new Set(t.versions.flatMap((v) => v.blocks.map((b) => b.id))) })
+    expect(r.blocks.map((b) => b.id)).toEqual(['fresh'])
+    expect(savedTemplate(t, '2026-11-25', r.blocks, 'replace').versions[2]!.blocks.map((b) => b.id)).toEqual(['ny', 'fresh'])
+  })
+
+  it('„Zastąp”: blok tego szablonu z dnia zachowuje swoje id także wtedy, gdy szablon zna je z innych wersji', () => {
+    const plan = [ofTpl('x', h(9))]
+    const t = template([blk('x', h(9))])
+    const r = templateBlocksOf(plan, plan, { date: DATE, templateId: TPL, version: t.versions[0]!, mode: 'replace', newId: seq, allIds: new Set(['x']) })
     expect(r.blocks.map((b) => b.id)).toEqual(['x'])
-    expect(savedTemplate(template([session, blk('x', h(9))]), '2026-11-25', r.blocks, 'replace').versions[1]!.blocks.map((b) => b.id)).toEqual(['ny', 'x'])
   })
 
   it('blok bez miejsca (bez godziny i kotwicy) nie idzie, a zakotwiczone do niego też nie – żadna kotwica nie wskazuje bloku, którego nie ma', () => {
@@ -168,11 +175,12 @@ describe('bloki szablonu z bloków dnia', () => {
 })
 
 describe('godziny szablonu, nie dnia: pobudka dnia inna niż szablonu (D617, jak „Szablony”)', () => {
-  // The template's morning block 08:00 the day shows 3 h later (wake 09:00, the template's 06:00); a fixed block 13:00 bounds the morning.
+  // Blocks of yours (no block of the snapshot): the day's wake 09:00, the template's 06:00; a fixed block 13:00 bounds the morning.
   const plan = [blk('m', h(11)), blk('f', h(13), { fixed: true }), blk('after', h(14)), blk('tail', null, { anchor: 'm', durationMin: 30 })]
+  const late = { delta: 180, asMade: new Map<string, number>() }
 
   it('późna pobudka: poranne elastyczne – w godzinach szablonu; stałe i te po pierwszym stałym – bez zmian; zakotwiczony do bloku, który idzie – za nim', () => {
-    const { blocks } = templateBlocksOf(plan, plan, { date: DATE, templateId: TPL, version: null, mode: 'replace', newId: seq, wake: { delta: 180, firstFixed: h(13) } })
+    const { blocks } = templateBlocksOf(plan, plan, { date: DATE, templateId: TPL, version: null, mode: 'replace', newId: seq, wake: late })
     expect(blocks.map((b) => [b.startMin, b.anchor != null])).toEqual([
       [h(8), false],
       [h(13), false],
@@ -182,21 +190,61 @@ describe('godziny szablonu, nie dnia: pobudka dnia inna niż szablonu (D617, jak
   })
 
   it('zakotwiczony do bloku, który nie idzie – godzina z planu, cofnięta o pobudkę', () => {
-    const r = templateBlocksOf(blocksToSave(plan, ['tail'], NONE).take, plan, { date: DATE, templateId: TPL, version: null, mode: 'replace', newId: seq, wake: { delta: 180, firstFixed: h(13) } })
+    const r = templateBlocksOf(blocksToSave(plan, ['tail'], NONE).take, plan, { date: DATE, templateId: TPL, version: null, mode: 'replace', newId: seq, wake: late })
     expect(r.blocks.map((b) => [b.startMin, b.anchor])).toEqual([[h(9), null]])
+  })
+
+  it('granica poranka z wersji po zapisie, nie z dnia: stały blok dnia, który nie idzie do szablonu, poranka szablonu nie ogranicza', () => {
+    // The day's fixed 09:00 stays out: the template's days have no fixed block before 11:00 – „m” is a morning block there (08:00 + 3 h = 11:00).
+    const p = [blk('f9', h(9), { fixed: true }), blk('m', h(11))]
+    const r = templateBlocksOf(blocksToSave(p, ['m'], NONE).take, p, { date: DATE, templateId: TPL, version: null, mode: 'replace', newId: seq, wake: late })
+    expect(r.blocks.map((b) => b.startMin)).toEqual([h(8)])
+    // A session of the version (kept by „Zastąp”) at 10:00 bounds it: 11:00 is after it, it stays.
+    const withSession = template([planBlock({ ...session, startMin: h(10) })]).versions[0]!
+    expect(templateBlocksOf(blocksToSave(p, ['m'], NONE).take, p, { date: DATE, templateId: TPL, version: withSession, mode: 'replace', newId: seq, wake: late }).blocks.map((b) => b.startMin)).toEqual([h(11)])
   })
 
   it('tydzień przesunięcia sesji (pobudka migawki godzinę wcześniej): poranny blok 07:00 dnia to 08:00 szablonu', () => {
     const p = [blk('m', h(7))]
-    const { blocks } = templateBlocksOf(p, p, { date: DATE, templateId: TPL, version: null, mode: 'replace', newId: seq, wake: { delta: -60, firstFixed: Number.POSITIVE_INFINITY } })
+    const { blocks } = templateBlocksOf(p, p, { date: DATE, templateId: TPL, version: null, mode: 'replace', newId: seq, wake: { delta: -60, asMade: new Map() } })
     expect(blocks.map((b) => b.startMin)).toEqual([h(8)])
   })
 
-  it('różnica pobudek i granica poranka z migawki i pliku dnia (`wakeFrameOf`)', () => {
-    const snapshot = { wakeMin: h(5), templateWakeMin: h(6), blocks: [blk('f', h(13), { fixed: true }), blk('m', h(7))], settings: { sessions: [] } } as unknown as DaySnapshot
-    expect(wakeFrameOf(snapshot, null)).toEqual({ delta: -60, firstFixed: h(13) })
-    const late = { date: DATE, wakeMin: h(9), blocks: [blk('own', h(12), { fixed: true })], cancelled: [], movedTo: {}, sessions: {} } as unknown as DayFile
-    expect(wakeFrameOf(snapshot, late)).toEqual({ delta: 180, firstFixed: h(12) })
+  it('blok migawki, którego dzień nie zmienił – własna godzina szablonu (przesunięcie za pierwszy stały i przycięcie na końcu doby się nie odwracają)', () => {
+    // The template's 11:00 the wake (+3 h) put at 14:00 – after the fixed 13:00; the template's 01:00 (+1) cut to the day's last start for an hour.
+    const p = [ofTpl('x', h(14)), blk('f', h(13), { fixed: true }), ofTpl('night', 1679 - 60)]
+    const asMade = new Map([
+      [templateBlockId(DATE, TPL, 'x'), h(11)],
+      [templateBlockId(DATE, TPL, 'night'), h(25)]
+    ])
+    const { blocks } = templateBlocksOf(blocksToSave(p, null, NONE).take, p, { date: DATE, templateId: TPL, version: null, mode: 'replace', newId: seq, wake: { delta: 180, asMade } })
+    expect(blocks.map((b) => [b.id === 'x' || b.id === 'night' ? b.id : 'new', b.startMin])).toEqual([
+      ['new', h(13)],
+      ['x', h(11)],
+      ['night', h(25)]
+    ])
+  })
+
+  it('różnica pobudek i godziny migawki dla bloków, których plik dnia nie zmienia (`wakeFrameOf`)', () => {
+    const snapshot = { wakeMin: h(5), templateWakeMin: h(6), blocks: [blk('f', h(13), { fixed: true }), blk('m', h(7)), blk('after', null, { anchor: 'm' })], settings: { sessions: [] } } as unknown as DaySnapshot
+    expect(wakeFrameOf(snapshot, null)).toEqual({ delta: -60, asMade: new Map([['f', h(13)], ['m', h(7)]]) })
+    const lateFile = { date: DATE, wakeMin: h(9), blocks: [blk('m', h(10))], cancelled: [], movedTo: {}, sessions: {} } as unknown as DayFile
+    expect(wakeFrameOf(snapshot, lateFile)).toEqual({ delta: 180, asMade: new Map([['f', h(13)]]) })
+  })
+})
+
+describe('„bez zmian” i bloki, które dzień ma już z szablonu', () => {
+  it('wersja równa obowiązującej (inna kolejność bloków) – ta sama treść; inny blok – nie', () => {
+    const v = template([blk('x', h(9), { origin: 'template' }), session]).versions[0]!
+    expect(sameVersionBody(v, { ...v, from: '2026-11-25', blocks: [session, blk('x', h(9), { origin: 'template' })] })).toBe(true)
+    expect(sameVersionBody(v, { ...v, blocks: [session, blk('x', h(10), { origin: 'template' })] })).toBe(false)
+  })
+
+  it('dzień dostałby drugi raz tylko bloki, które nie są jego własnymi blokami tego szablonu', () => {
+    const plan = [ofTpl('x', h(9)), blk('own', h(10))]
+    expect(bringsNewBlocks([blk('x', h(9))], plan, DATE, TPL)).toBe(false)
+    expect(bringsNewBlocks([blk('x', h(9)), blk('n1', h(10))], plan, DATE, TPL)).toBe(true)
+    expect(bringsNewBlocks([blk('x', h(9))], plan, DATE, 'inny')).toBe(true)
   })
 })
 
