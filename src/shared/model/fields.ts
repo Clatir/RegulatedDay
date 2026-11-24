@@ -36,13 +36,21 @@ export interface ToggleField {
   group: FieldGroup
 }
 
-/** „Bloki poza komputerem jednym ciągiem” (D553–D556) and „Bufory dekompresji” (D569): off by default. */
+/** „Bloki poza komputerem jednym ciągiem” (D553–D556), „… przy komputerze …” (D570) and „Bufory dekompresji” (D569): off by default. */
 export const TOGGLE_FIELDS: readonly ToggleField[] = [
   {
     key: 'awayChain',
     path: ['awayChain'],
     label: 'Bloki poza komputerem jednym ciągiem',
     hint: 'Gdy nikogo nie ma przy komputerze, każdy blok poza komputerem (posiłek, rutyna, sprawy domowe, spacer…) kończy się o swoim planowanym końcu i od razu zaczyna się następny – bez pytania po powrocie; każdy start i koniec jest na liście „zrobione automatycznie” z „Cofnij”. Powrót w trakcie bloku kończy go jak dotąd.',
+    group: 'timer'
+  },
+  // „Bloki przy komputerze jednym ciągiem” (D570, D620): off by default.
+  {
+    key: 'deskChain',
+    path: ['deskChain'],
+    label: 'Bloki przy komputerze jednym ciągiem',
+    hint: 'Gdy blok przy komputerze dobiega końca, a Ty pracujesz (klawiatura albo mysz w ostatnich 2 min), kończy się o planowanym końcu jako zrobiony i od razu zaczyna się następny blok przy komputerze, jeśli zaczyna się najpóźniej 5 min później – zamiast pytania „Dalej?”. Pasek mówi „Dalej: <nazwa> · Cofnij” przez 10 s. Nie przed sesją, wykładem, zjazdem, dojazdem, blokiem stałym, buforem dekompresji, blokiem za granicą ani po ostatnim bloku pracy.',
     group: 'timer'
   },
   // „Bufory dekompresji” (D386, D403, D569): off by default, beside its thresholds.

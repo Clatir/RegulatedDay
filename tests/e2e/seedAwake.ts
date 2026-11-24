@@ -8,14 +8,15 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { defaultTemplates, firstComputerRecords } from '../../src/shared/model/defaults'
 import { DEFAULT_GENERAL, rdFrom } from '../../src/shared/model/rd'
-import { DEFAULT_SESSIONS, DEFAULT_SETTINGS } from '../../src/shared/model/settings'
+import { DEFAULT_SESSIONS, DEFAULT_SETTINGS, type RulesSettings } from '../../src/shared/model/settings'
 import { paths } from '../../src/shared/data/paths'
 import { addDays } from '../../src/shared/time/zone'
 import { logicalToday } from './app'
 
-export function seedAwake(dir: string, blocks: ReadonlyArray<Record<string, unknown>>): { today: string; dayFile: string } {
+export function seedAwake(dir: string, blocks: ReadonlyArray<Record<string, unknown>>, extra: Partial<RulesSettings> = {}): { today: string; dayFile: string } {
   const today = logicalToday()
-  const settings = { ...DEFAULT_SETTINGS, dayTypes: { ...DEFAULT_SETTINGS.dayTypes, zwykly: { ...DEFAULT_SETTINGS.dayTypes.zwykly, bedtimeMin: 27 * 60 + 59 } } }
+  // `extra` – shared settings of the test on top of the defaults (e.g. `deskChain`, N1).
+  const settings = { ...DEFAULT_SETTINGS, ...extra, dayTypes: { ...DEFAULT_SETTINGS.dayTypes, zwykly: { ...DEFAULT_SETTINGS.dayTypes.zwykly, bedtimeMin: 27 * 60 + 59 } } }
   const records = firstComputerRecords(
     { settings, general: DEFAULT_GENERAL, categories: rdFrom(undefined).categories, people: [], templates: defaultTemplates(), lectures: [], days: {} },
     Date.now(),

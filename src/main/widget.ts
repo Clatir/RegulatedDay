@@ -23,7 +23,7 @@ import { hardEndCurrent, hardEndMessage, type HardEndNow } from '@shared/engine/
 import { classModeEnd, fewerAt, modesOf, type ModePrefs, type Modes } from '@shared/engine/modes'
 import { REMINDER_NOTICE_MIN, reminderWords, remindersDue } from '@shared/engine/reminders'
 import { suggestRegen } from '@shared/engine/reserve'
-import { timerNow, type TimerNow } from '@shared/engine/timer'
+import { DESK_CHAIN_RULE, deskChainPair, MOVED_ON, timerNow, type TimerNow } from '@shared/engine/timer'
 import { WIDE_COST_FROM } from '@shared/model/blockCosts'
 import { olderComputers } from '@shared/model/note'
 import { pushedText } from '@shared/engine/pushApart'
@@ -53,6 +53,8 @@ import { ASSESS_TEXT, barCostOp, CLICK_UNDO_MS, noFolderView, SEEN_LINE, SIGNAL_
 import type { DataFolder } from './data/folder'
 
 const CONFIRM_MS = 10_000
+/** A chain at the computer this bar first sees later than this after it gets no line „Dalej: … · Cofnij” – the list only (D620, T2499). */
+export const DESK_LINE_LATE_MS = 60_000
 /** Two clicks within this count as one (spec „Potwierdzenie przedłużenia”). */
 export const DOUBLE_MS = 500
 const REFRESH_MS = 15_000
@@ -85,6 +87,8 @@ export interface WidgetDeps {
    */
   cost?: (click: BarCostClick) => Promise<BarCostResult>
   answer: (id: string, answer: string, value: number | null) => Promise<TimerResult>
+  /** A check of the folder now (the leader's pass, as after a click): after „Anuluj” of a waiting „Przedłuż” (T2868). */
+  check?: () => void
   seen: (ids: string[], how: 'panel' | 'main' | 'notification' | 'bar') => Promise<unknown>
   clickedApp: () => void
   modePrefs: () => ModePrefs
@@ -152,6 +156,8 @@ interface Pending extends Omit<BarPending, 'left'> {
   /** „Przedłuż”: the length waiting for the second click (changed in steps of 15 min – T289), and its block (none: the one in front). */
   minutes?: number
   block?: string
+  /** „Przedłuż” of the block in front: the block the bar showed in front at the first click (D621, T2862) – its confirmation carries it. */
+  shown?: string | null
 }
 
 /** The longest extension of „Przedłuż” by its steps. */
@@ -330,6 +336,11 @@ export class WidgetEngine {
   /** „Dodano 5 spraw · Cofnij” after a list pasted into the field of the window or the panel (N11, D606): one at a time, for `UNDO_LINE_MS`. */
   private quickLine: { batch: string; text: string; until: number; seq: number; undoing: boolean } | null = null
   private clickSeq = 0
+  /** Chains at the computer this bar saw (D620): the start's id → until when its line „Dalej: … · Cofnij” stands (mono; 0 – none). */
+  private deskSeen = new Map<string, number>()
+  private deskDay: string | null = null
+  /** The block in front in the view last emitted (D621, T2862): what the bar showed, not the day being counted (undefined – no day). */
+  private shownFg: string | null | undefined = undefined
 
   constructor(private readonly d: WidgetDeps) {}
 
@@ -409,9 +420,11 @@ export class WidgetEngine {
     if (!folder) {
       this.view = null
       this.stepAt([], 0)
+      this.shownFg = undefined
       this.d.emit(this.current())
       return
     }
+    let front: string | null | undefined
     const now = this.now
     const mono = this.mono
     let notices: (() => Promise<void>) | null = null
@@ -425,9 +438,10 @@ export class WidgetEngine {
       // A collection not readable now leaves the bar without the label, never without the bar (D405).
       const allDay = (await folder.collection('allDay').catch(() => [])).map(allDayFrom).filter((x): x is AllDayEvent => !!x)
       const names = { rd, settings: m.state.settings, routines, requests }
-      if (this.pending && this.pending.until <= mono) this.pending = null
+      if (this.pending && this.pending.until <= mono) this.setPending(null)
       if (this.note && this.note.until <= mono) this.note = null
       const timer = timerNow(m.state)
+      front = timer.fg?.info.id ?? null
       const modePrefs = this.d.modePrefs()
       const modes = modesOf(m.state, timer, m.ctx.events, now, modePrefs)
       const hardEnd = hardEndCurrent(m.state, timer)
@@ -467,6 +481,7 @@ export class WidgetEngine {
       this.gapView(m, now, modes)
       this.variantsView(m, now, mono, modes)
       this.clickUndoView(mono)
+      this.deskChainView(m, now, mono)
       this.syncView(folder, now)
       this.linesLast()
       if (this.failing) this.d.log('info', 'widget: dzień znów policzony')
@@ -480,12 +495,14 @@ export class WidgetEngine {
       if (!this.failing) this.d.log('warn', 'widok widgetu nie policzył się', e)
       this.failing = true
       this.model = null
+      front = undefined
       this.view = this.withPanelBy(unknownView())
       this.awayView(folder)
     }
     // The warning steps of the view's own day (none while the widget is hidden or the day not counted).
     const v = this.current()
     this.stepAt(this.model && !v.hidden ? warnDeadlines(this.model.state, v.block?.endsAt ?? null, now) : [], now)
+    this.shownFg = front
     this.d.emit(v)
     if (notices) await notices().catch((e) => this.d.log('warn', 'powiadomienia nie policzyły się', e))
   }
@@ -1018,7 +1035,7 @@ export class WidgetEngine {
     try {
       await this.actNow(action, arg, from)
     } catch (e) {
-      this.pending = null
+      this.setPending(null)
       this.say(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`)
       this.d.log('warn', `pasek: ${action}`, e)
       await this.refresh()
@@ -1092,13 +1109,13 @@ export class WidgetEngine {
     const num = (s: string | undefined) => (s != null && /^-?\d+$/.test(s) ? Number(s) : null)
     switch (action) {
       case 'next':
-        click = { a: 'next' }
+        click = { a: 'next', shown: this.shownFront() }
         break
       case 'pause':
         click = { a: 'pause' }
         break
       case 'extend':
-        click = { a: 'extend', minutes: num(arg) ?? 15 }
+        click = { a: 'extend', minutes: num(arg) ?? 15, shown: this.shownFront() }
         label = `Przedłuż +${num(arg) ?? 15}`
         break
       case 'endWork':
@@ -1155,8 +1172,17 @@ export class WidgetEngine {
       }
       case 'confirm': {
         const p = this.pending
-        this.pending = null
-        if (p && p.until > this.mono) r = await p.redo()
+        // Its hold stays – fresh, for the whole write (T2868): the leader writes no chain over the extension meanwhile; its end moves then.
+        this.setPending(null, true)
+        if (p?.minutes != null) this.d.folder()?.holdDeskChain(p.block ?? p.shown ?? null, CONFIRM_MS)
+        try {
+          if (p && p.until > this.mono) r = await p.redo()
+        } finally {
+          this.releaseHold(p)
+          // Refused (or not written): the chain may go now – the leader's pass at once (an extension written – the click's own pass).
+          if (p?.minutes != null && !r?.ok) this.d.check?.()
+        }
+        if (r && !r.ok && r.code === 'moved') return this.sayMoved(r)
         if (r && !r.ok && r.why) this.say(r.why)
         // The start after „Dalej” that waited for its cost: the same click – its „Cofnij” takes both back (D564 P18).
         const u = p?.undoOf
@@ -1165,8 +1191,9 @@ export class WidgetEngine {
         return this.refresh()
       }
       case 'cancelPending':
-        // „Anuluj” of a cost waiting for its second click (C6): nothing more is done – what its first click did stays.
-        this.pending = null
+        // „Anuluj” of a cost waiting for its second click (C6): nothing more is done – what its first click did stays; a waiting chain
+        // at the computer goes on at once (T2867).
+        this.setPending(null)
         return this.refresh()
       case 'openMain':
         // „+ Prośba do kolejki” and another person outside the quiet modes (D311): the screen of requests; „Rytuał” (D318).
@@ -1238,6 +1265,8 @@ export class WidgetEngine {
         if (kind === 'moved') return act === 'undo' ? this.undoMoved(id === 'push' ? 'push' : 'variant') : undefined
         // „<akcja> · Cofnij” of the bar's last click (D564 P18).
         if (kind === 'clickUndo') return act === 'undo' ? this.undoClickLine(id) : undefined
+        // „Dalej: <nazwa> · Cofnij” after a chain at the computer (D620).
+        if (kind === 'deskChain') return act === 'undo' ? this.undoDeskChain(id, day) : undefined
         // „Zadanie zrobione? · Tak · Wraca na listę” (D384): the answer is the task's record.
         if (kind === 'task') return act === 'done' || act === 'back' ? this.answerTask(line, act) : undefined
         // A reminder (UX13, D565 P21): „Otwórz” / „Rytuał” – the main window on „Dziś” (the morning plan) or the ritual, by your
@@ -1285,9 +1314,9 @@ export class WidgetEngine {
           // A break pauses the running work (it waits as the next in the plan), never ends it.
           if (act === 'break' || act === 'solitude') return this.startFromLine(line, day, { a: 'startNew', block: line.replace(/[^a-z0-9]/gi, '').slice(0, 40), categoryId: 'regeneracja', variantId: act === 'solitude' ? 'cisza' : this.breakWay(), durationMin: 15 }, act, false)
           await this.d.timer({ a: 'mark', question: line, answer: act, day })
-        } else if (act === 'extend') click = { a: 'extend', minutes: num(value) ?? 15 }
+        } else if (act === 'extend') click = { a: 'extend', minutes: num(value) ?? 15, shown: this.askedOf(kind, line) }
         else if (act === 'next') {
-          click = { a: 'next' }
+          click = { a: 'next', shown: this.askedOf(kind, line) }
           action = 'next'
         } else if (act === 'workEnd') click = { a: 'workEnd' }
         else if (act === 'endedAt' && value == null) {
@@ -1316,7 +1345,11 @@ export class WidgetEngine {
     const aimed = undoKind === 'next' ? (this.nextBlock ?? undefined) : undefined
     r = await this.d.timer(c)
     // The block „Dalej” began: the one it was clicked toward, when its click wrote its start – else the first it wrote (the plan changed).
-    const undo = r.ok && undoKind ? this.clickDone(undoKind, undoKind === 'workEnd' ? 'Koniec pracy' : `Skończono: ${ended}`, r.wrote, undoKind === 'next' && !r.confirm ? begunOf(aimed, r.wrote?.begun) : undefined, aimed) : null
+    const begun = undoKind === 'next' && !r.confirm ? begunOf(aimed, r.wrote?.begun) : undefined
+    // „Dalej” after the shown block ended elsewhere (T2869): it wrote only the start – „Zaczęto: <nazwa>”, no „Skończono”.
+    const onlyStart = undoKind === 'next' && r.ok && !!r.wrote && r.wrote.ids.length === (r.wrote.begun?.length ?? 0) && begun != null
+    const text = undoKind === 'workEnd' ? 'Koniec pracy' : onlyStart ? `Zaczęto: ${this.blockNameOf(begun!) ?? 'blok'}` : `Skończono: ${ended}`
+    const undo = r.ok && undoKind ? this.clickDone(undoKind, text, r.wrote, onlyStart ? undefined : begun, aimed) : null
     if (r.confirm) {
       const cost = r.confirm
       // „Dalej”: its first click ended the running block; the cost belongs to starting the next one – shown at „Start”.
@@ -1326,9 +1359,10 @@ export class WidgetEngine {
         if (undo && this.pending) this.pending.undoOf = undo
       }
       // „Przedłuż” – of the block in front, in the background or from a line – keeps its length's steps (T289).
-      else this.wait(button, label || 'Start', cost, () => this.d.timer({ ...c, confirm: true }), c.a === 'extend' ? c.minutes : undefined, c.a === 'extend' ? c.block : undefined)
+      else this.wait(button, label || 'Start', cost, () => this.d.timer({ ...c, confirm: true }), c.a === 'extend' ? c.minutes : undefined, c.a === 'extend' ? c.block : undefined, c.a === 'extend' ? c.shown : undefined)
     } else {
-      this.pending = null
+      this.setPending(null)
+      if (!r.ok && r.code === 'moved') return this.sayMoved(r)
       if (!r.ok && r.why) this.say(r.why)
     }
     await this.refresh()
@@ -1630,7 +1664,7 @@ export class WidgetEngine {
     if (u.undoing) return
     u.undoing = true
     const held = this.pending?.undoOf === u
-    if (held) this.pending = null
+    if (held) this.setPending(null)
     this.markUndoing(u, held)
     try {
       const r = await this.d.timer({ a: 'undoClick', ids: u.ids, day: u.day })
@@ -1654,9 +1688,90 @@ export class WidgetEngine {
     this.d.emit(this.current())
   }
 
+  /** The block the bar shows in front now (D621: „Dalej” and „Przedłuż” carry it), null – none; undefined – no day counted yet. */
+  private shownFront(): string | null | undefined {
+    return this.shownFg
+  }
+
+  /**
+   * The block an answer of a line is about (D621, T2862): „Dalej?” – the block in its id (`next:<dzień>:<blok>:<próg>`, the one it asked of,
+   * whatever view the click came from); another line – the block in front of the view last emitted.
+   */
+  private askedOf(kind: string, line: string): string | null | undefined {
+    return kind === 'next' || kind === 'next2' ? line.split(':').slice(2, -1).join(':') : this.shownFront()
+  }
+
+  /** A click refused because another block is in front now (D621, T2862): the bar names the one the refusal saw there (`front`). */
+  private sayMoved(r: TimerResult): Promise<void> {
+    this.say(r.front ? `Już biegnie: ${this.blockNameOf(r.front) ?? 'blok'}` : (r.why ?? MOVED_ON))
+    return this.refresh()
+  }
+
+  /** A „Przedłuż” waiting for its second click holds the leader's chain at the computer as long as it waits (T2861, T2867; monotonic). */
+  private holdPending(): void {
+    const p = this.pending
+    if (p?.minutes != null) this.d.folder()?.holdDeskChain(p.block ?? p.shown ?? null, Math.max(0, p.until - this.mono))
+  }
+
+  /** … and lets it go at once when it is cancelled or confirmed (T2867). */
+  private releaseHold(p: Pending | null): void {
+    if (p?.minutes != null) this.d.folder()?.holdDeskChain(p.block ?? p.shown ?? null, 0)
+  }
+
+  /**
+   * The one way the waiting cost changes (T2868): the one before (cancelled, replaced, refused, expired) lets the leader's chain go at
+   * once, a new „Przedłuż” holds it as long as it waits; `keep` – „Potwierdź”, whose hold goes once its extension is written.
+   */
+  private setPending(next: Pending | null, keep = false): void {
+    const was = this.pending
+    this.pending = next
+    const freed = !!was && was !== next && !keep && was.minutes != null
+    if (freed) this.releaseHold(was)
+    this.holdPending()
+    // The hold went (cancelled, expired, refused, replaced by another cost): the leader's pass at once – after the new hold, if any.
+    if (freed && next?.minutes == null) this.d.check?.()
+  }
+
+  /**
+   * „Dalej: <nazwa> · Cofnij” (D620, T2499) after a chain at the computer: the first of the lines for `CLICK_UNDO_MS` from when this bar
+   * first saw its start – only one seen at most `DESK_LINE_LATE_MS` after it (late by sync or a restart – the list only); every computer's
+   * bar the same way, never while hidden. Its „Cofnij” takes back both blocks (`deskChainPair`).
+   */
+  private deskChainView(m: NonNullable<WidgetEngine['model']>, now: number, mono: number): void {
+    const v = this.view!
+    if (v.day !== this.deskDay) {
+      this.deskSeen.clear()
+      this.deskDay = v.day
+    }
+    if (v.day == null) return
+    const at = new Map<string, number>()
+    for (const e of m.ctx.events) if ((e as { autoRule?: unknown }).autoRule === DESK_CHAIN_RULE && e.k === 'block.start') at.set(e.id, (e as { at: number }).at)
+    let line: { id: string; until: number; block: string } | null = null
+    for (const a of m.state.facts.autos) {
+      if (a.rule !== DESK_CHAIN_RULE || a.k !== 'block.start' || !a.block) continue
+      if (!this.deskSeen.has(a.id)) {
+        const fresh = now - (at.get(a.id) ?? Number.NEGATIVE_INFINITY) <= DESK_LINE_LATE_MS
+        this.deskSeen.set(a.id, fresh ? mono + CLICK_UNDO_MS : 0)
+        if (fresh) setTimeout(() => void this.refresh(), CLICK_UNDO_MS + 50).unref?.()
+      }
+      const until = this.deskSeen.get(a.id)!
+      if (until > mono && deskChainPair(m.state, a)?.alive && (!line || until > line.until)) line = { id: a.id, until, block: a.block }
+    }
+    if (line && !v.hidden) v.lines = [{ id: `deskChain:${line.id}`, text: `Dalej: ${this.blockNameOf(line.block) ?? 'blok'}`, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }, ...v.lines]
+  }
+
+  /** „Cofnij” of the line „Dalej: …” (D620): an `undo` of the chain's start – the engine takes back its end too; the line goes either way. */
+  private async undoDeskChain(start: string, day: string | undefined): Promise<void> {
+    this.deskSeen.set(start, 0)
+    const r = await this.d.timer({ a: 'undo', target: start, day })
+    if (!r.ok && r.why) this.say(r.why)
+    return this.refresh()
+  }
+
   /** A cost waits for its second click within 10 s, in place of its button. */
-  private wait(button: string, label: string, cost: NonNullable<TimerResult['confirm']>, redo: () => Promise<TimerResult>, minutes?: number, block?: string): void {
-    this.pending = { button, text: costText(label, cost), until: this.mono + CONFIRM_MS, redo, ...(minutes != null ? { minutes } : {}), ...(block ? { block } : {}) }
+  private wait(button: string, label: string, cost: NonNullable<TimerResult['confirm']>, redo: () => Promise<TimerResult>, minutes?: number, block?: string, shown?: string | null): void {
+    // „Przedłuż” waiting: no chain at the computer ends its block meanwhile (T2861) – `setPending` holds it.
+    this.setPending({ button, text: costText(label, cost), until: this.mono + CONFIRM_MS, redo, ...(minutes != null ? { minutes } : {}), ...(block ? { block } : {}), ...(shown !== undefined ? { shown } : {}) })
     setTimeout(() => void this.refresh(), CONFIRM_MS + 50).unref?.()
   }
 
@@ -1671,14 +1786,18 @@ export class WidgetEngine {
     const minutes = Math.min(EXTEND_MAX_MIN, Math.max(15, p.minutes + delta))
     if (minutes === p.minutes) return
     const day = this.current().day ?? undefined
-    const c: TimerIn = { a: 'extend', minutes, day, ...(p.block ? { block: p.block } : {}) }
+    // The block shown at the first click goes with every step (D621, T2862).
+    const c: TimerIn = { a: 'extend', minutes, day, ...(p.block ? { block: p.block } : {}), ...(p.shown !== undefined ? { shown: p.shown } : {}) }
     const r = await this.d.timer({ ...c, probe: true })
-    if (r.confirm) this.wait(p.button, `Przedłuż +${minutes}`, r.confirm, () => this.d.timer({ ...c, confirm: true }), minutes, p.block)
+    // Cancelled, confirmed or replaced while the step was judged (T2868): the step brings nothing back.
+    if (this.pending !== p) return this.refresh()
+    if (r.confirm) this.wait(p.button, `Przedłuż +${minutes}`, r.confirm, () => this.d.timer({ ...c, confirm: true }), minutes, p.block, p.shown)
     else if (r.ok) {
-      this.pending = { button: p.button, text: `Przedłuż +${minutes}: bez kosztu`, until: this.mono + CONFIRM_MS, redo: () => this.d.timer(c), minutes, ...(p.block ? { block: p.block } : {}) }
+      this.setPending({ button: p.button, text: `Przedłuż +${minutes}: bez kosztu`, until: this.mono + CONFIRM_MS, redo: () => this.d.timer(c), minutes, ...(p.block ? { block: p.block } : {}), ...(p.shown !== undefined ? { shown: p.shown } : {}) })
       setTimeout(() => void this.refresh(), CONFIRM_MS + 50).unref?.()
     } else {
-      this.pending = null
+      this.setPending(null)
+      if (r.code === 'moved') return this.sayMoved(r)
       if (r.why) this.say(r.why)
     }
     await this.refresh()

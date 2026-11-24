@@ -11,7 +11,8 @@
  * with one click (D564 P12), its „+ Skrzynka” the window „Do skrzynki” on top with the focus (P15) – the bar stays under the
  * other windows. Hidden by its „×” and shown again by the settings (P16), it lies under them too. The row of a block of work stands in
  * one line at 100% and 125% (C4, P17 – with a shot of the bar), and a real „Dalej” with its „Cofnij” (P18) opens no window, nor do the
- * real clicks of „⋯”, „Koszt ▸” and its [+] (D585) – the cost unfolds inside the bar, which stays under the other windows.
+ * real clicks of „⋯”, „Koszt ▸” and its [+] (D585) – the cost unfolds inside the bar, which stays under the other windows; a chain at the
+ * computer (N1, D620) – its line „Dalej: … · Cofnij” and a real „Cofnij” – opens none either.
  */
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -696,6 +697,67 @@ test('„Koszt ▸” paska pulpitu prawdziwym kliknięciem: rozwinięcie w pask
           return zIndex(l, cover) < zIndex(l, bar.hwnd) && zIndex(l, bar.hwnd) < desktopIndex(l, bar.hwnd)
         }, { timeout: 10_000 })
         .toBe(true)
+    })
+  } finally {
+    await app.close()
+  }
+})
+
+/**
+ * „Bloki przy komputerze jednym ciągiem” (N1, D620): a block at the computer reaching its end while the real cursor moved over the bar
+ * (SendInput – input in the last 2 min, no click) ends there and the next one begins by itself; the desktop bar says „Dalej: <nazwa> ·
+ * Cofnij” for 10 s, and its „Cofnij” clicked for real brings the first block back – no new window, the bar still under the other windows
+ * (D229).
+ */
+test('ciąg przy komputerze na pasku pulpitu: „Dalej: Raport · Cofnij” o końcu bloku, prawdziwe „Cofnij” przywraca blok – bez nowego okna, pasek dalej pod oknami (N1, D620)', async () => {
+  test.setTimeout(180_000)
+  const nowMin = logicalMinuteOf(logicalToday(), Date.now())
+  test.skip(nowMin > 28 * 60 - 100, 'blok pracy godzinę później nie mieści się już w dobie logicznej (koniec o 04:00)')
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-desk-chain-'))
+  // The next block at the computer by its own hour a minute from now (a project – no cost after the boundary); work an hour later, so
+  // the block begun now is no last work block (its „Dalej?” would have „Koniec pracy”).
+  seedAwake(
+    dataDir,
+    [
+      { id: 'e2e-next', categoryId: 'projekty', name: 'Raport', startMin: nowMin + 1, durationMin: 30, fixed: false, origin: 'user' },
+      { id: 'e2e-later', categoryId: 'inne', startMin: nowMin + 60, durationMin: 30, fixed: false, origin: 'user' }
+    ],
+    { deskChain: true }
+  )
+  const { app, page: main, userData } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).day), { timeout: 30_000 }).not.toBeNull()
+      // A block of one minute begun now: its end comes within the test.
+      await main.evaluate(() => window.rd.timer({ a: 'startNew', block: 'e2e-chain', categoryId: 'inne', durationMin: 1 }))
+      const page = await viewPage(app, 'bar')
+      await expect(page.getByTestId('bar-next')).toBeVisible({ timeout: 30_000 })
+      await settledBarBounds(app)
+      const bar = await barInfo(app)
+      const covers = uncover(bar.hwnd)
+      const next = await barPoint(app, 'bar-next')
+      await expect.poll(() => windowsAt([next]), { message: `pasek zasłonięty (${covers.join(', ') || 'nic nie zminimalizowano'})`, timeout: 10_000 }).toEqual([bar.hwnd])
+      // Input: the real cursor over the bar, no click (the CI runner has no other input – idle 2 min would be „bezczynny”).
+      hover([next, [next[0] + 12, next[1]]], 200)
+      const before = pidWindows(bar.pid)
+      const orderBefore = topWindows()
+      const line = page.locator('[data-testid^="bar-line-deskChain:"]')
+      await expect(line).toContainText('Dalej: Raport', { timeout: 90_000 })
+      await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).block?.name ?? null), { timeout: 5_000 }).toBe('Raport')
+      // The bar grew by the line: its new place first, then the real click on „Cofnij” (within its 10 s).
+      await settledBarBounds(app)
+      const undo = await barPoint(app, 'bar-act-deskChain-undo')
+      await expect.poll(() => windowsAt([undo]), { timeout: 5_000 }).toEqual([bar.hwnd])
+      click(...undo)
+      await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).block?.name ?? null), { timeout: 5_000 }).toBe('Inne obowiązki')
+      await expect(line).toHaveCount(0)
+      // „Raport” never began: the next is it again, not begun.
+      await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).buttons.nextName ?? null), { timeout: 5_000 }).toBe('Raport')
+      expect(pidWindows(bar.pid)).toEqual(before)
+      const orderAfter = topWindows()
+      expect(movedAcross(orderBefore, orderAfter, bar.hwnd)).toEqual([])
+      expect(zIndex(orderAfter, bar.hwnd)).toBeLessThan(desktopIndex(orderAfter, bar.hwnd))
     })
   } finally {
     await app.close()
