@@ -226,6 +226,17 @@ describe('„Zaplanuj…” grupy i upuszczenie na oś (D530)', () => {
     set(rel('a'), record('a')!)
   })
 
+  it('starty grupy liczone jak w podglądzie rozsuwania (`planningOfGroup`): każda następna od minuty poprzedniej plus długość – także gdy start pierwszej przycina doba', async () => {
+    const items = [task('a', { estimateMin: 30 }), task('b', { estimateMin: 15 }), task('c', { estimateMin: 30 })]
+    const model = dayOf(TODAY, [])
+    for (const from of [lm('14:00'), 230]) {
+      stub(items, { [TODAY]: null })
+      const r = await planCases(['a', 'b', 'c'], TODAY, from)
+      const preview = planningOfGroup(model, TODAY, items.map((x) => requestFrom(x)!), from)
+      expect(r.blocks.map((x) => x.block.startMin)).toEqual(preview.blocks.map((b) => b.startMin))
+    }
+  })
+
   it('„Cofnij” planowania, gdy plik dnia zmieniony od tego czasu: dzień zostaje, sprawy z nim (rekordy nie wracają do „niezaplanowanych” bez bloku) i są policzone', async () => {
     const { sent, lay, set, record, day } = stub([task('a'), task('b')], { [TODAY]: null })
     const r = await planCases(['a', 'b'], TODAY, lm('10:00'))

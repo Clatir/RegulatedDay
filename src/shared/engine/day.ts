@@ -116,11 +116,17 @@ export const typicalOf =
  * the state's own forecast. The view, the buffer and the typical lengths are taken once, for every try.
  */
 export function shownForecaster(ctx: DayContext, state: DayState): (blocks: readonly BlockInfo[]) => Placed[] {
+  const whole = shownWholeForecaster(ctx, state)
+  return (blocks) => whole(blocks).placed
+}
+
+/** `shownForecaster` with the whole forecast (also the order of its chain – `Forecast.chainOrder`, D624). */
+export function shownWholeForecaster(ctx: DayContext, state: DayState): (blocks: readonly BlockInfo[]) => Forecast {
   const m = state.now
   const view = viewAt(state.facts, m + 1)
   const { transitionBufferMin } = settingsAtMinute(ctx.snapshot, state.facts, m + 1).settings
   const typicalMin = typicalOf(ctx)
-  return (blocks) => forecast({ blocks, view, m, mode: 'typical', transitionBufferMin, typicalMin }).placed
+  return (blocks) => forecast({ blocks, view, m, mode: 'typical', transitionBufferMin, typicalMin })
 }
 
 /** `shownForecaster` for one set of blocks. */

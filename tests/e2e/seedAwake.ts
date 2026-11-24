@@ -13,9 +13,11 @@ import { paths } from '../../src/shared/data/paths'
 import { addDays } from '../../src/shared/time/zone'
 import { logicalToday } from './app'
 
-export function seedAwake(dir: string, blocks: ReadonlyArray<Record<string, unknown>>): { today: string; dayFile: string } {
+/** `maxMin` – the ordinary day's maximum (a logical minute; default as the settings' – 19:00). */
+export function seedAwake(dir: string, blocks: ReadonlyArray<Record<string, unknown>>, o: { maxMin?: number } = {}): { today: string; dayFile: string } {
   const today = logicalToday()
-  const settings = { ...DEFAULT_SETTINGS, dayTypes: { ...DEFAULT_SETTINGS.dayTypes, zwykly: { ...DEFAULT_SETTINGS.dayTypes.zwykly, bedtimeMin: 27 * 60 + 59 } } }
+  const zwykly = { ...DEFAULT_SETTINGS.dayTypes.zwykly, bedtimeMin: 27 * 60 + 59, ...(o.maxMin != null ? { maxMin: o.maxMin } : {}) }
+  const settings = { ...DEFAULT_SETTINGS, dayTypes: { ...DEFAULT_SETTINGS.dayTypes, zwykly } }
   const records = firstComputerRecords(
     { settings, general: DEFAULT_GENERAL, categories: rdFrom(undefined).categories, people: [], templates: defaultTemplates(), lectures: [], days: {} },
     Date.now(),
