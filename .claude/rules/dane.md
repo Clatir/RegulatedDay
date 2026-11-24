@@ -26,6 +26,24 @@ komputerów**`, `**Kopie zapasowe**`) i „Terminy” w rozdziale Timer. Decyzje
 - `main/data/eventLog.ts` – lokalny dziennik → log na OneDrive, `ensure` (brakujące zdarzenia, własne kopie
   konfliktowe), `readDay` (wszystkie komputery, pamięć po rozmiarze i czasie modyfikacji).
 - `main/data/records.ts`, `history.ts` (migawki przy edycjach, jedna na minutę), `editQueue.ts` (zmiany pól z bazą).
+- „Ostatnio usunięte” (N24): `RecordStore.write` (powód `edit`) dnia → `shared/data/removed.ts` `dayRemovals` (wyjęty z pliku bez
+  `movedTo`, nowe odwołanie; edycja, która zmienia też serię – `QueuedEdit.series` – nie daje notatki) → po udanym `put`
+  `history.removal` z chwilą edycji (`edit.at`) i `taken` (załączniki zdjęte z wpisem – `removalMarks` w `enqueue`, id → `removedAt`,
+  `QueuedEdit.taken`, właściciel-blok – `takenBy`; to samo w migawce `delete` rekordu – `RecordStore.remove(rel, at, taken)` – i `archive`
+  serii: nigdy `delete`, bo `joinCopy` uznałby brak pliku za usunięcie celowe) – jeden plik na
+  edycję w `.history/.removed/` (kropka: `records()` go pomija), starsze niż `REMOVED_MS` (30 dni) sprząta następny zapis.
+  `folder.removedItems` (IPC `historyRemoved`): `history.records(unread, REMOVED_KINDS)` – brak pliku (nie usunięcie czekające w kolejce; seria – `archived` w pliku)
+  + najnowsza wersja bez kopii konfliktowych to `delete` (chwila – `Snapshot.at`); seria tylko `archived` – rekord teraz bez archiwum z
+  `until`/`count` najnowszej wersji niezarchiwizowanej; bloki – najnowsza notatka każdego id ze wszystkich dni, gdy bloku nie ma w planie
+  `ownContext` ani w `movedTo`, bez cofniętego usunięcia (blok znowu w pliku, odwołanie zdjęte), bez zdjętego samego wpisu bloku migawki
+  (`snapshotEntries`) i bez bloku z `movedFrom`, gdy plik dnia
+  źródłowego nie ma `movedTo[id]` = ten dzień; wartość, `startMin` i `anchorGone` z `ownContext` policzonego od nowa z plikiem po
+  `restoredDay` (nie stanąłby z innego powodu – pominięty), `frozen` z `day.freeze`; załączniki – `removedWith(…, taken)` (id z
+  usunięcia, `removedAt` bez zmian, właściciel), lista nieczytelna – `attachmentsUnknown`; nieczytelne (też historia: `unread` w
+  `records`/`list`/`removals`) → `complete: false`. Okno: `features/history/RemovedList.tsx` (odczyt po zmianie danych najwyżej co
+  `REMOVED_REREAD_MS`, od razu po `useRemovedChanges`; „nic” tylko przy `complete`), `removedText.ts` (`restoreOff`),
+  `removedActions.ts` (`restoredDay` / `removedAgain`; rekord – `editOf` w turze, seria tylko w archiwum; `RemovedItem.attachments` –
+  `restoreEdits` z `withOwner`, „Cofnij” – `removalEdits`; bez wpisu właściciela – nic).
 - `main/data/presenceStore.ts` – własna obecność (kiedy zapisać) i cudze (czasy zobaczenia lokalnym zegarem).
 - `main/data/folder.ts` – `DataFolder`: `open`, `check` (co 15 s: obecności, prowadzenie, dziennik, kolejka, kopie
   konfliktowe pliku dnia, zadania prowadzącego: dzień, odcinki minut, minięcie twardego końca), `dayState`, `close`.

@@ -13,18 +13,21 @@ import { readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeFileAtomic } from '../datastore/atomic'
-import type { ComputerRow, SearchCorpus } from '@shared/api'
+import type { ComputerRow, RemovedItem, RemovedList, SearchCorpus } from '@shared/api'
 import { EventClock, type ClockSources } from '@shared/data/clock'
 import { inverseEdit, sameContentAs, setAt, type MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
 import { readLogText } from '@shared/data/logText'
+import { dayBlocks, dayRaw, isRaw as isPlainRecord } from '@shared/data/dayEdits'
+import { REMOVED_KINDS, REMOVED_MS, removalMarks, removedWith, restoredDay, type DayRemoval } from '@shared/data/removed'
 import { activityOf, type Activity } from '@shared/engine/activity'
 import { answerEvents, autoActions, closedSince, fixedStartPausesClosed, nextCheckAt, nextDeadline, questionsOf, runFromOf, shutdownActions, type AutoEvent, type Question } from '@shared/engine/auto'
 import { simEvents } from '@shared/engine/sim'
 import { groupLogDrafts, groupLogUndo, type GroupSkip } from '@shared/engine/groupEdit'
 import { foregroundRuns, templateDoneDrafts, templateDoneUndo, type DayRun, type DoneSkipWhy } from '@shared/engine/templateApply'
-import { createDay, nextWakeForBedtime, type HolidayLookup } from '@shared/engine/createDay'
+import { createDay, nextWakeForBedtime, snapshotEntries, type HolidayLookup } from '@shared/engine/createDay'
 import { dayContextOf } from '@shared/engine/context'
+import { plannedStartMin } from '@shared/engine/planEdit'
 import { computeDay, newSegments, type DayContext, type DayState } from '@shared/engine/day'
 import { NO_POWER, powerNeedOf, type PowerNeed } from '@shared/engine/power'
 import { requestAction, type RequestAction } from '@shared/engine/requests'
@@ -1018,6 +1021,148 @@ export class DataFolder {
   }
 
   /**
+   * „Ostatnio usunięte” in „Historia” (N24): what was removed in the last `REMOVED_MS` and is still gone, newest first, each
+   * at the instant you removed it (the queue's entry – `at` of the version kept at the removal, the note's time).
+   * Records (only the kinds of the list are looked at) from their history: a file gone whose newest version (conflict copies
+   * aside) is its removal – not one whose removal still waits in the queue (the file is there); a series only archived (its
+   * removal, D381 – a series without a file is no removal of yours, e.g. the „Cofnij” of its making): the record as it is now out
+   * of the archive, with its end (`until`, `count`) from its newest version not archived (the one kept at the archive). Blocks
+   * from the notes of removals (`history.removals`): for each block only its newest note of all days, on the day it names – if
+   * the day's plan as this computer sees it now (`ownContext`) does not have it, it is not moved to another day (`movedTo`), not
+   * moved here from a day that no longer says it went here (a move taken back), and not of the day's snapshot with only its own
+   * entry taken out of the file. A block shows as the day would have it put back – its context counted again with the file
+   * after „Przywróć” (the day's wake, D334, the room of the series, D401; `startMin` also for one after an anchor); one the plan
+   * would not show even then for its anchor is `anchorGone`, for another reason – left out. The attachments of each: those its
+   * very edit named (`taken`) and still so (`removedWith`); their list unreadable – `attachmentsUnknown`. Whatever cannot be read
+   * now (the history, a record, the attachments, a day's file or log) is left out with `complete` false – unknown is never „none”.
+   */
+  async removedItems(): Promise<RemovedList> {
+    const at = this.clock.now()
+    const since = at - REMOVED_MS
+    let complete = true
+    const unread = () => void (complete = false)
+    const items: Array<{ item: Omit<RemovedItem, 'attachments' | 'attachmentsUnknown'>; taken?: Record<string, number> }> = []
+    const none = { cancelled: false, frozen: false, anchorGone: false, startMin: null, date: null }
+    for (const r of await this.history.records(unread, REMOVED_KINDS)) {
+      if (r.last < since) continue
+      const rel = paths.record(r.kind as (typeof REMOVED_KINDS)[number], r.id)
+      let now: Record<string, unknown> | undefined
+      let file: Record<string, unknown> | undefined
+      try {
+        now = await this.recordView(rel)
+        file = await this.shared(rel)
+      } catch {
+        complete = false
+        continue
+      }
+      const series = r.kind === 'series'
+      // A removal still waiting in the queue (the file there, the queue's view without it; a series – archived in the queue's view
+      // only) is not written yet: not on the list.
+      if (series ? now?.archived !== true || file?.archived !== true : now !== undefined || file !== undefined) continue
+      const versions = (await this.history.list(r.kind, r.id, unread)).filter((v) => v.reason !== 'conflict' && isPlainRecord(v.record))
+      if (series) {
+        // The newest version not archived: the series just before its (last) archive (`archive` – kept at it, with when).
+        const was = versions.find((v) => (v.record as Record<string, unknown>).archived !== true)
+        const atArchive = was?.reason === 'archive' || was?.reason === 'delete'
+        const removedAt = atArchive ? (was!.at ?? was!.savedAt) : typeof now!.updatedAt === 'number' ? now!.updatedAt : null
+        if (!was || removedAt == null || removedAt < since) continue
+        const end = was.record as Record<string, unknown>
+        items.push({ item: { ...none, kind: 'series', id: r.id, rel, removedAt, value: { ...now!, archived: false, until: end.until ?? null, count: end.count ?? null } }, ...(atArchive ? { taken: was.taken } : {}) })
+        continue
+      }
+      const was = versions[0]?.reason === 'delete' ? versions[0] : undefined
+      const removedAt = was ? (was.at ?? was.savedAt) : null
+      if (!was || removedAt == null || removedAt < since) continue
+      items.push({ item: { ...none, kind: r.kind as RemovedItem['kind'], id: r.id, rel, removedAt, value: was.record as Record<string, unknown> }, taken: was.taken })
+    }
+    let notes: Awaited<ReturnType<RecordHistory['removals']>> = []
+    try {
+      notes = await this.history.removals(since, unread)
+    } catch {
+      complete = false
+    }
+    // The newest note of each block of all days (notes come newest first): an older one – on another day too – says nothing now.
+    const byDay = new Map<string, Array<{ id: string; at: number; r: DayRemoval; taken?: Record<string, number> }>>()
+    const seen = new Set<string>()
+    for (const n of notes) {
+      if (!isIsoDate(n.date)) continue
+      for (const r of n.removed) {
+        if (!r || typeof r.id !== 'string' || seen.has(r.id)) continue
+        seen.add(r.id)
+        // The attachments the note names that may be this block's (one of another block of the same edit is not; one of an owner
+        // not known when it was queued may be).
+        const taken = n.taken ? Object.fromEntries(Object.entries(n.taken).filter(([a]) => n.takenBy?.[a] == null || n.takenBy[a] === r.id)) : undefined
+        byDay.set(n.date, [...(byDay.get(n.date) ?? []), { id: r.id, at: n.savedAt, r, taken }])
+      }
+    }
+    let inp: Inputs | null = null
+    if (byDay.size) {
+      try {
+        inp = await this.inputs(true)
+      } catch {
+        complete = false
+      }
+    }
+    for (const [date, removed] of inp ? byDay : []) {
+      try {
+        const read = await this.log.readDay(date)
+        if (!read.complete && !read.away) throw new Error('log')
+        const raw = (await this.recordView(paths.day(date))) ?? null
+        const ctx = await this.ownContext(date, read, at, inp!, raw ? dayFileFrom(raw, date) : null)
+        const inPlan = new Set(ctx.plan.map((b) => b.id))
+        const movedTo = raw ? dayFileFrom(raw, date).movedTo : {}
+        // Its removal taken back since: one of yours is in the file again, one of the snapshot no longer cancelled (gone from the plan
+        // since for another reason – its anchor – it is not removed).
+        const inFile = new Set(dayBlocks(raw ?? {}).flatMap((b) => (isPlainRecord(b) && typeof b.id === 'string' ? [b.id] : [])))
+        const cancelledNow = new Set(raw ? dayFileFrom(raw, date).cancelled : [])
+        const frozen = read.events.some((e) => isKnown(e) && e.k === 'day.freeze')
+        const ofSnapshot = snapshotEntries(ctx.snapshot, date)
+        for (const { id, at: removedAt, r, taken } of removed) {
+          const cancelled = r.cancelled === true
+          if (inPlan.has(id) || id in movedTo || (cancelled ? !cancelledNow.has(id) : inFile.has(id) || ofSnapshot(id))) continue
+          const own = isPlainRecord(r.block) ? r.block : null
+          if (!cancelled && !own) continue
+          // Moved here from another day: removed here only while that day still says it went here (else the move was taken back).
+          const from = typeof own?.movedFrom === 'string' && isIsoDate(own.movedFrom) && own.movedFrom !== date ? own.movedFrom : null
+          if (from) {
+            try {
+              const source = await this.recordView(paths.day(from))
+              if (!source || dayFileFrom(source, from).movedTo[id] !== date) continue
+            } catch {
+              complete = false
+              continue
+            }
+          }
+          // The day as „Przywróć” would leave it, counted again from that file: where the block would stand, if at all.
+          const after = (await this.ownContext(date, read, at, inp!, dayFileFrom(restoredDay(dayRaw(raw, date), { id, value: own, cancelled }), date))).plan
+          const back = after.find((b) => b.id === id)
+          const shown = back ? (back as unknown as Record<string, unknown>) : (own ?? (ofSnapshot(id) as unknown as Record<string, unknown> | null))
+          if (!shown || (!back && typeof shown.anchor !== 'string')) continue
+          const startMin = back ? plannedStartMin(back, after) : null
+          items.push({ item: { kind: 'block', id, rel: paths.day(date), date, removedAt, value: cancelled ? shown : own, cancelled, frozen, anchorGone: !back, startMin }, taken })
+        }
+      } catch {
+        complete = false
+      }
+    }
+    // The attachments only when a removal took some: their list read once.
+    let attachments: Array<Record<string, unknown>> | null = []
+    if (items.some((x) => x.taken && Object.keys(x.taken).length)) {
+      try {
+        attachments = await this.collection('attachment')
+      } catch {
+        attachments = null
+        complete = false
+      }
+    }
+    const out = items.map(({ item, taken }): RemovedItem => {
+      const unknown = attachments == null && !!taken && Object.keys(taken).length > 0
+      return { ...item, attachments: attachments && !unknown ? removedWith(attachments, item, taken) : null, attachmentsUnknown: unknown }
+    })
+    return { items: out.sort((a, b) => b.removedAt - a.removedAt), complete }
+  }
+
+  /**
    * The days from `from` on that have a file (also one still in the queue), in order – a change of a series looks at the
    * occurrences changed on their days (D381). A year that cannot be listed now is an error (unknown is never „none”).
    */
@@ -1095,12 +1240,21 @@ export class DataFolder {
     const at = this.clock.now()
     const ids: string[] = []
     const queued: QueuedEdit[] = []
+    // What each entry removes with it (N24): the attachments that go after it (a day's block's – by its id), a series changed too.
+    const blockOf = new Map<string, string>()
     for (const e of entries) {
+      const c = classify(e.rel)
+      if (c?.kind !== 'attachment' || !c.id) continue
+      const a = attachmentFrom(await this.recordView(e.rel).catch(() => undefined))
+      if (a?.owner.scope === 'day') blockOf.set(a.id, a.owner.blockId)
+    }
+    const marks = removalMarks(entries, (id) => blockOf.get(id) ?? null)
+    for (const [i, e] of entries.entries()) {
       const id = `${this.o.computer}-${at.toString(36)}-${(this.editSeq++).toString(36)}`
       // The entries before it in this edit it goes with (T923), by their place.
       const after = [...new Set(e.after ?? [])].filter((i) => Number.isInteger(i) && i >= 0 && i < ids.length).map((i) => ids[i]!)
       ids.push(id)
-      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}), ...(after.length ? { after } : {}), ...(whole ? { whole: true } : {}) })
+      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}), ...(after.length ? { after } : {}), ...(whole ? { whole: true } : {}), ...marks[i] })
     }
     // All of them on the disk at once, or none (A3-15): a save that fails leaves no part of it to be written later.
     this.queue.add(...queued)

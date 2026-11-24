@@ -1149,6 +1149,7 @@ function registerIpc(): void {
   handle(CH.historyList, () => needHub().historyList())
   handle(CH.historyVersions, (_e, kind: string, id: string) => needHub().historyVersions(String(kind), String(id)))
   handle(CH.historyRestore, (_e, kind: string, id: string, file: string) => needHub().historyRestore(String(kind), String(id), String(file)))
+  handle(CH.historyRemoved, () => needHub().historyRemoved())
   handle(CH.folderDefault, () => dataFolderNow() ?? DataHub.defaultFolder(app.getPath('documents')))
   handle(CH.folderPick, (e, current: string | null) => pickDir(e, 'Folder danych Regulated Day', typeof current === 'string' ? current : undefined))
   handle(CH.folderProbe, (_e, path: string) => DataHub.probe(String(path)))
