@@ -772,7 +772,7 @@ function seedDay(dir: string, date: string, blocks: Array<{ id: string; startMin
 /** The Monday on or before `date`. */
 const mondayOf = (date: string): string => plusDays(date, -((new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7))
 /** A column's first line as the page words it: „śr 25.11” (`dayHeading`). */
-const headingOf = (date: string): string => `${['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'][(new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7]} ${Number(date.slice(8, 10))}.${date.slice(5, 7)}`
+const headingOf = (date: string): string => `${['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'][(new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7]} ${date.slice(8, 10)}.${date.slice(5, 7)}` // as `dayHeading` (`plDayMonth`, zero-padded)
 
 test('Widoki (SNT1, D417, D418, T936): przełącznik zapamiętany, „3 dni” z paskiem energii „przyjęte” jutro, „Agenda” z blokiem jutra otwierającym dzień', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-views-'))

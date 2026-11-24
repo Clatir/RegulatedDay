@@ -147,6 +147,7 @@ export function GroupCostDialog({ n, initial, onClose, onApply }: { n: number; i
               value={costs[p]}
               onCommit={(v) => setCosts((c) => costSet(c, p, v))}
               testId={`group-cost-${p}-value`}
+              wheel="step"
             />
             <button type="button" className="btn px-2 py-0" disabled={costs[p] >= COST_MAX} onClick={() => step(p, 1)} aria-label={`${POOL_NAME[p]}: więcej`} data-testid={`group-cost-${p}-plus`}>
               +
