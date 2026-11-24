@@ -91,6 +91,15 @@ export const costSet = (c: Costs, pool: Pool, value: number): Costs => (Number.i
 
 export const sameCosts = (a: Costs, b: Costs): boolean => a.head === b.head && a.emotions === b.emotions && a.senses === b.senses && a.body === b.body
 
+/**
+ * The button that gives the block's own cost up (D510, D512): back to its routine's, its variant's own cost, else to its subcategory's –
+ * with the numbers („Jak podkategoria (3·1·1·0)”). One label for the tile's window (`TileCost`) and the bar's „Koszt ▸” (D585).
+ */
+export function resetLabel(cost: Pick<BlockCosts, 'base' | 'baseFrom'>): string {
+  const from = cost.baseFrom === 'routine' ? 'Jak rutyna' : cost.baseFrom === 'variant' ? 'Jak wariant' : 'Jak podkategoria'
+  return `${from} (${costsText(cost.base, true)})`
+}
+
 /** The range of a cost a version before `WIDE_COST_FROM` takes (D568: it reads one past it as none and may write the default over it). */
 export const OLD_COST_MAX = 5
 /** The first version that takes a cost of −100…100 (D568, T2440). */

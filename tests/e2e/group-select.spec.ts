@@ -15,7 +15,7 @@ import { expect, test } from '@playwright/test'
 import { paths } from '../../src/shared/data/paths'
 import { dayFileFrom } from '../../src/shared/model/plan'
 import { addDays } from '../../src/shared/time/zone'
-import { launch, withMainLog } from './app'
+import { launch, withMainLog, DAY_NUMBER } from './app'
 import { seedAwake } from './seedAwake'
 
 type Json = Record<string, unknown>
@@ -177,8 +177,8 @@ test('Kalendarz: Ctrl+klik pierwszego dnia, Shift+klik siódmego, prawy przycisk
       await page.getByTestId('month-next').click()
       await expect(page.getByTestId('calendar')).toHaveAttribute('data-counted', 'true', { timeout: 30_000 })
       const cell = (d: string) => page.getByTestId(`day-${d}`)
-      await cell(days[0]!).click({ modifiers: ['Control'] })
-      await cell(days[6]!).click({ modifiers: ['Shift'] })
+      await cell(days[0]!).click({ modifiers: ['Control'], position: DAY_NUMBER })
+      await cell(days[6]!).click({ modifiers: ['Shift'], position: DAY_NUMBER })
       for (const d of days) await expect(cell(d)).toHaveAttribute('aria-pressed', 'true')
       await expect(page.getByTestId('calendar-selection')).toContainText('Zaznaczone dni: 7')
       await cell(days[6]!).click({ button: 'right' })
@@ -380,6 +380,104 @@ test('przeciąganie grupy (D531): „Tydzień” – dwa bloki wtorku na czwarte
       await expect.poll(() => startsOn(tue), { timeout: 15_000 }).toEqual({ w1: 19 * 60, w2: 20 * 60 + 30 })
       // The two files of one „Cofnij” are written one after the other: Thursday waited for too (T1972).
       await expect.poll(() => startsOn(thu), { timeout: 15_000 }).toEqual({ t1: 19 * 60 + 30 })
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+/** The submenu „Podkategoria” of the open menu of blocks: the group that holds `id` is opened, then the subcategory is picked. */
+async function pickCategory(page: import('@playwright/test').Page, id: string): Promise<void> {
+  await page.getByTestId('block-menu-category').click()
+  const groups = await page.locator('[data-testid^="block-menu-group-"]').all()
+  for (const g of groups) {
+    await g.click()
+    if ((await page.getByTestId(`block-menu-category-${id}`).count()) > 0) break
+  }
+  await page.getByTestId(`block-menu-category-${id}`).click()
+}
+
+test('Agenda (N18, D596): trzy bloki Ctrl+klik → prawy przycisk → podkategoria „Analiza”: linia „Zmieniono 3 bloki”, „Cofnij” przywraca', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-select-agenda-'))
+  const { today } = seedAwake(dataDir, [])
+  // Three days to come inside the seven of the list (from today): tomorrow, in two and in three days, one block each.
+  const dates = [1, 2, 3].map((n) => addDays(today, n))
+  dates.forEach((d, i) => write(dataDir, paths.day(d), { schema: 1, date: d, blocks: [{ id: `g${i + 1}`, categoryId: 'inne', startMin: 19 * 60, durationMin: 60, fixed: false, name: `G${i + 1}` }] }))
+  const categories = () => dates.flatMap((d) => blocksOf(dataDir, d).map((b) => b.categoryId))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-week').click()
+      await page.getByTestId('week-mode-agenda').click()
+      const row = (i: number) => page.getByTestId(`agenda-block-${dates[i]}-g${i + 1}`)
+      await expect(row(2)).toBeVisible({ timeout: 30_000 })
+      for (let i = 0; i < 3; i++) await row(i).click({ modifiers: ['Control'] })
+      for (let i = 0; i < 3; i++) await expect(row(i)).toHaveAttribute('data-marked', 'true')
+      await expect(page.getByTestId('agenda-selection')).toContainText('Zaznaczone: 3')
+      // The days stayed closed: still the list.
+      await expect(page.getByTestId('agenda')).toBeVisible()
+      await expect(page.getByTestId('today')).toHaveCount(0)
+      await row(2).click({ button: 'right' })
+      await expect(page.getByTestId('block-menu')).toHaveAttribute('aria-label', 'Zmień 3 bloki')
+      await pickCategory(page, 'analiza')
+      await expect.poll(categories, { timeout: 15_000 }).toEqual(['analiza', 'analiza', 'analiza'])
+      await expect(page.getByTestId('group-line-week')).toContainText('Zmieniono 3 bloki')
+      await page.getByTestId('group-line-week-undo').click()
+      await expect.poll(categories, { timeout: 15_000 }).toEqual(['inne', 'inne', 'inne'])
+      await expect(page.getByTestId('group-line-week')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('Kalendarz – paski miesiąca (N18, D597): dwa paski Ctrl+klik zaznaczają bloki, nie dni; menu „Zmień 2 bloki”, podkategoria – linia „calendar”, „Cofnij”; Esc czyści', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-select-month-bars-'))
+  const { today } = seedAwake(dataDir, [])
+  // The first two Sundays of the next month (all to come; a Sunday has no template – its cell holds only the block put there).
+  const next = addDays(`${today.slice(0, 7)}-01`, 32).slice(0, 7)
+  const first = `${next}-01`
+  const sunday = addDays(first, (7 - new Date(`${first}T12:00:00Z`).getUTCDay()) % 7)
+  const sundays = [sunday, addDays(sunday, 7)]
+  sundays.forEach((d, i) => write(dataDir, paths.day(d), { schema: 1, date: d, blocks: [{ id: `m${i + 1}`, categoryId: 'inne', startMin: 19 * 60, durationMin: 60, fixed: false, name: `M${i + 1}` }] }))
+  const categories = () => sundays.flatMap((d) => blocksOf(dataDir, d).map((b) => b.categoryId))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-calendar').click()
+      await expect(page.getByTestId('calendar')).toBeVisible()
+      await page.getByTestId('month-next').click()
+      await expect(page.getByTestId('calendar')).toHaveAttribute('data-counted', 'true', { timeout: 30_000 })
+      const bar = (i: number) => page.locator(`[data-testid="month-bar-${sundays[i]}"][data-block-id="m${i + 1}"]`)
+      await expect(bar(1)).toBeVisible({ timeout: 30_000 })
+      await bar(0).click({ modifiers: ['Control'] })
+      await bar(1).click({ modifiers: ['Control'] })
+      await expect(bar(0)).toHaveAttribute('data-marked', 'true')
+      await expect(bar(1)).toHaveAttribute('data-marked', 'true')
+      await expect(page.getByTestId('calendar-block-selection')).toContainText('Zaznaczone: 2 bloki')
+      // No day is selected and none was opened.
+      await expect(page.locator('[data-testid^="day-"][aria-pressed="true"]')).toHaveCount(0)
+      await expect(page.getByTestId('calendar')).toBeVisible()
+      await bar(1).click({ button: 'right' })
+      await expect(page.getByTestId('block-menu')).toHaveAttribute('aria-label', 'Zmień 2 bloki')
+      await pickCategory(page, 'analiza')
+      await expect.poll(categories, { timeout: 15_000 }).toEqual(['analiza', 'analiza'])
+      await expect(page.getByTestId('group-line-calendar')).toContainText('Zmieniono 2 bloki')
+      await page.getByTestId('group-line-calendar-undo').click()
+      await expect.poll(categories, { timeout: 15_000 }).toEqual(['inne', 'inne'])
+      // Esc clears the blocks.
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('calendar-block-selection')).toHaveCount(0)
+      await expect(bar(0)).not.toHaveAttribute('data-marked', 'true')
+      // A cell is a day again: Ctrl+click selects the day, as before.
+      await page.getByTestId(`day-${sundays[0]}`).click({ modifiers: ['Control'], position: DAY_NUMBER })
+      await expect(page.getByTestId(`day-${sundays[0]}`)).toHaveAttribute('aria-pressed', 'true')
     })
     expect(errors).toEqual([])
   } finally {

@@ -67,6 +67,7 @@ export const CH = {
   historyList: 'rd:historyList',
   historyVersions: 'rd:historyVersions',
   historyRestore: 'rd:historyRestore',
+  historyRemoved: 'rd:historyRemoved',
   folderDefault: 'rd:folderDefault',
   folderPick: 'rd:folderPick',
   folderProbe: 'rd:folderProbe',
@@ -373,6 +374,8 @@ export type WidgetAction =
   | 'step'
   /** The version of a routine picked in „Kroki ▸” (D481): `<block>|<version>` – the day's version of the block at once. */
   | 'routineVersion'
+  /** „Koszt ▸” of „⋯” (D585): the cost of the bar's block from now on – `barCostArg` (`<block>|<pool>|<±n>`, `<block>|<pool>|=<n>`, `<block>|reset`). */
+  | 'cost'
 
 /**
  * The bar's own actions: laid again („Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests), the
@@ -741,6 +744,48 @@ export interface HistoryVersion {
   record: unknown
 }
 
+/**
+ * A block, sprawa, routine, template, series or all-day event removed in the last 30 days (N24, „Ostatnio usunięte”) and
+ * still gone: what „Przywróć” puts back where it was.
+ */
+export interface RemovedItem {
+  kind: 'block' | 'request' | 'routine' | 'template' | 'series' | 'allDay'
+  /** The record's id; a block's id in its day. */
+  id: string
+  /** The record's file; a block's – its day's file. */
+  rel: string
+  /** A block's day (null – a record). */
+  date: string | null
+  /** When it was removed (ms UTC). */
+  removedAt: number
+  /**
+   * A record as it was before its removal (a series – before it was archived); a block as its day's file held it, or (one of
+   * the day's snapshot the file never changed) as the snapshot has it – a name to show, never written for a cancelled one.
+   */
+  value: RawRecord | null
+  /** A block of the day's snapshot cancelled for the day: „Przywróć” takes the cancel back. */
+  cancelled: boolean
+  /** The block's day is frozen (`day.freeze`): it is not changed any more – „Przywróć” off with why. */
+  frozen: boolean
+  /** The block stood right after another one (`anchor`) that is not in the day's plan now: put back, it would not show. */
+  anchorGone: boolean
+  /**
+   * The attachments this very removal took with it (D410 – soft, `removedAt`) and that are still so – named by its edit (kept with
+   * the removal's note or version), `removedAt` – theirs; „Przywróć” brings them back with it. Null – none (or not known).
+   */
+  attachments: { ids: string[]; removedAt: number } | null
+  /** Its removal took attachments, and their list cannot be read now: „Przywróć” waits (it would bring the block back without them). */
+  attachmentsUnknown: boolean
+  /** A block: where it would start put back (also one that starts after another – `anchor`); null – a record, or not known. */
+  startMin: number | null
+}
+
+/** The list „Ostatnio usunięte”; `complete` false – something could not be read now (a day, the history), the list may be short. */
+export interface RemovedList {
+  items: RemovedItem[]
+  complete: boolean
+}
+
 /** The monitors as Windows lays them out (DIP) and the desktop bar on them (D304). */
 export interface BarScreens {
   displays: Array<{ id: number; label: string; bounds: Rect; workArea: Rect; primary: boolean }>
@@ -959,6 +1004,8 @@ export interface RdApi {
   historyList(): Promise<HistoryRecord[]>
   historyVersions(kind: string, id: string): Promise<HistoryVersion[]>
   historyRestore(kind: string, id: string, file: string): Promise<EditOutcome[]>
+  /** „Ostatnio usunięte” (N24): what was removed in the last 30 days and is still gone, newest first. */
+  historyRemoved(): Promise<RemovedList>
   folderDefault(): Promise<string>
   folderPick(current: string | null): Promise<string | null>
   folderProbe(path: string): Promise<FolderProbe>

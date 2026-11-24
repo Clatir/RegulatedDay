@@ -24,6 +24,8 @@ import { classModeEnd, fewerAt, modesOf, type ModePrefs, type Modes } from '@sha
 import { REMINDER_NOTICE_MIN, reminderWords, remindersDue } from '@shared/engine/reminders'
 import { suggestRegen } from '@shared/engine/reserve'
 import { timerNow, type TimerNow } from '@shared/engine/timer'
+import { WIDE_COST_FROM } from '@shared/model/blockCosts'
+import { olderComputers } from '@shared/model/note'
 import { pushedText } from '@shared/engine/pushApart'
 import { energyOrderVariant } from '@shared/engine/energyOrder'
 import { casesFrom, isDone, taskAnswerRaw } from '@shared/engine/cases'
@@ -47,7 +49,7 @@ import { answered } from '@shared/engine/care'
 import { batteryLine, NO_SYNC, syncLines } from '@shared/sync/syncLines'
 import { QUICK_UNDO_ASKED, quickUndoText } from '@shared/quickList'
 import { quickSavedText } from '@shared/quickSaid'
-import { ASSESS_TEXT, CLICK_UNDO_MS, noFolderView, SEEN_LINE, SIGNAL_TEXT, UNDO_LINE_MS, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
+import { ASSESS_TEXT, barCostOp, CLICK_UNDO_MS, noFolderView, SEEN_LINE, SIGNAL_TEXT, UNDO_LINE_MS, type BarCostClick, type BarCostResult, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
 import type { DataFolder } from './data/folder'
 
 const CONFIRM_MS = 10_000
@@ -77,6 +79,11 @@ export interface WidgetDeps {
   timer: (click: TimerIn) => Promise<TimerResult>
   /** Edits of records as the window writes them (the hub tells the windows at once). */
   edit: (entries: EditEntry[]) => Promise<EditOutcome[]>
+  /**
+   * A click of „Koszt ▸” judged and written by the folder (`hub.barCost` – the windows hear it at once: the block's tile, D585, T2503);
+   * undefined – the folder's own `barCost`.
+   */
+  cost?: (click: BarCostClick) => Promise<BarCostResult>
   answer: (id: string, answer: string, value: number | null) => Promise<TimerResult>
   seen: (ids: string[], how: 'panel' | 'main' | 'notification' | 'bar') => Promise<unknown>
   clickedApp: () => void
@@ -450,7 +457,9 @@ export class WidgetEngine {
           // The day's file the model was counted from (D473: the routine's list it keeps, its ticks – read once, T1115).
           dayFile: m.dayFile,
           cases: requests,
-          allDay
+          allDay,
+          // „Koszt ▸” warns as the tile's window (D568): the folder's computers, the list the window's view has.
+          olderComputers: olderComputers(folder.computers, WIDE_COST_FROM)
         }),
         note: this.note ? { text: this.note.text, left: this.note.until - mono, ...(this.note.ok ? { ok: true as const } : {}) } : null
       }
@@ -1000,9 +1009,12 @@ export class WidgetEngine {
     // Two clicks within 0.5 s are one – also the second click of a cost that comes too soon after its first. On the
     // monotonic clock: a wall clock set back or forward meanwhile (time sync) neither drops a click nor lets a double one through.
     const at = this.mono
-    if ((this.lastClick.key === key && at - this.lastClick.at < DOUBLE_MS) || (action === 'confirm' && this.pending && at - (this.pending.until - CONFIRM_MS) < DOUBLE_MS)) return
+    // A step of „Koszt ▸” (D585) is an intent of its own, as a step of ±5 min: quick clicks of it all count (the bar's button drops the
+    // second click of a double click on anything else, C8).
+    const steps = action === 'cost'
+    if (!steps && ((this.lastClick.key === key && at - this.lastClick.at < DOUBLE_MS) || (action === 'confirm' && this.pending && at - (this.pending.until - CONFIRM_MS) < DOUBLE_MS))) return
     // A click of the bar itself (the desktop bar's background) is no action: it never parts the two clicks of one (A7-01).
-    if (action !== 'barClick') this.lastClick = { key, at }
+    if (action !== 'barClick' && !steps) this.lastClick = { key, at }
     try {
       await this.actNow(action, arg, from)
     } catch (e) {
@@ -1016,6 +1028,38 @@ export class WidgetEngine {
   private say(text: string, ok = false): void {
     this.note = { text, until: this.mono + NOTE_MS, ...(ok ? { ok: true as const } : {}) }
     setTimeout(() => void this.refresh(), NOTE_MS + 50).unref?.()
+  }
+
+  /** A refresh begun after this call has ended (one running now read the folder before it): its view has what was just written. */
+  private async refreshed(): Promise<void> {
+    await this.refresh()
+    if (this.running) await this.running
+  }
+
+  /**
+   * A click of „Koszt ▸” (D585, N12) – `<block>|<pool>|<±n>`, `<block>|<pool>|=<n>`, `<block>|reset` (`barCostArg`) on the bar's day: an intent
+   * the folder judges in its turn with the other clicks (`DataFolder.barCost` – `barDay`, `serial`, `writeOn`) over the block's newest change
+   * in the log's order, and writes as `block.cost` (as a begun block's tile, `plan/costSave.ts`) at the earlier of the bar's clock (its views
+   * are counted at it) and the folder's, never before the latest instant of the block's start and changes (T2513; one from a clock more
+   * than a minute ahead – refused); the engine counts the new cost from that minute to the block's end, the minutes gone by stay. A block of
+   * a series changes alone, that day only (the event is of the day's block). Refused (the block no longer the bar's, a day gone by, the
+   * day's logs not readable) or failed – only the bar's note says why: a cost waiting for its „Potwierdź” stays (T2511).
+   */
+  private async costNow(day: string | undefined, arg: string | undefined): Promise<void> {
+    const click = barCostOp(arg ?? '')
+    if (!click || !day) return
+    try {
+      const c = { day, block: click.block, op: click.op, at: this.now }
+      // The hub's way when given (the windows hear the change); else the folder's own – without one, nothing to write to.
+      const folder = this.d.cost ? null : this.d.folder()
+      const r: BarCostResult = this.d.cost ? await this.d.cost(c) : folder ? await folder.barCost(c) : { ok: false, why: 'folder danych nie jest otwarty' }
+      if (!r.ok) this.say(`Nie zapisano: ${r.why}`)
+    } catch (e) {
+      this.say(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`)
+      this.d.log('warn', 'pasek: koszt bloku', e)
+    }
+    // The view counted after the write (a refresh running now read the folder before it): its numbers are what was written.
+    await this.refreshed()
   }
 
   private async actNow(action: string, arg: string | undefined, from: ViewKind): Promise<void> {
@@ -1165,6 +1209,9 @@ export class WidgetEngine {
         if (!block || !(ROUTINE_VERSIONS as readonly string[]).includes(version ?? '')) return
         return this.pickRoutineVersion(day, block, version as RoutineVersion)
       }
+      case 'cost':
+        // „Koszt ▸” (D585): the cost of the bar's block from now on.
+        return this.costNow(day, arg)
       case 'step': {
         // The tick of the step line (D440): `<block>|<step>` – the bar's day; no sound, no window.
         const [block, step] = (arg ?? '').split('|')

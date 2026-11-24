@@ -20,7 +20,7 @@ import { paths } from '../../src/shared/data/paths'
 import { createDailyBackup } from '../../src/main/data/backup'
 import { logicalMinuteOf } from '../../src/shared/time/day'
 import { addDays } from '../../src/shared/time/zone'
-import { launch, logicalToday, viewPage, withMainLog } from './app'
+import { launch, logicalToday, viewPage, withMainLog, DAY_NUMBER } from './app'
 import { seedAwake } from './seedAwake'
 
 const shots = process.env.RD_E2E_SHOTS
@@ -282,15 +282,15 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await expect(todayCell).toContainText('zwykły')
       await expect(page.getByTestId('calendar')).toHaveAttribute('data-counted', 'true', { timeout: 30_000 })
       const todayText = (await todayCell.textContent()) ?? ''
-      await todayCell.click({ modifiers: ['Control'] })
+      await todayCell.click({ modifiers: ['Control'], position: DAY_NUMBER })
       await page.getByTestId('calendar-type-zjazd-zdalny').click()
       await expect(page.getByText('Typ dzisiejszego dnia zmienisz w „Dziś”', { exact: false })).toBeVisible()
       await expect(todayCell).toHaveText(todayText)
       // Two dates of the next month (days to come) marked as a remote „zjazd”.
       await page.getByTestId('month-next').click()
       const cells = page.locator('[data-testid^="day-"]')
-      await cells.nth(10).click({ modifiers: ['Control'] })
-      await cells.nth(11).click({ modifiers: ['Control'] })
+      await cells.nth(10).click({ modifiers: ['Control'], position: DAY_NUMBER })
+      await cells.nth(11).click({ modifiers: ['Control'], position: DAY_NUMBER })
       await page.getByTestId('calendar-type-zjazd-zdalny').click()
       await expect(cells.nth(10)).toContainText('zjazd zdalny')
       await expect(cells.nth(11)).toContainText('zjazd zdalny')

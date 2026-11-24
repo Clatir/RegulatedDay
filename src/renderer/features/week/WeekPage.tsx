@@ -12,14 +12,16 @@
  * all-day events of the checked calendars only (`useVisibleDays` for the days' blocks, `useVisibleAllDayIn` for the events and their
  * count – it also keeps the event Ctrl K opened, `revealedId`, D427).
  */
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { agendaOf } from '@shared/engine/calendarViews'
 import { eventsOn } from '@shared/model/allDay'
+import { settingsOn } from '@shared/model/settings'
 import { threeDays, agendaDates, type DaysView } from '@shared/engine/week'
 import { weekStart } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { useData } from '../../store/data'
 import { useDaysView, useWeekView } from '../../store/horizon'
+import { useDeleteSelected } from '../../lib/deleteKey'
 import { usePeriodKeys } from '../../lib/periodKeys'
 import { setMemory, takeFoundPick, useUi } from '../../store/ui'
 import { pendingCard } from '../allday/allDayView'
@@ -30,9 +32,11 @@ import { AgendaView } from './AgendaView'
 import { DayGrid } from './DayGrid'
 import { EnergyStripLegend } from './EnergyStrip'
 import { hasEnergy } from '../plan/energyDraw'
+import type { Names } from '../plan/blockView'
 import { GoalsPanel } from './GoalsPanel'
 import { THREE_DAYS_PPM, goalsMonthOfWeek } from './weekLayout'
 import { weekTitle } from './weekText'
+import { inAgenda, useWeekGroup } from './weekSelect'
 import { WeekPushLine } from './WeekPushLine'
 import { GroupLine } from '../../components/GroupLine'
 import { WeekCasesPanel } from './WeekCasesPanel'
@@ -260,11 +264,30 @@ function AgendaBody({ from, today, opened }: { from: string; today: string; open
     for (const [i, d] of (listed ?? []).entries()) out[d.date] = (seen.hiddenByDay[i] ?? 0) + eventsOn(allDay, d.date).length - eventsOn(events.shown, d.date).length
     return out
   }, [listed, seen.hiddenByDay, allDay, events.shown])
+  // N18, D596: the blocks of the list are selected as those of the columns (Ctrl+click, Shift+click, Ctrl+A, Esc, the menu of the right button, Del) – the energy
+  // is not counted here (T954). The selection is of these seven days: another period starts without it.
+  const horizon = view?.days
+  const listedDays = useMemo(() => {
+    const byDay = new Map((horizon ?? []).map((d) => [d.date, new Map(d.blocks.map((b) => [b.id, b]))]))
+    return seen.days.map((d) => ({ date: d.date, blocks: d.blocks.flatMap((a) => byDay.get(d.date)?.get(a.id) ?? []) }))
+  }, [seen.days, horizon])
+  const { rd, routines, requests } = useData()
+  const namesOf = useCallback((date: string): Names => ({ rd, settings: settingsOn(rd.settings, date), routines, requests }), [rd, routines, requests])
+  const group = useWeekGroup({ days: listedDays, scope: `agenda|${dates[0]}`, today, energy: false, namesOf, when: inAgenda, costsKnown: false })
+  useDeleteSelected(group.removeTarget)
   return (
     <>
       <CalendarChips hiddenCount={seen.hiddenCount + events.hiddenInRange} />
       {view ? (
-        <AgendaView agenda={seen.days} hiddenByDate={hiddenByDate} today={today} />
+        <>
+          {group.summary && (
+            <div className="text-[12px] text-muted" data-testid="agenda-selection">
+              {group.summary}
+            </div>
+          )}
+          <AgendaView agenda={seen.days} hiddenByDate={hiddenByDate} today={today} group={group} />
+          {group.overlay}
+        </>
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="agenda-loading">
           {failed ? 'Nie da się teraz policzyć tych dni.' : 'Liczę dni…'}

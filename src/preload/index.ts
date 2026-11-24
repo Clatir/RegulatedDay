@@ -61,6 +61,7 @@ const api: RdApi = {
   historyList: () => ipcRenderer.invoke(CH.historyList),
   historyVersions: (kind, id) => ipcRenderer.invoke(CH.historyVersions, kind, id),
   historyRestore: (kind, id, file) => ipcRenderer.invoke(CH.historyRestore, kind, id, file),
+  historyRemoved: () => ipcRenderer.invoke(CH.historyRemoved),
   folderDefault: () => ipcRenderer.invoke(CH.folderDefault),
   folderPick: (current) => ipcRenderer.invoke(CH.folderPick, current),
   folderProbe: (path) => ipcRenderer.invoke(CH.folderProbe, path),

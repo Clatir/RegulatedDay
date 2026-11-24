@@ -16,6 +16,12 @@ export interface Launched {
   errors: string[]
 }
 
+/**
+ * Where a click selects a day of the month (Ctrl or Shift): the day number in the top left corner of its cell. The middle of a cell with blocks is a bar,
+ * and Ctrl or Shift on a bar selects its block, not the day (N18, D597).
+ */
+export const DAY_NUMBER = { x: 8, y: 8 } as const
+
 export const FAKE_HELPER = resolve('tests/fakes/fake-helper.mjs')
 
 /**

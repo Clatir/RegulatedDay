@@ -12,7 +12,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { COST_MAX, COST_MIN, costNumber, costSet, costStep, costsText, sameCosts, type TileCost as TileCostInfo } from '@shared/model/blockCosts'
+import { COST_MAX, COST_MIN, costNumber, costSet, costStep, costsText, resetLabel, sameCosts, type TileCost as TileCostInfo } from '@shared/model/blockCosts'
 import { POOLS as POOL_ORDER, type Costs, type Pool } from '@shared/model/categories'
 import { cx } from '../../components/ui'
 import { commitActiveField } from '../../lib/commit'
@@ -63,12 +63,6 @@ export function popPlace(anchor: PopAnchor, view: { width: number; height: numbe
   const below = anchor.bottom + GAP
   const top = below + height + MARGIN <= view.height ? below : Math.max(MARGIN, anchor.top - GAP - height)
   return { left, top }
-}
-
-/** The button that gives the block's own cost up (D510): back to its variant's own cost, else to its subcategory's – with the numbers. */
-export function resetLabel(cost: Pick<TileCostInfo, 'base' | 'baseFrom'>): string {
-  const from = cost.baseFrom === 'routine' ? 'Jak rutyna' : cost.baseFrom === 'variant' ? 'Jak wariant' : 'Jak podkategoria'
-  return `${from} (${costsText(cost.base, true)})`
 }
 
 /** The words the label says to a hand that hovers it (and to a reader of the screen). */

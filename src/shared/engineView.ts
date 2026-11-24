@@ -38,7 +38,9 @@ import type { Routine } from './model/routines'
 import type { AllDayEvent } from './model/allDay'
 import { ENGINE_TONE_SET, iconColor, toneColor, type Tone, type WarnStep } from './theme'
 import { firstOpen } from './model/steps'
-import { barAllDay, nextLabel, NO_VARIANTS, type BarLine, type BarPending, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from './widget'
+import { barCostOf } from './engine/costChange'
+import { wideCostWarning } from './model/blockCosts'
+import { barAllDay, nextLabel, NO_VARIANTS, type BarCost, type BarLine, type BarPending, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from './widget'
 
 const MIN = 60_000
 
@@ -76,6 +78,11 @@ export interface EngineInput {
   cases?: readonly RequestRecord[]
   /** The all-day events (D405): today's are the label at the left of the desktop bar (read only, never an input of the day). */
   allDay?: readonly AllDayEvent[]
+  /**
+   * The names of the folder's computers with a version before `WIDE_COST_FROM` (`olderComputers` – the computers the window's view has):
+   * „Koszt ▸” warns under a cost past ±5 as the tile's window does (D568).
+   */
+  olderComputers?: readonly string[]
 }
 
 /** A request without a person (spec „osoba: ?”). */
@@ -445,6 +452,12 @@ export function engineView(i: EngineInput): WidgetView {
   const open1 = fgSteps?.length ? firstOpen(fgSteps) : null
   const steps: BarSteps | null = front && fgSteps?.length ? { block: front.fg.info.id, step: open1 ? { id: open1.step.id, title: open1.step.title, n: open1.n } : null, total: fgSteps.length } : null
   const block = front ? { name: nameOf(front.fg.info.id), className: `${CLASS_NAME[front.fg.info.rules.cls] ?? ''}${reserve ? ' · rezerwa energii' : ''}`, endsAt: front.endsAt } : null
+  // „Koszt ▸” (D585): the block in front – with nothing in front the paused one „Wznów” resumes –, never one behind nor of a day gone by;
+  // its cost now as its tile counts it (`barCostOf` – `begunCosts`, koszt.md: never `b.costs ?? costsOf(…)`).
+  const costOf = barCostOf(i.ctx, state, t, now)
+  // The warning of the tile's window under a cost past ±5 while a computer of an older version is in the folder (D568, T2510).
+  const costWarning = costOf ? wideCostWarning(i.olderComputers ?? [], [costOf.costs.costs]) : null
+  const cost: BarCost | null = costOf ? { block: costOf.block.id, name: nameOf(costOf.block.id), ...costOf.costs, ...(costWarning ? { warning: costWarning } : {}) } : null
   const nextFixed = state.blocks
     .filter((b) => (b.fixed || b.waits) && b.inPlan && b.start != null && at(b.start) > now && state.facts.blocks.get(b.id)?.startedAt == null)
     .sort((a, b) => a.start! - b.start!)[0]
@@ -506,6 +519,7 @@ export function engineView(i: EngineInput): WidgetView {
     ritual: !modes.night && !state.facts.closed && state.grid.date === logicalDayOf(now) && ritualDue(state, logicalDayOf(now), i.ritualFrom ?? null),
     routines,
     allDay: barAllDay(i.allDay ?? [], logicalDayOf(now)),
-    steps: hidden ? null : steps
+    steps: hidden ? null : steps,
+    cost
   }
 }

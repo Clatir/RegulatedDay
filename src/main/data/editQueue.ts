@@ -10,6 +10,7 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, re
 import { join } from 'node:path'
 import { deepEqual, sameContentAs, setAt, valueAt, type Path } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
+import type { RemovalMarks } from '@shared/data/removed'
 import { earlierOnce } from '@shared/model/rd'
 import { BrokenRecordError, type RecordStore } from './records'
 
@@ -47,7 +48,16 @@ export interface QueuedEdit {
    * elsewhere writes nothing of it – a question about all of it, as an entry others go with (T960).
    */
   whole?: boolean
+  /** The attachments soft-removed with this entry by its edit: id → the `removedAt` written (N24 – what „Przywróć” brings back). */
+  taken?: Record<string, number>
+  /** Of those, the ones of a day's block: id → the block's id. */
+  takenBy?: Record<string, string>
+  /** Its edit changes a series record too (N24 – none of its day's changes is a removal of yours). */
+  series?: true
 }
+
+/** What an entry tells a write of its removal (N24). */
+const marksOf = (e: QueuedEdit): RemovalMarks => ({ ...(e.taken ? { taken: e.taken } : {}), ...(e.takenBy ? { takenBy: e.takenBy } : {}), ...(e.series ? { series: true } : {}) })
 
 /** Why an entry waits behind an earlier one for the same file that is still a question (it never goes by itself). */
 export const BEHIND_QUESTION = 'czeka na odpowiedź na wcześniejsze pytanie'
@@ -440,7 +450,7 @@ export class EditQueue {
       if (!edit.create) return { id: edit.id, status: edit.remove ? 'applied' : 'removedElsewhere' }
       let value: unknown = {}
       for (const f of edit.edits) value = setAt(value, f.path, f.value)
-      await records.write(edit.rel, { ...(value as Record<string, unknown>), updatedAt: edit.at, updatedBy: this.o.computer }, 'edit')
+      await records.write(edit.rel, { ...(value as Record<string, unknown>), updatedAt: edit.at, updatedBy: this.o.computer }, 'edit', edit.at, marksOf(edit))
       return { id: edit.id, status: 'applied' }
     }
     // The file's stamp of its last change never goes back (an older edit laid on later keeps the newer time – „Przyjmij
@@ -449,7 +459,7 @@ export class EditQueue {
     if (edit.remove) {
       // „Usunięcie na jednym komputerze przy edycji na drugim zawsze kończy się pytaniem” (spec, A3-09).
       if (edit.base !== undefined && !sameContentAs(cur.value, edit.base)) return { id: edit.id, status: 'changedElsewhere' }
-      await records.remove(edit.rel)
+      await records.remove(edit.rel, edit.at, edit.taken)
       return { id: edit.id, status: 'applied' }
     }
     let value: unknown = cur.value
@@ -476,7 +486,7 @@ export class EditQueue {
     // of it is written until you answer – „theirs” then takes it and them out with nothing of it left (a block moved to
     // another day never stays on both: its target is the owner, the source goes with it).
     if (conflicts.length && (edit.whole || this.entries.some((x) => x.after?.includes(edit.id)))) return { id: edit.id, status: 'conflict', fields: conflicts }
-    if (applied.length) await records.write(edit.rel, { ...(value as Record<string, unknown>), updatedAt: stamp, updatedBy: this.o.computer }, 'edit')
+    if (applied.length) await records.write(edit.rel, { ...(value as Record<string, unknown>), updatedAt: stamp, updatedBy: this.o.computer }, 'edit', edit.at, marksOf(edit))
     if (conflicts.length) {
       // What did not meet a change elsewhere is written; the rest stays queued as a question.
       edit.edits = conflicts.map(({ now: _now, ...f }) => f)

@@ -15,7 +15,7 @@ import { DEFAULT_SETTINGS } from '../../src/shared/model/settings'
 import { defaultTemplates, firstComputerRecords } from '../../src/shared/model/defaults'
 import { addDays, weekday } from '../../src/shared/time/zone'
 import { date as dateCells, header, pdfOf, row, type Cell } from '../fixtures/zjazdy-pdf'
-import { launch, logicalToday, withMainLog } from './app'
+import { launch, logicalToday, withMainLog, DAY_NUMBER } from './app'
 
 const shots = process.env.RD_E2E_SHOTS
 async function shot(page: Page, name: string): Promise<void> {
@@ -267,7 +267,7 @@ test('Kalendarz (UX5 / B2): jeden dzień zjazdu zmieniony na „Wolne” – dym
       const stored = typeOf(s1)
       expect(stored).toMatch(/^zjazd-/)
       await showMonthOf(page, s1)
-      await page.getByTestId(`day-${s1}`).click({ modifiers: ['Control'] })
+      await page.getByTestId(`day-${s1}`).click({ modifiers: ['Control'], position: DAY_NUMBER })
       await page.getByTestId('calendar-type-wolne').click()
       // One day: no line of a group – the toast with its „Cofnij”.
       const toast = page.getByRole('status').filter({ hasText: `Typ dnia ${plDate(s1)}: Wolne` })
