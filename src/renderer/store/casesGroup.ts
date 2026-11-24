@@ -220,8 +220,8 @@ export interface GroupUndoResult extends CaseResult {
 /**
  * „Cofnij” of one group change (D529, D313): the records go back field by field – only the fields the change set, only while they have
  * the value it gave them (`revertedRaw`); a sprawa changed since stays and is counted in `kept` (said, never silent). A day's file goes
- * back whole, only while it stands as the change left it (`daysKept` – as for one sprawa, `undoCase`); the sprawy of a day whose file
- * stayed (the day the change planned them in, and the copies it made there) stay with it and are counted in `kept` – never a block of
+ * back whole, only while it stands as the change left it and no sprawa of the change tied to it stays (`daysKept` – as for one sprawa,
+ * `undoCase`; D607); the sprawy of a day whose file stayed (the day the change planned them in, and the copies it made there) stay with it and are counted in `kept` – never a block of
  * the group left on the axis with its sprawa gone, nor a sprawa „zaplanowane” in a block that is gone. A record the change made is taken away
  * only while it stands as it was made – the next task of a tick (`owner`) only with the tick taken back; one the change removed is
  * brought back only while there is none. One edit for all of it.
@@ -240,22 +240,51 @@ export async function undoGroup(undo: readonly CaseUndoFile[]): Promise<GroupUnd
     })
     const days = dates.length ? await daysNow(dates) : {}
     if (!days) return DAY_UNREADABLE
-    // The days first: whether each file stands as the change left it decides for the sprawy that stand in it.
-    const dayBack = new Map<string, boolean>()
-    for (const u of undo) {
-      const c = classify(u.rel)
-      if (c?.kind !== 'day' || c.conflict) continue
-      const now = days[c.date!] ?? null
-      const stands = now == null ? u.after == null : u.after != null && isRaw(now) && sameContentAs(now, u.after)
-      dayBack.set(u.rel, stands)
-      if (stands) put(u.rel, now, u.before, u.owner)
-      else daysKept++
-    }
     // The day a record's change tied it to: where its block was put, or the day a copy was made with.
     const dayOf = (u: CaseUndoFile): string | null => {
       if (u.owner != null && classify(u.owner)?.kind === 'day') return u.owner
       const now = u.after?.day
       return typeof now === 'string' && (u.before?.day !== now || u.before?.block !== u.after?.block) ? paths.day(now) : null
+    }
+    // A sprawa changed since (it would stay on its own): its day stays too, with every sprawa of the change tied to it (D607).
+    const stays = (u: CaseUndoFile): boolean => {
+      const now = rawRecord(u.rel)
+      if (u.before && u.after) return !isRaw(now) || revertedRaw(now, u.before, u.after) === 'kept'
+      if (!u.before) return now != null && !(u.after != null && isRaw(now) && sameContentAs(now, u.after))
+      return now != null && !sameContentAs(now, u.before)
+    }
+    // The days held, to a fixed point: a sprawa that stays holds its new day and the day it stood on before (a planning again moved it – that file
+    // stays as the change left it, the old block must not come back beside the new one); a sprawa tied to a held day stays with it, so it holds
+    // both of its days in turn – repeated until nothing is added.
+    const requests = undo.filter((u) => {
+      const c = classify(u.rel)
+      return c != null && !c.conflict && c.kind === 'request'
+    })
+    const staying = new Set(requests.filter(stays).map((u) => u.rel))
+    const heldDays = new Set<string>()
+    for (let grew = true; grew; ) {
+      grew = false
+      for (const u of requests) {
+        const tied = dayOf(u)
+        if (tied == null || !(staying.has(u.rel) || heldDays.has(tied))) continue
+        const was = u.before?.day
+        for (const d of [tied, ...(typeof was === 'string' && paths.day(was) !== tied ? [paths.day(was)] : [])]) {
+          if (heldDays.has(d)) continue
+          heldDays.add(d)
+          grew = true
+        }
+      }
+    }
+    // The days first: whether each file stands as the change left it – and none of its sprawy stays – decides for the sprawy that stand in it.
+    const dayBack = new Map<string, boolean>()
+    for (const u of undo) {
+      const c = classify(u.rel)
+      if (c?.kind !== 'day' || c.conflict) continue
+      const now = days[c.date!] ?? null
+      const stands = !heldDays.has(u.rel) && (now == null ? u.after == null : u.after != null && isRaw(now) && sameContentAs(now, u.after))
+      dayBack.set(u.rel, stands)
+      if (stands) put(u.rel, now, u.before, u.owner)
+      else daysKept++
     }
     // A record the change wrote for another record (the next of a tick) is not a sprawa of its own in the count.
     const owned = new Set(undo.filter((u) => u.owner != null && classify(u.owner)?.kind === 'request').map((u) => u.rel))

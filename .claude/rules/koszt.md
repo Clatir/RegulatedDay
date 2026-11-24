@@ -35,7 +35,7 @@ T1360–T1374, T1395–T1399, T1430–T1437, T1440–T1447.
 - Kolejność (D512): własny bloku → rutyny → wariantu → kategorii (podkategorii). `model/blockCosts.ts`: `baseCosts(kategorie,
   kategoria, wariant, rezerwa, rutyna)` = `rutyna ?? costsOf(…)` – koszt bez własnego; `blockCosts(b)` = `own ?? base` (+ `base` –
   do niego wraca przycisk okienka, `own`, `baseFrom` z `baseFromOf`: 'routine' – „Jak rutyna (…)”, 'variant' – „Jak wariant (…)”,
-  brak – „Jak podkategoria (…)”, `TileCost.resetLabel`, D510; `b.routineCosts` wymagane); zakres puli tylko z `RANGES.cost` (`COST_MIN`/`COST_MAX`,
+  brak – „Jak podkategoria (…)”, `resetLabel` w `model/blockCosts.ts` – kafelek i pasek, D510; `b.routineCosts` wymagane); zakres puli tylko z `RANGES.cost` (`COST_MIN`/`COST_MAX`,
   `isPoolCost`, `poolCostsFrom` – rutyna i start; `costsFrom` w `plan.ts`, `block.cost`, krok okienka, kalibracja). Silnik
   (`energy.ts` `costOf`) liczy `own ?? baseCosts(…, routine)` bez obiektów w pętlach minut. Kopie: `energyOrder.ts`, `variants.ts`
   (`blockCosts`), `calibration.ts` `costKey` (blok z kosztem rutyny – bez dowodu, jak własny) – nowe miejsce liczące koszt bloku
@@ -101,13 +101,18 @@ T1360–T1374, T1395–T1399, T1430–T1437, T1440–T1447.
   wierszu godzin – `costRoom(tight, koszt)` (px, `style.paddingRight`; rośnie z liczbami trzycyfrowymi), napis `max-w-full` kafelka.
 - Zakres −100…100 (D568, T2440; był −5…5): jedno źródło `RANGES.cost`. Okienko kafelka i okno grupowe – pole `CostInput` (`SettingNumber`,
   całkowita w zakresie, „−” i „-”; odmowa – `<testid>-error`) między −/+; `costSet` przycina. Suma kosztów biegnących razem – `SUM_CAP =
-  COST_MAX * 100` (`energy.ts`). `RULES_VERSION` 19: starsza wersja koszt poza ±5 czyta jako brak (ustawienia – domyślny, plik – kategorii,
+  COST_MAX * 100` (`energy.ts`). Kółko nad polem kosztu (N8, T2550): `SettingNumber wheel` – dwa tryby (T2551): `'gesture'` (jeden zapis na gest – Ustawienia `CategoryRow`/`VariantRows`, okienko kafelka i rutyny) i `'step'` (każdy obrót od razu `onCommit` od pokazanej – formularze z lokalnym stanem: okno grupowe, `CostFields`; `CostInput` i `CostNumbers` mają prop `wheel` jawnie) (`useWheelValue` – pole pokazuje własną liczbę, każdy obrót od pokazanej, ±1, Shift ±10, jeden `onCommit` na gest: `WHEEL_COMMIT_MS` 400 ciszy, od razu przy blur (`CommitField onLeave`) i unmount; liczba własna znika, gdy `value` zmieni się z zewnątrz, albo po `WHEEL_SHOWN_MS` 5 s od zapisu bez zmiany `value` (zanik tylko, gdy żaden obrót nie czeka); echo własnego zapisu w trakcie następnego gestu tylko przesuwa start; natywny `wheel` nie-pasywny w `CommitField onWheelStep`), `lib/wheel.ts` (`wheelInput`/`wheelSteps`: ząbek myszy = `wheelDelta*` wielokrotność 120 = krok bez względu na skalowanie, inaczej suma pikseli co `WHEEL_NOTCH_PX` 100, linie/strony krok na zdarzenie; deltaX tylko z Shift i tylko mysz; Ctrl/Meta bez przechwycenia; `wheelClaim` – trwające przewijanie strony wygrywa, `WHEEL_SCROLL_LATCH_MS` 400 od ostatniego kółka poza polem, bez odnawiania – D590), `CostInput` (też okienko kosztu rutyny – `RoutineCostField` → `TileCost`; zamknięte w trakcie gestu zapisuje przez unmount) i `CostNumbers` (nie kreator). `RULES_VERSION` 19: starsza wersja koszt poza ±5 czyta jako brak (ustawienia – domyślny, plik – kategorii,
   `block.cost`/`routine.cost`/`energy.cost` – linia zła) i ustępuje prowadzenia.
 - Zapis jeden dla „Dziś”, „3 dni”, „Tygodnia”: `plan/costSave.ts` `saveTileCosts(cel, koszt, { ask })` – niezaczęty blok serii pyta
   `changeScope` (`series/seriesScope.ts`, ten sam kod co pole panelu – `seriesFirst` w `TodayPage.saveFields`) raz na okienko
   (`ask.scope`); zaczęty blok serii – bez pytania, tylko on od teraz. W kolejce okna dzień czytany raz bez liczenia (`plannedDay`:
   `dayData` – plan, `foldFacts`, plik): niezaczęty → plik dnia (`patchedBlock` z `dayActions`), zaczęty → `logEvents` `block.cost`
   (chwila z zegara procesu głównego, `USER_EVENTS`); minięty zegarem (`windowPassed` – stały/czekający po końcu okna) – odmowa.
+- Pasek „⋯” → „Koszt ▸” (D585, reguły `widget.md`): trwający blok paska, ten sam zapis zaczętego – `block.cost` pisze proces główny
+  (`DataFolder.barCost` w kolejce kliknięć, `barCostAfter` = `costSet` nad najnowszą zmianą w kolejności logu – `barCostBasis`, chwila nie przed
+  `barCostBasis.after` – najpóźniejsza chwila startu i zmian; `after` > zegar folderu + `BAR_COST_AHEAD_MS` (60 s) – odmowa `BAR_COST_AHEAD_TEXT`);
+  widok i ocena – `barCostOf` (`begunCosts`, `costEditable`), `wideCostWarning`. Silnik (`costChangesOf`: minuta, potem log) bez zmian.
+  Powody odmowy `COST_*_TEXT` – `engine/costChange.ts` (kafelek i pasek; `costSave.ts` je przekazuje dalej).
 
 ## Przelicz koszty ×N (D566, D567, T2420–T2423, T2431)
 - Czysty plan i cofnięcie w `engine/costScale.ts`: `COST_SCALE_FACTORS` (0,5–3 co 0,25, domyślnie 2), własny mnożnik `parseScaleFactor`

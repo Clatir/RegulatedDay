@@ -25,7 +25,7 @@ let rd: { barClose: ReturnType<typeof vi.fn<RdApi['barClose']>>; widgetAction: R
 
 beforeEach(() => {
   rd = { barClose: vi.fn<RdApi['barClose']>(), widgetAction: vi.fn<RdApi['widgetAction']>(() => Promise.resolve(null as never)) }
-  const api: Partial<RdApi> = { ...rd, quickToday: () => Promise.resolve('2026-11-20'), barLayout: () => undefined, barDrag: () => undefined, onBarDragOver: () => () => undefined }
+  const api: Partial<RdApi> = { ...rd, quickToday: () => Promise.resolve({ today: '2026-11-20', nowMin: null }), barLayout: () => undefined, barDrag: () => undefined, onBarDragOver: () => () => undefined }
   ;(window as unknown as { rd: Partial<RdApi> }).rd = api
   if (!hadObserver)
     (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {

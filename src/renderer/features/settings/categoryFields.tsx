@@ -12,7 +12,7 @@ import { blockFill } from '@shared/theme'
 import { cx } from '../../components/ui'
 import { saveRd } from '../../store/data'
 import { useMachine } from '../../store/machine'
-import { SettingNumber } from './SettingNumber'
+import { SettingNumber, type WheelMode } from './SettingNumber'
 
 export const FLAGS: Array<[keyof CategoryRules, string]> = [
   ['background', 'może biec w tle'],
@@ -87,13 +87,13 @@ export function ColorSwatches({ value, onPick }: { value: string | null; onPick:
 
 /**
  * The cost of each pool an hour (`RANGES.cost`, −100…100 – D568): `label` names a field for the reader, `named` puts the pool's name before it (a form);
- * `testId` – each field's.
+ * `testId` – each field's; `wheel` – how the mouse wheel saves (T2551): `'step'` every turn at once (a form with its own state, `CostFields`), `'gesture'` once per gesture (Settings).
  */
-export function CostNumbers({ costs, onCommit, label, named, testId }: { costs: Costs; onCommit: (pool: keyof Costs, v: number) => void; label: (pool: string) => string; named?: boolean; testId?: (pool: keyof Costs) => string }) {
+export function CostNumbers({ costs, onCommit, label, named, testId, wheel }: { wheel: WheelMode; costs: Costs; onCommit: (pool: keyof Costs, v: number) => void; label: (pool: string) => string; named?: boolean; testId?: (pool: keyof Costs) => string }) {
   return (
     <>
       {POOLS.map(([p, name]) => {
-        const field = <SettingNumber key={p} field={{ kind: 'integer', range: RANGES.cost, label: label(name) }} value={costs[p]} onCommit={(v) => onCommit(p, v)} className="w-[52px]" data-testid={testId?.(p)} />
+        const field = <SettingNumber key={p} field={{ kind: 'integer', range: RANGES.cost, label: label(name) }} value={costs[p]} onCommit={(v) => onCommit(p, v)} className="w-[52px]" wheel={wheel} data-testid={testId?.(p)} />
         return named ? (
           <label key={p} className="flex items-center gap-1.5 text-[12.5px] text-muted">
             {name}

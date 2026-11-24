@@ -23,6 +23,9 @@ paths:
   - "tests/web/group-menu.test.ts"
   - "tests/e2e/group-select.spec.ts"
   - "tests/web/calendar-selection.test.ts"
+  - "tests/web/agenda-select.test.ts"
+  - "tests/web/month-block-select.test.ts"
+  - "src/renderer/features/week/AgendaView.tsx"
   - "tests/unit/selection.test.ts"
   - "tests/unit/group-summary.test.ts"
   - "tests/unit/group-text.test.ts"
@@ -115,4 +118,7 @@ paths:
   tekst w rogu; nic nie zmieniono – toast `nothingText`; „Cofnij” niepełne – `UndoNotDone` (linia zostaje, bez drugiego komunikatu). Pozycje menu: `MenuCtx.judge` =
   `judgeBlocks` → `ruleVerdicts` silnika (jeden przebieg na otwarcie menu – `useMemo` po `menu`, `view`, wartości `where`, `ctx` i `blocksOf`; ekrany trzymają `judge`, `stateOf`, `where` i `blocksOf` stałe między rysowaniami; „Dziś”, szablon); bez niego (kolumny) stany
   `MenuBlock` i `notToday` (odwołaj / zaparkuj tylko dziś, T1720).
+- **N18 – „Agenda” i paski miesiąca (D596, D597, T2610–T2619):** ten sam `useWeekGroup` (uogólniony: `days` = to, co ekran rysuje – `GroupTile`, `view` `week`/`calendar`, `when`, `arrows`, `enabled`); `runBlockGroup` zna `calendar` jak `week` (klucze `blockKey`, `changeDaysGroup`, linia widoku).
+  „Agenda” (`AgendaBody` w `WeekPage`): `when: inAgenda` (fokus w `[data-testid="agenda"]` albo na body), `scope` `agenda|<pierwszy dzień>`, lista = bloki z `seen.days` (bez zdjętych i ukrytych kalendarzy) podmienione na `HorizonBlock`; Ctrl/Shift w wierszu zaznacza, zwykły klik otwiera; `energy: false`, napis `agenda-selection`, linia `week`.
+  Miesiąc (`CalendarPage`): `monthCellView` daje `MonthBar.block`, `barDays` = paski bloków komórek (to, co widać, po filtrze kalendarzy; "+N" i wydarzenia poza), `MonthBlock.movable` (bez kosztu – T2608; `useWeekGroup({ costsKnown: false })` → `MenuCtx.costsKnown` false → `blockMenu` wyłącza „Koszt…” z powodem, T2614 – Agenda też; w „Tygodniu” bez zmian); `MonthGrid` `bars` (`BarPicking`): `mousedown` z Ctrl/Shift na pasku `stopPropagation` (komórka nie zaznacza dnia), `contextmenu` tylko na pasku zaznaczonego bloku (inaczej bąbelkuje do menu dnia); pasek nie jest fokusowalny – Shift+F10 działa na komórce. Dwa zaznaczenia na stronie: `blocksOn` (ref) – klawisze dni (`when`) milkną, gdy zaznaczony jest blok, a klawisze bloków (`when`) odpowiadają tylko wtedy; wykluczanie: `mark` czyści dni przed zaznaczeniem bloku, efekt na `selection.state` czyści bloki po zaznaczeniu dnia; `arrows: false` dla bloków; `scope` = miesiąc. Napis `calendar-block-selection` (`blocksLine`) obok `calendar-selection`; Del – `useDeleteSelected(blocks.removeTarget)` (≥ 2 – "Usunąć N bloków?", jeden – z nazwą, jak „Tydzień”). Testy `agenda-select`, `month-block-select`, E2E `group-select.spec.ts`.
 - E2E ciągu Z: `tests/e2e/group-select.spec.ts` (oś jutra: Ctrl/Shift/klik/Esc/kopia Ctrl/menu; „Tydzień”: Ctrl+klik dwóch dni; Kalendarz: 7 dni → „Wolne” → linia → „Cofnij”) – dni z przyszłości liczone od `logicalToday()`, nic nie zależy od godziny testu.

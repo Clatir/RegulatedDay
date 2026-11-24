@@ -9,12 +9,13 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
 import { readLogText } from '@shared/data/logText'
+import { compareEvents, RULES_VERSION } from '@shared/model/events'
 import { paths } from '@shared/data/paths'
 import { placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { HARD_END_TEXT } from '@shared/engineView'
 import { checkinSkipId } from '@shared/engine/reminders'
-import { NO_FOLDER_LINE, noFolderView, type WidgetView } from '@shared/widget'
+import { NO_FOLDER_LINE, noFolderView, type BarCostClick, type BarCostResult, type WidgetView } from '@shared/widget'
 import { DataFolder } from '../../src/main/data/folder'
 import { nodeFs, type DataFs } from '../../src/main/data/fsio'
 import { arrangedIn, begunOf, planArrangedIpc, planPushedIpc, pushedIn, WidgetEngine, type NotifyIn } from '../../src/main/widget'
@@ -43,7 +44,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; remindersNotice?: boolean; opened?: string[]; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>; openQuick?: () => void; timerHook?: (c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null } = {}) {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; remindersNotice?: boolean; opened?: string[]; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>; quickUndo?: (batch: string) => Promise<{ ok: boolean; error: string | null; undone: number; kept: number }>; openQuick?: () => void; cost?: (c: BarCostClick) => Promise<BarCostResult>; folderAhead?: number; timerHook?: (c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null } = {}) {
   // `now` is the wall clock; setting it moves the monotonic one by the same step (time passes), `jump` moves the wall clock
   // alone (Windows sets the time back or forward – the monotonic clock goes on).
   const clock = {
@@ -61,7 +62,7 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
       this.wall += ms
     }
   }
-  const folder = await DataFolder.open({ fs: o.fs ?? nodeFs, dataDir, stateDir: join(root, 'state'), computer: 'pca', computerName: 'PC A', appVersion: '0.4.0', clock: { wall: () => clock.now, mono: () => clock.mono }, holidays: marketDay, oneDriveRunning: () => o.oneDrive ?? true })
+  const folder = await DataFolder.open({ fs: o.fs ?? nodeFs, dataDir, stateDir: join(root, 'state'), computer: 'pca', computerName: 'PC A', appVersion: '0.4.0', clock: { wall: () => clock.now + (o.folderAhead ?? 0), mono: () => clock.mono }, holidays: marketDay, oneDriveRunning: () => o.oneDrive ?? true })
   const shown: NotifyIn[] = []
   const failLater: Array<() => void> = []
   const views: WidgetView[] = []
@@ -114,7 +115,9 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
       batterySaver: () => o.batterySaver ?? false,
       backup: () => (o.backupFailed ? { failed: { error: 'plik zajęty' } } : null),
       ...(o.quickAdd ? { quickAdd: o.quickAdd } : {}),
-      ...(o.openQuick ? { openQuick: o.openQuick } : {})
+      ...(o.quickUndo ? { quickUndo: o.quickUndo } : {}),
+      ...(o.openQuick ? { openQuick: o.openQuick } : {}),
+      ...(o.cost ? { cost: o.cost } : {})
     })
   const w = build()
   return { folder, clock, w, build, shown, failLater, views, closeFolder: () => (open = false), openFolder: () => (open = true), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
@@ -2698,11 +2701,134 @@ describe('szybki zapis „+” – potwierdzenie w pasku (D470)', () => {
     expect(w.current().note).toMatchObject({ text: 'Dodano do Skrzynki: Kup mleko', ok: true })
   })
 
+  it('wklejona lista z pola okna / panelu (N11, D606): linia „Dodano 5 spraw · Cofnij” 15 min; „Cofnij” woła cofnięcie listy i mówi, co poszło i co zostało', async () => {
+    const undone: string[] = []
+    const { w, clock } = await make({
+      quickUndo: async (batch) => {
+        undone.push(batch)
+        return { ok: true, error: null, undone: 3, kept: 2 }
+      }
+    })
+    await w.refresh()
+    await w.quickListSaid('Dodano 5 spraw', 'b1')
+    expect(w.current().lines.find((l) => l.id === 'quick:b1')).toMatchObject({ text: 'Dodano 5 spraw', actions: [{ id: 'undo', label: 'Cofnij' }] })
+    // Still there before the 15 minutes pass, gone after.
+    clock.now += 14 * 60_000
+    await w.refresh()
+    expect(w.current().lines.some((l) => l.id === 'quick:b1')).toBe(true)
+    await w.act('line', 'quick:b1|undo', 'bar')
+    expect(undone).toEqual(['b1'])
+    expect(w.current().lines.some((l) => l.id.startsWith('quick:'))).toBe(false)
+    expect(w.current().note).toMatchObject({ text: 'Cofnięto 3 sprawy · 2 sprawy zmienione od tego czasu – zostały', ok: true })
+    // The second click on a line that is gone does nothing; the line of an older list is no „Cofnij” of the newer one.
+    await w.act('line', 'quick:b1|undo', 'bar')
+    expect(undone).toEqual(['b1'])
+    await w.quickListSaid('Dodano 2 sprawy', 'b2')
+    await w.quickListSaid('Dodano 3 sprawy', 'b3')
+    await w.act('line', 'quick:b2|undo', 'bar')
+    expect(undone).toEqual(['b1'])
+    clock.now += 16 * 60_000
+    await w.refresh()
+    expect(w.current().lines.some((l) => l.id.startsWith('quick:'))).toBe(false)
+  })
+
+  it('lista z okienka „Do skrzynki” (batch null) i „Cofnij”, którego nie da się wykonać: pasek mówi tylko zdanie / powód, bez linii', async () => {
+    const { w } = await make({ quickUndo: async () => ({ ok: false, error: 'Tego zapisu nie da się już cofnąć.', undone: 0, kept: 0 }) })
+    await w.refresh()
+    await w.quickListSaid('Dodano 5 spraw · 1 bez miejsca na osi', null)
+    expect(w.current().note).toMatchObject({ text: 'Dodano 5 spraw · 1 bez miejsca na osi', ok: true })
+    expect(w.current().lines.some((l) => l.id.startsWith('quick:'))).toBe(false)
+    await w.quickListSaid('Dodano 2 sprawy', 'b9')
+    await w.act('line', 'quick:b9|undo', 'bar')
+    expect(w.current().note).toMatchObject({ text: 'Tego zapisu nie da się już cofnąć.' })
+    expect(w.current().note).not.toHaveProperty('ok')
+  })
+
+  it('„Cofnij” listy odmówione w całości (paczka oddana – `again`) albo rzucające: linia zostaje z „Cofnij” (bez „Cofam…”), pasek mówi powód; bez `again` linia znika (runda 2)', async () => {
+    let mode: 'again' | 'throws' | 'gone' = 'again'
+    const { w, clock } = await make({
+      quickUndo: async () => {
+        if (mode === 'throws') throw new Error('EIO')
+        return mode === 'again' ? { ok: false, error: 'Nie cofnięto – spróbuj jeszcze raz.', undone: 0, kept: 0, again: true } : { ok: false, error: 'Tego zapisu nie da się już cofnąć.', undone: 0, kept: 0 }
+      }
+    })
+    await w.refresh()
+    await w.quickListSaid('Dodano 3 sprawy', 'b1')
+    await w.act('line', 'quick:b1|undo', 'bar')
+    expect(w.current().lines.find((l) => l.id === 'quick:b1')).toMatchObject({ actions: [{ id: 'undo', label: 'Cofnij' }] })
+    expect(w.current().note).toMatchObject({ text: 'Nie cofnięto – spróbuj jeszcze raz.' })
+    // The same click again within half a second is a double click – the test lets time pass between them.
+    clock.now += 2_000
+    mode = 'throws'
+    await w.act('line', 'quick:b1|undo', 'bar')
+    expect(w.current().lines.find((l) => l.id === 'quick:b1')).toMatchObject({ actions: [{ id: 'undo', label: 'Cofnij' }] })
+    expect(w.current().note!.text).toContain('Nie cofnięto')
+    clock.now += 2_000
+    mode = 'gone'
+    await w.act('line', 'quick:b1|undo', 'bar')
+    expect(w.current().lines.some((l) => l.id.startsWith('quick:'))).toBe(false)
+  })
+
+  it('„Cofnij” listy odmówione w całości, gdy linia wygasła w trakcie cofania (runda 3): wraca na minutę, dopóki nie zajęła jej nowsza lista', async () => {
+    let expire = true
+    const holder: { w?: Awaited<ReturnType<typeof make>>['w']; clock?: Awaited<ReturnType<typeof make>>['clock'] } = {}
+    const made = await make({
+      quickUndo: async () => {
+        if (expire) {
+          holder.clock!.now += 16 * 60_000
+          await holder.w!.refresh()
+        }
+        return { ok: false, error: 'Nie cofnięto – spróbuj jeszcze raz.', undone: 0, kept: 0, again: true }
+      }
+    })
+    holder.w = made.w
+    holder.clock = made.clock
+    await made.w.refresh()
+    await made.w.quickListSaid('Dodano 3 sprawy', 'b1')
+    await made.w.act('line', 'quick:b1|undo', 'bar')
+    // The 15 minutes ran out during the undo, nothing newer took the line's place: it is back, with its button.
+    expect(made.w.current().lines.find((l) => l.id === 'quick:b1')).toMatchObject({ actions: [{ id: 'undo', label: 'Cofnij' }] })
+    // A newer list in the meantime keeps its place: the old line does not push it away.
+    made.clock.now += 2_000
+    expire = false
+    await made.w.quickListSaid('Dodano 2 sprawy', 'b2')
+    expect(made.w.current().lines.filter((l) => l.id.startsWith('quick:')).map((l) => l.id)).toEqual(['quick:b2'])
+  })
+
+  it('„Cofnij” listy, gdy kolejka pyta o zmianę z innego komputera (D607): pasek mówi, że cofnięcie czeka na odpowiedź – nie „spróbuj jeszcze raz”', async () => {
+    const { w } = await make({ quickUndo: async () => ({ ok: true, error: null, undone: 3, kept: 0, asked: true }) })
+    await w.refresh()
+    await w.quickListSaid('Dodano 3 sprawy', 'b1')
+    await w.act('line', 'quick:b1|undo', 'bar')
+    expect(w.current().note).toMatchObject({ text: 'Cofnięcie czeka na odpowiedź o zmianie z innego komputera', ok: true })
+  })
+
   it('pasek powtarza tytuł zapisany przez folder (zwrócony z zapisu), nie liczy go od nowa z surowego tekstu i zegara paska', async () => {
     const { w } = await make({ quickAdd: async () => ({ ok: true, error: null, title: 'Tytuł z folderu' }) })
     await w.refresh()
     await w.act('quickAdd', 'Kup mleko !jutro', 'bar')
     expect(w.current().note).toMatchObject({ text: 'Dodano do Skrzynki: Tytuł z folderu', ok: true })
+  })
+
+  it('szybki zapis z godziną (D601): pasek mówi, gdzie sprawa stanęła, albo dlaczego nie stanęła na osi', async () => {
+    const { w } = await make({ quickAdd: async () => ({ ok: true, error: null, title: 'Raport', placed: 'jutro 15:00' }) })
+    await w.refresh()
+    await w.act('quickAdd', 'Raport @jutro 15:00', 'bar')
+    expect(w.current().note).toMatchObject({ text: 'Dodano na oś: Raport – jutro 15:00', ok: true })
+    await w.quickSaid('Raport', { notPlaced: 'ten dzień już minął' })
+    expect(w.current().note).toMatchObject({ text: 'Zapisano: Raport – nie postawiono na osi: ten dzień już minął', ok: true })
+    // The same line from the bar's own field (the folder's answer) – and a long title is cut to 40 characters whatever the reason.
+    const long = `Zadzwonić ${'x'.repeat(100)}`
+    const asked = await make({ quickAdd: async () => ({ ok: true, error: null, title: long, notPlaced: 'ta godzina już minęła' }) })
+    await asked.w.refresh()
+    await asked.w.act('quickAdd', long, 'bar')
+    const text = asked.w.current().note!.text
+    expect(text).toBe(`Zapisano: Zadzwonić ${'x'.repeat(29)}… – nie postawiono na osi: ta godzina już minęła`)
+    // The queue asks about the day's file: waiting for the answer, not „Dodano na oś” (the answer „ich wersja” takes the block).
+    await w.quickSaid('Raport', { asked: true })
+    expect(w.current().note).toMatchObject({ text: 'Zapisano: Raport – czeka na odpowiedź o zmianie z innego komputera', ok: true })
+    await w.quickSaid('Raport', { placed: 'dziś 15:00' })
+    expect(w.current().note).toMatchObject({ text: 'Dodano na oś: Raport – dziś 15:00' })
   })
 })
 
@@ -3048,5 +3174,385 @@ describe('„<akcja> · Cofnij” po kliknięciu paska (D564 P18, UX12)', () => 
     expect(undoLine(w)?.text).toBe('Skończono: Pisanie, zaczęto: Raport')
     // The block clicked toward, wherever its start stands among the ones the click wrote; else the first of them.
     expect([begunOf('g', ['b', 'g']), begunOf('x', ['b', 'g']), begunOf(undefined, ['b']), begunOf('b', undefined)]).toEqual(['g', 'b', 'b', undefined])
+  })
+})
+
+describe('„Koszt ▸” z paska (D585, N12)', () => {
+  type CostEvent = { block: string; at: number; costs: Record<string, number> | null }
+  /** The changes of the block's cost in the day's log, in the log's order (every computer's). */
+  const costEvents = async (folder: DataFolder) =>
+    ((await folder.readDay(DAY)).events.filter((e) => e.k === 'block.cost').sort(compareEvents) as unknown as CostEvent[]).map((e) => ({ block: e.block, at: e.at, costs: e.costs }))
+
+  it('akcja `cost` pisze `block.cost` z chwilą procesu głównego; szybkie kliknięcia po kolei, każde nad zapisanym; wpisana liczba; „Jak podkategoria” – null', async () => {
+    const { w, folder, at } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    const base = w.current().cost!.base
+    expect(w.current().cost).toMatchObject({ block: 'a', name: 'Inne obowiązki', costs: base, own: false })
+    at(10 * 60 + 20)
+    const t = placeLogical(DAY, 10 * 60 + 20)
+    // Three clicks within 0.5 s (the steps are not a double click): none is lost, each over what the one before wrote.
+    await Promise.all([w.act('cost', 'a|head|+1', 'bar'), w.act('cost', 'a|head|+1', 'bar'), w.act('cost', 'a|senses|+10', 'bar')])
+    const one = { ...base, head: base.head + 1 }
+    const two = { ...one, head: base.head + 2 }
+    const three = { ...two, senses: base.senses + 10 }
+    expect(await costEvents(folder)).toEqual([
+      { block: 'a', at: t, costs: one },
+      { block: 'a', at: t, costs: two },
+      { block: 'a', at: t, costs: three }
+    ])
+    expect(w.current().cost).toMatchObject({ costs: three, own: true })
+    // A typed number (the panel's and the window's field) – kept in −100…100 as on the tile (`costSet`).
+    await w.act('cost', 'a|body|=42', 'panel')
+    await w.act('cost', 'a|emotions|=-500', 'main')
+    expect(w.current().cost?.costs).toEqual({ ...three, body: 42, emotions: -100 })
+    // At the end of the range a step changes nothing: nothing written.
+    await w.act('cost', 'a|emotions|-1', 'main')
+    expect(await costEvents(folder)).toHaveLength(5)
+    // „Jak podkategoria”: the block's own cost given up – `costs: null`, the view on the base again; a second one writes nothing.
+    await w.act('cost', 'a|reset', 'bar')
+    await w.act('cost', 'a|reset', 'bar')
+    expect((await costEvents(folder)).map((e) => e.costs)).toEqual([one, two, three, { ...three, body: 42 }, { ...three, body: 42, emotions: -100 }, null])
+    expect(w.current().cost).toMatchObject({ costs: base, own: false })
+    expect(w.current().note).toBeNull()
+  })
+
+  it('blok już skończony albo inny niż na pasku – nic nie zapisuje, powód w pasku; zły argument – nic', async () => {
+    const { w, folder, at } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 10)
+    await w.act('cost', 'a|nope|+1', 'bar')
+    await w.act('cost', 'a|head|+x', 'bar')
+    await w.act('cost', 'ny|head|+1', 'bar')
+    expect(await costEvents(folder)).toEqual([])
+    expect(w.current().note?.text).toBe('Nie zapisano: ten blok nie trwa teraz na pasku')
+    at(10 * 60 + 20)
+    await w.act('next', undefined, 'bar')
+    expect(w.current().cost).toBeNull()
+    at(10 * 60 + 25)
+    await w.act('cost', 'a|head|+1', 'bar')
+    expect(await costEvents(folder)).toEqual([])
+    expect(w.current().note?.text).toBe('Nie zapisano: ten blok nie trwa teraz na pasku')
+  })
+
+  it('zapis idzie przez `cost` (hub – okna słyszą go od razu), gdy proces główny go daje: dzień i blok paska, zamiar, chwila zegara paska', async () => {
+    const sent: BarCostClick[] = []
+    const holder: { folder: DataFolder | null } = { folder: null }
+    const { w, folder, at, clock } = await make({ cost: async (c) => (sent.push(c), holder.folder!.barCost(c)) })
+    holder.folder = folder
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 5)
+    await w.act('cost', 'a|head|-1', 'bar')
+    expect(sent).toEqual([{ day: DAY, block: 'a', op: { k: 'step', pool: 'head', by: -1 }, at: clock.now }])
+    expect(await costEvents(folder)).toHaveLength(1)
+  })
+
+  it('„Dalej” i [+] równocześnie: kolej folderu – „Dalej” kończy blok, kliknięcie kosztu dostaje odmowę, żadnego `block.cost` po końcu', async () => {
+    const { w, folder, at } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 20)
+    await w.refresh()
+    expect(w.current().cost?.block).toBe('a')
+    await Promise.all([w.act('next', undefined, 'bar'), w.act('cost', 'a|head|+1', 'bar')])
+    expect((await folder.dayState(DAY)).facts.blocks.get('a')?.endedAt).not.toBeNull()
+    expect(await costEvents(folder)).toEqual([])
+    expect(w.current().note?.text).toBe('Nie zapisano: ten blok nie trwa teraz na pasku')
+  })
+
+  it('blok zaczęty wczoraj trwa po 04:00 (pasek na wczoraj): bez „Koszt ▸”, kliknięcie nic nie pisze – „ten dzień już minął”, jak kafelek', async () => {
+    const { w, folder, at } = await make({ from: placeLogical(DAY, 27 * 60 + 30) })
+    expect((await folder.timerClick({ a: 'startNew', block: 'x', categoryId: 'inne', durationMin: 120, confirm: true } as never)).ok).toBe(true)
+    at(27 * 60 + 40)
+    await w.refresh()
+    expect(w.current()).toMatchObject({ day: DAY, cost: { block: 'x' } })
+    at(28 * 60 + 10)
+    await w.refresh()
+    expect(w.current().day).toBe(DAY)
+    expect(w.current().block).not.toBeNull()
+    expect(w.current().cost).toBeNull()
+    await w.act('cost', 'x|head|+1', 'bar')
+    expect(await costEvents(folder)).toEqual([])
+    expect(w.current().note?.text).toBe('Nie zapisano: ten dzień już minął')
+  })
+
+  it('ostrzeżenie o komputerze ze starszą wersją (D568) – z komputerów folderu, jak w oknie; tylko przy koszcie spoza ±5', async () => {
+    // PC B with a version before WIDE_COST_FROM (its presence – the folder's list of computers, as the window's view has it).
+    const t0 = placeLogical(DAY, 9 * 60)
+    mkdirSync(join(dataDir, '.presence'), { recursive: true })
+    writeFileSync(join(dataDir, '.presence', 'pcb.json'), JSON.stringify({ format: 1, computer: 'pcb', name: 'PC B', appVersion: '1.36.0', rulesVersion: 18, versions: [], lastPresence: t0, lastUse: t0, state: 'closed', seenLeader: 'pca', settled: true, lastEvents: {}, writtenAt: t0 }))
+    const { w, folder, at } = await make()
+    await folder.check()
+    expect(folder.computers.map((c) => [c.name, c.appVersion])).toEqual([['PC A', undefined], ['PC B', '1.36.0']])
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 5)
+    await w.act('cost', 'a|head|=5', 'bar')
+    expect(w.current().cost).not.toHaveProperty('warning')
+    await w.act('cost', 'a|head|=6', 'bar')
+    expect(w.current().cost?.warning).toContain('Komputer PC B ma starszą wersję aplikacji')
+  })
+
+  it('koniec bloku zapisany po odczycie widoku (jak „Dalej” tuż przed [+]): `block.cost` nigdy po końcu bloku w kolejności logu – ocena w kolejce folderu', async () => {
+    const holder: { folder: DataFolder | null; end: boolean; now: () => number } = { folder: null, end: false, now: () => 0 }
+    // A refresh reads the folder, then – before the bar's write – the block's end comes into the log.
+    const { w, folder, at, clock } = await make({
+      during: () => {
+        if (!holder.end) return
+        holder.end = false
+        holder.folder!.append({ day: DAY, dom: 'timer', k: 'block.end', block: 'a', at: holder.now(), done: true, rule: null })
+      }
+    })
+    holder.folder = folder
+    holder.now = () => clock.now
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 20)
+    await w.refresh()
+    holder.end = true
+    await w.act('cost', 'a|head|+1', 'bar')
+    await w.act('cost', 'a|head|+1', 'bar')
+    const events = (await folder.readDay(DAY)).events
+    const end = events.find((e) => e.k === 'block.end')!
+    expect(end).toBeDefined()
+    expect(events.filter((e) => e.k === 'block.cost').every((e) => compareEvents(e, end) < 0)).toBe(true)
+    expect(w.current().note?.text).toBe('Nie zapisano: ten blok nie trwa teraz na pasku')
+  })
+
+  it('nieudany zapis kosztu: powód w pasku, czekający koszt „Przedłuż” zostaje (`pending` nietknięty)', async () => {
+    const { w, folder, at } = await make({ cost: async () => Promise.reject(new Error('log jest teraz nieczytelny')) })
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 10 * 60 + 1), boundary: placeLogical(DAY, 10 * 60 + 30), auto: false }])
+    at(10 * 60 + 5)
+    await w.refresh()
+    await w.act('extend', '15', 'bar')
+    expect(w.current().pending).toMatchObject({ button: 'extend' })
+    await w.act('cost', 'a|head|+1', 'bar')
+    expect(w.current().note?.text).toBe('Nie zapisano: log jest teraz nieczytelny')
+    expect(w.current().pending).toMatchObject({ button: 'extend' })
+  })
+
+  it('logi dnia nieczytelne w chwili kliknięcia: odmowa folderu z powodem (jak kliknięcie timera), nic nie zapisane', async () => {
+    let broken = false
+    const fs: DataFs = { ...nodeFs, read: async (abs) => (broken && abs.endsWith('pcb.jsonl') ? Promise.reject(Object.assign(new Error('EIO'), { code: 'EIO' })) : nodeFs.read(abs)) }
+    const pcb = join(dataDir, paths.log(DAY, 'pcb'))
+    const line = (n: number, at: number) => `${JSON.stringify({ id: `pcb-${n}`, c: 'pcb', n, t: at, l: at, v: 1, day: DAY, dom: 'meta', k: n === 0 ? 'observe.from' : 'observe.alive', at, ...(n === 0 ? { why: 'start' } : {}) })}\n`
+    mkdirSync(join(dataDir, paths.logDir(DAY)), { recursive: true })
+    writeFileSync(pcb, line(0, placeLogical(DAY, 9 * 60)))
+    const { w, folder, at } = await make({ fs })
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 5)
+    await w.refresh()
+    // PC B's log changed and cannot be read now.
+    appendFileSync(pcb, line(1, placeLogical(DAY, 10 * 60)))
+    broken = true
+    await w.act('cost', 'a|head|+1', 'bar')
+    broken = false
+    expect(await costEvents(folder)).toEqual([])
+    expect(w.current().note?.text).toBe('Nie zapisano: nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę')
+  })
+
+  it('kliknięcia po kolei i w kolejce – każde nad zapisanym, także gdy zegar folderu jest przed zegarem paska (chwila zapisu = zegar paska, żaden przyrost nie ginie)', async () => {
+    // The folder's clock 0.5 s ahead of the bar's: at 10:20:29.7 its own instant rounds to 10:21, the bar's view to 10:20.
+    const { w, folder, at, clock } = await make({ folderAhead: 500 })
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 20)
+    clock.now += 29_700
+    await w.refresh()
+    const base = w.current().cost!.base
+    await w.act('cost', 'a|head|+1', 'bar')
+    await w.act('cost', 'a|head|+1', 'bar')
+    await Promise.all([w.act('cost', 'a|head|+1', 'bar'), w.act('cost', 'a|body|=9', 'bar')])
+    expect((await costEvents(folder)).map((e) => e.costs)).toEqual([
+      { ...base, head: base.head + 1 },
+      { ...base, head: base.head + 2 },
+      { ...base, head: base.head + 3 },
+      { ...base, head: base.head + 3, body: 9 }
+    ])
+    expect(w.current().cost?.costs).toEqual({ ...base, head: base.head + 3, body: 9 })
+  })
+
+  it('zmiana z kafelka między kliknięciami paska nie ginie: następne kliknięcie idzie nad nią (także przy zegarze folderu przed paskiem)', async () => {
+    const { w, folder, at, clock } = await make({ folderAhead: 500 })
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 20)
+    clock.now += 29_700
+    await w.refresh()
+    const base = w.current().cost!.base
+    await w.act('cost', 'a|head|+1', 'bar')
+    // The tile's window (`saveTileCosts` – `logEvents`): the folder's clock.
+    const tile = { head: 40, emotions: 2, senses: 3, body: 4 }
+    await folder.userEvents([{ k: 'block.cost', day: DAY, block: 'a', costs: tile }])
+    await w.act('cost', 'a|head|+1', 'bar')
+    expect((await costEvents(folder)).map((e) => e.costs)).toEqual([{ ...base, head: base.head + 1 }, tile, { ...tile, head: 41 }])
+  })
+
+  it('zegar paska przed zegarem folderu: zmiana paska nie wychodzi za zegar folderu – kafelek zapisany zaraz po niej wygrywa, następne kliknięcie idzie nad nim', async () => {
+    // The bar's clock 0.5 s ahead of the folder's: at 10:20:30.1 its own instant rounds to 10:21, the folder's (10:20:29.6) to 10:20.
+    const { w, folder, at, clock } = await make({ folderAhead: -500 })
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 20)
+    clock.now += 30_100
+    await w.refresh()
+    const base = w.current().cost!.base
+    await w.act('cost', 'a|head|+1', 'bar')
+    const tile = { head: 40, emotions: 2, senses: 3, body: 4 }
+    await folder.userEvents([{ k: 'block.cost', day: DAY, block: 'a', costs: tile }])
+    await w.refresh()
+    expect(w.current().cost?.costs).toEqual(tile)
+    await w.act('cost', 'a|head|+1', 'bar')
+    expect((await costEvents(folder)).map((e) => e.costs)).toEqual([{ ...base, head: base.head + 1 }, tile, { ...tile, head: 41 }])
+    expect(w.current().cost?.costs).toEqual({ ...tile, head: 41 })
+  })
+
+  it('drugi komputer z zegarem minutę do przodu zmienił koszt (kafelek): kliknięcie paska idzie nad jego zmianą i liczy się od jej minuty', async () => {
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 20)
+    await w.refresh()
+    const base = w.current().cost!.base
+    const ahead = clock.now + 60_000
+    const peer = { head: 30, emotions: 1, senses: 1, body: 1 }
+    mkdirSync(join(dataDir, paths.logDir(DAY)), { recursive: true })
+    writeFileSync(join(dataDir, paths.log(DAY, 'pcb')), `${JSON.stringify({ id: 'pcb-0', c: 'pcb', n: 0, t: ahead, l: ahead, v: RULES_VERSION, day: DAY, dom: 'timer', k: 'block.cost', block: 'a', at: ahead, costs: peer })}\n`)
+    await w.refresh()
+    // Its minute (10:21) is still to come: the bar shows the cost of now.
+    expect(w.current().cost?.costs).toEqual(base)
+    await w.act('cost', 'a|head|+1', 'bar')
+    expect((await costEvents(folder)).at(-1)).toEqual({ block: 'a', at: ahead, costs: { ...peer, head: 31 } })
+    clock.now += 2 * 60_000
+    await w.refresh()
+    expect(w.current().cost?.costs).toEqual({ ...peer, head: 31 })
+  })
+
+  it('zmiana drugiego komputera z zegarem daleko do przodu (+20 min): odmowa z powodem, nic nie zapisane; +30 s – zapis jak zwykle', async () => {
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 20)
+    await w.refresh()
+    const peer = (n: number, ahead: number, costs: Record<string, number>) => JSON.stringify({ id: `pcb-${n}`, c: 'pcb', n, t: clock.now + ahead, l: clock.now + ahead, v: RULES_VERSION, day: DAY, dom: 'timer', k: 'block.cost', block: 'a', at: clock.now + ahead, costs })
+    const file = join(dataDir, paths.log(DAY, 'pcb'))
+    mkdirSync(join(dataDir, paths.logDir(DAY)), { recursive: true })
+    writeFileSync(file, `${peer(0, 30_000, { head: 30, emotions: 1, senses: 1, body: 1 })}
+`)
+    await w.act('cost', 'a|head|+1', 'bar')
+    expect((await costEvents(folder)).at(-1)).toEqual({ block: 'a', at: clock.now + 30_000, costs: { head: 31, emotions: 1, senses: 1, body: 1 } })
+    appendFileSync(file, `${peer(1, 20 * 60_000, { head: 60, emotions: 1, senses: 1, body: 1 })}
+`)
+    const count = (await costEvents(folder)).length
+    await w.act('cost', 'a|head|+1', 'bar')
+    expect(await costEvents(folder)).toHaveLength(count)
+    expect(w.current().note?.text).toBe('Nie zapisano: zegar innego komputera jest przed tym – koszt zmienisz, gdy nadejdzie chwila jego zmiany')
+  })
+
+  it('zegar komputera cofnięty po kliknięciu: następne kliknięcie idzie nad poprzednim i liczy się od jego minuty (nie ginie)', async () => {
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 20)
+    await w.refresh()
+    const base = w.current().cost!.base
+    await w.act('cost', 'a|head|+1', 'bar')
+    // Windows sets the time back 50 s (the monotonic clock goes on; more than a minute – a refusal, `BAR_COST_AHEAD_MS`); the scheduler takes
+    // the wall clock again: 10:19:10 – the minute 10:19, before the first click's.
+    clock.jump(-50_000)
+    folder.clock.rebase()
+    await w.refresh()
+    await w.act('cost', 'a|head|+1', 'bar')
+    expect(await costEvents(folder)).toEqual([
+      { block: 'a', at: placeLogical(DAY, 10 * 60 + 20), costs: { ...base, head: base.head + 1 } },
+      { block: 'a', at: placeLogical(DAY, 10 * 60 + 20), costs: { ...base, head: base.head + 2 } }
+    ])
+    clock.now += 4 * 60_000
+    await w.refresh()
+    expect(w.current().cost?.costs).toEqual({ ...base, head: base.head + 2 })
+  })
+
+  it('kafelek zapisał koszt w trakcie kliknięcia paska (po odczycie dnia): kliknięcie liczone od nowa nad nim; ciągle zmieniany – odmowa', async () => {
+    const { w, folder, at } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 10)
+    await w.refresh()
+    let head = 40
+    let fire = 0
+    const real = folder.log.readDay.bind(folder.log)
+    // The tile's window writes (`logEvents` – outside the folder's turn of clicks) just after the click read the day.
+    folder.log.readDay = async (day: string) => {
+      const r = await real(day)
+      if (fire > 0) {
+        fire--
+        void folder.userEvents([{ k: 'block.cost', day: DAY, block: 'a', costs: { head: head++, emotions: 2, senses: 3, body: 4 } }])
+      }
+      return r
+    }
+    fire = 1
+    await w.act('cost', 'a|head|+1', 'bar')
+    expect((await costEvents(folder)).map((e) => e.costs)).toEqual([{ head: 40, emotions: 2, senses: 3, body: 4 }, { head: 41, emotions: 2, senses: 3, body: 4 }])
+    // Changed again at every one of its 3 tries: nothing written over a cost it did not see – the bar says why.
+    head = 50
+    fire = 100
+    await w.act('cost', 'a|head|+1', 'bar')
+    fire = 0
+    const heads = (await costEvents(folder)).map((e) => e.costs!.head)
+    expect(heads.length).toBeGreaterThanOrEqual(5)
+    expect(heads).toEqual([40, 41, ...Array.from({ length: heads.length - 2 }, (_, i) => 50 + i)])
+    expect(w.current().note?.text).toBe('Nie zapisano: koszt tego bloku zmienił się w międzyczasie – kliknij jeszcze raz')
+  })
+
+  it('„Odcinam się”: folder odmawia jak widok (jedna reguła `barCostOf`) – nic nie zapisane', async () => {
+    const { w, folder, at } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 10)
+    await w.act('cutOff', undefined, 'bar')
+    expect(w.current()).toMatchObject({ hidden: true, cost: null })
+    expect(await folder.barCost({ day: DAY, block: 'a', op: { k: 'step', pool: 'head', by: 1 }, at: placeLogical(DAY, 10 * 60 + 11) })).toEqual({ ok: false, why: 'ten blok nie trwa teraz na pasku' })
+    expect(await costEvents(folder)).toEqual([])
+  })
+
+  it('folder zamknięty w chwili kliknięcia: droga huba (`cost`) i tak pyta; bez niej – „Nie zapisano: folder danych nie jest otwarty”', async () => {
+    const sent: BarCostClick[] = []
+    const viaHub = await make({ cost: async (c) => (sent.push(c), { ok: false, why: 'folder danych nie jest otwarty' }) })
+    await viaHub.w.refresh()
+    await viaHub.w.act('start', undefined, 'panel')
+    viaHub.closeFolder()
+    await viaHub.w.act('cost', 'a|head|+1', 'bar')
+    expect(sent.map((c) => c.block)).toEqual(['a'])
+    const own = await make()
+    await own.w.refresh()
+    await own.w.act('start', undefined, 'panel')
+    own.closeFolder()
+    await own.w.act('cost', 'a|head|+1', 'bar')
+    own.openFolder()
+    await own.w.refresh()
+    expect(own.w.current().note?.text).toBe('Nie zapisano: folder danych nie jest otwarty')
+  })
+
+  it('zmiana z paska przelicza prognozę od teraz: minuty przed zmianą po staremu, od zmiany – nowy koszt', async () => {
+    const { w, folder, at } = await make()
+    folder.append({ day: DAY, dom: 'energy', k: 'energy.checkin', at: placeLogical(DAY, 7 * 60), answers: { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] } })
+    await folder.log.flush()
+    await w.refresh()
+    await w.act('start', undefined, 'panel')
+    at(10 * 60 + 20)
+    const curve = async () => Array.from((await folder.energyState(DAY)).energy.series.head)
+    const before = await curve()
+    await w.act('cost', 'a|head|+10', 'bar')
+    const after = await curve()
+    // The index of a minute from 04:00: the change at 10:20, the block's end at 11:00.
+    const change = 10 * 60 + 20 - 4 * 60
+    const end = 11 * 60 - 4 * 60
+    expect(after.slice(0, change + 1)).toEqual(before.slice(0, change + 1))
+    expect(after[end]!).toBeLessThan(before[end]!)
   })
 })

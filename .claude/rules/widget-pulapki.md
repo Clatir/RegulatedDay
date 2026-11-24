@@ -16,6 +16,8 @@ paths:
 - W ciszy nocnej pasek nie ma Start ani Pauzy (ma „Prośba ▸”, D346) – testy E2E zaczynają blok z panelu bloku (`block-timer-start`), bo
   uruchamiają się o dowolnej godzinie; tekst `bar-block` w nocy to godzina, nie „Bez bloku”.
 - Komponenty `renderer/widget/**` sprawdza check-code (bez title, select, pól daty i czasu): kroki ±5 min zamiast pól.
+- Testy `tests/web` paska pulpitu (`mode: 'desktop'`): dwa puszczenia w ≤ 500 ms i ≤ 4 px to dwuklik (C8) – drugie przepada, chyba że `repeat`;
+  kolejne kliknięcia testu rozdzielaj zegarem (`vi.setSystemTime`, `tests/web/bar-cost.test.ts`).
 - `DesktopBar.apply({ onTop })` to jedyne `setAlwaysOnTop` paska (check-code liczy wywołania); bez „na wierzchu” pasek
   zawsze kładzie pomocnik pod oknami.
 - Okno dźwięku (`windows/soundWindow.ts`, widok `sound`) nigdy się nie pokazuje; dźwięk gra przy zmianie kroku na 5 i 0.

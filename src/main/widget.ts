@@ -24,6 +24,8 @@ import { classModeEnd, fewerAt, modesOf, type ModePrefs, type Modes } from '@sha
 import { REMINDER_NOTICE_MIN, reminderWords, remindersDue } from '@shared/engine/reminders'
 import { suggestRegen } from '@shared/engine/reserve'
 import { timerNow, type TimerNow } from '@shared/engine/timer'
+import { WIDE_COST_FROM } from '@shared/model/blockCosts'
+import { olderComputers } from '@shared/model/note'
 import { pushedText } from '@shared/engine/pushApart'
 import { energyOrderVariant } from '@shared/engine/energyOrder'
 import { casesFrom, isDone, taskAnswerRaw } from '@shared/engine/cases'
@@ -45,7 +47,9 @@ import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { answered } from '@shared/engine/care'
 import { batteryLine, NO_SYNC, syncLines } from '@shared/sync/syncLines'
-import { ASSESS_TEXT, CLICK_UNDO_MS, noFolderView, SEEN_LINE, shortTitle, SIGNAL_TEXT, UNDO_LINE_MS, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
+import { QUICK_UNDO_ASKED, quickUndoText } from '@shared/quickList'
+import { quickSavedText } from '@shared/quickSaid'
+import { ASSESS_TEXT, barCostOp, CLICK_UNDO_MS, noFolderView, SEEN_LINE, SIGNAL_TEXT, UNDO_LINE_MS, type BarCostClick, type BarCostResult, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
 import type { DataFolder } from './data/folder'
 
 const CONFIRM_MS = 10_000
@@ -54,8 +58,6 @@ export const DOUBLE_MS = 500
 const REFRESH_MS = 15_000
 /** A refused or failed click says why in the bar this long. */
 const NOTE_MS = 6_000
-/** The longest title the bar repeats after a quick capture (D470): the bar has a line, not a field. */
-const QUICK_SAID_MAX = 40
 const MIN = 60_000
 /** The questions of the engine (their ids: rule:day:block:threshold) – only they are marked seen. */
 const QUESTION_ID = SEEN_LINE
@@ -77,6 +79,11 @@ export interface WidgetDeps {
   timer: (click: TimerIn) => Promise<TimerResult>
   /** Edits of records as the window writes them (the hub tells the windows at once). */
   edit: (entries: EditEntry[]) => Promise<EditOutcome[]>
+  /**
+   * A click of „Koszt ▸” judged and written by the folder (`hub.barCost` – the windows hear it at once: the block's tile, D585, T2503);
+   * undefined – the folder's own `barCost`.
+   */
+  cost?: (click: BarCostClick) => Promise<BarCostResult>
   answer: (id: string, answer: string, value: number | null) => Promise<TimerResult>
   seen: (ids: string[], how: 'panel' | 'main' | 'notification' | 'bar') => Promise<unknown>
   clickedApp: () => void
@@ -100,7 +107,9 @@ export interface WidgetDeps {
   /** The backups as the data service knows them (its last daily backup failed – A3-06). */
   backup?: () => { failed: { error: string } | null } | null
   /** The quick capture (D385, D402): a task of your own into „Skrzynka” – the field of the bar; why, when not saved. */
-  quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>
+  quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null; placed?: string; notPlaced?: string; asked?: boolean }>
+  /** „Cofnij” of a pasted list (N11, D606): its sprawy and blocks taken away, the count of what went and what stayed. */
+  quickUndo?: (batch: string) => Promise<{ ok: boolean; error: string | null; undone: number; kept: number; asked?: boolean; again?: boolean }>
   /** „+ Skrzynka” of the desktop bar (D564 P15): it takes no keys – the window „Do skrzynki” opens as by its shortcut. */
   openQuick?: () => void
 }
@@ -229,13 +238,10 @@ export function planPushedIpc(w: Pick<WidgetEngine, 'pushed'>, log: WidgetDeps['
   if (p) void w.pushed(p.day, p.count, p.edit, line !== false).catch((e) => log('warn', 'pasek nie przeliczył się po przesunięciu bloków', e))
 }
 
+export { quickSavedText }
+
 /** The bar's note when a variant picked finds the plan as it would make it (D378). */
 export const PLAN_ALREADY = 'Plan już jest tak ułożony.'
-
-/** What the bar says after a quick capture (D470): the title as the folder saved it (the capture returns it), cut when long. */
-export function quickSavedText(saved: string): string {
-  return `Dodano do Skrzynki: ${shortTitle(saved, QUICK_SAID_MAX)}`
-}
 
 /** The longest label of a variant the window may give the bar (its line „Przestawiono: …”). */
 const ARRANGED_LABEL_MAX = 200
@@ -321,6 +327,8 @@ export class WidgetEngine {
   private stepsUndo: StepsUndo | null = null
   /** „<akcja> · Cofnij” of the bar's last click it can take back (D564 P18): one at a time – a newer click replaces it. */
   private clickUndo: ClickUndo | null = null
+  /** „Dodano 5 spraw · Cofnij” after a list pasted into the field of the window or the panel (N11, D606): one at a time, for `UNDO_LINE_MS`. */
+  private quickLine: { batch: string; text: string; until: number; seq: number; undoing: boolean } | null = null
   private clickSeq = 0
 
   constructor(private readonly d: WidgetDeps) {}
@@ -449,7 +457,9 @@ export class WidgetEngine {
           // The day's file the model was counted from (D473: the routine's list it keeps, its ticks – read once, T1115).
           dayFile: m.dayFile,
           cases: requests,
-          allDay
+          allDay,
+          // „Koszt ▸” warns as the tile's window (D568): the folder's computers, the list the window's view has.
+          olderComputers: olderComputers(folder.computers, WIDE_COST_FROM)
         }),
         note: this.note ? { text: this.note.text, left: this.note.until - mono, ...(this.note.ok ? { ok: true as const } : {}) } : null
       }
@@ -623,8 +633,16 @@ export class WidgetEngine {
     for (const [kind, mv] of [...this.moved]) if (mv.until <= mono) this.moved.delete(kind)
     // The newest first; after every line of the day (`linesLast`): the bar shows one of them at most, the other waits in
     // „⋯” with its „Cofnij” (`barLines`).
-    const movedLines = [...this.moved].sort((a, b) => b[1].seq - a[1].seq).map(([kind, mv]) => ({ id: `moved:${kind}`, text: mv.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }))
-    if (movedLines.length && !v.hidden) v.lines = [...v.lines, ...movedLines]
+    // A list pasted into the field (N11) is such a line too (`quick:<batch>`): in the order of the newest first with the plan's changes.
+    const q = this.quickLine
+    if (q && q.until <= mono) this.quickLine = null
+    const changeLines = [
+      ...[...this.moved].map(([kind, mv]) => ({ seq: mv.seq, line: { id: `moved:${kind}`, text: mv.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false } })),
+      ...(this.quickLine ? [{ seq: this.quickLine.seq, line: { id: `quick:${this.quickLine.batch}`, text: this.quickLine.text, actions: [{ id: 'undo', label: this.quickLine.undoing ? 'Cofam…' : 'Cofnij' }], dot: false } }] : [])
+    ]
+      .sort((a, b) => b.seq - a.seq)
+      .map((x) => x.line)
+    if (changeLines.length && !v.hidden) v.lines = [...v.lines, ...changeLines]
     // A routine saved from the bar (D328) or a block ended by its last step (D474): its „Cofnij” for a while, in place of its line.
     const u = this.stepsUndo
     if (u && (u.until <= mono || u.day !== date)) this.stepsUndo = null
@@ -669,7 +687,7 @@ export class WidgetEngine {
    */
   private linesLast(): void {
     const v = this.view!
-    const moved = (l: { id: string }) => l.id.startsWith('moved:')
+    const moved = (l: { id: string }) => l.id.startsWith('moved:') || l.id.startsWith('quick:')
     const hard = (l: { id: string }) => l.id.startsWith('hardEnd:')
     // The reminders (UX13) after all: they never push a line of the day – nor a change's „Cofnij” – into „⋯”.
     const remind = (l: { id: string }) => l.id.startsWith('remind:')
@@ -991,9 +1009,12 @@ export class WidgetEngine {
     // Two clicks within 0.5 s are one – also the second click of a cost that comes too soon after its first. On the
     // monotonic clock: a wall clock set back or forward meanwhile (time sync) neither drops a click nor lets a double one through.
     const at = this.mono
-    if ((this.lastClick.key === key && at - this.lastClick.at < DOUBLE_MS) || (action === 'confirm' && this.pending && at - (this.pending.until - CONFIRM_MS) < DOUBLE_MS)) return
+    // A step of „Koszt ▸” (D585) is an intent of its own, as a step of ±5 min: quick clicks of it all count (the bar's button drops the
+    // second click of a double click on anything else, C8).
+    const steps = action === 'cost'
+    if (!steps && ((this.lastClick.key === key && at - this.lastClick.at < DOUBLE_MS) || (action === 'confirm' && this.pending && at - (this.pending.until - CONFIRM_MS) < DOUBLE_MS))) return
     // A click of the bar itself (the desktop bar's background) is no action: it never parts the two clicks of one (A7-01).
-    if (action !== 'barClick') this.lastClick = { key, at }
+    if (action !== 'barClick' && !steps) this.lastClick = { key, at }
     try {
       await this.actNow(action, arg, from)
     } catch (e) {
@@ -1007,6 +1028,38 @@ export class WidgetEngine {
   private say(text: string, ok = false): void {
     this.note = { text, until: this.mono + NOTE_MS, ...(ok ? { ok: true as const } : {}) }
     setTimeout(() => void this.refresh(), NOTE_MS + 50).unref?.()
+  }
+
+  /** A refresh begun after this call has ended (one running now read the folder before it): its view has what was just written. */
+  private async refreshed(): Promise<void> {
+    await this.refresh()
+    if (this.running) await this.running
+  }
+
+  /**
+   * A click of „Koszt ▸” (D585, N12) – `<block>|<pool>|<±n>`, `<block>|<pool>|=<n>`, `<block>|reset` (`barCostArg`) on the bar's day: an intent
+   * the folder judges in its turn with the other clicks (`DataFolder.barCost` – `barDay`, `serial`, `writeOn`) over the block's newest change
+   * in the log's order, and writes as `block.cost` (as a begun block's tile, `plan/costSave.ts`) at the earlier of the bar's clock (its views
+   * are counted at it) and the folder's, never before the latest instant of the block's start and changes (T2513; one from a clock more
+   * than a minute ahead – refused); the engine counts the new cost from that minute to the block's end, the minutes gone by stay. A block of
+   * a series changes alone, that day only (the event is of the day's block). Refused (the block no longer the bar's, a day gone by, the
+   * day's logs not readable) or failed – only the bar's note says why: a cost waiting for its „Potwierdź” stays (T2511).
+   */
+  private async costNow(day: string | undefined, arg: string | undefined): Promise<void> {
+    const click = barCostOp(arg ?? '')
+    if (!click || !day) return
+    try {
+      const c = { day, block: click.block, op: click.op, at: this.now }
+      // The hub's way when given (the windows hear the change); else the folder's own – without one, nothing to write to.
+      const folder = this.d.cost ? null : this.d.folder()
+      const r: BarCostResult = this.d.cost ? await this.d.cost(c) : folder ? await folder.barCost(c) : { ok: false, why: 'folder danych nie jest otwarty' }
+      if (!r.ok) this.say(`Nie zapisano: ${r.why}`)
+    } catch (e) {
+      this.say(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`)
+      this.d.log('warn', 'pasek: koszt bloku', e)
+    }
+    // The view counted after the write (a refresh running now read the folder before it): its numbers are what was written.
+    await this.refreshed()
   }
 
   private async actNow(action: string, arg: string | undefined, from: ViewKind): Promise<void> {
@@ -1156,6 +1209,9 @@ export class WidgetEngine {
         if (!block || !(ROUTINE_VERSIONS as readonly string[]).includes(version ?? '')) return
         return this.pickRoutineVersion(day, block, version as RoutineVersion)
       }
+      case 'cost':
+        // „Koszt ▸” (D585): the cost of the bar's block from now on.
+        return this.costNow(day, arg)
       case 'step': {
         // The tick of the step line (D440): `<block>|<step>` – the bar's day; no sound, no window.
         const [block, step] = (arg ?? '').split('|')
@@ -1177,6 +1233,8 @@ export class WidgetEngine {
         if (!line || !act) return
         const [kind, id] = [line.slice(0, line.indexOf(':')), line.slice(line.indexOf(':') + 1)]
         button = `line:${line}|${act}`
+        // „Dodano 5 spraw · Cofnij” of a pasted list (N11, D606).
+        if (kind === 'quick') return act === 'undo' ? this.undoQuickList(id) : undefined
         if (kind === 'moved') return act === 'undo' ? this.undoMoved(id === 'push' ? 'push' : 'variant') : undefined
         // „<akcja> · Cofnij” of the bar's last click (D564 P18).
         if (kind === 'clickUndo') return act === 'undo' ? this.undoClickLine(id) : undefined
@@ -1279,14 +1337,52 @@ export class WidgetEngine {
   /** A title from the bar's field into „Skrzynka” (D385): saved – the bar says what was added (D470); refused – why. */
   private async quickAdd(title: string): Promise<void> {
     const r = this.d.quickAdd ? await this.d.quickAdd(title) : { ok: false, error: 'Szybki zapis nie działa teraz.', title: null }
-    if (r.ok) this.say(quickSavedText(r.title ?? ''), true)
+    if (r.ok) this.say(quickSavedText(r.title ?? '', r), true)
     else if (r.error) this.say(r.error)
     return this.refresh()
   }
 
   /** The quick capture saved by the global shortcut (the window „Do skrzynki”, D470): the bar says it as it does for its own field. */
-  quickSaid(title: string): Promise<void> {
-    this.say(quickSavedText(title), true)
+  quickSaid(title: string, o: { placed?: string; notPlaced?: string; asked?: boolean } = {}): Promise<void> {
+    this.say(quickSavedText(title, o), true)
+    return this.refresh()
+  }
+
+  /**
+   * A list pasted into the quick capture saved (N11, D606): the window „Do skrzynki” (`batch` null) – the bar says it as it says one title; the
+   * window's bar and the panel – a line „Dodano 5 spraw · Cofnij” for `UNDO_LINE_MS` (one list at a time; a newer one takes its place).
+   */
+  quickListSaid(text: string, batch: string | null): Promise<void> {
+    if (batch) this.quickLine = { batch, text, until: this.mono + UNDO_LINE_MS, seq: ++this.movedSeq, undoing: false }
+    else this.say(text, true)
+    return this.refresh()
+  }
+
+  /** „Cofnij” on the line of a pasted list: all its sprawy and blocks taken away but what changed since – the bar says what went and what stayed. */
+  private async undoQuickList(batch: string): Promise<void> {
+    const q = this.quickLine
+    if (!q || q.batch !== batch || q.undoing) return
+    q.undoing = true
+    let r: Awaited<ReturnType<NonNullable<WidgetDeps['quickUndo']>>> | null = null
+    let failed: string | null = null
+    try {
+      await this.refresh()
+      r = this.d.quickUndo ? await this.d.quickUndo(batch) : null
+    } catch (e) {
+      failed = `Nie cofnięto: ${e instanceof Error ? e.message : String(e)}`
+    } finally {
+      q.undoing = false
+    }
+    // The list given back (nothing of the undo was written – `again`) or the call failed: the line stays with its „Cofnij”; else it is spent.
+    const again = failed != null || (r != null && !r.ok && r.again === true)
+    if (!again && this.quickLine === q) this.quickLine = null
+    // The line ran out while the undo ran (its 15 minutes) and no newer list took its place: it comes back for a minute to try again.
+    else if (again && this.quickLine == null) {
+      q.until = this.mono + 60_000
+      this.quickLine = q
+    }
+    if (r?.ok) this.say(r.asked ? QUICK_UNDO_ASKED : quickUndoText(r.undone, r.kept), true)
+    else this.say(failed ?? r?.error ?? 'Cofnięcie nie działa teraz.')
     return this.refresh()
   }
 

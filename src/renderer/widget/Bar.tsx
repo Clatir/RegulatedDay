@@ -3,8 +3,8 @@
  * desktop bar – the engine's view from the main process (one neutral line without a data folder, D327). „Dalej?” has its fixed
  * place at the start, and the row under it never repeats its answers (C5); the row of a block of work is „Dalej: <nazwa>”, Pauza,
  * Przedłuż, Koniec pracy, „+ Skrzynka” and „⋯” (D564 P17 – one line of the desktop bar at 100%; in a session also Skończyłem),
- * and „⋯” holds Odcinam się, „Prośba ▸” and „Sygnały ▸” first (in the night's quiet, without „⋯”, „Prośba ▸” stands in the row,
- * D346); the other questions and lines at the end, and what does not fit gathers in „⋯” with a count. Everything is chosen by a
+ * and „⋯” holds Odcinam się, „Prośba ▸”, „Sygnały ▸” and – with a block in front begun – „Koszt ▸” first (D585; in the night's quiet,
+ * without „⋯”, „Prośba ▸” stands in the row, D346); the other questions and lines at the end, and what does not fit gathers in „⋯” with a count. Everything is chosen by a
  * click inside the bar – groups, the lengths of „Przedłuż”, the steps of „Skończył się o …” unfold within the bar itself,
  * never as a separate window (D229). A first click with a cost shows it in place of its button; the second within 10 s
  * does it, „Anuluj” drops it (C6). After a click it can take back the main process gives a line „<akcja> · Cofnij” (D564 P18).
@@ -15,25 +15,31 @@
 import { createContext, Fragment, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { WidgetAction } from '@shared/api'
 import { REQUEST_ESTIMATE_MAX_MIN, REQUEST_ESTIMATE_MIN } from '@shared/engine/requests'
+import { COST_MAX, COST_MIN, costNumber, resetLabel } from '@shared/model/blockCosts'
+import type { Pool } from '@shared/model/categories'
+import { checkField, formatField, parseField } from '@shared/model/fields'
 import { TITLE_MAX } from '@shared/model/requests'
+import { RANGES } from '@shared/model/settings'
 import { quickPreview } from '@shared/quickDates'
 import { barBackground, TONE_SETS } from '@shared/theme'
-import { ALL_STEPS_TEXT, ASSESS_TEXT, BAR_CLOSED_TEXT, barStepText, nextLabel, OPEN_MAIN_TEXT, SIGNAL_TEXT, SEEN_LINE, SHOW_BAR_AFTER_BACK_TEXT, SHOW_BAR_TEXT, type AutoItem, type BarAllDay, type BarLine, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from '@shared/widget'
+import { ALL_STEPS_TEXT, ASSESS_TEXT, BAR_CLOSED_TEXT, barCostArg, barStepText, nextLabel, OPEN_MAIN_TEXT, SIGNAL_TEXT, SEEN_LINE, SHOW_BAR_AFTER_BACK_TEXT, SHOW_BAR_TEXT, type AutoItem, type BarAllDay, type BarCost, type BarCostOp, type BarLine, type BarRoutine, type BarSteps, type RunningRequest, type WidgetView } from '@shared/widget'
 import { countdown, useNow } from '../lib/clock'
 import { useMachine } from '../store/machine'
+import { CommitField } from '../components/fields'
 import { cx } from '../components/ui'
 import { useStepPicks } from '../lib/stepPicks'
 import { termHolds } from '../lib/viewTerms'
 import { useEscapeLayer } from '../lib/escape'
 import { useQuickToday } from './quickToday'
+import { usePasteList } from './usePasteList'
 import { pressFromMove, releasedUnheard, type GripState } from './barGrip'
 import { freeSpot, secondRelease, type BarRelease } from './barDouble'
 
 export type BarMode = 'main' | 'panel' | 'desktop'
-type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | 'quick' | 'parallel' | null
+type Unfold = 'request' | 'signals' | 'more' | 'extend' | 'variants' | 'routine' | 'quick' | 'parallel' | 'cost' | null
 
 const SIGNALS = Object.entries(SIGNAL_TEXT)
-const POOLS: Array<[string, string]> = [
+const POOLS: Array<[Pool, string]> = [
   ['head', 'głowa'],
   ['emotions', 'emocje'],
   ['senses', 'bodźce'],
@@ -69,9 +75,10 @@ const ButtonClicks = createContext<{ current: LastClick } | null>(null)
  * clicks of one spot; a key gives 0), on the desktop bar the releases do (its window often never hears the press, T1500).
  * `repeat`: a step (±5 min) – a quick click counts too, when the click before it was on this very step. `fit`: a label with a name
  * („Dalej: <nazwa>”, „Start: <nazwa>”) – it takes the room the row has left, at least „Dalej: X…”, and its name is cut (C4): the
- * row of a block of work stays one line of the desktop bar.
+ * row of a block of work stays one line of the desktop bar. `onAct` hears whether Shift was held (the click's own state of the key – also on
+ * the desktop bar, which never has the focus: „Koszt ▸” steps by 10 with it, D585). `disabled`: it does nothing (the end of a cost's range).
  */
-function BarButton({ mode, onAct, children, testId, pressed, accent, label, repeat, fit }: { mode: BarMode; onAct: () => void; children: ReactNode; testId?: string; pressed?: boolean; accent?: boolean; label?: string; repeat?: boolean; fit?: boolean }) {
+function BarButton({ mode, onAct, children, testId, pressed, accent, label, repeat, fit, disabled }: { mode: BarMode; onAct: (how: { shift: boolean }) => void; children: ReactNode; testId?: string; pressed?: boolean; accent?: boolean; label?: string; repeat?: boolean; fit?: boolean; disabled?: boolean }) {
   const last = useContext(ButtonClicks)
   /** This click again on the button clicked just before (a step clicked quickly once more). */
   const again = (button: EventTarget) => !last || last.current.button === button
@@ -79,19 +86,21 @@ function BarButton({ mode, onAct, children, testId, pressed, accent, label, repe
     mode === 'desktop'
       ? {
           onPointerUp: (e: React.PointerEvent) => {
-            if (e.button !== 0) return
-            if (!last) return onAct()
+            if (e.button !== 0 || disabled) return
+            const how = { shift: e.shiftKey }
+            if (!last) return onAct(how)
             const now = { at: e.timeStamp, x: e.screenX, y: e.screenY }
             const second = secondRelease(last.current.release, now) && !(repeat && again(e.currentTarget))
             last.current = { button: e.currentTarget, release: now }
-            if (!second) onAct()
+            if (!second) onAct(how)
           }
         }
       : {
           onClick: (e: React.MouseEvent) => {
+            if (disabled) return
             const second = e.detail > 1 && !(repeat && again(e.currentTarget))
             if (last) last.current = { ...last.current, button: e.currentTarget }
-            if (!second) onAct()
+            if (!second) onAct({ shift: e.shiftKey })
           }
         }
   return (
@@ -100,12 +109,13 @@ function BarButton({ mode, onAct, children, testId, pressed, accent, label, repe
       data-testid={testId}
       aria-pressed={pressed}
       aria-label={label}
+      disabled={disabled}
       className={cx(
         'inline-flex h-[24px] items-center rounded border px-2 text-[12px] leading-none whitespace-nowrap',
         // Its basis 0 and least width break the row's lines; it grows to its whole label where the row has room.
         fit ? 'max-w-max min-w-[4.5rem] flex-[1_1_0%] overflow-hidden' : 'shrink-0',
         accent ? 'border-lamp/60 text-fg' : 'border-line-strong text-fg',
-        pressed ? 'bg-raised' : 'bg-transparent hover:bg-hover'
+        disabled ? 'bg-transparent opacity-40' : pressed ? 'bg-raised' : 'bg-transparent hover:bg-hover'
       )}
       {...props}
     >
@@ -472,7 +482,10 @@ function RequestUnfold({ view, mode, close }: { view: WidgetView; mode: BarMode;
  * The field of the quick capture (D385, D402): a title, Enter saves it as a task into „Skrzynka” (the main process says
  * why when it cannot), Esc folds it – in the main window's bar and in the icon's panel (the desktop bar takes no keys: its
  * „+ Skrzynka” opens the window „Do skrzynki”, D564 P15). The words of dates at the end of the title (`!jutro`, `@pt` – D409) are told in a line
- * under the field before Enter – the field is never in the desktop bar itself, so its height does not change (D229).
+ * under the field before Enter – the field is never in the desktop bar itself, so its height does not change (D229). A list of lines pasted into it
+ * (N11, D605) is asked about under the field first (`usePasteList`); Enter saves the lines as sprawy – the bar then says „Dodano 5 spraw · Cofnij” as a
+ * line of its own (the main process), a refusal is said under the field. D607: what was typed before the paste stays – the field neither clears nor
+ * folds; one empty at Enter clears and folds after the save, but only while it is still empty (what was typed meanwhile is never taken).
  */
 function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: BarMode; close: () => void; text: string; setText: (t: string) => void; takeFocus: () => boolean; input: React.RefObject<HTMLInputElement | null> }) {
   useEscapeLayer(true, close)
@@ -486,8 +499,45 @@ function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: Ba
     setText('')
     close()
   }
-  const { today } = useQuickToday(text)
-  const preview = quickPreview(text, today)
+  const { today, nowMin, categories } = useQuickToday(text)
+  const preview = quickPreview(text, today, categories, nowMin)
+  const [listError, setListError] = useState<string | null>(null)
+  const saving = useRef(false)
+  // The text of the field now – what a save finds in it when it is answered.
+  const nowText = useRef(text)
+  nowText.current = text
+  // The field that saved may be gone when the answer comes (Esc folded it, „+” opened it again): its answer then touches nothing.
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+    }
+  }, [])
+  const saveList = (lines: string[]): boolean => {
+    if (saving.current) return false
+    saving.current = true
+    setListError(null)
+    // D607: what was typed before the paste stays – the field neither clears nor folds; an empty one does, as after a title.
+    const at = text
+    window.rd.quickAddMany(lines).then(
+      (r) => {
+        saving.current = false
+        if (!alive.current) return
+        if (!r.ok) return setListError(r.error)
+        if (at.trim() !== '' || nowText.current !== at) return
+        setText('')
+        close()
+      },
+      (e: unknown) => {
+        saving.current = false
+        if (!alive.current) return
+        setListError(`Nie zapisano: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    )
+    return true
+  }
+  const paste = usePasteList({ value: text, setValue: setText, input, save: saveList })
   return (
     <div className="flex flex-col gap-0.5" data-testid="bar-quick-field">
       <div className="flex items-center gap-1.5">
@@ -498,8 +548,13 @@ function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: Ba
           value={text}
           maxLength={TITLE_MAX}
           placeholder="Enter zapisuje"
-          onChange={(e) => setText(e.currentTarget.value)}
+          onChange={(e) => {
+            setText(e.currentTarget.value)
+            setListError(null)
+          }}
+          onPaste={paste.onPaste}
           onKeyDown={(e) => {
+            if (paste.onKeyDown(e)) return
             if (e.key === 'Enter') {
               e.preventDefault()
               save()
@@ -511,10 +566,20 @@ function QuickField({ mode, close, text, setText, takeFocus, input }: { mode: Ba
           Zapisz
         </BarButton>
       </div>
-      {preview && (
-        <span className="text-[12px] text-muted" data-testid="bar-quick-preview">
-          {preview}
+      {paste.question ? (
+        <span className="text-[12px] text-muted" data-testid="bar-quick-paste">
+          {paste.question}
         </span>
+      ) : listError ? (
+        <span className="text-[12px] text-rose" data-testid="bar-quick-error">
+          {listError}
+        </span>
+      ) : (
+        preview && (
+          <span className="text-[12px] text-muted" data-testid="bar-quick-preview">
+            {preview}
+          </span>
+        )
       )}
     </div>
   )
@@ -582,6 +647,71 @@ function RoutineUnfold({ routine, mode, close }: { routine: BarRoutine; mode: Ba
       <div className="flex flex-wrap gap-1.5">
         <BarButton mode={mode} accent testId="bar-routine-save" onAct={save}>
           ✓ Zapisz zaznaczone{done.size ? ` (${done.size})` : ''}
+        </BarButton>
+      </div>
+    </div>
+  )
+}
+
+/** A pool's cost typed in the bar (D585): a whole number of `RANGES.cost`, as the tile's field (`CostInput`). */
+const COST_FIELD = { kind: 'integer', range: RANGES.cost } as const
+
+/**
+ * „Koszt ▸” of „⋯” unfolded (D585, N12) – the window of a tile's cost for the bar's block, begun and not ended: „Koszt od teraz: <nazwa>”,
+ * głowa · emocje · bodźce · ciało each [−] number [+] (±1, with Shift ±10; quick clicks count, as the steps of ±5 min), „Jak podkategoria
+ * (…)” – „Jak wariant (…)”, „Jak rutyna (…)” as the tile says it (`resetLabel`) – and „Gotowe”. In the window's bar and the icon's panel a
+ * field takes a typed number between [−] and [+] (out of −100…100 – refused under it); the desktop bar never takes the focus (D229) – the
+ * number only. Each click is an intent the main process puts, in its turn, over what is written (`block.cost` from now to the block's end);
+ * the numbers are the view's.
+ */
+function CostUnfold({ cost, mode, close }: { cost: BarCost; mode: BarMode; close: () => void }) {
+  const send = (op: BarCostOp) => act('cost', barCostArg(cost.block, op))
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="bar-cost">
+      <span className="min-w-0 truncate text-[12px] text-muted" data-testid="bar-cost-title">
+        Koszt od teraz: {cost.name}
+      </span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        {POOLS.map(([pool, name]) => (
+          <span key={pool} className="inline-flex items-center gap-1" data-testid={`bar-cost-${pool}`}>
+            <span className="text-[12px] text-muted">{name}</span>
+            <BarButton mode={mode} repeat testId={`bar-cost-${pool}-minus`} label={`${name}: mniej`} disabled={cost.costs[pool] <= COST_MIN} onAct={({ shift }) => send({ k: 'step', pool, by: shift ? -10 : -1 })}>
+              −
+            </BarButton>
+            {mode === 'desktop' ? (
+              <span className="num min-w-[2.2em] text-center text-[12px] text-fg" data-testid={`bar-cost-${pool}-value`}>
+                {costNumber(cost.costs[pool])}
+              </span>
+            ) : (
+              <CommitField
+                value={cost.costs[pool]}
+                parse={(t) => parseField(COST_FIELD, t)}
+                format={(v) => formatField(COST_FIELD, v)}
+                onCommit={(v) => checkField(COST_FIELD, v).ok && send({ k: 'set', pool, value: v })}
+                className="h-[24px] text-[12px]"
+                shellClassName="w-[46px]"
+                aria-label={`${name}: koszt na godzinę`}
+                data-testid={`bar-cost-${pool}-value`}
+              />
+            )}
+            <BarButton mode={mode} repeat testId={`bar-cost-${pool}-plus`} label={`${name}: więcej`} disabled={cost.costs[pool] >= COST_MAX} onAct={({ shift }) => send({ k: 'step', pool, by: shift ? 10 : 1 })}>
+              +
+            </BarButton>
+          </span>
+        ))}
+      </div>
+      {/* D568: the tile's warning under a cost past ±5 while a computer of an older version is in the folder – the main process says it. */}
+      {cost.warning && (
+        <p role="note" className="text-[11px] leading-snug text-lamp" data-testid="bar-cost-old">
+          {cost.warning}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        <BarButton mode={mode} testId="bar-cost-reset" pressed={!cost.own} onAct={() => send({ k: 'reset' })}>
+          {resetLabel(cost)}
+        </BarButton>
+        <BarButton mode={mode} accent testId="bar-cost-done" onAct={close}>
+          Gotowe
         </BarButton>
       </div>
     </div>
@@ -743,7 +873,7 @@ export const beatsNow = (beaten: string | null, id: string | null): boolean => i
 export function barLines(lines: readonly BarLine[], quiet: boolean): { shown: BarLine[]; extra: BarLine[] } {
   const fit = quiet ? 1 : 2
   const folds = (l: BarLine) => quiet && (l.id.startsWith('routine:') || l.id.startsWith('task:'))
-  const moved = lines.filter((l) => l.id.startsWith('moved:'))
+  const moved = lines.filter((l) => l.id.startsWith('moved:') || l.id.startsWith('quick:'))
   const later = new Set([...lines.filter(folds), ...moved.slice(1)])
   const front = lines.filter((l) => !later.has(l))
   return { shown: front.slice(0, fit), extra: [...front.slice(fit), ...lines.filter((l) => later.has(l))] }
@@ -826,6 +956,13 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
     setRoutineLine(line)
   }
   const routineOpen = unfold === 'routine' ? (view.routines.find((r) => r.line === routineLine) ?? null) : null
+  // „Koszt ▸” (D585): the block it was opened for – another one in front (or none) folds it, a click never goes to a block not named.
+  const [costFor, setCostFor] = useState<string | null>(null)
+  const openCost = () => {
+    setCostFor(view.cost?.block ?? null)
+    setUnfold((x) => (x === 'cost' ? null : 'cost'))
+  }
+  const costOpen = unfold === 'cost' && view.cost?.block === costFor ? view.cost : null
   const running = view.requests.running
   const { shown: shownLines, extra } = barLines(view.lines, quiet)
   // The terms of the view (the cost waiting, the note) count from the moment this view reached the window, on its own monotonic clock.
@@ -842,8 +979,8 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
   const rowWorkEnd = view.buttons.workEnd && !asked.has('workEnd')
   // „⋯” stands (not in the night's quiet): Odcinam się, „Prośba ▸” and „Sygnały ▸” wait in it (D564 P17).
   const more = !view.night
-  // What came out of „⋯” („Prośba ▸”, „Sygnały ▸”) keeps it pressed; its click folds it.
-  const fromMore = unfold === 'more' || unfold === 'request' || unfold === 'signals'
+  // What came out of „⋯” („Prośba ▸”, „Sygnały ▸”, „Koszt ▸”) keeps it pressed; its click folds it.
+  const fromMore = unfold === 'more' || unfold === 'request' || unfold === 'signals' || unfold === 'cost'
   // The cost stands in place of its button when that button is on view; otherwise in the row under the buttons.
   const inPlace =
     !!pending &&
@@ -899,6 +1036,10 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
   useEffect(() => {
     if (unfold === 'routine' && !routineOpen) setUnfold(null)
   }, [unfold, routineOpen])
+  // The block of „Koszt ▸” ended, went behind or another came in front: its cost folds.
+  useEffect(() => {
+    if (unfold === 'cost' && !costOpen) setUnfold(null)
+  }, [unfold, costOpen])
 
   /** A button of the bar's own, or its cost waiting for the second click in its place – with „Anuluj” (C6). `fit`: a label with a name. */
   const own = (id: string, label: string, action: WidgetAction, testId: string, arg?: string, fit?: boolean) =>
@@ -942,6 +1083,7 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
       {unfold === 'request' && <RequestUnfold view={view} mode={mode} close={() => setUnfold(null)} />}
       {unfold === 'quick' && quickField}
       {routineOpen && <RoutineUnfold key={routineOpen.line} routine={routineOpen} mode={mode} close={() => setUnfold(null)} />}
+      {costOpen && <CostUnfold key={costOpen.block} cost={costOpen} mode={mode} close={() => setUnfold(null)} />}
       {unfold === 'signals' && (
         <div className="flex flex-col gap-1.5">
           <div className="flex flex-wrap gap-1.5">
@@ -994,6 +1136,12 @@ function BarView({ view, mode, grows = 'up', onUnfold, opening }: BarProps) {
             {view.signals && (
               <BarButton mode={mode} testId="bar-group-signals" onAct={() => toggle('signals')}>
                 Sygnały ▸
+              </BarButton>
+            )}
+            {/* D585: the cost of the block in front from now on – only while one is begun and not ended. */}
+            {view.cost && (
+              <BarButton mode={mode} testId="bar-group-cost" onAct={openCost}>
+                Koszt ▸
               </BarButton>
             )}
           </div>

@@ -45,6 +45,25 @@ const find = (entries: readonly MenuEntry[], testId: string): MenuEntry | undefi
 }
 const item = (entries: readonly MenuEntry[], testId: string) => find(entries, testId) as Extract<MenuEntry, { label: string }> & { check?: string; disabled?: string; onPick?: () => void; submenu?: MenuEntry[] }
 
+describe('„Koszt…” w widoku bez kosztów (N18, T2614)', () => {
+  const WHY = 'Koszt zmienisz w „Tygodniu”, „3 dniach” albo w „Dziś”'
+  it('Agenda i miesiąc (`costsKnown: false`): pozycja wyłączona z powodem w podpowiedzi, nie otwiera okna', () => {
+    const entries = blockMenu([b('a', { costs: null }), b('b', { costs: null })], { ...CTX, costsKnown: false }, ON)
+    expect(item(entries, 'block-menu-cost').disabled).toBe(WHY)
+    expect(item(entries, 'block-menu-cost').onPick).toBeUndefined()
+    expect(costOpened).toBe(0)
+  })
+
+  it('„Tydzień”, „3 dni” i „Dziś”: blok bez kosztu własnego (costs: null) – pozycja czynna, jak dotąd', () => {
+    for (const ctx of [CTX, { ...CTX, costsKnown: true }]) {
+      const cost = item(blockMenu([b('a', { costs: null })], ctx, ON), 'block-menu-cost')
+      expect(cost.disabled).toBeUndefined()
+      cost.onPick!()
+    }
+    expect(costOpened).toBe(2)
+  })
+})
+
 describe('podkategoria i wariant: ✓ i „—”', () => {
   it('✓ przy podkategorii wszystkich, „—” przy części, nic przy żadnej; wybór niesie `category` z wariantem null', () => {
     const m = blockMenu([b('a'), b('b', { categoryId: 'nauka' })], CTX, ON)

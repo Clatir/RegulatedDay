@@ -3,7 +3,7 @@
  * każdego rekordu”): the records with earlier versions – settings, templates, the plan of lectures, days' plans,
  * requests, routines – also removed ones. A version shows what differs from the record now, in the interface's words
  * (never keys, ids, UTC or milliseconds), and „Przywróć” makes it the record again (an edit: the version replaced goes to
- * the history too).
+ * the history too). The filter „Usunięte · 30 dni” (N24) lists what was removed in the last 30 days instead – `RemovedList`.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { HistoryRecord, HistoryVersion } from '@shared/api'
@@ -21,10 +21,12 @@ import { rawRecord, reloadData, useData } from '../../store/data'
 import { closeToast, takePick, takeFoundPick, toast, useUi } from '../../store/ui'
 import { blockName } from '../plan/blockView'
 import { seriesBlockOf } from '../series/seriesForm'
+import { RemovedList, RemovedToggle } from './RemovedList'
+import { REMOVED_ABOUT_TEXT } from './removedText'
 
 const KIND_NAMES: Record<string, string> = { settings: 'Ustawienia', template: 'Szablony', series: 'Serie', schedule: 'Plan wykładów', day: 'Plany dni', request: 'Sprawy', routine: 'Rutyny', allDay: 'Wydarzenia', attachment: 'Załączniki' }
 const READ_FAILED_TEXT = 'Nie udało się odczytać historii – spróbuj za chwilę.'
-const REASONS: Record<string, string> = { edit: 'przed edycją', delete: 'przed usunięciem', merge: 'przed scaleniem', conflict: 'wersja z konfliktu', restore: 'przed przywróceniem' }
+const REASONS: Record<string, string> = { edit: 'przed edycją', delete: 'przed usunięciem', archive: 'przed usunięciem', merge: 'przed scaleniem', conflict: 'wersja z konfliktu', restore: 'przed przywróceniem' }
 
 /** The record chosen, by its key, from the list as it is now – after „Przywróć” no longer „usunięty” (A7-10). */
 export const recordKey = (r: { kind: string; id: string }): string => `${r.kind}/${r.id}`
@@ -39,6 +41,8 @@ export function HistoryPage() {
   // UX18 (E7): the kinds to show (`FilterBar`, remembered on this computer) and the words searched in a record's name and kind.
   const [chosenKinds, setChosenKinds] = useFilters('history')
   const [query, setQuery] = useState('')
+  // N24: „Usunięte · 30 dni” – the removed things instead of the records with versions (not remembered: Historia opens on versions).
+  const [removedOn, setRemovedOn] = useState(false)
   // A read that fails is no „empty” history and no „no versions”: said as it is (UX18) – the screen and a message – and a record picked waits for nothing.
   const [failed, setFailed] = useState(false)
   const failedToast = useRef<number | null>(null)
@@ -65,12 +69,19 @@ export function HistoryPage() {
     const p = takeFoundPick((x) => x.kind === 'history', (x) => !!chosenRecord(records, x.id), 'Ten rekord nie ma jeszcze wersji w historii.')
     if (!p) return
     setChosen(p.id)
+    setRemovedOn(false)
     if (chosenKinds.length) setChosenKinds([])
     setQuery('')
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `setChosenKinds` is a new function at every render; only a new pick or list matters
   }, [pick, records])
   if (!records) return failed ? <EmptyState why={READ_FAILED_TEXT} /> : <div className="p-6 text-muted">Czytam historię…</div>
-  if (!records.length) return <EmptyState why="Historia jest pusta: wersje zapisują się, gdy zmieniasz albo usuwasz plan, szablon, sprawę, rutynę czy ustawienia." />
+  if (!records.length && !removedOn)
+    return (
+      <div className="flex flex-col items-center">
+        <EmptyState why="Historia jest pusta: wersje zapisują się, gdy zmieniasz albo usuwasz plan, szablon, sprawę, rutynę czy ustawienia." />
+        <RemovedToggle on={removedOn} set={setRemovedOn} />
+      </div>
+    )
   // Only the records the list has a name for (the counter, the filters and the list say the same); a day is found by its ISO date too.
   const known = records.filter((r) => KIND_NAMES[r.kind])
   const kinds = [...new Set(known.map((r) => r.kind))]
@@ -88,14 +99,16 @@ export function HistoryPage() {
     <div className="flex min-h-0 flex-1" data-testid="history">
       <div className="flex w-[300px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-line p-3">
         <input type="search" className="input" value={query} placeholder="Szukaj w historii" aria-label="Szukaj w historii" onChange={(e) => setQuery(e.currentTarget.value)} data-testid="history-search" />
-        <FilterBar listKey="history" options={options} shown={shown.length} total={known.length} />
-        {!shown.length && (
+        <RemovedToggle on={removedOn} set={setRemovedOn} />
+        {removedOn && <RemovedList query={query} />}
+        {!removedOn && <FilterBar listKey="history" options={options} shown={shown.length} total={known.length} />}
+        {!removedOn && !shown.length && (
           <p className="text-[12.5px] text-muted" data-testid="history-none">
             Nic nie pasuje – zmień szukane słowa albo wyczyść filtry.
           </p>
         )}
         {kinds
-          .filter((k) => shown.some((r) => r.kind === k))
+          .filter((k) => !removedOn && shown.some((r) => r.kind === k))
           .map((k) => (
           <div key={k} className="flex flex-col gap-1">
             <span className="text-[11.5px] text-muted">{KIND_NAMES[k]}</span>
@@ -119,7 +132,9 @@ export function HistoryPage() {
           </div>
         ))}
       </div>
-      <div className="min-w-0 flex-1 overflow-y-auto p-4">{selected ? <Versions key={recordKey(selected)} r={selected} /> : <EmptyState why="Wybierz rekord, żeby zobaczyć jego wcześniejsze wersje." />}</div>
+      <div className="min-w-0 flex-1 overflow-y-auto p-4">
+        {removedOn ? <EmptyState why={REMOVED_ABOUT_TEXT} /> : selected ? <Versions key={recordKey(selected)} r={selected} /> : <EmptyState why="Wybierz rekord, żeby zobaczyć jego wcześniejsze wersje." />}
+      </div>
     </div>
   )
 }

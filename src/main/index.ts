@@ -19,6 +19,7 @@ import {
   type BarScreens,
   type EditEntry,
   type EventIn,
+  type QuickAddManyResult,
   type QuickAddResult,
   type SystemSettingsPage,
   type TimerIn,
@@ -31,6 +32,7 @@ import {
 import type { RitualValue } from '@shared/engine/ritual'
 import type { CloseHow } from '@shared/model/events'
 import type { BarSpot, MachinePrefs } from '@shared/machine'
+import { quickListSavedText } from '@shared/quickList'
 import { quitNotice } from '@shared/sync/syncLines'
 import { MAX_STEPS, ROUTINE_VERSIONS } from '@shared/model/routines'
 import { BAR_SPOTS, patchMachinePrefs } from '@shared/machine'
@@ -206,6 +208,7 @@ const widget = new WidgetEngine({
   folderStatus: () => (hub?.status === 'opening' ? 'opening' : hub?.status === 'failed' ? 'failed' : 'none'),
   timer: (click) => (hub ? hub.timer(click) : Promise.resolve({ ok: false, why: 'folder danych nie jest otwarty', confirm: null })),
   edit: (entries) => (hub ? hub.edit(entries) : Promise.reject(new Error('folder danych nie jest otwarty'))),
+  cost: (c) => (hub ? hub.barCost(c) : Promise.resolve({ ok: false as const, why: 'folder danych nie jest otwarty' })),
   answer: (id, a, value) => (hub ? hub.answer(id, a, value) : Promise.resolve({ ok: false, why: 'folder danych nie jest otwarty', confirm: null })),
   seen: (ids, how) => hub?.seen(ids, how) ?? Promise.resolve(0),
   clickedApp: () => hub?.clickedApp(),
@@ -220,6 +223,7 @@ const widget = new WidgetEngine({
   batterySaver: () => batterySaverOn && inOneDriveNow(),
   backup: () => hub?.service?.backup ?? null,
   quickAdd: (title) => quickAdd(title),
+  quickUndo: (batch) => (hub ? hub.quickUndo(batch) : Promise.resolve({ ok: false, error: 'Aplikacja jeszcze się uruchamia – nic nie cofnięto.', undone: 0, kept: 0 })),
   // „+ Skrzynka” of the desktop bar (D564 P15): the bar takes no keys (D229) – the window „Do skrzynki”, as by its shortcut.
   openQuick: () => quick?.openFromBar()
 })
@@ -1120,14 +1124,27 @@ function registerIpc(): void {
   handle(CH.quickAdd, async (e, title: unknown) => {
     const r = await quickAdd(typeof title === 'string' ? title.slice(0, 1000) : '')
     if (r.ok && viewOf(e.sender) === 'quick') {
-      quick?.close('zapisano')
+      // D601: the queue asks about the day's file – the window stays and says it under the field (the bar says it too), never a silent success.
+      if (!r.asked) quick?.close('zapisano')
       // D470: the bar says where it went – the quick window is gone already.
-      void widget.quickSaid(r.title ?? '')
+      void widget.quickSaid(r.title ?? '', r)
     }
     return r
   })
+  // A pasted list (N11, D605, D606): saved at once as one edit. The window „Do skrzynki” stays open (its „Cofnij” is under its field) and the bar
+  // only says it; the main window's bar and the panel's say it as a line with its own „Cofnij” (`quickUndo`).
+  handle(CH.quickAddMany, async (e, lines: unknown) => {
+    const r = hub ? await hub.quickAddMany(Array.isArray(lines) ? lines.map((x) => (typeof x === 'string' ? x.slice(0, 1000) : '')).slice(0, 500) : []) : ({ ok: false, error: 'Aplikacja jeszcze się uruchamia – nic nie zapisano.', count: 0, notPlaced: 0, batch: null } satisfies QuickAddManyResult)
+    if (r.ok) {
+      const text = quickListSavedText(r.count, { notPlaced: r.notPlaced, ...(r.asked ? { asked: true } : {}) })
+      void widget.quickListSaid(text, viewOf(e.sender) === 'quick' ? null : r.batch)
+    }
+    return r
+  })
+  handle(CH.quickUndo, (_e, batch: unknown) => needHub().quickUndo(batch))
   ipcMain.on(CH.quickClose, () => quick?.close('Esc'))
-  handle(CH.quickToday, () => needHub().quickToday())
+  handle(CH.quickToday, () => needHub().quickClock())
+  handle(CH.quickCategories, () => needHub().quickCategories())
   // The settings ask for its state (opened, T759): one Windows refused is tried again first.
   handle(CH.quickShortcut, () => quick?.retry() ?? { key: shortcutOf(prefs()), state: 'off' })
   handle(CH.casesRitual, (_e, day: unknown) => needHub().casesRitual(String(day)))
@@ -1149,6 +1166,7 @@ function registerIpc(): void {
   handle(CH.historyList, () => needHub().historyList())
   handle(CH.historyVersions, (_e, kind: string, id: string) => needHub().historyVersions(String(kind), String(id)))
   handle(CH.historyRestore, (_e, kind: string, id: string, file: string) => needHub().historyRestore(String(kind), String(id), String(file)))
+  handle(CH.historyRemoved, () => needHub().historyRemoved())
   handle(CH.folderDefault, () => dataFolderNow() ?? DataHub.defaultFolder(app.getPath('documents')))
   handle(CH.folderPick, (e, current: string | null) => pickDir(e, 'Folder danych Regulated Day', typeof current === 'string' ? current : undefined))
   handle(CH.folderProbe, (_e, path: string) => DataHub.probe(String(path)))

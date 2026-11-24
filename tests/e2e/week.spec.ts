@@ -17,7 +17,7 @@ import { defaultTemplates, firstComputerRecords } from '../../src/shared/model/d
 import { previousMonth } from '../../src/shared/model/goals'
 import { newTask } from '../../src/shared/model/requests'
 import { logicalMinuteOf } from '../../src/shared/time/day'
-import { launch, logicalToday, withMainLog } from './app'
+import { launch, logicalToday, withMainLog, DAY_NUMBER } from './app'
 
 const shots = process.env.RD_E2E_SHOTS
 async function shot(page: Page, name: string): Promise<void> {
@@ -772,7 +772,7 @@ function seedDay(dir: string, date: string, blocks: Array<{ id: string; startMin
 /** The Monday on or before `date`. */
 const mondayOf = (date: string): string => plusDays(date, -((new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7))
 /** A column's first line as the page words it: „śr 25.11” (`dayHeading`). */
-const headingOf = (date: string): string => `${['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'][(new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7]} ${Number(date.slice(8, 10))}.${date.slice(5, 7)}`
+const headingOf = (date: string): string => `${['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'][(new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7]} ${date.slice(8, 10)}.${date.slice(5, 7)}` // as `dayHeading` (`plDayMonth`, zero-padded)
 
 test('Widoki (SNT1, D417, D418, T936): przełącznik zapamiętany, „3 dni” z paskiem energii „przyjęte” jutro, „Agenda” z blokiem jutra otwierającym dzień', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-views-'))
@@ -1109,9 +1109,14 @@ test('Miesiąc (SNT1, D418, D422): w komórce dnia do trzech pasków stałych bl
       const dot = page.getByTestId(`month-load-${next}`)
       await expect(dot).toHaveAttribute('data-level', /^(low|mid|high)$/)
       await expect(dot).toHaveAttribute('title', /^Praca .+ z .+$/)
+      // The dot of the energy beside it (N21, D595): a day to come – counted from the assumed check-in, in a shade of the strip.
+      const energy = page.getByTestId(`month-energy-${next}`)
+      await expect(energy).toHaveAttribute('data-assumed', 'true')
+      await expect(energy).toHaveAttribute('data-state', /^(ok|watch|low)$/)
+      await expect(energy).toHaveAttribute('title', /^Energia: najsłabsza .+ \d+ · .+ \(rezerwa \d+\) · przyjęte$/)
       await shot(page, 'snt1-04-month')
       // The colour of the day and the selection stay: a click with Ctrl selects the day.
-      await page.getByTestId(`day-${next}`).click({ modifiers: ['Control'] })
+      await page.getByTestId(`day-${next}`).click({ modifiers: ['Control'], position: DAY_NUMBER })
       await expect(page.getByTestId(`day-${next}`)).toHaveAttribute('aria-pressed', 'true')
     })
     expect(errors).toEqual([])

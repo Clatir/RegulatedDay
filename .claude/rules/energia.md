@@ -18,11 +18,16 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
   kolor rezerwy, prognoza; `newDescents` (zejścia do zapisu przez prowadzącego), `checkinStates`, `shownOf`.
 - `engine/reserve.ts` – `suggestRegen` (sposób o najniższym koszcie w puli, remis: pierwszy z listy wariantów),
   `reserveReaction` (nagroda: stany zejść i werdykt).
-- `engine/energyTrack.ts` – krzywa przy osi (`energyTrack`, próbki co 10 min i w każdej minucie zmiany spadku puli – T2440; „Dziś” i kolumny) i `columnEnergy` (D417,
+- `engine/energyTrack.ts` – krzywa przy osi (`energyTrack`, próbki co 10 min i w każdej minucie zmiany spadku puli – T2440; „Dziś” i kolumny), odcień najsłabszej puli
+  (`shadeOf`, `WATCH_ABOVE_RESERVE`, `onScreen` – jedna reguła paska kolumny i kropki miesiąca, N21, T2600) i `columnEnergy` (D417,
   T903): dzień przyszły od przyjętego check-inu (`ASSUMED_CHECKIN`, 04:00, `assumed`) – tylko dla energii, nie zdarzenie logu.
   Dziś bez check-inu (brak, „Pomiń”) – też `assumedEnergy` (T2430): w kolumnie (`columnEnergy` `today`) i przy osi „Dziś” (`dayAxis`, gdy
   `date >= today`); przyjęte zdarzenie żyje tylko w kopii `ctx.events` do `computeEnergy` – nigdy w logu, pliku dnia ani `DayState`.
+  `EnergyState.runs` → `EnergyTrack.runs` (T2571): biegi bloków, z których liczy się krzywa (log do teraz, prognoza od teraz) – z nich bierze właściciela zejścia obwódka przy przyczynie (`reserveCause.ts`).
   Rysunek: `EnergyLanes` (× `ASSUMED_FACTOR`, liczby „teraz” `ASSUMED_NOW_OPACITY`, podpis `energy-assumed`), `EnergyStrip` (`data-assumed`).
+- `engine/energyCurve.ts` (T1280, T1281, T2607) – wygładzona krzywa toru (`poolCurve` – każda pula ze swoich próbek, `curveAt`, `valuesAt`,
+  `energySpan`), `stripState`, `eachStripMinute` – jedno przejście po minutach paska: `stripRuns` (pasek kolumny) i `dayEnergy` (kropka
+  miesiąca – najciemniejsza minuta paska, pamięć po obiekcie toru); okno bierze je przez `plan/energyDraw.ts` (re-eksport).
 - Zdarzenia `energy.*` w `model/events.ts`; `DayState.rest` i `settingsAtMinute` z `engine/day.ts`;
   `DataFolder.energyState` i zapis `energy.reserve` w zadaniach prowadzącego (`main/data/folder.ts`).
 

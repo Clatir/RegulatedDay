@@ -13,6 +13,7 @@ import { isDone } from '@shared/engine/cases'
 import type { Priority, RequestRecord } from '@shared/model/requests'
 import { assumedEnergy, energyTrack } from '@shared/engine/energyTrack'
 import { atOf, logicalSpan } from '@shared/engine/grid'
+import { reserveCauses } from '@shared/engine/reserveCause'
 import { pausedPlaceOf } from '@shared/engine/facts'
 import { runningEdges } from '@shared/engine/resize'
 import { plannedEndOf } from '@shared/engine/timer'
@@ -71,6 +72,8 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
   // D365: a block running now (of its own hour – not a session, a lecture nor a class of a „zjazd”) has its bottom edge.
   const edges = now != null ? runningEdges(state, now) : null
   const items: TimelineItem[] = []
+  // N20: the blocks that are not on the day's curve (parked, cancelled, passed unbegun – on a day gone by every unbegun one) are never its cause.
+  const offCurve = new Set<string>()
   const placed = new Map(state.forecast.map((p) => [p.block.id, p]))
   // D501: the changes of begun blocks' costs, once for the day.
   const changes = costChangesOf(ctx, state.facts)
@@ -97,6 +100,9 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
       to = placed.get(p.id)!.to
     }
     if (from == null || to == null) continue
+    // A day gone by shown with no clock (`now` null): what was not begun did not happen – as „Tydzień” has it (`missed`).
+    const passed = f?.startedAt == null && ((nowIdx != null && to <= nowIdx) || (today != null && model.date < today))
+    if (gone || passed) offCurve.add(p.id)
     const edge = f?.startedAt != null && f.endedAt == null ? edges?.get(p.id) : undefined
     // D473: a block of a day („Dziś”) of a routine without steps of its own counts the routine's – the templates' and the
     // wizard's axes (`today` null) count their own lists only, as their panels show them (T1103).
@@ -185,6 +191,12 @@ export function dayAxis(model: DayModel, names: Names, now: number | null, today
   // check-in (none yet, skipped) and a day to come: from the assumed check-in, for the drawing only (T2430) – never in the log.
   const assumed = today != null && model.date >= today && !model.energy.known && model.energy.enabled
   const energy = assumed ? assumedEnergy(ctx, state, true) : energyTrack(model.date, g, model.energy)
+  // N20: the block at whose time a pool first goes below the reserve – counted once for the day, from the curve the lanes draw.
+  const causes = reserveCauses(energy, items.filter((i) => !offCurve.has(i.id)))
+  for (const i of items) {
+    const cause = causes.get(i.id)
+    if (cause) i.reserve = cause
+  }
   return { items, markers, energy, from: Math.min(lm(state.wake) - 30, 6 * 60), to: Math.max(lm(state.bedtime.forecast) + 30, 22 * 60) }
 }
 
