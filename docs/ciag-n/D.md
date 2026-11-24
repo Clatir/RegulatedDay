@@ -9,7 +9,7 @@ Numery: D610–D619, T2750–T2849. Po wznowieniu czytaj ten plik, potem `git -C
 ## Zadania (kolejność)
 - [x] N24
 - [ ] N15
-- [ ] N16
+- [ ] N16 → A1 (koordynator)
 - [ ] N23
 
 ## Wpisy zadań

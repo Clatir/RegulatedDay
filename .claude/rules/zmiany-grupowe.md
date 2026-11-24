@@ -97,10 +97,9 @@ linii – moduł Z1 (`src/shared/groupText.ts`); tu tylko dane.
   (bez faktów, `task`, `requests`, `recorder`, historii; kroki `freshSteps`), blok tego szablonu (`isOfTemplate`) zachowuje id = `sourceId`, „Dołóż” – taki, który wersja ma, pomija
   (`inTemplate`), nowe id nigdy z `allIds` (wszystkie wersje); kotwica → id w wersji / `session:<id>` sesji wersji / godzina z planu (`plannedStartMin`); blok bez miejsca
   i zakotwiczone do niego – `left` („bez godziny”, do punktu stałego; rutyna bierze je jako kroki na końcu); godziny szablonu – `wake` = `wakeFrameOf(snapshot, dayFile, date,
-  templates)`: blok szablonu migawki bez nadpisania w pliku – `asMade` = godzina z wersji, która zrobiła dzień (`templateFrom`, blok po `sourceId` – nie godzina migawki, którą
-  przesuwa `pushedBySeries`), tylko gdy granica poranka wersji po zapisie (godziny szablonu: zachowane bloki wersji + zapisywane stałe) = `madeBound` (pierwszy stały tamtej wersji),
-  inaczej odtworzenie dnia wygrywa; inny – `unshiftedStart` (`dayWakeMin` − `templateWakeMin`; granica jak ma ją dzień – wpis sesji po starcie bloku sesji dnia, jak `frameOf`;
-  nie wie o wykładach i odpowiedziach „nie” sesji przyszłych dni); `alongside` zawsze null. `savedTemplate` = `withTemplateVersion` od `from` („Zastąp” zostawia `isSessionEntry`);
+  templates)`: A – blok szablonu migawki bez nadpisania w pliku zawsze `asMade` (godzina z wersji `templateFrom` po `sourceId`, gdy blok wersji = blok migawki poza godziną
+  przesuniętą przez serię – `shapeOf`; inaczej surowe `startMin` migawki; nigdy `templateVersionOn(date)`); B – każdy inny `unshiftedStart` (`dayWakeMin` − `templateWakeMin`, granica
+  = pierwszy stały wersji po zapisie, wpis sesji w godzinie na `date` z samego wpisu – `entryDef` → `sessionBlock`; nie wie o wykładach przyszłych dni); `alongside` zawsze null. `savedTemplate` = `withTemplateVersion` od `from` („Zastąp” zostawia `isSessionEntry`);
   `sameVersionBody` (bloki po id, kotwica do wpisu sesji jako `session:<id>`) – „bez zmian”. `saveAsFrom` (D616), `savedDayTwice(date, from, szablon dnia po zapisie, next)` – też
   wersja obowiązująca w dniu = ta od `from`; z `dayTemplateAfter` i `bringsNewBlocks(save, dayFile)` (`TemplateSave.sources`: blok z pliku dnia, nie blok tego szablonu dnia);
   `routineStepsOf` (1–240 min, ≤ 40).

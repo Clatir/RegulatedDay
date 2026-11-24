@@ -12,13 +12,14 @@
  * in the plan and those anchored to it („bez godziny”, `TemplateSave.left`) – a routine takes them as steps after the others, in the plan's order.
  */
 import type { DaySnapshot } from '../model/events'
-import { BLOCK_NAME_MAX, isSessionEntry, planBlock, sessionIdOf, templateFor, templateVersionOn, withTemplateVersion, type DayFile, type PlanBlock, type Template, type TemplateVersion } from '../model/plan'
+import { BLOCK_NAME_MAX, isSessionEntry, planBlock, sessionIdOf, templateFor, templateVersionOn, withTemplateVersion, type DayFile, type PlanBlock, type SessionEntry, type Template, type TemplateVersion } from '../model/plan'
 import { MAX_STEPS, STEP_RANGE, type RoutineStep } from '../model/routines'
 import type { DayTypeId } from '../model/settings'
 import { freshSteps } from '../model/steps'
+import { entryDef } from '../model/templateSessions'
 import { addDays, weekday } from '../time/zone'
 import { deepEqual } from '../data/merge'
-import { dayWakeMin, firstFixedStart, SESSION_ANCHOR, templateBlockId, unshiftedStart } from './createDay'
+import { dayWakeMin, firstFixedStart, SESSION_ANCHOR, sessionBlock, templateBlockId, unshiftedStart } from './createDay'
 import { plannedStartMin } from './planEdit'
 import { isOfTemplate } from './templateApply'
 
@@ -82,31 +83,40 @@ export interface TemplateSave {
 
 /**
  * How the day's wake moved its morning (D617, as „Szablony”): `delta` – the day's wake less the template's (a wake of the day's own, the week of
- * the session shift); `asMade` – the blocks of the template that made the day which its file does not change, by their id on the day: each one's
- * hour in the version that made the day (`snapshot.templateFrom` – never the snapshot's own hour, which an occurrence of a series may have pushed),
- * taken as it is, never counted back (a move past the first fixed block, a cut at the day's end cannot be undone from the hour the day shows) – while
- * the morning of the version as the save leaves it is bounded as that version's was (`madeBound`, its first fixed block in the template's hours).
+ * the session shift); `asMade` – the template's hour of each block of the snapshot's template the day's file does not change, by its id on the day
+ * (rule A – taken as it is, never counted back: a move past the first fixed block, a cut at the day's end cannot be undone from the hour the day
+ * shows); `holidays` – the day's, for the sessions of the version (rule B).
  */
 export interface WakeFrame {
   delta: number
   asMade: ReadonlyMap<string, number>
-  madeBound: number
+  holidays: DaySnapshot['holidays']
 }
 
-/** The frame of the day `date` (`dayPlan`'s own difference of wakes) and the hours of the version of its template (`templates`) that made it. */
+/** What a block of a template is besides its place: the fields a version's block and the snapshot's copy of it share. */
+const shapeOf = (b: PlanBlock) => ({ categoryId: b.categoryId, variantId: b.variantId, durationMin: b.durationMin, fixed: b.fixed, background: b.background, costs: b.costs, bgCostPct: b.bgCostPct, note: b.note, name: b.name, routine: b.routine, anchored: b.anchor != null })
+
+/**
+ * The frame of the day `date`: `dayPlan`'s own difference of wakes and, for the template's blocks of the snapshot the day did not change, their hour
+ * (rule A): the hour of the block in the version that made the day (`templateFrom`, by `sourceId`) when that version is there and its block is the
+ * snapshot's but for an hour an occurrence of a series pushed later (`pushedBySeries`); else – no template, no such version, a block changed in the
+ * version since – the snapshot's own hour (the template's when the day was made). Never the version in force on `date` in its place.
+ */
 export function wakeFrameOf(snapshot: DaySnapshot, dayFile: DayFile | null, date: string, templates: readonly Template[]): WakeFrame {
   const delta = dayWakeMin(snapshot, dayFile) - snapshot.templateWakeMin
   const t = snapshot.templateId ? templates.find((x) => x.id === snapshot.templateId) : undefined
-  const version = t ? (t.versions.find((v) => v.from === snapshot.templateFrom) ?? templateVersionOn(t, date)) : null
-  if (!t || !version) return { delta, asMade: new Map(), madeBound: Number.POSITIVE_INFINITY }
+  const version = t?.versions.find((v) => v.from === snapshot.templateFrom)
+  const own = new Map((version?.blocks ?? []).map((b) => [b.id, b]))
+  const series = (snapshot.series?.length ?? 0) > 0 || snapshot.blocks.some((b) => b.origin === 'series')
   const changed = new Set((dayFile?.blocks ?? []).map((b) => b.id))
-  const own = new Map(version.blocks.map((b) => [b.id, b]))
   const asMade = new Map<string, number>()
   for (const b of snapshot.blocks) {
-    const v = b.origin === 'template' && b.sourceId && b.id === templateBlockId(date, t.id, b.sourceId) ? own.get(b.sourceId) : undefined
-    if (v?.startMin != null && !v.anchor && !changed.has(b.id)) asMade.set(b.id, v.startMin)
+    if (b.origin !== 'template' || b.startMin == null || b.anchor || changed.has(b.id)) continue
+    const v = t && b.sourceId && b.id === templateBlockId(date, t.id, b.sourceId) ? own.get(b.sourceId) : undefined
+    const pushed = v?.startMin != null && deepEqual(shapeOf(v), shapeOf(b)) && (v.startMin === b.startMin || (series && b.startMin > v.startMin))
+    asMade.set(b.id, pushed ? v.startMin! : b.startMin)
   }
-  return { delta, asMade, madeBound: firstFixedStart(version.blocks) }
+  return { delta, asMade, holidays: snapshot.holidays ?? [] }
 }
 
 /**
@@ -115,10 +125,10 @@ export function wakeFrameOf(snapshot: DaySnapshot, dayFile: DayFile | null, date
  * (`allIds`: its attachments stay its own). `version` – the template's version in force from the date of the save (null – none yet): „Dołóż” leaves
  * a block of the template the version has already (`inTemplate`); an anchor goes to a block of the version as it will be (one saved, or – „Dołóż” –
  * one it keeps), or to a session of it (`session:<id>`), else the block takes the hour the plan gives it. A block with no place at all is left
- * (`left`), and the blocks anchored to it with it – no anchor points at a block that is not there. The hours are the template's (`wake`, D617): a
- * block of the snapshot the day did not change – its own hour in the snapshot; any other – the plan's hour taken back by the day's wake as a drag on
- * the axis of „Szablony” is (`unshiftedStart`), the morning bounded by the first fixed block of the version as the save leaves it (the days made of
- * it bound theirs so). A block beside another (D492) keeps its hour without the group – a template has no parallel blocks. `taskTitle` – the title
+ * (`left`), and the blocks anchored to it with it – no anchor points at a block that is not there. The hours are the template's (`wake`, D617): A – a
+ * block of the template the day did not change – its template's hour (`wakeFrameOf`); B – any other – the plan's hour taken back by the day's wake as
+ * a drag on the axis of „Szablony” is (`unshiftedStart`), the morning bounded by the first fixed block of the version as the save leaves it (its
+ * sessions at their hours on `date` – the days made of it bound theirs so). A block beside another (D492) keeps its hour without the group – a template has no parallel blocks. `taskTitle` – the title
  * of the task of „Sprawy” that names a block of a task (the template has no task: the title is its name).
  */
 export function templateBlocksOf(
@@ -188,20 +198,18 @@ export function templateBlocksOf(
       changed = true
     }
   }
-  // The first fixed block of the version as the save leaves it (a fixed block keeps its hour on any wake): what bounds the morning of its days – in
-  // the template's hours (to compare with the bound of the version that made the day) and as the day has it (a session where the day has it: a week
-  // of the session shift has it an hour earlier – what the day's hours are counted back against, as `templatePush.frameOf`).
+  // Rule B: the first fixed block of the version as the save leaves it bounds the morning of the blocks counted back (a fixed block keeps its hour
+  // on any wake) – a session kept by the version at the hour its entry has on `date` (the week of the session shift: an hour earlier), whatever the
+  // day answered it and whichever template made the day.
   const placed = going.filter(({ b }) => !placeless.has(b.id))
   const placedFixed = placed.flatMap(({ b }) => (b.fixed && !anchorOf(b) ? [{ ...b, startMin: plannedStartMin(b, plan) }] : []))
-  const boundAfter = firstFixedStart([...kept, ...placedFixed])
-  const sessionStart = new Map(plan.flatMap((b) => (b.origin === 'session' && b.sourceId && b.startMin != null ? [[b.sourceId, b.startMin] as const] : [])))
-  const firstFixed = firstFixedStart([...kept.map((b) => (isSessionEntry(b) ? { ...b, startMin: sessionStart.get(sessionIdOf(b)) ?? b.startMin } : b)), ...placedFixed])
-  // A block as made goes at its own hour only while the morning of its days is bounded as before (else the day as it is wins: counted back, D617).
-  const asMadeOk = o.wake != null && boundAfter === o.wake.madeBound
+  const year = Number(o.date.slice(0, 4))
+  const onDate = (e: SessionEntry): number => sessionBlock(entryDef(e, year), o.date, o.wake?.holidays ?? [])?.startMin ?? e.startMin
+  const firstFixed = firstFixedStart([...kept.map((b) => (isSessionEntry(b) ? { ...b, startMin: onDate(b) } : b)), ...placedFixed])
+  // Rule A: a block of the template the day did not change – its template's hour (`asMade`); rule B: any other – counted back (`unshiftedStart`).
   const hourOf = (b: PlanBlock, dayStart: number): number => {
     if (!o.wake) return dayStart
-    const asMade = asMadeOk && !b.anchor ? o.wake.asMade.get(b.id) : undefined
-    return asMade ?? unshiftedStart({ ...b, anchor: null }, dayStart, o.wake.delta, firstFixed)
+    return (b.anchor ? undefined : o.wake.asMade.get(b.id)) ?? unshiftedStart({ ...b, anchor: null }, dayStart, o.wake.delta, firstFixed)
   }
   const blocks: PlanBlock[] = []
   const sources: string[] = []
