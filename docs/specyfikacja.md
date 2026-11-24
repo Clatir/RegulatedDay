@@ -1273,6 +1273,32 @@ Te zachowania w ICTTJ i FI dopisywano po wydaniu, więc tutaj są ustalone z gó
   i spacer 12:30–13:30, odejście 11:50, powrót 14:00 – posiłek 12:00–12:30, spacer 12:30–13:30, oba skończone, bez
   pytania; powrót o 13:00 – spacer do 13:00 z pytaniem; bez ustawienia – posiłek do 13:00 (limit), spacer 13:00–14:00
   z pytaniem.
+- **Bloki przy komputerze jednym ciągiem (D570, D620, D621, ustawienie w „Pytaniach w ciągu dnia”, domyślnie wyłączone):**
+  blok przy komputerze (elastyczny, na pierwszym planie, nie w grupie równoległej) dobiega planowanego końca (chwila zera
+  odliczania), a Ty jesteś aktywny – wejście z klawiatury albo myszy na którymkolwiek komputerze w ostatnich 2 min (drugi
+  komputer liczy się do swojego ostatniego „obserwacja trwa”) – i następny blok, który zacząłby „Dalej”, jest elastyczny,
+  przy komputerze, z planu, niezaczęty i zaczyna się (swoja godzina, bez niej miejsce w prognozie) najpóźniej 5 min
+  później: bieżący kończy się o planowanym końcu jako zrobiony, następny zaczyna się w tej samej chwili, zamiast pytania
+  „Dalej?”. Liczy się ustawienie z minuty końca. Pasek mówi „Dalej: <nazwa> · Cofnij” przez 10 s (na każdym komputerze,
+  który zobaczy start najpóźniej 60 s po nim), a lista „zrobione automatycznie” ma oba wiersze („Analiza skończony o
+  10:30 (według planu, jednym ciągiem przy komputerze)”, „Raport zaczęty o 10:30 (jednym ciągiem przy komputerze)”).
+  „Cofnij” któregokolwiek przywraca oba bloki – bieżący biegnie dalej, następny się nie zaczął – póki następnego nie
+  zmieniłeś (pauza, „Przedłuż”, prośba, inny start); potem odmawia. Po Twoim „Cofnij” ciąg dla tego startu bloku już
+  nie wraca, także po „Przedłuż”. Jak dotąd („Dalej?”) przy bezczynności, przy wyłączonym ustawieniu, przy „Przedłuż”
+  czekającym na drugie kliknięcie, gdy start następnego miałby koszt jak przy „Dalej” (za zatwierdzoną granicą albo
+  maksimum), po ostatnim bloku pracy (pytanie ma „Koniec pracy”), gdy po bloku stoi bufor dekompresji (bufor wygrywa),
+  gdy okno sesji, wykładu, zajęć zjazdu, dojazdu albo bloku stałego sięga od końca do 5 min po nim (albo któryś czeka
+  na „Zacznij”), od efektywnej pory snu, w „Odcinam się” i przy prośbie. Ciąg rusza tylko do 60 s po końcu – tyle
+  „Dalej?” na niego czeka; później (prowadzący spóźniony) zostaje „Dalej?”, a pytanie raz zobaczone wyłącza ciąg.
+  Nieobecność odliczona wcześniej w bloku przesuwa jego planowany koniec jak dotąd, a ciąg liczy się od nowego końca.
+  Późniejszy log z przerwą w wejściu w tych 2 min (drugi komputer) cofa ciąg, póki następnego bloku nie zmieniłeś.
+  „Dalej” i „Przedłuż” (także odpowiedzi na „Dalej?” i potwierdzenie kosztu) kliknięte na pasku, który pokazywał
+  jeszcze poprzedni blok, nic nie robią – pasek mówi „Już biegnie: <nazwa>” (D621); gdy pokazany blok skończył się
+  gdzie indziej, a z przodu nic nie biegnie, „Dalej” zaczyna następny (linia „Zaczęto: <nazwa> · Cofnij”), a „Przedłuż” mówi „ten blok
+  już się skończył”; zapauzowany gdzie indziej – oba mówią „ten blok jest teraz zapauzowany”. „Przedłuż” czekające na drugie
+  kliknięcie wstrzymuje ciąg tylko na komputerze, który prowadzi; na innym ciąg rusza, potwierdzenie odmawia „Już
+  biegnie: <nazwa>”, a „Cofnij” linii ciągu przywraca blok – potem „Przedłuż” działa. Przykład: Analiza 10:00–10:30,
+  Raport od 10:30, pisanie do 10:29 – o 10:30 Analiza skończona, Raport biegnie; bez wejścia od 10:27 – „Dalej?” jak dotąd.
 - Gdy aplikacja była zamknięta albo się zawiesiła przy biegnącym bloku, przy starcie zadaje te same pytania, z odpowiedzią „skończył się przy wyłączeniu” jako pierwszą.
 - **Użycie komputera** to ciąg wejścia trwający co najmniej 30 s: co 5 s sprawdzana jest bezczynność systemu, próbka z
   bezczynnością poniżej 5 s jest wejściem (wejście to to, co Windows liczy jako aktywność: mysz, klawiatura, dotyk,
@@ -2238,6 +2264,7 @@ Stack jest taki sam jak w ICTTJ i FI, ale bazą kodu jest FI. Poprawki po wydani
 | Próg bezczynności (nadgodziny i koniec bloku bez zobaczonego „Dalej?”, D231; z wejścia, a program symulujący ruch myszy podtrzymuje blok) | 10 min | 5–60 min | wspólne, z datą obowiązywania |
 | Pytanie o nieobecność | po 30 min | 10–120 min | wspólne, z datą obowiązywania |
 | Bloki poza komputerem jednym ciągiem (D553) | wyłączone | włączone, wyłączone | wspólne, z datą obowiązywania |
+| Bloki przy komputerze jednym ciągiem (D570, D620) | wyłączone | włączone, wyłączone | wspólne, z datą obowiązywania (liczone w minucie planowanego końca bloku) |
 | Bufory dekompresji (D386, D403, D569; „Plan dnia”): po bloku od progu długości (plan z „Przedłuż”) i kosztu głowy, emocji albo bodźców blok „Dekompresja” 5–20 min | wyłączone; próg 45 min i koszt 3/h | włączone, wyłączone; długość 15 min – 4 h; koszt 1–100/h | wspólne, z datą obowiązywania (próg liczony w chwili planowanego końca bloku) |
 | Pasek pulpitu pod oknami (D229) i jego miejsce, pulsowanie paska przy 5 i 0 min (D225), tryb sesji, tryb zajęć | włączony, lewy dolny róg, wyłączone, tak, tak | — | ten komputer |
 | Zawsze na wierzchu (D291) | wyłączone | wyłączone, pasek pulpitu, pasek pulpitu i panel ikony | ten komputer |

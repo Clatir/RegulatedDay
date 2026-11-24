@@ -108,6 +108,8 @@ export class DataService {
   private readonly scheduler: Scheduler
   private readonly now: () => number
   private running: Promise<void> | null = null
+  /** A tick asked while a pass runs: one more after it (T2868). */
+  private again = false
   private stopped = false
   private lastBackupTry = 0
   private lastGuardPlan = 0
@@ -231,8 +233,17 @@ export class DataService {
   /** One check (the scheduler's; never two at once): presence from the system's idle time, the folder, the backup. */
   tick(): Promise<void> {
     if (this.stopped) return Promise.resolve()
-    if (this.running) return this.running
-    this.running = this.tickNow().finally(() => {
+    // Asked during a pass (a click, „Anuluj” of a waiting „Przedłuż”, T2868): one more right after it – never 15 s later.
+    if (this.running) {
+      this.again = true
+      return this.running
+    }
+    this.running = (async () => {
+      do {
+        this.again = false
+        await this.tickNow()
+      } while (this.again && !this.stopped)
+    })().finally(() => {
       this.running = null
     })
     return this.running

@@ -140,6 +140,15 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   Przedłuż, Koniec pracy, „+ Skrzynka”, „⋯”; Odcinam się, „Prośba ▸”, „Sygnały ▸” – `bar-more-actions` w „⋯” (noc: „Prośba ▸” w wierszu); przy
   „Dalej?” wiersz bez jego odpowiedzi (C5); `BarButton fit` – nazwa się tnie (jeden wiersz przy 100 %); koszt z „Anuluj” (`cancelPending`);
   linia `clickUndo:<rodzaj>:<n>` „<akcja> · Cofnij” – pierwsza, `CLICK_UNDO_MS` 10 s; znika po udanym albo `clickGone` (`undoClick` – `timer.md`).
+- Ciąg przy komputerze (N1, D620, D621): `deskChainView` – linia `deskChain:<id startu>` „Dalej: <nazwa> · Cofnij” pierwsza, `CLICK_UNDO_MS` od
+  pierwszego zobaczenia startu `deskChain` (tylko ≤ `DESK_LINE_LATE_MS` 60 s po nim, pamięć `deskSeen` na dzień paska); „Cofnij” = `undo` startu
+  (`undoDeskChain`, silnik cofa parę). „Dalej” i „Przedłuż” wiersza, odpowiedzi „Dalej?” (blok z id pytania – `askedOf`), krok ±15 i „Potwierdź”
+  niosą `shown` – blok z przodu widoku ostatnio wysłanego (`shownFg` przy `emit`, nie `model`) albo pierwszego kliknięcia (`Pending.shown`); odmowa
+  `moved` (też próba kroku – `hub.timer` oddaje `code` / `front`) – `sayMoved(r)` „Już biegnie: <nazwa z `r.front`>”. Czekający koszt zmienia
+  tylko `setPending` (T2868: poprzedni zwalnia `hold`, nowy „Przedłuż” go bierze – `folder.holdDeskChain`, zegar monotoniczny); „Potwierdź” trzyma
+  świeży `hold` na czas zapisu (`releaseHold` w `finally`); zwolnienie bez nowego „Przedłuż” – `d.check` (przebieg od razu, `DataService.tick` w
+  trakcie przebiegu – jeszcze raz po nim); prowadzący bierze `hold` z początku `check()` (`deskHoldsNow`); krok po `await` sprawdza `pending === p`;
+  „Dalej” bez końca pokazanego – linia „Zaczęto: <nazwa>”. Tylko prowadzący (inny komputer – odmowa D621). Test w CI: `bar-windows.spec.ts`.
 - Wydarzenia całodniowe (D405, T740–T743): `WidgetView.allDay` (`barAllDay`, dziś = doba logiczna) – kropka i tytuł (≤ 20 znaków, „+N”) z lewej strony pierwszego wiersza
   paska pulpitu (`AllDayLabel`, tylko `desktop`), tylko odczyt, pełne tytuły po najechaniu w miejscu; miejsce zabiera tylko elastyczna nazwa bloku.
 
