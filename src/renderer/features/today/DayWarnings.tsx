@@ -3,7 +3,7 @@
  * the hour of the maximum, the numbers of the budget, what may be done) and the forecast of energy at the reserve (`EnergyState.warnings`).
  * D563 P10: they stand in one place at a time – the side panel of „Dziś” and, when a block's panel is open instead of it, that panel
  * (D3) – never over the axis and never in the morning plan. Only words: nothing is blocked (D72). By the energy's warning – the
- * cheapest swap with „Zamień” (N22, `CheapestSwapLine`).
+ * cheapest swap with „Zamień” (N22, `CheapestSwapLine`) and the regeneration before the block with the descent (N3, `RegenHereLine`).
  */
 import type { ReactNode } from 'react'
 import { morningWarnings, type MorningWarning } from '@shared/engine/morning'
@@ -30,8 +30,11 @@ export function dayWarningTexts(model: Pick<DayModel, 'date' | 'state' | 'energy
   return [...morningWarnings(m.state).map((w) => WORDS[w](m, lm, past)), ...energy]
 }
 
-/** `swap` – the line of „Najtańsza zamiana” (N22, `CheapestSwapLine`): after the warnings, by the energy's (the last of them). */
-export function DayWarnings({ warnings, swap }: { warnings: readonly string[]; swap?: ReactNode }) {
+/**
+ * `swap` – the line of „Najtańsza zamiana” (N22, `CheapestSwapLine`), `regen` – the line of „Wstaw regenerację tutaj” (N3,
+ * `RegenHereLine`): after the warnings, by the energy's (the last of them), in that order.
+ */
+export function DayWarnings({ warnings, swap, regen }: { warnings: readonly string[]; swap?: ReactNode; regen?: ReactNode }) {
   if (warnings.length === 0) return null
   return (
     <ul className="flex flex-col gap-1 rounded border border-rose/40 bg-rose-soft px-2 py-1.5 text-[12.5px]" data-testid="day-warnings">
@@ -39,6 +42,7 @@ export function DayWarnings({ warnings, swap }: { warnings: readonly string[]; s
         <li key={w}>{w}</li>
       ))}
       {swap}
+      {regen}
     </ul>
   )
 }

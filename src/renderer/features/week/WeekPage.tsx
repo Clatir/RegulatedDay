@@ -42,6 +42,8 @@ import { GroupLine } from '../../components/GroupLine'
 import { WeekCasesPanel } from './WeekCasesPanel'
 import { casesOpen, lastWeekMode, rememberCasesOpen, rememberWeekMode, shiftDay, threeDaysTitle, WEEK_MODES, type WeekMode } from './weekViews'
 import { agendaTitle, AGENDA_STEP } from './weekPeriod'
+import { RegenHereDayHint } from '../today/RegenHere'
+import type { ReserveCause } from '@shared/engine/reserveCause'
 
 export function WeekPage() {
   const today = useData((s) => s.view?.today ?? '')
@@ -187,6 +189,12 @@ export function WeekPage() {
   )
 }
 
+/**
+ * N3 in N20's hint of a column's tile (T2963): today's proposal „Wstaw regenerację tutaj” – the day counted when the hint opens; a day to come
+ * or gone by – nothing (`RegenHereDayHint`).
+ */
+const regenDayAction = (id: string, cause: ReserveCause, date: string) => <RegenHereDayHint date={date} id={id} cause={cause} />
+
 /** „Tydzień”: the month's goals, then the seven columns. */
 function WeekBody({ week, today, openCard, onCardOpened, opened, onPicking }: { week: string; today: string; openCard: string | null; onCardOpened: () => void; opened: MutableRefObject<string | null>; onPicking: (open: boolean) => void }) {
   const { view, failed } = useWeekView(week)
@@ -201,7 +209,7 @@ function WeekBody({ week, today, openCard, onCardOpened, opened, onPicking }: { 
         <>
           {/* Some column shows the strip of energy (D500) – the legend of its shades stands over the columns. */}
           {view.days.some((d) => hasEnergy(d.energy)) && <EnergyStripLegend />}
-          <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} openCard={openCard} onCardOpened={onCardOpened} opened={opened} onPicking={onPicking} allDays={view.days} />
+          <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} openCard={openCard} onCardOpened={onCardOpened} opened={opened} onPicking={onPicking} allDays={view.days} reserveAction={regenDayAction} />
         </>
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="week-loading">
@@ -233,7 +241,7 @@ function ThreeDaysBody({ middle, opened, onPicking }: { middle: string; opened: 
         <>
           {/* Some column shows the strip of energy (D500) – the legend of its shades stands over the columns. */}
           {view.days.some((d) => hasEnergy(d.energy)) && <EnergyStripLegend />}
-          <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} ppm={THREE_DAYS_PPM} mode="3days" openCard={null} onCardOpened={() => undefined} opened={opened} onPicking={onPicking} allDays={view.days} />
+          <DayGrid key={view.days[0]?.date} days={seen.days} from={view.from} to={view.to} ppm={THREE_DAYS_PPM} mode="3days" openCard={null} onCardOpened={() => undefined} opened={opened} onPicking={onPicking} allDays={view.days} reserveAction={regenDayAction} />
         </>
       ) : (
         <span className="text-[12.5px] text-muted" data-testid="three-loading">

@@ -24,7 +24,8 @@ import { useCalendarFilter } from '@renderer/features/calendars/calendarFilter'
 import { BlockDayNotes } from '@renderer/features/today/DayNotes'
 import { SidePanel } from '@renderer/features/today/TodayPage'
 import { CheapestSwapLine } from '@renderer/features/today/CheapestSwap'
-import { GONE_DAYS, PLAN_ALREADY_TEXT, PLAN_CHANGED_TEXT, cheapestSwapCached, cheapestSwapKeyOf, cheapestSwapPeek, energyOrderCached, energyOrderKey, resetEnergyOrderCache, resetSwapCache, swapGone, swapLineText, swappedText } from '@renderer/features/today/dayActions'
+import { regenHereKeyOf, regenMemory, resetRegenCache } from '@renderer/features/today/regenActions'
+import { GONE_DAYS, PLAN_ALREADY_TEXT, PLAN_CHANGED_TEXT, cheapestSwapCached, cheapestSwapKeyOf, cheapestSwapPeek, energyOrderCached, energyOrderKey, resetEnergyOrderCache, resetSwapCache, swapBack, swapGone, swapLineText, swappedText } from '@renderer/features/today/dayActions'
 import { useData } from '@renderer/store/data'
 import type { DayModel } from '@renderer/store/day'
 import { NO_MEMORY, useUi } from '@renderer/store/ui'
@@ -74,6 +75,7 @@ beforeEach(() => {
   useData.setState({ view: { today: DATE, allDay: [], computers: [] } as unknown as DataView, allDay: [] })
   useUi.setState({ page: 'today', day: null, pick: null, toasts: [], from: null, memory: NO_MEMORY })
   resetSwapCache()
+  resetRegenCache()
   resetEnergyOrderCache()
   useCalendarFilter.setState({ hidden: [], revealed: null })
 })
@@ -86,7 +88,14 @@ afterEach(() => {
 })
 
 /** In an act, until the line's search put off past the paint (T2635) has counted the day's key – a condition, no fixed delay. */
-const settle = (m: DayModel) => act(() => vi.waitFor(() => expect(cheapestSwapPeek(m, cheapestSwapKeyOf(m)).due).toBe(false)))
+const settle = (m: DayModel) =>
+  act(() =>
+    vi.waitFor(() => {
+      expect(cheapestSwapPeek(m, cheapestSwapKeyOf(m)).due).toBe(false)
+      // The panel's other line by the warning (N3) counts after the paint too: both counted, no state update after the test.
+      expect(regenMemory.peek(m, regenHereKeyOf(m)).due).toBe(false)
+    })
+  )
 
 /** `node` rendered; with `m` – also until its line's search has counted `m` (`settle`). */
 async function render(node: Parameters<Root['render']>[0], m?: DayModel): Promise<void> {
@@ -358,7 +367,10 @@ describe('„Najtańsza zamiana” w oknie (N22)', () => {
     const swapped = { ...m, ctx: { ...m.ctx, plan: m.ctx.plan.map((b) => ({ ...b, startMin: ({ r: lm('11:00'), c: lm('10:00'), e: lm('08:00') } as Record<string, number>)[b.id] ?? b.startMin })) } } as DayModel
     expect(cheapestSwapPeek(swapped, cheapestSwapKeyOf(swapped), cheapestSwapKeyOf(m)).swap).toBeNull()
     await act(async () => root!.render(createElement(SidePanel, sideProps(swapped))))
-    expect(q('cheapest-swap')).toBeNull()
+    // Before the new plan is counted no line; once counted (the search after the paint may run under load at once) never the swap just made.
+    expect(q('cheapest-swap-text')?.textContent ?? null).not.toBe(LINE)
+    await settle(swapped)
+    expect(q('cheapest-swap-text')?.textContent ?? null).not.toBe(LINE)
   })
 
   it('T2639: przed policzeniem nowego klucza trzymana tylko zamiana, którą ta linia pokazała, i tylko gdy oba bloki są w planie', async () => {
@@ -487,5 +499,56 @@ describe('„Najtańsza zamiana” w oknie (N22)', () => {
     await act(async () => void q('cheapest-swap-apply')!.click())
     await vi.waitFor(() => expect(sent).toHaveLength(1))
     await vi.waitFor(() => expect(q('cheapest-swap-text')?.textContent).toBe(LINE))
+  })
+
+  it('T2870: blok przestawiany przez zamianę przesunięty w międzyczasie (inny komputer) – nic nie zapisane, „Plan zmienił się…”, linia wraca', async () => {
+    // „Inne” moved to 09:30 elsewhere: the starts counted from 09:00 would write over it.
+    const { sent } = stub(fileWith({ c: lm('09:30') }))
+    await side(model())
+    await act(async () => void q('cheapest-swap-apply')!.click())
+    await vi.waitFor(() => expect(useUi.getState().toasts.map((t) => t.text)).toContain(PLAN_CHANGED_TEXT))
+    expect(sent).toEqual([])
+    await vi.waitFor(() => expect(q('cheapest-swap-text')?.textContent).toBe(LINE))
+  })
+
+  it('T2878: dwie zrobione zamiany tego dnia – druga nie odsłania pierwszej; cofnięcie jednej zdejmuje tylko jej znak', () => {
+    const m = model()
+    const key = cheapestSwapKeyOf(m)!
+    const swap = cheapestSwapCached(m)!
+    const other = { a: 'c', b: 'e', changes: [] }
+    swapGone(DATE, swap)
+    swapGone(DATE, other)
+    expect(cheapestSwapPeek(m, key).swap).toBeNull()
+    swapBack(DATE, other)
+    expect(cheapestSwapPeek(m, key).swap).toBeNull()
+    swapBack(DATE, swap)
+    expect(cheapestSwapPeek(m, key).swap).toMatchObject({ a: 'r', b: 'e' })
+  })
+
+  it('T2878: w przerwie stanął w międzyczasie nowy blok (inny komputer) – „Zamień” nic nie zapisuje, „Plan zmienił się…”', async () => {
+    const added = { ...FILE, blocks: [...(FILE.blocks as unknown[]), blockJson(block({ id: 'nowy', cat: 'inne', at: '09:30', min: 30, origin: 'user' }))] }
+    const { sent } = stub(added)
+    await side(model())
+    await act(async () => void q('cheapest-swap-apply')!.click())
+    await vi.waitFor(() => expect(useUi.getState().toasts.map((t) => t.text)).toContain(PLAN_CHANGED_TEXT))
+    expect(sent).toEqual([])
+  })
+
+  it('T2920: bloki szablonu zamienione już na innym komputerze (zapisane do pliku) – „Plan już jest tak ułożony.”, nie „Plan zmienił się…”', async () => {
+    // The plan's blocks of a template: none of them in the file the window saw.
+    const tpl = PLAN.map((b) => ({ ...b, origin: 'template' as const }))
+    const s = new Scenario({ date: DATE, plan: tpl, wake: '06:30', settings: { transitionBufferMin: 0, reserve: 20 } }).observe('06:30', null)
+    s.checkin('07:00', FULL)
+    const ctx = s.contextAt(s.at('07:30'))
+    const state = computeDay(ctx)
+    const seen: RawRecord = { schema: 1, date: DATE, blocks: [] }
+    const m = { date: DATE, ctx, state, energy: computeEnergy(ctx, state), dayFile: dayFileFrom(seen, DATE), data: { dayFile: seen } } as unknown as DayModel
+    // Another computer's „Zamień” wrote the three to the file at their new starts.
+    const moved: Record<string, number> = { r: lm('11:00'), c: lm('10:00'), e: lm('08:00') }
+    const { sent } = stub({ ...seen, blocks: tpl.filter((b) => moved[b.id] != null).map((b) => blockJson({ ...b, startMin: moved[b.id]! })) })
+    await side(m)
+    await act(async () => void q('cheapest-swap-apply')!.click())
+    await vi.waitFor(() => expect(useUi.getState().toasts.map((t) => t.text)).toEqual([PLAN_ALREADY_TEXT]))
+    expect(sent).toEqual([])
   })
 })

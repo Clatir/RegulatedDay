@@ -19,7 +19,7 @@ import { begunIds, foldFacts } from '@shared/engine/facts'
 import type { Freed } from '@shared/engine/gaps'
 import { gridOf } from '@shared/engine/grid'
 import type { AnyEvent } from '@shared/model/events'
-import { createDay } from '@shared/engine/createDay'
+import { createDay, dayPlan } from '@shared/engine/createDay'
 import { copiedDay, moveBetweenDays, stayRuleOf, wakeChange } from '@shared/engine/planEdit'
 import type { DayContext, DayState } from '@shared/engine/day'
 import type { EnergyState } from '@shared/engine/energy'
@@ -36,6 +36,7 @@ import { countedDay, dayUsable, type DayModel } from '../../store/day'
 import { skipCheckin, toast, undoToast, useUi } from '../../store/ui'
 import { checkinSkipId } from '@shared/engine/reminders'
 import { MOVE_GONE_TEXT, movedDay, stayedOf, type Stayed, type WeekPush, type WeekPushedDay } from '../../store/weekPush'
+import { GONE_DAYS, proposalMemory, type ProposalDay } from './proposalMemory'
 
 /** The edit of a day's file `before` (null: none yet, it is made) by `next` – null when it changes nothing. */
 export function dayFileEdit(date: string, before: RawRecord | null, next: (raw: RawRecord) => RawRecord): EditEntry | null {
@@ -116,21 +117,60 @@ export function withPushed(raw: RawRecord, date: string, change: (raw: RawRecord
   return after
 }
 
+/** The fields of a block the day's forecast lays it by (T2927): what two plans must agree on to be one plan. */
+const PLAN_FIELDS = ['startMin', 'durationMin', 'anchor', 'fixed', 'categoryId', 'variantId', 'background', 'alongside'] as const
+
+/** A plan by what the forecast lays it by – every block's id and `PLAN_FIELDS`, in the order of the ids (T2927). */
+const planKey = (plan: readonly PlanBlock[]): string =>
+  JSON.stringify([...plan].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map((b) => [b.id, ...PLAN_FIELDS.map((k) => b[k] ?? null)]))
+
+/** What a save counted on the window's plan finds in the day's file in its turn (T2927). */
+export type PlanStanding = 'stands' | 'already' | 'changed'
+
+/** The day the window counted a change on: its snapshot and the plan of its file (`basePlan ?? plan` – without the buffers). */
+export type CountedDay = Pick<DayContext, 'plan' | 'basePlan' | 'snapshot'>
+
+/** The plan the change was counted on (`basePlan ?? plan`) with `starts` (by id) laid on and the blocks it puts in (`added`). */
+export function planAfter(ctx: CountedDay, starts: readonly PushedStart[], added: readonly PlanBlock[] = []): PlanBlock[] {
+  const at = new Map(starts.map((p) => [p.block.id, p.startMin]))
+  return [...(ctx.basePlan ?? ctx.plan).map((b) => (at.has(b.id) ? { ...b, startMin: at.get(b.id)! } : b)), ...added]
+}
+
+/**
+ * The one rule of a save counted on the window's plan („Ułóż”, „Zamień”, „Wstaw regenerację tutaj” – T2927, replaces T2870, T2878,
+ * T2920–T2924): the day's plan counted from the file as it is in the turn of the save, by the very function the window's plan was
+ * counted with (`dayPlan` of the model's snapshot – the template, the series, the sessions' answers, cancelled and moved blocks, anchors),
+ * compared with the window's plan by what the forecast lays the blocks by (`PLAN_FIELDS`, the order of the ids aside): the same –
+ * `stands` (it may be written); the plan after the change (`after`) – `already` („Plan już jest tak ułożony.”: another computer, an earlier
+ * click, T622); anything else – `changed` (nothing written: „Plan zmienił się…”).
+ */
+export function countedPlan(raw: RawRecord, date: string, ctx: CountedDay, after: readonly PlanBlock[]): PlanStanding {
+  const now = planKey(dayPlan(ctx.snapshot, dayFileFrom(raw, date)))
+  if (now === planKey(ctx.basePlan ?? ctx.plan)) return 'stands'
+  return now === planKey(after) ? 'already' : 'changed'
+}
+
 /**
  * A change of the plan that pushes blocks apart (D367, rozsuwanie): the change and the pushed blocks' new starts as one
  * edit of the day's file, in its turn. Saved – the bar keeps „Przesunięto N bloków · Cofnij” (the main process, as after
  * a variant, D313): its „Cofnij” takes this one edit back, the day's file as it was before it. Nothing pushed – the change
- * alone, as before.
+ * alone, as before. `line` false – the window says it with its own „Cofnij” (N3 „Wstaw regenerację tutaj”, as „Dodaj” of the week,
+ * D400): the bar gets the marker's trigger only, no second „Cofnij”. `stands` – what the file in its turn says of the plan the change was
+ * counted on (`countedPlan`, T2927): anything but `stands` – nothing is written, `sent.standing` says why.
  */
 export async function pushDayBlocks(
   date: string,
   seen: RawRecord | null,
   change: (raw: RawRecord) => RawRecord,
   pushed: readonly PushedStart[],
-  sent: { entry: EditEntry | null; made: RawRecord | null } = { entry: null, made: null }
+  sent: { entry: EditEntry | null; made: RawRecord | null; standing?: PlanStanding } = { entry: null, made: null },
+  line = true,
+  stands?: (raw: RawRecord) => PlanStanding
 ): Promise<EditOutcome[] | null> {
   const out = await trySaveWith(async () => {
     const before = (await dayFilesNow([date], () => seen))[date] ?? null
+    sent.standing = stands?.(dayRaw(before, date)) ?? 'stands'
+    if (sent.standing !== 'stands') return []
     const after = withPushed(dayRaw(before, date), date, change, pushed)
     sent.entry = editOf(paths.day(date), before, after)
     sent.made = sent.entry?.create ? after : null
@@ -138,7 +178,7 @@ export async function pushDayBlocks(
   })
   if (isSaved(out) && sent.entry && pushed.length) {
     try {
-      await window.rd.planPushed(date, pushed.length, sent.entry, sent.made)
+      await (line ? window.rd.planPushed(date, pushed.length, sent.entry, sent.made) : window.rd.planPushed(date, pushed.length, sent.entry, sent.made, false))
     } catch {
       // The plan is saved; only the bar's „Cofnij” of it is missing (the main process is closing).
     }
@@ -287,8 +327,8 @@ export function variantStarts(plan: readonly PlanBlock[], v: Pick<Variant, 'chan
  * the block as the file holds it then. Saved – the bar keeps „Przestawiono: <label> · Cofnij” (the main process, as after
  * a variant picked in the bar, D313): its „Cofnij” takes this one edit back.
  */
-export async function arrangeDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], label: string): Promise<{ out: EditOutcome[] | null; already: boolean }> {
-  const { out, sent } = await saveStarts(date, seen, starts)
+export async function arrangeDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], label: string, ctx?: CountedDay): Promise<{ out: EditOutcome[] | null; already: boolean }> {
+  const { out, sent } = await saveStarts(date, seen, starts, ctx)
   if (sent.already) return { out, already: true }
   if (isSaved(out) && sent.entry) {
     try {
@@ -303,19 +343,29 @@ export async function arrangeDayBlocks(date: string, seen: RawRecord | null, sta
 /**
  * New starts of blocks as one edit of the day's file, in its turn, each over the block as the file holds it then („Ułóż”, „Zamień”).
  * `sent.already` – the file in its turn already so (another computer, an earlier click): nothing written, the note said (D379, T622);
- * `sent.entry` – the edit sent, `sent.after` – the file it made when it had none.
+ * `sent.changed` – the plan the starts were counted on is no more in the file (a block moved meanwhile – an earlier click, another
+ * computer, `countedPlan` on the model's day `ctx`, T2927): nothing written, the window says `PLAN_CHANGED_TEXT`; `sent.entry` – the edit sent,
+ * `sent.after` – the file it made when it had none.
  */
-async function saveStarts(date: string, seen: RawRecord | null, starts: readonly PushedStart[]): Promise<{ out: EditOutcome[] | null; sent: { already: boolean; entry: EditEntry | null; after: RawRecord | null } }> {
-  const sent: { made: boolean; already: boolean; entry: EditEntry | null; after: RawRecord | null } = { made: false, already: false, entry: null, after: null }
+async function saveStarts(date: string, seen: RawRecord | null, starts: readonly PushedStart[], ctx?: CountedDay): Promise<{ out: EditOutcome[] | null; sent: { already: boolean; changed: boolean; entry: EditEntry | null; after: RawRecord | null } }> {
+  const sent: { made: boolean; already: boolean; changed: boolean; entry: EditEntry | null; after: RawRecord | null } = { made: false, already: false, changed: false, entry: null, after: null }
   const out = await trySaveWith(async () => {
     const before = (await dayFilesNow([date], () => seen))[date] ?? null
-    const after = withPushed(dayRaw(before, date), date, (r) => r, starts)
+    const raw = dayRaw(before, date)
+    // T2927: the file in its turn counted to the plan the starts were counted on (`ctx` – the model's day; none – as before T2870).
+    const standing: PlanStanding = ctx ? countedPlan(raw, date, ctx, planAfter(ctx, starts)) : 'stands'
+    sent.changed = standing === 'changed'
+    if (sent.changed) return []
+    // Already so (another computer, an earlier click): as an edit that changes nothing – „Plan już jest tak ułożony.”.
     sent.made = true
+    if (standing === 'already') return []
+    const after = withPushed(raw, date, (r) => r, starts)
     sent.entry = editOf(paths.day(date), before, after)
     sent.after = sent.entry?.create ? after : null
     return [sent.entry]
   })
-  if (sent.made && !sent.entry) {
+  if (sent.changed) toast(PLAN_CHANGED_TEXT, 'info', 6000)
+  else if (sent.made && !sent.entry) {
     sent.already = true
     toast(PLAN_ALREADY_TEXT, 'info')
   }
@@ -335,9 +385,9 @@ export const swappedText = (a: string, b: string): string => `Zamieniono: ${a} �
  * runs, nor after (a new file or a new key on the way) – and not done again when the save fails, or when its „Cofnij” takes it back
  * (the proposal comes back at once).
  */
-export async function swapDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], swap: Pick<CheapestSwap, 'a' | 'b' | 'changes'>, text: string, openId: string | null = null): Promise<{ out: EditOutcome[] | null; already: boolean; saved: boolean }> {
+export async function swapDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], swap: Pick<CheapestSwap, 'a' | 'b' | 'changes'>, text: string, openId: string | null = null, ctx?: CountedDay): Promise<{ out: EditOutcome[] | null; already: boolean; saved: boolean }> {
   swapGone(date, swap)
-  const { out, sent } = await saveStarts(date, seen, starts)
+  const { out, sent } = await saveStarts(date, seen, starts, ctx)
   if (sent.already) return { out, already: true, saved: false }
   const saved = isSaved(out) && sent.entry != null
   if (saved) undoEditToast(date, sent.entry!, sent.after, swapToastText(text, starts, [swap.a, swap.b], openId), () => swapBack(date, swap))
@@ -360,23 +410,27 @@ export function swapToastText(text: string, starts: readonly PushedStart[], pair
 }
 
 /** What the cheapest swap is counted on: the day as counted (`DayModel`). */
-type SwapDay = EnergyOrderDay & { date: string }
+type SwapDay = ProposalDay
 
-/** The last cheapest swap counted (T2624): by the day's key – as „Ułóż pod energię” (T616) – and its date (T2633). */
-let lastSwap: { key: string; date: string; value: CheapestSwap | null } | null = null
-/**
- * The swaps done (T2628, T2634, T2638, T2640, T2643): by date, the swap's own words (`swapSignature`) – „Zamień” saving it, saved, or
- * finding the plan already so; no line of that day shows that swap, whatever key it is counted for. The last `GONE_DAYS` days only
- * (inserted last, kept).
- */
-const gone = new Map<string, string>()
-export const GONE_DAYS = 14
-/** The window's lines of the swap, told when a swap is done or comes back (`onSwapsDone`). */
-const doneListeners = new Set<() => void>()
+/** The days the swaps done are kept for (T2640). */
+export { GONE_DAYS }
 
 /** A swap by what it does (T2643): its two blocks and the new starts it writes. */
 export const swapSignature = (s: Pick<CheapestSwap, 'a' | 'b' | 'changes'>): string =>
   `${s.a}|${s.b}|${s.changes.map((c) => (c.k === 'start' ? `${c.block}@${c.startMin}` : c.k)).join(',')}`
+
+/**
+ * The memory of the cheapest swap (N22, `proposalMemory`): the last swap counted (T2624) by the day's key – as „Ułóż pod energię”
+ * (T616) – and its date (T2633); the swaps done by date and their own words (`swapSignature`, T2628, T2634, T2638, T2640, T2643) –
+ * „Zamień” saving it, saved, or finding the plan already so; no line of that day shows that swap, whatever key it is counted for. Held
+ * while a new key is counted only with both its blocks in the plan (T2639).
+ */
+export const swapMemory = proposalMemory<CheapestSwap>({
+  what: 'Najtańsza zamiana',
+  search: (m) => cheapestSwap(m.ctx, m.state, m.energy),
+  signature: swapSignature,
+  holds: (m, s) => m.ctx.plan.some((b) => b.id === s.a) && m.ctx.plan.some((b) => b.id === s.b)
+})
 
 /**
  * What the cheapest swap of a day depends on (T2624, T2636): its date and what „Ułóż pod energię” depends on (`energyOrderKey`);
@@ -391,16 +445,7 @@ export const cheapestSwapKeyOf = (m: SwapDay): string | null => (reserveWarned(m
  * search that throws (T2641) is said in the console and remembered as none for its key – the line never waits on it again.
  */
 export function cheapestSwapCached(m: SwapDay, key: string | null = cheapestSwapKeyOf(m)): CheapestSwap | null {
-  if (key == null) return null
-  if (lastSwap && lastSwap.key === key) return lastSwap.value
-  let value: CheapestSwap | null = null
-  try {
-    value = cheapestSwap(m.ctx, m.state, m.energy)
-  } catch (e) {
-    console.warn('Najtańsza zamiana: nie policzono propozycji', e)
-  }
-  lastSwap = { key, date: m.date, value }
-  return value
+  return swapMemory.cached(m, key)
 }
 
 /** What the line of the cheapest swap shows without the search (T2632, T2633): `fresh` – counted for this key, `due` – to count. */
@@ -417,14 +462,8 @@ export interface SwapSeen {
  * (`swapGone`, by its words – T2643) – none, fresh or held. `key` null – nothing (no warning).
  */
 export function cheapestSwapPeek(m: SwapDay, key: string | null, shownKey: string | null = null): SwapSeen {
-  if (key == null) return { swap: null, fresh: false, due: false }
-  const done = gone.get(m.date)
-  const open = (s: CheapestSwap | null | undefined): CheapestSwap | null => (s && swapSignature(s) !== done ? s : null)
-  if (lastSwap && lastSwap.key === key) return { swap: open(lastSwap.value), fresh: true, due: false }
-  const last = open(lastSwap?.value)
-  const inPlan = (id: string) => m.ctx.plan.some((b) => b.id === id)
-  const held = last && lastSwap!.key === shownKey && lastSwap!.date === m.date && inPlan(last.a) && inPlan(last.b) ? last : null
-  return { swap: held, fresh: false, due: true }
+  const { value, fresh, due } = swapMemory.peek(m, key, shownKey)
+  return { swap: value, fresh, due }
 }
 
 /**
@@ -432,29 +471,17 @@ export function cheapestSwapPeek(m: SwapDay, key: string | null, shownKey: strin
  * so – no line of the day shows it, in any panel, for any key (another day's stays as it was – T2640).
  */
 export function swapGone(date: string, swap: Pick<CheapestSwap, 'a' | 'b' | 'changes'>): void {
-  gone.delete(date)
-  gone.set(date, swapSignature(swap))
-  while (gone.size > GONE_DAYS) gone.delete(gone.keys().next().value!)
-  for (const f of doneListeners) f()
+  swapMemory.done(date, swapSignature(swap))
 }
 
 /** The swap is not done after all (T2643): its save failed, or its „Cofnij” took it back – shown again (while it is the one marked). */
 export function swapBack(date: string, swap: Pick<CheapestSwap, 'a' | 'b' | 'changes'>): void {
-  if (gone.get(date) !== swapSignature(swap)) return
-  gone.delete(date)
-  for (const f of doneListeners) f()
-}
-
-/** `f` told whenever a swap is done or comes back (the lines count again what they show); the way back – the unsubscription. */
-export function onSwapsDone(f: () => void): () => void {
-  doneListeners.add(f)
-  return () => void doneListeners.delete(f)
+  swapMemory.back(date, swapSignature(swap))
 }
 
 /** The memory of `cheapestSwapCached` and of `swapGone` emptied (tests: one file's day never answers for another's). */
 export function resetSwapCache(): void {
-  lastSwap = null
-  gone.clear()
+  swapMemory.reset()
 }
 
 /**

@@ -487,7 +487,7 @@ function EnergyOrder({ model, names }: { model: DayModel; names: Names }) {
   if (!variant || gone === key) return null
   const arrange = () =>
     run(async () => {
-      if ((await arrangeDayBlocks(model.date, model.data.dayFile, variantStarts(model.ctx.plan, variant), variant.label)).already) setGone(key)
+      if ((await arrangeDayBlocks(model.date, model.data.dayFile, variantStarts(model.ctx.plan, variant), variant.label, model.ctx)).already) setGone(key)
     })
   const leave = () => run(async () => void (await leaveEnergyOrder(model.date, model.data.dayFile)))
   return (

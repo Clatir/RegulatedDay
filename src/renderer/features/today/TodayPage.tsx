@@ -90,6 +90,8 @@ import { DayNumbers, DaySummary } from './DayNumbers'
 import { BlockDayNotes } from './DayNotes'
 import { DayWarnings, dayWarningTexts } from './DayWarnings'
 import { CheapestSwapLine } from './CheapestSwap'
+import { RegenHereHint, RegenHereLine } from './RegenHere'
+import { useReserveKey } from './useProposal'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
@@ -135,6 +137,8 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
   const date = model.date
   const isToday = date === today
   const names: Names = useMemo(() => ({ rd, settings: model.state.settings, routines, requests }), [rd, model.state.settings, routines, requests])
+  // N3 by N20 (T2961, T2964): the day's key of the proposals once per count – the side panel and the hints of the axis share it.
+  const dayKey = useReserveKey(model, date < today)
   const axis = useMemo(() => dayAxis(model, names, isToday ? now : null, today), [model, names, isToday, now, today])
   // D410: the attachments of the day's blocks – the 📎 on a tile, a drop of files on it, the panel's section.
   const attachments = useData((s) => s.attachments)
@@ -774,6 +778,8 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
               // D501: the window of the cost on a tile – one path with „3 dni” and „Tydzień” (a block of a series not begun asks its scope as
               // the panel does, once a window; a begun block costs so from now on).
               energyTrial={energyTrial}
+              // N20's hint of the tile at the cause, N3's proposal in it (T2961): the same proposal and action as the side panel's line.
+              reserveAction={(id, cause) => <RegenHereHint model={model} names={names} past={date < today} dayKey={dayKey} id={id} cause={cause} />}
               onCosts={(id, costs, ask) => saveTileCosts({ date, blockId: id, names, ofSeries: plan.find((x) => x.id === id)?.origin === 'series' }, costs, { ask })}
               rename={rename}
               markers={axis.markers}
@@ -989,6 +995,8 @@ export const AXIS_HINT = 'Przeciągnij po osi, żeby dodać blok w tych godzinac
 /** Beside the plan when no block is selected: the warnings, the parked blocks, what the engine says of the day. */
 export function SidePanel({ model, names, routines, past, onSelect, onMove, cases }: { model: DayModel; names: Names; routines: boolean; past: boolean; onSelect: (id: string) => void; onMove: (b: PlanBlock) => void; cases?: ReactNode }) {
   const s = model.state
+  // The day's key once for both proposals by the warning (T2636).
+  const dayKey = useReserveKey(model, past)
   const parked = model.ctx.plan.filter((b) => s.facts.blocks.get(b.id)?.parkedAt != null)
   return (
     <aside className={cx('flex shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3 text-[12.5px]', SIDE_PANEL_WIDTH)} data-testid="day-side">
@@ -996,7 +1004,7 @@ export function SidePanel({ model, names, routines, past, onSelect, onMove, case
       {routines && <RoutineCards model={model} names={names} />}
       {cases}
       <DayNumbers model={model} />
-      <DayWarnings warnings={dayWarningTexts(model, past)} swap={<CheapestSwapLine model={model} names={names} past={past} />} />
+      <DayWarnings warnings={dayWarningTexts(model, past)} swap={<CheapestSwapLine model={model} names={names} past={past} dayKey={dayKey} />} regen={<RegenHereLine model={model} names={names} past={past} dayKey={dayKey} />} />
       {parked.length > 0 && (
         <div className="flex flex-col gap-1.5">
           <h4 className="text-[12px] text-muted">Zaparkowane</h4>
