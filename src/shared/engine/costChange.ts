@@ -19,8 +19,10 @@ import { routineCostApplies } from '../model/routines'
 import type { RulesSettings } from '../model/settings'
 import { plannedSpan, type BlockInfo } from './blocks'
 import type { DayContext, DayState } from './day'
-import type { BlockFact, DayFacts } from './facts'
+import { OPEN, type BlockFact, type DayFacts } from './facts'
 import { idxOf } from './grid'
+import type { TimerNow } from './timer'
+import { logicalDayOf } from '../time/day'
 
 /**
  * A change of a block's cost: from the minute `at` (index) on, `costs` – its own (null – no own cost any more), or with `routine` its
@@ -222,6 +224,12 @@ export function begunCosts(
   return { costs: own ?? base, base, own: own != null, ...baseFromOf(state.settings.categories, cat, variant, fallback, routine) }
 }
 
+/** Why the cost of a block is not changed any more (`costEditable`) – said after „Nie zapisano: ” by the tile's save and the bar's „Koszt ▸”. */
+export const COST_DAY_GONE_TEXT = 'ten dzień już minął'
+export const COST_ENDED_TEXT = 'ten blok już się skończył'
+export const COST_TAKEN_OFF_TEXT = 'ten blok jest zaparkowany albo odwołany'
+export const COST_PASSED_TEXT = 'czas tego bloku już minął'
+
 /**
  * The tile's cost may be changed (D501): on a day not gone by, a block not taken off before it began (parked, cancelled) – one not begun
  * while its time has not passed (its own cost in the plan), one begun until it ends (from now on, `block.cost`). An ended block only tells.
@@ -230,6 +238,48 @@ export function costEditable(f: Pick<BlockFact, 'startedAt' | 'endedAt' | 'parke
   if (dayGone) return false
   if (f?.startedAt != null) return f.endedAt == null
   return f?.parkedAt == null && f?.cancelledAt == null && !passed
+}
+
+/**
+ * The block whose cost the bar's „Koszt ▸” changes (D585, T2500): the block in front – with nothing in front the paused one „Wznów”
+ * resumes –, never one behind, nor one of a day gone by (begun yesterday, running past 04:00 – `costEditable`, as its tile, T2509), nor
+ * while „Odcinam się” runs (the widget is hidden); with its cost at minute `state.now` as its tile counts it (`begunCosts`). One rule for
+ * the bar's view (`engineView`) and the folder's judging of a click (`DataFolder.barCost`). `now` – the instant (ms) the day is counted at.
+ */
+export function barCostOf(
+  ctx: Pick<DayContext, 'events' | 'plan' | 'snapshot'>,
+  state: Pick<DayState, 'facts' | 'settings' | 'now' | 'grid'>,
+  t: Pick<TimerNow, 'fg' | 'paused' | 'next'>,
+  now: number
+): { block: BlockInfo; costs: BlockCosts } | null {
+  if (state.facts.disconnect.some((d) => d.to === OPEN)) return null
+  const b = t.fg ?? t.paused.find((p) => p.info.id === t.next?.id) ?? null
+  if (!b || !costEditable(state.facts.blocks.get(b.info.id), state.grid.date < logicalDayOf(now), false)) return null
+  return { block: b.info, costs: begunCosts(ctx, state, b.info) }
+}
+
+/**
+ * What a click of the bar's „Koszt ▸” on a begun block is put over, and from when it may count (T2513). `now` – the block's cost to step
+ * from: the own cost of its newest change in the log's order (`block.cost` after its start – also one whose minute is still to come: a
+ * clock of another computer ahead, this one's set back), else of its start; the base of now. `after` – the instant (ms) the new change is
+ * written at no earlier than: the latest instant of its start and its changes – `costChangesOf` orders by minute, then by the log, so a
+ * change written later in the log at that minute or after it counts from its minute on over every one before it.
+ */
+export function barCostBasis(ctx: Pick<DayContext, 'events' | 'plan' | 'snapshot'>, state: Pick<DayState, 'facts' | 'settings' | 'now' | 'grid'>, b: BlockInfo): { now: BlockCosts; after: number } {
+  const start = state.facts.blocks.get(b.id)?.startOrder ?? null
+  let after = start?.at ?? Number.NEGATIVE_INFINITY
+  let newest: (AnyEvent & { at: number }) | null = null
+  for (const e of ctx.events) {
+    if (!isCostChange(e) || e.block !== b.id || !start || compareEvents(e, start) <= 0) continue
+    if (!newest || compareEvents(e, newest) > 0) newest = e
+    if (e.at > after) after = e.at
+  }
+  const all = costChangesOf(ctx, state.facts)
+  const now = begunCosts(ctx, state, b, all)
+  if (!newest) return { now, after }
+  // At the newest change's own minute `ownAt` gives that change (the last of its minute in the log's order); the base stays the one of now.
+  const then = begunCosts(ctx, state, b, all, idxOf(state.grid, newest.at))
+  return { now: { ...now, costs: then.own ? then.costs : now.base, own: then.own }, after }
 }
 
 /**

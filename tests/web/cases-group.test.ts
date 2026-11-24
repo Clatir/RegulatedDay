@@ -13,6 +13,7 @@ import { computeDay } from '@shared/engine/day'
 import { dayFileFrom } from '@shared/model/plan'
 import { newRequest, newTask, requestFrom } from '@shared/model/requests'
 import { logicalDayOf } from '@shared/time/day'
+import { addDays } from '@shared/time/zone'
 import { groupFreeStart, lowestEnergyChange, planGroupOnAxis, planningOfGroup, plannableOf } from '@renderer/features/cases/groupPlan'
 import { DAY_UNREADABLE } from '@renderer/store/cases'
 import { casesLineText, planGroupDrop } from '@renderer/features/cases/groupActions'
@@ -244,6 +245,54 @@ describe('„Zaplanuj…” grupy i upuszczenie na oś (D530)', () => {
     s2.set(paths.day(TODAY), { ...(s2.day(TODAY) as RawRecord), blocks: [] })
     expect(await undoGroup(c.undo)).toMatchObject({ saved: true, restored: 0, kept: 1, daysKept: 1 })
     expect(s2.sent).toHaveLength(1)
+  })
+
+  it('„Cofnij” planowania, gdy jedna sprawa grupy zmieniona od tego czasu: dzień zostaje, a z nim wszystkie sprawy grupy z tego dnia (kept 3) – żadna nie wskazuje na zdjęty blok (D607)', async () => {
+    const { sent, lay, set, record, day } = stub([task('a'), task('b'), task('c')], { [TODAY]: null })
+    const r = await planCases(['a', 'b', 'c'], TODAY, lm('10:00'))
+    lay(r.undo)
+    // „a” planned again since (its block is another one now – a field the change set): it stays as it is, so the day's file cannot lose the blocks.
+    set(rel('a'), { ...record('a')!, block: 'inny-blok' })
+    const back = await undoGroup(r.undo)
+    expect(back).toMatchObject({ saved: true, restored: 0, kept: 3, daysKept: 1 })
+    expect(sent).toHaveLength(1)
+    expect(dayFileFrom(day(TODAY), TODAY).blocks).toHaveLength(3)
+    for (const x of r.blocks) expect(dayFileFrom(day(TODAY), TODAY).blocks.map((b) => b.id)).toContain(x.block.id)
+    for (const id of ['b', 'c']) expect(record(id)).toMatchObject({ day: TODAY, state: 'planned' })
+  })
+
+  it('„Cofnij” grupy przeplanowanej na inny dzień, gdy jedna sprawa zmieniona od tego czasu: jej stary dzień też zostaje – stary blok nie wraca obok nowego (D607)', async () => {
+    const TOMORROW = addDays(TODAY, 1)
+    const { lay, set, record, day } = stub([task('a'), task('b')], { [TODAY]: null, [TOMORROW]: null })
+    const first = await planCases(['a'], TODAY, lm('10:00'))
+    lay(first.undo)
+    expect(dayFileFrom(day(TODAY), TODAY).blocks).toHaveLength(1)
+    const r = await planCases(['a', 'b'], TOMORROW, lm('10:00'))
+    lay(r.undo)
+    // The old block left its day with the new planning.
+    expect(dayFileFrom(day(TODAY), TODAY).blocks).toEqual([])
+    set(rel('a'), { ...record('a')!, block: 'inny-blok' })
+    const back = await undoGroup(r.undo)
+    expect(back).toMatchObject({ saved: true, restored: 0, kept: 2, daysKept: 2 })
+    // The old day stays as the change left it: no old block of „a” back beside the new one.
+    expect(dayFileFrom(day(TODAY), TODAY).blocks).toEqual([])
+    expect(dayFileFrom(day(TOMORROW), TOMORROW).blocks).toHaveLength(2)
+  })
+
+  it('„Cofnij” grupy – punkt stały dni: A z X na Y, B z W na Y, B zmieniona → X, Y, W zostają, A i B kept, A ma jeden blok (runda 3)', async () => {
+    const [X, W, Y] = [TODAY, addDays(TODAY, 1), addDays(TODAY, 2)]
+    const { lay, set, record, day } = stub([task('a'), task('b')], { [X]: null, [W]: null, [Y]: null })
+    lay((await planCases(['a'], X, lm('10:00'))).undo)
+    lay((await planCases(['b'], W, lm('10:00'))).undo)
+    const r = await planCases(['a', 'b'], Y, lm('10:00'))
+    lay(r.undo)
+    expect(dayFileFrom(day(X), X).blocks).toEqual([])
+    set(rel('b'), { ...record('b')!, block: 'inny-blok' })
+    expect(await undoGroup(r.undo)).toMatchObject({ saved: true, restored: 0, kept: 2, daysKept: 3 })
+    // „A” keeps its new block only: X (its old day) did not take the old block back.
+    expect(dayFileFrom(day(X), X).blocks).toEqual([])
+    expect(dayFileFrom(day(W), W).blocks).toEqual([])
+    expect(dayFileFrom(day(Y), Y).blocks).toHaveLength(2)
   })
 
   it('upuszczona grupa: pierwsza w minucie upuszczenia, z Ctrl – kopie, oryginały zostają na liście', async () => {

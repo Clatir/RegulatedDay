@@ -333,6 +333,56 @@ test('Sprawy: szybki zapis „!jutro” – podgląd pod polem przed Enter, zada
   }
 })
 
+/** A list as an editor puts it on the clipboard: markers of three kinds, a checkbox, an empty line, CRLF. */
+const LIST = '- Kup mleko\r\n\r\n- [ ] Raport @jutro 15:00 1h #anal\n1. Telefon do mamy\n* Oddać książki !jutro'
+
+test('Sprawy: wklejona lista (N11) – pytanie pod polem, Enter dodaje 4 sprawy (godzina – blok na jutrze), dymek „Cofnij” zdejmuje wszystkie; Esc – jeden tytuł', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-paste-'))
+  const { today } = seedAwake(dataDir, [])
+  const tomorrow = addDays(today, 1)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await dataOpen(page)
+      await page.getByTestId('nav-requests').click()
+      await expect(page.getByTestId('requests')).toBeVisible()
+      await page.keyboard.press('Control+KeyN')
+      const field = page.getByTestId('case-add-title')
+      await expect(field).toBeFocused()
+      const paste = (text: string) =>
+        field.evaluate((el, t) => {
+          const data = new DataTransfer()
+          data.setData('text/plain', t)
+          el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+        }, text)
+      await paste(LIST)
+      await expect(field).toHaveValue('')
+      await expect(page.getByTestId('case-add-paste')).toHaveText('Dodać 4 sprawy? · Enter · Esc – jeden tytuł')
+      // The first Esc only answers the question: one title in the field, the field stays.
+      await field.press('Escape')
+      await expect(field).toHaveValue('- Kup mleko - [ ] Raport @jutro 15:00 1h #anal 1. Telefon do mamy * Oddać książki !jutro')
+      await expect(page.getByTestId('case-add-paste')).toHaveCount(0)
+      await field.fill('')
+      await paste(LIST)
+      await field.press('Enter')
+      await expect.poll(() => records(dataDir).map((r) => r.title).sort()).toEqual(['Kup mleko', 'Oddać książki', 'Raport', 'Telefon do mamy'])
+      expect(records(dataDir).find((r) => r.title === 'Raport')).toMatchObject({ estimateMin: 60, categoryId: 'analiza', doDate: tomorrow, day: tomorrow })
+      expect(records(dataDir).find((r) => r.title === 'Oddać książki')).toMatchObject({ dueDate: tomorrow })
+      await expect.poll(() => blocksOf(dataDir, tomorrow).map((b) => b.startMin)).toEqual([900])
+      await expect(field).toHaveCount(0)
+      await expect(page.getByRole('status').filter({ hasText: 'Dodano 4 sprawy' })).toBeVisible()
+      // „Cofnij” of the toast: all four and the block gone.
+      await page.getByTestId('toast-action').click()
+      await expect.poll(() => records(dataDir)).toEqual([])
+      await expect.poll(() => blocksOf(dataDir, tomorrow)).toEqual([])
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
 test('plan poranny: karta „Terminy” – sprawy po terminie i z terminem w progu; „Pomiń” chowa do końca dnia, „Na Dziś” przenosi na „Dziś”; pusta – bez karty', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-deadlines-'))
   const { today } = seedAwake(dataDir, [])
