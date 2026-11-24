@@ -93,6 +93,8 @@ export function useWeekGroup(o: {
   all?: readonly string[]
   /** The view counted no costs of its blocks („Agenda”, the month): the menu's „Koszt…” is off (default: counted). */
   costsKnown?: boolean
+  /** „Zapisz jako szablon / rutynę…” in the menu (N15 – „Tydzień” and „3 dni”). */
+  saveAs?: boolean
 }): WeekGroup {
   const view = o.view ?? 'week'
   const order = useMemo(() => weekOrder(o.days), [o.days])
@@ -129,6 +131,6 @@ export function useWeekGroup(o: {
     mark: (date, id, e) => void sel.onItemClick(blockKey(date, id), { ctrlKey: e.ctrlKey, shiftKey: e.shiftKey }),
     context: (date, id, at) => setMenu({ ids: [...sel.onItemContext(blockKey(date, id))], at }),
     removeTarget: removeTargetOf,
-    overlay: <BlockGroupMenu view={view} menu={menu} onClose={() => setMenu(null)} blocksOf={blocksOf} ctx={ctx} today={o.today} />
+    overlay: <BlockGroupMenu view={view} menu={menu} onClose={() => setMenu(null)} blocksOf={blocksOf} ctx={ctx} today={o.today} saveAs={o.saveAs === true} />
   }
 }

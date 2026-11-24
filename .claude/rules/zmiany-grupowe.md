@@ -15,6 +15,13 @@ paths:
   - "src/renderer/features/plan/groupDrag.ts"
   - "tests/unit/engine/group-drag.test.ts"
   - "tests/web/group-drag.test.ts"
+  - "src/shared/engine/saveAs.ts"
+  - "src/renderer/features/plan/saveAs.ts"
+  - "src/renderer/features/plan/SaveAsDialogs.tsx"
+  - "tests/unit/engine/save-as.test.ts"
+  - "tests/fs/save-as.test.ts"
+  - "tests/web/save-as.test.ts"
+  - "tests/e2e/save-as.spec.ts"
 ---
 
 # Zmiany grupowe bloków (D527–D531, ciąg Z – logika i zapis)
@@ -83,3 +90,15 @@ linii – moduł Z1 (`src/shared/groupText.ts`); tu tylko dane.
   trzymanie z podglądu miejsca upuszczenia – `groupPreviewAt`, T1776; chwycony, który zostaje – bez trzymania, T1767). `DayGrid`: `Lift.members`, dni grupy
   liczone przy pierwszym ruchu ponad próg (`countDragDays`, T1774), pasma `week-group-drop[data-of]` i przyciemnienie z oceny upuszczenia (`dragGoing` →
   `groupBands`, T1765) tylko przy zmianie kolumny, startu, Ctrl (`placedFor`, T1775); Esc grupy także przed progiem (T1771).
+
+## „Zapisz jako szablon / rutynę…” (N15, D615–D619)
+- Czyste – `engine/saveAs.ts`: `blocksToSave(plan, ids|null, { off, ofSeries })` → `take` (po planowanym starcie) i `skipped` (`seria`, `sesja`, `wykład`, `zjazd`,
+  `zdjęty` – zaparkowany / odwołany bez startu); `templateBlocksOf(take, plan, { date, templateId, version, mode, newId, taskTitle })` – pola bloku przez `planBlock`
+  (bez faktów, `task`, `requests`, `recorder`, historii; kroki `freshSteps`), blok tego szablonu (`isOfTemplate`) zachowuje id = `sourceId`, „Dołóż” – taki, który wersja ma, pomija
+  (`inTemplate`); kotwica → id w wersji / `session:<id>` sesji wersji / godzina z planu (`plannedStartMin`); `alongside` zawsze null (szablon nie ma grup). `savedTemplate`
+  = `withTemplateVersion` od `from` („Zastąp” zostawia `isSessionEntry`). `saveAsFrom` (D616: dzień ≥ jutro → dzień po nim), `savedDayTwice`, `routineStepsOf` (1–240 min, ≤ 40).
+- Okno – `plan/saveAs.ts`: `saveAsTemplate` – dzień czytany i liczony w turze (`countedDay`), jedna edycja szablonu; „Zastąp”, które zdejmuje blok na dobre – `withAttachments`
+  (`templateActions.ts`, odmowa przy `attachmentsUnread`); linia `showGroupLine(view)`; „Cofnij” `undoTemplateSave` – rekord jak po zapisie → przed; inaczej tylko wersja `from`
+  (przywrócona albo usunięta), gdy stoi jak zapisana, zmieniona – zostaje z komunikatem. `saveAsRoutine` / `undoRoutineSave` (rekord jak „Rutyny”, „Cofnij” – usunięcie, gdy bez zmian).
+  `SaveAsDialogs.tsx`: `SaveAsWindow` (`useDay(date)` – podgląd; zapis liczy od nowa), menu: `BlockGroupMenu saveAs` (`saveAsSource` – bloki jednego dnia, inaczej `SAVE_AS_DAYS_WHY`),
+  `useAxisGroup` / `useWeekGroup` `saveAs: true` tylko „Dziś” i `DayGrid` (nie szablon, „Agenda”, miesiąc); menu dnia – `DayMenu` w „Dziś”, `week-day-menu` w `DayGrid`.

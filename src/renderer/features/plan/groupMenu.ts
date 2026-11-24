@@ -96,6 +96,11 @@ export interface BlockMenuOn {
   cost: () => void
   /** „Przenieś na dzień…”: the window of the day. */
   moveTo: () => void
+  /**
+   * „Zapisz jako szablon…” / „Zapisz jako rutynę…” (N15, D615): the windows of the save – left out where there are none (a template's version,
+   * „Agenda”, the month); `why` – both off with that reason (blocks of several days).
+   */
+  saveAs?: { pick: (kind: 'template' | 'routine') => void; why?: string }
 }
 
 /** The title of the menu: „Zmień 4 bloki”. */
@@ -155,8 +160,8 @@ const checked = (values: boolean[]): { check?: 'all' | 'some' } => {
 /**
  * The entries of „Zmień N bloków” (D528) for the `blocks` selected: „Podkategoria” and „Wariant” (✓ for the value all of them have, „—” for some;
  * the variants of the one subcategory the blocks share), „Koszt…”, „Rutyna” (for the blocks of the kind „rutyna”), „Przesuń o…” (later / earlier
- * by 5, 15, 30, 60 min or a number of the hand), „Przenieś na dzień…”, „Odwołaj”, „Zaparkuj”, „Usuń” – a template has no cancelling, parking nor move
- * to a day. Nothing is forbidden (D72): the blocks a change does not concern are left by it and counted in the line.
+ * by 5, 15, 30, 60 min or a number of the hand), „Przenieś na dzień…”, „Odwołaj”, „Zaparkuj”, „Zapisz jako szablon…” and „Zapisz jako rutynę…”
+ * (N15 – where the screen gives `on.saveAs`), „Usuń” – a template has no cancelling, parking nor move to a day. Nothing is forbidden (D72): the blocks a change does not concern are left by it and counted in the line.
  */
 export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockMenuOn): MenuEntry[] {
   const categories = [...new Set(blocks.map((b) => b.categoryId))]
@@ -245,6 +250,11 @@ export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockM
       dayWhy ? { label: 'Odwołaj', disabled: dayWhy, testId: 'block-menu-cancel' } : { label: 'Odwołaj', onPick: () => on.action({ kind: 'cancel' }), testId: 'block-menu-cancel' },
       dayWhy ? { label: 'Zaparkuj', disabled: dayWhy, testId: 'block-menu-park' } : { label: 'Zaparkuj', onPick: () => on.action({ kind: 'park' }), testId: 'block-menu-park' }
     )
+  }
+  const save = on.saveAs
+  if (save) {
+    const entry = (kind: 'template' | 'routine', label: string, testId: string): MenuEntry => (save.why ? { label, disabled: save.why, testId } : { label, onPick: () => save.pick(kind), testId })
+    entries.push({ kind: 'separator' }, entry('template', 'Zapisz jako szablon…', 'block-menu-save-template'), entry('routine', 'Zapisz jako rutynę…', 'block-menu-save-routine'))
   }
   entries.push({ kind: 'separator' }, { label: 'Usuń', onPick: () => on.action({ kind: 'remove' }), testId: 'block-menu-remove' })
   return entries

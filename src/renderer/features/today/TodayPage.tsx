@@ -53,6 +53,7 @@ import { dayAxis } from '../plan/dayItems'
 import { menuCtxOf, type MenuState } from '../plan/groupMenu'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { useAxisGroup, type AxisTile } from '../plan/useAxisGroup'
+import { SaveAsWindow, type SaveAsOpen } from '../plan/SaveAsDialogs'
 import { renameInfo, useTileRename } from '../plan/tileRename'
 import { judgeBlocks } from '../plan/groupRun'
 import { rememberNewBlockCategory } from '../plan/lastCategory'
@@ -167,7 +168,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
   const [exchange, setExchange] = useState<{ block: PlanBlock; proposal: ExchangeProposal } | null>(null)
   // The exchange asked for a block of another day is no longer asked.
   useEffect(() => setExchange(null), [date])
-  const [dialog, setDialog] = useState<null | 'type' | 'copy' | { move: PlanBlock } | 'addType'>(null)
+  const [dialog, setDialog] = useState<null | 'type' | 'copy' | { move: PlanBlock } | 'addType' | { save: SaveAsOpen }>(null)
   // D365: the bottom edge of a running block dropped past the boundary – its cost waits for „Potwierdź” or „Anuluj” for 10 s,
   // nothing is written meanwhile; the confirmation is the same click again (`confirm`) to the same instant.
   const [pending, setPending] = useState<{ id: string; to: number; endMin: number; text: string; seq: number } | null>(null)
@@ -312,7 +313,8 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
     ctx: menuCtx,
     stateOf,
     where,
-    judge
+    judge,
+    saveAs: true
   })
   // N9: F2 on the one selected block or a double click on a tile's name – its name in place, saved as the panel's „Nazwa” saves it but for this day alone
   // (a block of a series asks no scope, D430); a block begun outside the plan, or one the axis does not draw, has no field.
@@ -672,6 +674,9 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
         <DayMenu
           items={[
             { label: 'Skopiuj ten dzień do…', onPick: () => setDialog('copy'), testId: 'day-copy' },
+            // N15 (D615): the whole plan of the day as a template's version from a date, or as a new routine.
+            { label: 'Zapisz jako szablon…', onPick: () => setDialog({ save: { kind: 'template', date, ids: null } }), testId: 'day-save-template' },
+            { label: 'Zapisz jako rutynę…', onPick: () => setDialog({ save: { kind: 'routine', date, ids: null } }), testId: 'day-save-routine' },
             ...(isToday && model.state.facts.snapshots.some((s) => s.reason === 'type')
               ? [{ label: `Dodaj bloki typu ${DAY_TYPE_NAMES[currentType].toLowerCase()}…`, onPick: () => setDialog('addType'), testId: 'day-add-type' }]
               : [])
@@ -913,6 +918,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
       {dialog === 'type' && <TypeChangeDialog model={model} names={names} isToday={isToday} onClose={() => setDialog(null)} />}
       {dialog === 'addType' && <TypeChangeDialog model={model} names={names} isToday onlyAdd onClose={() => setDialog(null)} />}
       {dialog === 'copy' && <CopyDayDialog model={model} today={today} onClose={() => setDialog(null)} />}
+      {dialog && typeof dialog === 'object' && 'save' in dialog && <SaveAsWindow open={dialog.save} view="today" onClose={() => setDialog(null)} />}
       {dialog && typeof dialog === 'object' && 'move' in dialog && <MoveDialog model={model} block={dialog.move} names={names} today={today} onClose={() => setDialog(null)} />}
       {group.overlay}
     </div>

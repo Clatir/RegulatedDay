@@ -55,6 +55,7 @@ import { DENIED_TEXT, dropOn, dropStart, dropStays, sameDrop, weekOnto, type Blo
 import { inParallelZone, tileAt } from '../plan/parallelDrag'
 import { undoEditToast } from '../today/dayActions'
 import { useWeekGroup, type WeekGroup } from './weekSelect'
+import { SaveAsWindow, type SaveAsOpen } from '../plan/SaveAsDialogs'
 import { blockKey, parseBlockKey } from '../plan/groupMenu'
 import { countDragDays, dragDayGroup, dragGoing } from '../plan/groupDrag'
 
@@ -182,6 +183,8 @@ export function DayGrid({
   const { rd, routines, requests, templates } = useData()
   // UX19 (P28): the right button on a day's heading – „Zastosuj szablon ▸” for that day, through the flow of „Zastosuj do…”.
   const [dayMenu, setDayMenu] = useState<{ date: string; at: { x: number; y: number } } | null>(null)
+  // N15 (D615): „Zapisz jako szablon / rutynę…” of the day's heading – the whole plan of that day.
+  const [saving, setSaving] = useState<SaveAsOpen | null>(null)
   const apply = useApplyFlow()
   const today = useData((s) => s.view?.today ?? '')
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -229,7 +232,7 @@ export function DayGrid({
   const cols = { gridTemplateColumns: `${AXIS_PX}px repeat(${days.length}, minmax(0, 1fr))` }
   const dates = useMemo(() => days.map((d) => d.date), [days])
   // D527, D528: the selection of many blocks over the days (Ctrl+click, Shift+click, Shift+arrows, Ctrl+A, Esc, the menu of the right button); Del asks once for all.
-  const group = useWeekGroup({ days, scope: `${mode}|${dates[0]}`, today, energy: rd.general.modules.energy, namesOf })
+  const group = useWeekGroup({ days, scope: `${mode}|${dates[0]}`, today, energy: rd.general.modules.energy, namesOf, saveAs: true })
   useDeleteSelected(group.removeTarget)
   // N9: F2 on the one selected block (Ctrl+click) or a double click on a block's name – its name in place; the key of a block is `blockKey(date, id)`.
   const byKey = useMemo(() => new Map(days.flatMap((d) => d.blocks.map((b): [string, HorizonBlock] => [blockKey(d.date, b.id), b]))), [days])
@@ -645,9 +648,15 @@ export function DayGrid({
           at={dayMenu.at}
           onClose={() => setDayMenu(null)}
           testId="week-day-menu"
-          items={[applyTemplateEntry(templates, apply.busy, (t) => void apply.start(t, [dayMenu.date]), 'week-day-menu-apply')]}
+          items={[
+            applyTemplateEntry(templates, apply.busy, (t) => void apply.start(t, [dayMenu.date]), 'week-day-menu-apply'),
+            { kind: 'separator' },
+            { label: 'Zapisz jako szablon…', onPick: () => setSaving({ kind: 'template', date: dayMenu.date, ids: null }), testId: 'week-day-menu-save-template' },
+            { label: 'Zapisz jako rutynę…', onPick: () => setSaving({ kind: 'routine', date: dayMenu.date, ids: null }), testId: 'week-day-menu-save-routine' }
+          ]}
         />
       )}
+      {saving && <SaveAsWindow open={saving} view="week" onClose={() => setSaving(null)} />}
       {apply.dialogs}
     </div>
   )
@@ -665,7 +674,7 @@ function ColumnHeading({ day, brightness, onContext }: { day: HorizonDay; bright
       type="button"
       onClick={() => openDay(day.date)}
       {...menuBind(onContext)}
-      title={`${WEEKDAY_FULL[index]} – otwórz plan dnia (prawy przycisk – szablon na ten dzień)`}
+      title={`${WEEKDAY_FULL[index]} – otwórz plan dnia (prawy przycisk – zastosuj szablon albo zapisz dzień jako szablon czy rutynę)`}
       data-testid={`week-day-${day.date}`}
       data-when={day.when}
       aria-current={today ? 'date' : undefined}
