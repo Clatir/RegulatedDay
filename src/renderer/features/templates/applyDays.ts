@@ -21,10 +21,10 @@ import { keptText } from '@shared/groupText'
 import type { Template } from '@shared/model/plan'
 import { logicalDayOf, logicalMinuteOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
-import { BROKEN_FILE_TEXT, editOf, outcomeFate, readDayFiles, trySaveWith, type EditSender, type SendState } from '../../store/data'
+import { BROKEN_FILE_TEXT, editOf, outcomeFate, readDayFiles, trySaveWith, useData, type EditSender, type SendState } from '../../store/data'
 import { plannedDay } from '../../store/day'
 import type { DayEdit } from '../../store/dayUndo'
-import { showGroupLine, UndoNotDone } from '../../store/groupLine'
+import { showGroupLine, UndoNotDone, type GroupView } from '../../store/groupLine'
 import { toast } from '../../store/ui'
 import { undoDayEdits } from '../calendar/dayGroup'
 
@@ -87,8 +87,8 @@ export async function readApplyDays(dates: readonly string[], at: number): Promi
     if (typeof p === 'string') return void unreadable.push(date)
     const begun = begunIds(p.facts)
     const off = new Set([...stayingIds(p.facts)].filter((id) => !begun.has(id)))
-    // The buffers of decompression (T2458) are no collision: the day lays them again after the template.
-    days.push({ date, plan: p.ctx.basePlan ?? p.ctx.plan, snapshot: p.ctx.snapshot, raw: p.file as ApplyDay['raw'], begun, off, runs: p.runs })
+    // The buffers of decompression (T2458) are no collision: the day lays them again after the template. The most blocks of a group – D476, T2958.
+    days.push({ date, plan: p.ctx.basePlan ?? p.ctx.plan, snapshot: p.ctx.snapshot, raw: p.file as ApplyDay['raw'], begun, off, runs: p.runs, parallelMax: useData.getState().rd.general.parallelMax })
   })
   return { days, unreadable }
 }
@@ -138,6 +138,16 @@ export interface DaysDone {
   regradeLater?: string[]
   /** Days whose points could not be counted again, and no later check will (T1961). */
   regradeFailed?: string[]
+  /** Blocks the days had already (the copy of a week, D632): not copied, no collision. */
+  already?: number
+  /** Blocks the days' logs took off (the copy of a week, T2953): not copied back. */
+  offDay?: number
+  /** Copies anchored to those, left out with them (T2953). */
+  offAnchored?: number
+  /** Blocks beside a first block of their group left out (T2956): „obok pominiętego”. */
+  beside?: number
+  /** Blocks beyond the limit of their group (D476, T2958): „grupa pełna”. */
+  full?: number
 }
 
 const none = (): DaysDone => ({ edits: [], days: 0, blocks: 0, cancelled: 0, skipped: 0, begun: 0, empty: 0, unreadable: [], read: 0, waiting: 0, refused: 0, left: noneLeft(), doneDays: [], asDone: 0, unscored: [], facts: [], closedDays: [], notSaved: [], deferred: [], regradeLater: [], regradeFailed: [] })
@@ -152,6 +162,14 @@ export interface DayChange {
   left?: LeftCount
   /** The blocks brought in as done (D547). */
   done?: string[]
+  /** Blocks the day had already (the copy of a week, D632). */
+  already?: number
+  /** Blocks the day's log took off (the copy of a week, T2953). */
+  offDay?: number
+  offAnchored?: number
+  /** Beside a first block left out (T2956), beyond the group's limit (T2958). */
+  beside?: number
+  full?: number
 }
 
 /** A day as the change made it: its edit (none – nothing to write) and what it did. */
@@ -194,6 +212,11 @@ export function tallyDays(rows: readonly DayRow[], out: readonly EditOutcome[], 
     }
     d.skipped += r.skipped ?? 0
     d.begun += r.begun ?? 0
+    if (r.already) d.already = (d.already ?? 0) + r.already
+    if (r.offDay) d.offDay = (d.offDay ?? 0) + r.offDay
+    if (r.offAnchored) d.offAnchored = (d.offAnchored ?? 0) + r.offAnchored
+    if (r.beside) d.beside = (d.beside ?? 0) + r.beside
+    if (r.full) d.full = (d.full ?? 0) + r.full
     for (const k of Object.keys(d.left) as Array<keyof LeftCount>) d.left[k] += r.left?.[k] ?? 0
   }
   return d
@@ -229,13 +252,18 @@ export function scoreFacts(d: DaysDone, r: Pick<TemplateApplyResult, 'facts'>): 
   return d
 }
 
-/** One edit of every day `change` rewrites (`via` – what sends it: `edit`, or a step that writes more with it). Null – nothing was sent (the toast said why). */
-async function changeDays(dates: readonly string[], change: (day: ApplyDay) => DayChange, at: number, via?: (rows: readonly DayRow[]) => EditSender): Promise<DaysDone | null> {
+/**
+ * One edit of every day `change` rewrites (`via` – what sends it: `edit`, or a step that writes more with it; `prepare` – what the change
+ * reads first in the same turn, the copy of a week its source days – T2944; a throw sends nothing and is said). Null – nothing was sent
+ * (the toast said why).
+ */
+export async function changeDays(dates: readonly string[], change: (day: ApplyDay) => DayChange, at: number, via?: (rows: readonly DayRow[]) => EditSender, prepare?: () => Promise<void>): Promise<DaysDone | null> {
   let rows: DayRow[] = []
   let unreadable: string[] = []
   const state: SendState = { afterSend: false }
   const out = await trySaveWith(
     async () => {
+      await prepare?.()
       const read = await readApplyDays(dates, at)
       unreadable = read.unreadable
       rows = read.days.map((day) => {
@@ -259,7 +287,7 @@ const blocksWord = (n: number) => countLabel(n, 'blok', 'bloki', 'bloków')
 const NOT_SAVED_WORD: Record<string, string> = { changed: 'zmieniony na innym komputerze', removed: 'usunięty na innym komputerze', behind: 'czeka na odpowiedź na wcześniejsze pytanie' }
 
 /** The tail of the line: days not read, waiting for an answer, refused, not saved (with why), waiting for the folder. */
-function tail(d: Pick<DaysDone, 'unreadable' | 'waiting' | 'refused'> & Partial<Pick<DaysDone, 'notSaved' | 'deferred'>>): string {
+export function daysTail(d: Pick<DaysDone, 'unreadable' | 'waiting' | 'refused'> & Partial<Pick<DaysDone, 'notSaved' | 'deferred'>>): string {
   const parts: string[] = []
   if (d.waiting) parts.push(`${daysWord(d.waiting)} ${plural(d.waiting, 'czeka', 'czekają', 'czeka')} na odpowiedź`)
   if (d.refused) parts.push(`${daysWord(d.refused)} ${plural(d.refused, 'niezapisany', 'niezapisane', 'niezapisanych')}`)
@@ -270,6 +298,11 @@ function tail(d: Pick<DaysDone, 'unreadable' | 'waiting' | 'refused'> & Partial<
   }
   if (d.deferred?.length) parts.push(`${daysWord(d.deferred.length)} ${plural(d.deferred.length, 'czeka', 'czekają', 'czeka')} na folder – zaliczenia dopiszą się po zapisie`)
   return parts.map((p) => ` · ${p}`).join('')
+}
+
+/** The blocks of a group left out (T2956, T2958), in the words of the line: „pominięto 1 (obok pominiętego)”, „pominięto 2 (grupa pełna)”. */
+export function groupParts(d: Partial<Pick<DaysDone, 'beside' | 'full'>>): string[] {
+  return [d.beside ? `pominięto ${d.beside} (obok pominiętego)` : '', d.full ? `pominięto ${d.full} (grupa pełna)` : ''].filter(Boolean)
 }
 
 /** Why template blocks were left out, in the words of the line (D541, D547–D549). */
@@ -291,45 +324,48 @@ const closedText = (n: number): string => `${daysWord(n)} ${plural(n, 'był zamk
  */
 export function appliedText(
   name: string,
-  d: Pick<DaysDone, 'days' | 'blocks' | 'cancelled' | 'skipped' | 'unreadable' | 'waiting' | 'refused' | 'left' | 'asDone'> & Partial<Pick<DaysDone, 'unscored' | 'closedDays' | 'notSaved' | 'deferred'>>
+  d: Pick<DaysDone, 'days' | 'blocks' | 'cancelled' | 'skipped' | 'unreadable' | 'waiting' | 'refused' | 'left' | 'asDone'> & Partial<Pick<DaysDone, 'unscored' | 'closedDays' | 'notSaved' | 'deferred' | 'beside' | 'full'>>
 ): string {
   const done = d.asDone ? ` (w tym ${d.asDone} ${plural(d.asDone, 'zrealizowany', 'zrealizowane', 'zrealizowanych')})` : ''
   const parts = [`dodano ${blocksWord(d.blocks)}${done}`]
   if (d.cancelled) parts.push(`odwołano ${d.cancelled}`)
   if (d.skipped) parts.push(`pominięto ${d.skipped} (kolizja)`)
   for (const k of Object.keys(LEFT_WORD) as Array<keyof LeftCount>) if (d.left[k]) parts.push(`pominięto ${d.left[k]} (${LEFT_WORD[k]})`)
+  parts.push(...groupParts(d))
   if (d.unscored?.length) parts.push(unscoredText(d.unscored))
   if (d.closedDays?.length) parts.push(closedText(d.closedDays.length))
-  return `„${name}” – ${daysWord(d.days)}: ${parts.join(' · ')}${tail(d)}`
+  return `„${name}” – ${daysWord(d.days)}: ${parts.join(' · ')}${daysTail(d)}`
 }
 
 /** The line after „Odwołaj”: „„Trening” odwołany – 3 dni: 9 bloków · 2 zostały – już trwają”. */
 export function revokedText(name: string, d: Pick<DaysDone, 'days' | 'blocks' | 'begun' | 'unreadable' | 'waiting' | 'refused'>): string {
   const begun = d.begun ? ` · ${d.begun} ${plural(d.begun, 'został – już trwa', 'zostały – już trwają', 'zostało – już trwają')}` : ''
-  return `„${name}” odwołany – ${daysWord(d.days)}: ${blocksWord(d.blocks)}${begun}${tail(d)}`
+  return `„${name}” odwołany – ${daysWord(d.days)}: ${blocksWord(d.blocks)}${begun}${daysTail(d)}`
 }
 
 /** Why nothing changed („Zastosuj”), in the window's corner. */
 export function nothingAppliedText(d: DaysDone): string {
-  if (d.waiting || d.refused || d.notSaved?.length) return `Nic nie zapisano${tail(d)}`
-  if (!d.read) return `Nie da się teraz odczytać ${d.unreadable.length === 1 ? 'tego dnia' : 'tych dni'}${tail(d)}`
-  if (d.empty === d.read) return `Szablon nie ma bloków na ${d.read === 1 ? 'ten dzień' : 'te dni'}${tail(d)}`
+  if (d.waiting || d.refused || d.notSaved?.length) return `Nic nie zapisano${daysTail(d)}`
+  if (!d.read) return `Nie da się teraz odczytać ${d.unreadable.length === 1 ? 'tego dnia' : 'tych dni'}${daysTail(d)}`
+  if (d.empty === d.read) return `Szablon nie ma bloków na ${d.read === 1 ? 'ten dzień' : 'te dni'}${daysTail(d)}`
   const why = [
     d.skipped ? `bloki szablonu kolidują z planem (${d.skipped})` : '',
     d.left.past ? `bloki szablonu już minęły (${d.left.past})` : '',
     d.left.ran ? `w tym czasie trwały inne bloki (${d.left.ran})` : '',
-    d.left.outOfDay ? `od teraz nie mieszczą się w dobie (${d.left.outOfDay})` : ''
+    d.left.outOfDay ? `od teraz nie mieszczą się w dobie (${d.left.outOfDay})` : '',
+    d.beside ? `stoją obok pominiętego bloku (${d.beside})` : '',
+    d.full ? `ich grupa jest pełna (${d.full})` : ''
   ].filter(Boolean)
-  if (why.length) return `Nic nie dodano – ${why.join(' · ')}${tail(d)}`
-  return `${d.read === 1 ? 'Ten dzień ma' : 'Te dni mają'} już cały szablon${tail(d)}`
+  if (why.length) return `Nic nie dodano – ${why.join(' · ')}${daysTail(d)}`
+  return `${d.read === 1 ? 'Ten dzień ma' : 'Te dni mają'} już cały szablon${daysTail(d)}`
 }
 
 /** Why nothing changed („Odwołaj”). */
 export function nothingRevokedText(d: DaysDone): string {
-  if (d.waiting || d.refused) return `Nic nie zapisano${tail(d)}`
-  if (!d.read) return `Nie da się teraz odczytać ${d.unreadable.length === 1 ? 'tego dnia' : 'tych dni'}${tail(d)}`
-  if (d.begun) return `Nic nie odwołano – bloki szablonu już trwają (${d.begun})${tail(d)}`
-  return `${d.read === 1 ? 'W tym dniu' : 'W tych dniach'} nie ma bloków tego szablonu${tail(d)}`
+  if (d.waiting || d.refused) return `Nic nie zapisano${daysTail(d)}`
+  if (!d.read) return `Nie da się teraz odczytać ${d.unreadable.length === 1 ? 'tego dnia' : 'tych dni'}${daysTail(d)}`
+  if (d.begun) return `Nic nie odwołano – bloki szablonu już trwają (${d.begun})${daysTail(d)}`
+  return `${d.read === 1 ? 'W tym dniu' : 'W tych dniach'} nie ma bloków tego szablonu${daysTail(d)}`
 }
 
 /**
@@ -337,7 +373,7 @@ export function nothingRevokedText(d: DaysDone): string {
  * waits for its answer (never sent twice – the answer decides), nothing was to be done, or the result is unknown after the send. False –
  * nothing was written for good (refused, a change not saved and taken back whole, or not sent): the window stays for another try.
  */
-export function tell(d: DaysDone | null, line: (d: DaysDone) => string, why: (d: DaysDone) => string, undo: (d: DaysDone) => Promise<string | void> = (x) => undoDayEdits(x.edits)): boolean {
+export function tell(d: DaysDone | null, line: (d: DaysDone) => string, why: (d: DaysDone) => string, undo: (d: DaysDone) => Promise<string | void> = (x) => undoDayEdits(x.edits), view: GroupView = 'template'): boolean {
   if (!d) return false
   if (d.unknown) return true
   if (!d.days) {
@@ -345,7 +381,7 @@ export function tell(d: DaysDone | null, line: (d: DaysDone) => string, why: (d:
     toast(why(d), d.waiting || failed ? 'error' : 'info', 8000)
     return d.waiting > 0 || !failed
   }
-  showGroupLine('template', { text: line(d), undo: () => undo(d) })
+  showGroupLine(view, { text: line(d), undo: () => undo(d) })
   // A day not saved: the days' window stays with its choice for another „Zastosuj”.
   return !d.notSaved?.length
 }
@@ -480,7 +516,7 @@ export async function applyToDays(t: Template, dates: readonly string[], mode: A
     (day) => {
       const j = judgeApply(t, day, timing)
       const r = applyTemplate(t, day, mode, j)
-      return { raw: r.raw as RawRecord, blocks: r.added, cancelled: r.cancelled, skipped: r.skipped, left: r.left, done: r.done, empty: j.total === 0 }
+      return { raw: r.raw as RawRecord, blocks: r.added, cancelled: r.cancelled, skipped: r.skipped, left: r.left, done: r.done, empty: j.total === 0, beside: r.beside, full: r.full }
     },
     at,
     (rows) => {

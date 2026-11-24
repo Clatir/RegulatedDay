@@ -34,6 +34,8 @@ import { dayPlan, sessionBlock, sessionBlockId, templateBlockId, templateDayBloc
 import type { DayContext, DayState } from './day'
 import { OPEN, type DayFacts } from './facts'
 import { gridOf, logicalSpan } from './grid'
+import { groupRootOf } from './parallel'
+import { DEFAULT_GENERAL } from '../model/rd'
 import type { TimerDraft } from './timer'
 
 /** A run of a block in the foreground on the axis of the plan (logical minutes; a run still going – to infinity). */
@@ -55,6 +57,8 @@ export interface ApplyDay {
   off?: ReadonlySet<string>
   /** The runs of the day's blocks in the foreground (`foregroundRuns`): a block gone by over one of them is not added as done (D547). */
   runs?: readonly DayRun[]
+  /** The most blocks of a group at once (`rd.general.parallelMax`, D476); left out – the default. */
+  parallelMax?: number
 }
 
 /** How „Zastosuj” takes today and the days gone by (D546–D549). A day after `today` takes the template as it is. */
@@ -90,6 +94,8 @@ export interface ApplyJudged {
   total: number
   /** The template's blocks left out before the plan is asked, by why (D547–D549). */
   left: LeftCount
+  /** Of them, the blocks beside a first block of their group left out then (T2956). */
+  beside: number
 }
 
 /** The version of `t` a day takes: the one in force on it, the first one for a day before it. */
@@ -127,14 +133,18 @@ export function templateBlocksFor(t: Template, version: TemplateVersion, day: Pi
   return out
 }
 
-/** Start and end of each block on the axis of the plan (anchored – after the end of its anchor); null – no place. */
-function spansOf(blocks: readonly PlanBlock[]): Map<string, { start: number; end: number } | null> {
+/**
+ * Start and end of each block on the axis of the plan (anchored – after the end of its anchor; beside another – at its group's first block's
+ * start, its own length: D492, T2951 – never an hour of its own); null – no place.
+ */
+export function spansOf(blocks: readonly PlanBlock[]): Map<string, { start: number; end: number } | null> {
   const byId = new Map(blocks.map((b) => [b.id, b]))
   const memo = new Map<string, { start: number; end: number } | null>()
   const span = (b: PlanBlock, depth: number): { start: number; end: number } | null => {
     if (memo.has(b.id)) return memo.get(b.id)!
-    let start: number | null = b.startMin
-    if (start == null && b.anchor && depth < 20) {
+    const root = depth < 20 ? groupRootOf(byId, b.id) : null
+    let start: number | null = root != null ? (span(byId.get(root)!, depth + 1)?.start ?? null) : b.startMin
+    if (root == null && start == null && b.anchor && depth < 20) {
       const a = byId.get(b.anchor)
       const s = a ? span(a, depth + 1) : null
       start = s ? s.end : null
@@ -193,13 +203,15 @@ export function anchoredClosure(blocks: readonly PlanBlock[], seeds: Iterable<st
   return out
 }
 
-/** A block gone by as `takeGoneBy` takes it: its hours on the axis of the plan, whether it is in the background, its anchor. */
+/** A block gone by as `takeGoneBy` takes it: its hours on the axis of the plan, whether it is in the background, its anchor, its group. */
 export interface GoneByBlock {
   id: string
   start: number
   end: number
   bg: boolean
   anchor: string | null
+  /** The first block of its group of parallel blocks (D492; itself – none): the blocks of one group stand in one time, never on each other (T2951). */
+  group?: string
 }
 
 /**
@@ -211,9 +223,12 @@ export function takeGoneBy(blocks: readonly GoneByBlock[], runs: readonly DayRun
   const busy = [...runs]
   const taken: string[] = []
   const ran = new Set<string>()
+  const groupOf = new Map(blocks.map((b) => [b.id, b.group ?? b.id]))
   const order = blocks.map((b, i) => ({ b, i })).sort((x, y) => x.b.start - y.b.start || x.i - y.i)
   for (const { b } of order) {
-    if ((b.anchor && ran.has(b.anchor)) || (!b.bg && meets(busy, b.id, b))) {
+    // A block of its own group (taken before it, or its run) is no block on it (T2951).
+    const others = busy.filter((r) => (groupOf.get(r.block) ?? r.block) !== (b.group ?? b.id))
+    if ((b.anchor && ran.has(b.anchor)) || (!b.bg && meets(others, b.id, b))) {
       ran.add(b.id)
       continue
     }
@@ -253,36 +268,75 @@ function asTheDayHasThem(cands: readonly PlanBlock[], day: ApplyDay): PlanBlock[
   return cands.map((b) => inPlan.get(b.id) ?? restored.get(b.id) ?? b)
 }
 
+/** The first block of the group of `id` among `linked` (D492, T1166), or `id` itself – a block of no group. */
+const rootIn = (linked: ReadonlyMap<string, PlanBlock>, id: string): string => groupRootOf(linked, id) ?? id
+
 /**
- * The template's missing blocks as the timing puts them (D546–D549): moved „od teraz” (today; `moved`); those that stay out – outside the
- * day once moved, gone by under „Nie dodawaj minionych”, gone by over a real run of another block in the foreground – each with what is
- * anchored to it, for the same reason (it has no place without it); `done` – the blocks gone by that may go in as done. Two of them on each
- * other are judged once the plan has taken them (`applyTemplate` – `takeGoneBy` over the blocks that go in only).
+ * Whether the group `root` stands in the plan of the day after the change without its first block (T2956): a block of the plan of that group,
+ * still in it (not taken off by the log), is there – a block beside the first block that does not come in joins it (`groupRootOf` makes it
+ * the group's first, T1166).
  */
-function timed(cands: readonly PlanBlock[], missing: readonly PlanBlock[], day: ApplyDay, timing: ApplyTiming | null): { blocks: PlanBlock[]; done: Set<string>; moved: Set<string>; left: LeftCount } {
+function groupStands(day: ApplyDay, linked: ReadonlyMap<string, PlanBlock>, root: string): boolean {
+  return day.plan.some((p) => !day.off?.has(p.id) && p.id !== root && rootIn(linked, p.id) === root)
+}
+
+/**
+ * The template's missing blocks as the timing puts them (D546–D549): moved „od teraz” (today; `moved` – a block beside another moves with its
+ * group's first block, never by itself – T2951); those that stay out – outside the day once moved, gone by under „Nie dodawaj minionych”, gone
+ * by over a real run of another block in the foreground – each with what is anchored to it, for the same reason (it has no place without
+ * it), and the blocks beside it „obok pominiętego” (`beside`, T2956 – unless their group stands in the plan); `done` – the blocks gone by that
+ * may go in as done. Two of them on each other are judged once the plan has taken them (`applyTemplate` – `takeGoneBy` over the blocks that
+ * go in only).
+ */
+function timed(cands: readonly PlanBlock[], missing: readonly PlanBlock[], day: ApplyDay, timing: ApplyTiming | null): { blocks: PlanBlock[]; done: Set<string>; moved: Set<string>; left: LeftCount; beside: number } {
   const left = noneLeft()
   const moved = new Set<string>()
-  if (!timing || day.date > timing.today) return { blocks: [...missing], done: new Set(), moved, left }
+  if (!timing || day.date > timing.today) return { blocks: [...missing], done: new Set(), moved, left, beside: 0 }
   const isToday = day.date === timing.today
   let blocks = [...missing]
+  const linkedOf = (list: readonly PlanBlock[]) => new Map([...day.plan, ...list].map((b) => [b.id, b]))
+  const member = (linked: ReadonlyMap<string, PlanBlock>, b: PlanBlock): boolean => groupRootOf(linked, b.id) != null
   if (isToday && timing.hours === 'now') {
-    // The offset of the whole template (its blocks already in the plan too), so one apply after another keeps it.
-    const starts = cands.filter(movesWithNow).map((b) => b.startMin!)
+    // The offset of the whole template (its blocks already in the plan too), so one apply after another keeps it; a block beside another has
+    // the time of its group's first one (T2951) – it neither sets the offset nor moves by itself.
+    const all = new Map([...day.plan, ...cands].map((b) => [b.id, b]))
+    const starts = cands.filter((b) => movesWithNow(b) && !member(all, b)).map((b) => b.startMin!)
     const offset = starts.length ? timing.nowMin - Math.min(...starts) : 0
     if (offset) {
+      const linked = linkedOf(blocks)
       blocks = blocks.map((b) => {
-        if (!movesWithNow(b)) return b
+        if (!movesWithNow(b) || member(linked, b)) return b
         moved.add(b.id)
         return { ...b, startMin: b.startMin! + offset }
       })
-      for (const id of anchoredClosure(blocks, [...moved])) moved.add(id)
+      // What follows a moved block – anchored to it, beside it – has another hour too.
+      const after = linkedOf(blocks)
+      for (let grew = true, depth = 0; grew && depth < 20; depth++) {
+        grew = false
+        const follow = [...anchoredClosure(blocks, [...moved]), ...blocks.filter((b) => member(after, b) && moved.has(rootIn(after, b.id))).map((b) => b.id)]
+        for (const id of follow) {
+          if (moved.has(id)) continue
+          moved.add(id)
+          grew = true
+        }
+      }
     }
   }
   const spans = spansOf([...day.plan, ...blocks])
-  const why = new Map<string, LeftWhy>()
-  /** What `ids` leave out leaves out what is anchored to them too, for the same reason. */
+  const linked = linkedOf(blocks)
+  const why = new Map<string, LeftWhy | 'beside'>()
+  /** What `ids` leave out leaves out what is anchored to them, for the same reason; the blocks beside them – „obok pominiętego” (T2956). */
   const leave = (ids: Iterable<string>, w: LeftWhy) => {
     for (const id of anchoredClosure(blocks, ids)) if (!why.has(id)) why.set(id, w)
+    for (let grew = true, depth = 0; grew && depth < 20; depth++) {
+      grew = false
+      const out = blocks.filter((b) => !why.has(b.id) && member(linked, b) && why.has(rootIn(linked, b.id)) && !groupStands(day, linked, rootIn(linked, b.id))).map((b) => b.id)
+      for (const id of anchoredClosure(blocks, out)) {
+        if (why.has(id)) continue
+        why.set(id, 'beside')
+        grew = true
+      }
+    }
   }
   leave(
     blocks.filter((b) => {
@@ -293,7 +347,7 @@ function timed(cands: readonly PlanBlock[], missing: readonly PlanBlock[], day: 
   )
   const goneBy = blocks.flatMap((b): GoneByBlock[] => {
     const s = spans.get(b.id)
-    return s && !why.has(b.id) && (!isToday || s.end <= timing.nowMin) ? [{ id: b.id, ...s, bg: inBackground(b, day.snapshot), anchor: b.anchor }] : []
+    return s && !why.has(b.id) && (!isToday || s.end <= timing.nowMin) ? [{ id: b.id, ...s, bg: inBackground(b, day.snapshot), anchor: b.anchor, group: rootIn(linked, b.id) }] : []
   })
   const done = new Set<string>()
   if (timing.past === 'skip') leave(goneBy.map((b) => b.id), 'past')
@@ -302,8 +356,12 @@ function timed(cands: readonly PlanBlock[], missing: readonly PlanBlock[], day: 
     leave(goneBy.filter((b) => !b.bg && meets(runs, b.id, b)).map((b) => b.id), 'ran')
     for (const b of goneBy) if (!why.has(b.id)) done.add(b.id)
   }
-  for (const w of why.values()) left[w]++
-  return { blocks: blocks.filter((b) => !why.has(b.id)), done, moved, left }
+  let beside = 0
+  for (const w of why.values()) {
+    if (w === 'beside') beside++
+    else left[w]++
+  }
+  return { blocks: blocks.filter((b) => !why.has(b.id)), done, moved, left, beside }
 }
 
 /**
@@ -314,12 +372,22 @@ function timed(cands: readonly PlanBlock[], missing: readonly PlanBlock[], day: 
 export function judgeApply(t: Template, day: ApplyDay, timing: ApplyTiming | null = null): ApplyJudged {
   const version = versionForDay(t, day.date)
   const cands = version ? templateBlocksFor(t, version, day) : []
+  return judgeCands(cands, day, timing, day.plan.some((b) => isOfTemplate(b, day.date, t.id)))
+}
+
+/**
+ * Blocks to bring into a day (a template's – `judgeApply`, a week's copies – `weekCopy.ts`, T2940) judged against its plan: one not in the
+ * plan, not moved away from the day nor begun is missing; what each missing one overlaps at the hours `timing` gives (a block beside another
+ * at its group's time – T2951). A block of the plan of the block's own group is no collision (T2950): the group's limit is judged when the
+ * blocks come in (`takeIn`, T2958). `ofTemplate` – the day has blocks of this template already (it fills the gaps without asking).
+ */
+export function judgeCands(cands: readonly PlanBlock[], day: ApplyDay, timing: ApplyTiming | null, ofTemplate: boolean): ApplyJudged {
   const inPlan = new Set(day.plan.map((b) => b.id))
   // Moved to another day: the block is there, not here – not brought back. Begun and then removed (D336) – not brought back either.
   const movedTo = dayRaw(day.raw, day.date).movedTo
   const away = new Set(isRaw(movedTo) ? Object.keys(movedTo) : [])
   const shown = asTheDayHasThem(cands, day)
-  const { blocks: missingBlocks, done, moved, left } = timed(
+  const { blocks: missingBlocks, done, moved, left, beside } = timed(
     shown,
     shown.filter((b) => !inPlan.has(b.id) && !away.has(b.id) && !day.begun.has(b.id)),
     day,
@@ -327,21 +395,24 @@ export function judgeApply(t: Template, day: ApplyDay, timing: ApplyTiming | nul
   )
   const standing = day.plan.filter((p) => !day.off?.has(p.id))
   const spans = spansOf([...day.plan, ...missingBlocks])
+  const linked = new Map([...day.plan, ...missingBlocks].map((b) => [b.id, b]))
   const missing = missingBlocks.map((block) => {
     const s = spans.get(block.id)
     const asDone = done.has(block.id)
+    const group = rootIn(linked, block.id)
     const x = { block, done: asDone, moved: moved.has(block.id), span: s ?? null, bg: inBackground(block, day.snapshot) }
     if (!s || inBackground(block, day.snapshot)) return { ...x, clash: [] }
     const clash = standing.filter((p) => {
       const q = spans.get(p.id)
-      return !!q && !inBackground(p, day.snapshot) && !(asDone && day.begun.has(p.id)) && q.start < s.end && s.start < q.end
+      return !!q && !inBackground(p, day.snapshot) && !(asDone && day.begun.has(p.id)) && rootIn(linked, p.id) !== group && q.start < s.end && s.start < q.end
     })
     return { ...x, clash }
   })
-  // A block gone by that „Nadpisz plan” would take and that still stays out – on another one gone by (`takeIn`) – asks nothing: either
-  // answer leaves it out (T1957).
-  const doomed = takeIn(missing, day, 'overwrite').ran
-  return { date: day.date, ofTemplate: day.plan.some((b) => isOfTemplate(b, day.date, t.id)), missing: missing.map((x) => ({ ...x, doomed: doomed.has(x.block.id) })), total: cands.length, left }
+  // A block that „Nadpisz plan” would leave out anyway – on another one gone by (`takeIn`), beside a first block that does not come in, beyond
+  // its group's limit – asks nothing: either answer leaves it out (T1957, T2956, T2958).
+  const o = takeIn(missing, day, 'overwrite')
+  const doomed = new Set([...o.ran, ...o.beside, ...o.full])
+  return { date: day.date, ofTemplate, missing: missing.map((x) => ({ ...x, doomed: doomed.has(x.block.id) })), total: cands.length, left, beside }
 }
 
 /** The day asks „Uzupełnij luki czy nadpisz plan?” (D541): it has no blocks of the template and one of them collides. */
@@ -357,17 +428,26 @@ export interface Applied {
   skipped: number
   /** Template blocks left out before the plan was asked (`ApplyJudged.left`). */
   left: LeftCount
+  /** Blocks beside a first block of their group left out (T2956): „obok pominiętego”. */
+  beside: number
+  /** Blocks beyond the limit of their group (`parallelMax`, D476, T2958): „grupa pełna”. */
+  full: number
   /** The blocks brought in gone by, as done (D547): their facts (`templateDoneDrafts`) go with the file, in one step of the main process. */
   done: string[]
+  /** The blocks brought into the plan (their ids). */
+  taken: string[]
 }
 
 /**
  * Which of the missing blocks go in in `mode` – one rule for the file (`applyTemplate`) and for the question (`judgeApply`): those that fit,
  * in „Nadpisz” also those whose every colliding block may leave (neither it nor what is anchored to it has begun or is of the day's own
  * layers – `leaving`); a block anchored to one that will not be in the plan is left out too; of the blocks gone by that go in, one on another
- * taken before it (`takeGoneBy`, D547) stays out with what is anchored to it (`ran`).
+ * taken before it (`takeGoneBy`, D547 – a block of its own group is none) stays out with what is anchored to it (`ran`). A block beside a first
+ * block that does not come in stays out (`beside`, T2956) – unless its group stands in the plan; then each group takes no more than its limit,
+ * its blocks of the plan counted as `parallelDrop` counts them (also taken off by the log), the first block first (`full`, T2958) – a block
+ * of its own group is never cancelled for it.
  */
-function takeIn(missing: ApplyJudged['missing'], day: ApplyDay, mode: ApplyMode): { take: Set<string>; ran: Set<string>; leaving: Map<string, PlanBlock[]> } {
+function takeIn(missing: ApplyJudged['missing'], day: ApplyDay, mode: ApplyMode): { take: Set<string>; ran: Set<string>; beside: Set<string>; full: Set<string>; leaving: Map<string, PlanBlock[]> } {
   const leaving = new Map<string, PlanBlock[]>()
   const mayCancel = (c: PlanBlock): boolean => {
     if (!leaving.has(c.id)) leaving.set(c.id, [c, ...anchoredTo(day.plan, c.id)])
@@ -378,12 +458,40 @@ function takeIn(missing: ApplyJudged['missing'], day: ApplyDay, mode: ApplyMode)
   const byId = new Set(missing.map((x) => x.block.id))
   const inPlan = new Set(day.plan.map((b) => b.id))
   const blocks = missing.map((x) => x.block)
+  const linked = new Map([...day.plan, ...blocks].map((b) => [b.id, b]))
   const gone = [...missing.filter((x) => !take.has(x.block.id)).map((x) => x.block.id), ...blocks.flatMap((b) => (b.anchor && !byId.has(b.anchor) && !inPlan.has(b.anchor) ? [b.anchor] : []))]
   for (const id of anchoredClosure(blocks, gone)) take.delete(id)
-  const goneBy = missing.flatMap((x): GoneByBlock[] => (x.done && x.span && take.has(x.block.id) ? [{ id: x.block.id, ...x.span, bg: x.bg, anchor: x.block.anchor }] : []))
+  const goneBy = missing.flatMap((x): GoneByBlock[] => (x.done && x.span && take.has(x.block.id) ? [{ id: x.block.id, ...x.span, bg: x.bg, anchor: x.block.anchor, group: rootIn(linked, x.block.id) }] : []))
   const ran = new Set<string>()
   for (const id of anchoredClosure(blocks, takeGoneBy(goneBy, day.runs ?? []).ran)) if (take.delete(id)) ran.add(id)
-  return { take, ran, leaving }
+  // Beside a first block that does not come in (T2956): out „obok pominiętego”, with what is anchored to it – unless the group stands in the plan.
+  const standingRoot = (root: string): boolean => (inPlan.has(root) && !day.off?.has(root)) || groupStands(day, linked, root)
+  const beside = new Set<string>()
+  for (let grew = true, depth = 0; grew && depth < 20; depth++) {
+    grew = false
+    const out = blocks.filter((b) => take.has(b.id) && groupRootOf(linked, b.id) != null && !take.has(rootIn(linked, b.id)) && !standingRoot(rootIn(linked, b.id))).map((b) => b.id)
+    for (const id of anchoredClosure(blocks, out)) {
+      if (!take.delete(id)) continue
+      beside.add(id)
+      grew = true
+    }
+  }
+  // The group's limit (D476, T2958): its blocks of the plan (all of them, as a drop counts them), then the ones that come in – its first first.
+  const max = day.parallelMax ?? DEFAULT_GENERAL.parallelMax
+  const count = new Map<string, number>()
+  for (const p of day.plan) count.set(rootIn(linked, p.id), (count.get(rootIn(linked, p.id)) ?? 0) + 1)
+  const ordered = [...blocks].sort((a, b) => Number(groupRootOf(linked, a.id) != null) - Number(groupRootOf(linked, b.id) != null))
+  const over: string[] = []
+  for (const b of ordered) {
+    if (!take.has(b.id)) continue
+    const root = rootIn(linked, b.id)
+    const n = (count.get(root) ?? 0) + 1
+    count.set(root, n)
+    if (n > max) over.push(b.id)
+  }
+  const full = new Set<string>()
+  for (const id of anchoredClosure(blocks, over)) if (take.delete(id)) full.add(id)
+  return { take, ran, beside, full, leaving }
 }
 
 /**
@@ -392,9 +500,17 @@ function takeIn(missing: ApplyJudged['missing'], day: ApplyDay, mode: ApplyMode)
  * gave it another hour. A block the snapshot does not have (a copy) is written into the file.
  */
 export function applyTemplate(t: Template, day: ApplyDay, mode: ApplyMode, judged = judgeApply(t, day)): Applied {
+  return applyJudged(day, mode, judged)
+}
+
+/**
+ * The day's file after the blocks `judged` (`judgeCands`) are brought in in `mode` – the one rule of „Zastosuj” and of the copy of a week (T2940).
+ * A block beside another is written as it is (its `alongside` – `groupRootOf` finds its group, T1166), at its group's start (T2951).
+ */
+export function applyJudged(day: ApplyDay, mode: ApplyMode, judged: ApplyJudged): Applied {
   const asSnap = new Set(day.snapshot.blocks.map((b) => b.id))
   const m = asksMode(judged) ? mode : 'fill'
-  const { take, ran, leaving } = takeIn(judged.missing, day, m)
+  const { take, ran, beside, full, leaving } = takeIn(judged.missing, day, m)
   const byId = new Map(judged.missing.map((x) => [x.block.id, x]))
   const left = { ...judged.left, ran: judged.left.ran + ran.size }
   // Cancelled only for what is taken in the end.
@@ -407,14 +523,25 @@ export function applyTemplate(t: Template, day: ApplyDay, mode: ApplyMode, judge
   let raw = dayRaw(day.raw, day.date)
   for (const id of cancel) raw = setCancelled(raw, id, true)
   for (const id of take) {
-    const { block: b, moved } = byId.get(id)!
+    const { block: found, moved, span } = byId.get(id)!
+    const b = found.alongside != null && found.startMin != null && span ? { ...found, startMin: span.start } : found
     // Cancelled before (a block of the snapshot, or a copy „Nadpisz” / „Odwołaj” left in the file), a session answered „nie”: back as
     // the day had it – only then is `cancelled` written.
     raw = backInFile(raw, b)
     if (!asSnap.has(b.id) || moved) raw = putBlock(raw, b)
   }
   const done = judged.missing.filter((x) => x.done && take.has(x.block.id)).map((x) => x.block.id)
-  return { raw, added: take.size, cancelled: off.size, skipped: judged.missing.length - take.size - ran.size, left, done }
+  return {
+    raw,
+    added: take.size,
+    cancelled: off.size,
+    skipped: judged.missing.length - take.size - ran.size - beside.size - full.size,
+    left,
+    beside: judged.beside + beside.size,
+    full: full.size,
+    done,
+    taken: [...take]
+  }
 }
 
 /** Why a block asked to be done was not (D547): over a run, begun or taken off, not gone by now, not in the plan. */
@@ -453,7 +580,7 @@ export function templateDoneDrafts(
     const f = state.facts.blocks.get(id)
     const why: DoneSkipWhy | null = !info?.inPlan || !s ? 'notInPlan' : f?.startedAt != null || f?.parkedAt != null || f?.cancelledAt != null ? 'begun' : s.end > nowMin ? 'notPast' : null
     if (why) skipped.push({ id, why })
-    else cands.push({ id, ...s!, bg: info!.bg, anchor: plan.get(id)?.anchor ?? null })
+    else cands.push({ id, ...s!, bg: info!.bg, anchor: plan.get(id)?.anchor ?? null, group: groupRootOf(plan, id) ?? id })
   }
   const t = takeGoneBy(cands, foregroundRuns(state.facts, date))
   for (const id of t.ran) skipped.push({ id, why: 'ran' })

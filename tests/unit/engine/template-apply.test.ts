@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { marketDay } from '@shared/calendar/holidays'
-import { createDay, dayPlan, sessionBlockId, templateBlockId } from '@shared/engine/createDay'
+import { createDay, dayPlan, sessionBlockId, templateBlockId, templateDayBlocks } from '@shared/engine/createDay'
 import { anchoredClosure, applyTemplate, asksMode, backInFile, foregroundRuns, judgeApply, revokeTemplate, takeGoneBy, templateDoneUndo, versionForDay, type ApplyDay, type ApplyTiming, type DayRun } from '@shared/engine/templateApply'
 import type { AnyEvent } from '@shared/model/events'
 import { ALL_DAYS_YES, dayFileFrom, planBlock, type PlanBlock, type Template } from '@shared/model/plan'
@@ -537,5 +537,137 @@ describe('runda 2 przeglądu (T1950–T1955)', () => {
     const later = [...events.slice(1), ev(7, { k: 'block.cost', block: 'a', at: 4, costs: null })]
     const k = templateDoneUndo({ undone: new Set() }, later, ['pca-5', 'pca-6'], 'pca', 10)
     expect(typeof k !== 'string' && [k.undone, k.kept]).toEqual([[], ['a']])
+  })
+})
+
+describe('grupa bloków szablonu (T2951, T2956, T2957)', () => {
+  it('blok obok w dniu szablonu stoi przy pierwszym bloku grupy tego dnia (id dnia, nie wersji – T2957)', () => {
+    const group: Template = {
+      ...training,
+      versions: [{ ...training.versions[0]!, blocks: [planBlock({ id: 'rano', categoryId: 'sport', startMin: 6 * 60, durationMin: 60, origin: 'template' }), planBlock({ id: 'obok', categoryId: 'inne', startMin: 6 * 60, durationMin: 15, origin: 'template', alongside: 'rano' })] }]
+    }
+    expect(templateDayBlocks('trening', group.versions[0]!, THU, () => null).map((b) => [b.id, b.alongside])).toEqual([
+      [id(THU, 'rano'), null],
+      [id(THU, 'obok'), id(THU, 'rano')]
+    ])
+  })
+
+  it('pierwszy blok grupy pominięty przy „Uzupełnij luki” – blok obok też wypada, „obok pominiętego” (T2956)', () => {
+    // „obok” stands beside „rano” (06:00–07:00): „rano” meets the routine 06:15, „obok” (06:00–06:15) meets nothing.
+    const group: Template = {
+      ...training,
+      versions: [
+        {
+          ...training.versions[0]!,
+          blocks: [
+            planBlock({ id: 'rano', categoryId: 'sport', startMin: 6 * 60, durationMin: 60, origin: 'template' }),
+            planBlock({ id: 'obok', categoryId: 'inne', startMin: 6 * 60, durationMin: 15, origin: 'template', alongside: 'rano' })
+          ]
+        }
+      ]
+    }
+    const day = dayOf(THU, null, [], [ordinary, group])
+    const r = applyTemplate(group, day, 'fill')
+    expect(planAfter(day, r.raw).map((b) => b.id)).not.toContain(id(THU, 'obok'))
+    expect(r).toMatchObject({ added: 0, skipped: 1, beside: 1 })
+  })
+
+  it('dziś, „Nie dodawaj minionych”: R 05:00–06:00 minął, M obok R 05:00–07:00 o 06:30 – M wypada „obok pominiętego”, nie „minione” (T2956)', () => {
+    const empty: Template = { ...ordinary, versions: [{ ...ordinary.versions[0]!, blocks: [] }] }
+    const group: Template = {
+      ...training,
+      versions: [{ ...training.versions[0]!, blocks: [planBlock({ id: 'R', categoryId: 'sport', startMin: 5 * 60, durationMin: 60, origin: 'template' }), planBlock({ id: 'M', categoryId: 'inne', startMin: 5 * 60, durationMin: 120, origin: 'template', alongside: 'R' })] }]
+    }
+    const day = dayOf(THU, null, [], [empty, group])
+    const timing: ApplyTiming = { hours: 'plan', past: 'skip', today: THU, nowMin: 6 * 60 + 30 }
+    const j = judgeApply(group, day, timing)
+    expect(j).toMatchObject({ left: { past: 1 }, beside: 1 })
+    const r = applyTemplate(group, day, 'fill', j)
+    expect(r).toMatchObject({ added: 0, beside: 1 })
+  })
+})
+
+describe('przegląd r3 – grupy szablonu bez własnego czasu (T2951, T2956, T2958)', () => {
+  const empty: Template = { ...ordinary, versions: [{ ...ordinary.versions[0]!, blocks: [] }] }
+  /** A template of Thursdays (its own day is THU) with the blocks given. */
+  const thursday = (blocks: PlanBlock[]): Template => ({ ...training, weekdays: [4], versions: [{ ...training.versions[0]!, blocks }] })
+
+  it('R, B1, B2 – R i B2 usunięte z dnia, R koliduje: B2 wraca do grupy, która stoi w planie (B1), bez przepinania i bez zapisu bloku', () => {
+    const t = thursday([
+      planBlock({ id: 'R', categoryId: 'sport', startMin: 6 * 60, durationMin: 60, origin: 'template' }),
+      planBlock({ id: 'B1', categoryId: 'inne', startMin: 6 * 60, durationMin: 30, origin: 'template', alongside: 'R' }),
+      planBlock({ id: 'B2', categoryId: 'journaling', startMin: 6 * 60, durationMin: 15, origin: 'template', alongside: 'R' })
+    ])
+    const raw = { schema: 1, date: THU, cancelled: { [id(THU, 'R')]: true, [id(THU, 'B2')]: true }, blocks: [{ id: 'x', categoryId: 'nauka', startMin: 6 * 60 + 30, durationMin: 20, fixed: false }] }
+    const day = dayOf(THU, raw, [], [empty, t])
+    const r = applyTemplate(t, day, 'fill')
+    expect(r).toMatchObject({ added: 1, skipped: 1, beside: 0 })
+    const plan = planAfter(day, r.raw)
+    expect(plan.find((b) => b.id === id(THU, 'B2'))).toMatchObject({ alongside: id(THU, 'R') })
+    // Back by its cancel taken back – no block of the snapshot written into the file for it.
+    expect((r.raw.blocks as Array<{ id: string }>).map((b) => b.id)).toEqual(['x'])
+  })
+
+  it('„od teraz”: blok obok stałego R nie przesuwa się sam – zostaje w czasie R', () => {
+    const t: Template = {
+      ...training,
+      versions: [
+        {
+          ...training.versions[0]!,
+          blocks: [
+            planBlock({ id: 'F', categoryId: 'sport', startMin: 6 * 60, durationMin: 30, origin: 'template' }),
+            planBlock({ id: 'R', categoryId: 'inne', startMin: 21 * 60, durationMin: 60, origin: 'template', fixed: true }),
+            planBlock({ id: 'B1', categoryId: 'journaling', startMin: 21 * 60, durationMin: 30, origin: 'template', alongside: 'R' })
+          ]
+        }
+      ]
+    }
+    const day = dayOf(THU, null, [], [empty, t])
+    const j = judgeApply(t, day, { hours: 'now', past: 'skip', today: THU, nowMin: 10 * 60 })
+    expect(j.missing.find((m) => m.block.id === id(THU, 'F'))?.span?.start).toBe(10 * 60)
+    expect(j.missing.find((m) => m.block.id === id(THU, 'B1'))).toMatchObject({ span: { start: 21 * 60, end: 21 * 60 + 30 }, moved: false })
+  })
+
+  it('R zakotwiczony do A, A wydłużone w dniu: blok obok R stoi w czasie R (po końcu A), nie w swojej dawnej godzinie', () => {
+    const t = thursday([
+      planBlock({ id: 'A', categoryId: 'sport', startMin: 5 * 60, durationMin: 60, origin: 'template' }),
+      planBlock({ id: 'R', categoryId: 'inne', anchor: 'A', durationMin: 30, origin: 'template' }),
+      planBlock({ id: 'B1', categoryId: 'journaling', startMin: 6 * 60, durationMin: 20, origin: 'template', alongside: 'R' })
+    ])
+    // A lengthened to 07:00 in the day; R and B1 taken out; your block 06:00–06:20 where B1 stood once (the sessions start at 08:00).
+    const raw = {
+      schema: 1,
+      date: THU,
+      cancelled: { [id(THU, 'R')]: true, [id(THU, 'B1')]: true },
+      blocks: [
+        { id: id(THU, 'A'), categoryId: 'sport', startMin: 5 * 60, durationMin: 120, fixed: false, origin: 'template', sourceId: 'A' },
+        { id: 'x', categoryId: 'nauka', startMin: 6 * 60, durationMin: 20, fixed: false }
+      ]
+    }
+    const day = dayOf(THU, raw, [], [empty, t])
+    const j = judgeApply(t, day)
+    expect(j.missing.find((m) => m.block.id === id(THU, 'B1'))).toMatchObject({ span: { start: 7 * 60, end: 7 * 60 + 20 }, clash: [] })
+    expect(asksMode(j)).toBe(false)
+  })
+
+  it('grupa minionych „Dodaj jako zrealizowane”: bloki jednej grupy nie stoją na sobie – oba zrealizowane', () => {
+    const t: Template = {
+      ...training,
+      versions: [
+        {
+          ...training.versions[0]!,
+          blocks: [
+            planBlock({ id: 'R', categoryId: 'sport', startMin: 5 * 60, durationMin: 60, origin: 'template' }),
+            planBlock({ id: 'B1', categoryId: 'inne', startMin: 5 * 60, durationMin: 30, origin: 'template', alongside: 'R' })
+          ]
+        }
+      ]
+    }
+    const day = dayOf(THU, null, [], [empty, t])
+    const r = applyTemplate(t, day, 'fill', judgeApply(t, day, { hours: 'plan', past: 'done', today: THU, nowMin: 10 * 60 }))
+    expect(r.done.sort()).toEqual([id(THU, 'B1'), id(THU, 'R')].sort())
+    expect(r.left.ran).toBe(0)
+    // One rule with the main process.
+    expect(takeGoneBy([{ id: 'r', start: 300, end: 360, bg: false, anchor: null, group: 'r' }, { id: 'b', start: 300, end: 330, bg: false, anchor: null, group: 'r' }], []).taken).toEqual(['r', 'b'])
   })
 })

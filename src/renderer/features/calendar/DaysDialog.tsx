@@ -3,12 +3,14 @@
  * like the Calendar's (`MonthGrid`: a click – that day, Ctrl+click – one more or one less, Shift+click – the range from the last one, a drag – a
  * range) and the fields „Od” and „Do” (DD.MM.RRRR – the typing of every field of a date: dots, dashes, slashes, eight digits, „3.01”); a range typed
  * replaces the selection, the selection in the month shows its first and last day in the fields.
+ * „Skopiuj tydzień do…” (N16, D634) chooses weeks in it (`unit: 'week'`): every pick of the month and every range typed takes whole weeks,
+ * Monday to Sunday (`weekPick`, `wholeWeeks`), and the quick picks are the caller's (`quick` – „Następny tydzień”, …).
  */
-import { useState, type ComponentProps, type ReactNode } from 'react'
+import { useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { daysFromTo, dmy, isBadDmy, parseDmy, typedDmy } from '@shared/dateInput'
 import { countLabel, WEEKDAY_SHORT } from '@shared/format'
 import { Dialog } from '../../components/Dialog'
-import { weekdaysOfMonth, workdaysOfMonth } from './dayQuick'
+import { weekdaysOfMonth, weekPick, wholeWeeks, workdaysOfMonth } from './dayQuick'
 import { MONTH_NAMES, MonthGrid, monthOf, shiftMonth } from './MonthGrid'
 
 /** The most days a range typed may have when the caller gives no `max`: a range of centuries is never built (ten years). */
@@ -52,7 +54,9 @@ export function DaysDialog({
   cell,
   note,
   onChange,
-  footer
+  footer,
+  unit = 'day',
+  quick
 }: {
   title: string
   /** The accent button: „Zastosuj”, „Odwołaj”, „Skopiuj” – with the number of days chosen. */
@@ -72,8 +76,8 @@ export function DaysDialog({
   pastLabel?: string
   /** The month shown first (the one of today by default). */
   month?: string
-  /** A day that is never a target (the day copied from): it may stay marked in the month, it is not counted nor picked. */
-  skip?: string
+  /** Days that are never a target (the day copied from, the week copied from): they may stay marked in the month, they are not counted nor picked. */
+  skip?: string | readonly string[]
   /** What the month shows in a day's cell (a mark on the day `skip`, …). */
   cell?: ComponentProps<typeof MonthGrid>['cell']
   /** A line under the month. */
@@ -82,13 +86,21 @@ export function DaysDialog({
   onChange?: (dates: string[]) => void
   /** Replaces the buttons of the window (a warning that needs its own answer, as the copy of a day that already ran). */
   footer?: ReactNode
+  /** What a pick takes: days, or whole weeks Monday to Sunday (N16). */
+  unit?: 'day' | 'week'
+  /** The quick picks instead of „pn–pt” and „każdy <dzień>” of the month: each puts its days into the selection (as a typed range does). */
+  quick?: ReadonlyArray<{ label: string; title?: string; days: readonly string[]; testId: string }>
 }) {
   const [month, setMonth] = useState(firstMonth ?? monthOf(today))
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [tooLong, setTooLong] = useState(false)
-  const listOf = (days: Iterable<string>) => [...days].filter((d) => d !== skip).sort()
+  // The press on the month that made its pick: with Ctrl a week is added or taken off (N16), any other gesture takes the weeks it touches.
+  const ctrlPress = useRef(false)
+  const skipped = new Set(skip == null ? [] : typeof skip === 'string' ? [skip] : skip)
+  const weeks = unit === 'week'
+  const listOf = (days: Iterable<string>) => [...days].filter((d) => !skipped.has(d)).sort()
 
   const chosen = (days: string[]) => {
     setSel(new Set(days))
@@ -109,17 +121,25 @@ export function DaysDialog({
     const limit = max ?? TYPED_MAX
     const span = Math.abs(Date.parse(b ?? a) - Date.parse(a)) / 86_400_000 + 1
     const [x, y] = a <= (b ?? a) ? [a, b ?? a] : [b ?? a, a]
-    if (span - (skip != null && skip >= x && skip <= y ? 1 : 0) > limit) {
+    if (span - [...skipped].filter((d) => d >= x && d <= y).length > limit) {
       setTooLong(true)
       return chosen([])
     }
-    const days = daysFromTo(a, b ?? a)
+    const range = daysFromTo(a, b ?? a)
+    // Whole weeks (N16): the range grows to its Mondays and Sundays – the longest it may be is counted again then, in weeks (T2955).
+    const days = weeks ? listOf(wholeWeeks(range)) : range
+    if (weeks && new Set(days.map((d) => wholeWeeks([d])[0]!)).size > Math.floor(limit / 7)) {
+      setTooLong(true)
+      return chosen([])
+    }
     chosen(days)
-    setMonth(monthOf(days[0]!))
+    if (days.length) setMonth(monthOf(days[0]!))
   }
   /** The grid picked: the fields show the first and the last day. */
-  const picked = (next: Set<string>) => {
+  const picked = (got: Set<string>, ctrl = false) => {
     setTooLong(false)
+    // Whole weeks (N16): a pick of the month becomes the weeks it means (`weekPick` – with Ctrl one week more or less), never with a day `skip`.
+    const next = weeks ? new Set(listOf(weekPick(sel, got, ctrl))) : got
     chosen([...next])
     const list = listOf(next)
     setFrom(list.length ? dmy(list[0]!) : '')
@@ -127,6 +147,11 @@ export function DaysDialog({
   }
   const list = listOf(sel)
   const past = list.filter(isPast ?? ((d) => d < today)).length
+  const weekCount = new Set(list.map((d) => wholeWeeks([d])[0]!)).size
+  const chosenText = weeks
+    ? `Wybrane: ${countLabel(weekCount, 'tydzień', 'tygodnie', 'tygodni')} (${countLabel(list.length, 'dzień', 'dni', 'dni')}${past ? `; ${pastLabel}: ${past}` : ''})`
+    : `Wybrane: ${countLabel(list.length, 'dzień', 'dni', 'dni')}${past ? ` (${pastLabel}: ${past})` : ''}`
+  const hint = weeks ? 'Kliknij dzień – jego tydzień; Ctrl+klik dokłada albo zdejmuje tydzień, Shift+klik – zakres.' : 'Kliknij dzień; Ctrl+klik dodaje, Shift+klik – zakres.'
   const [y, m] = month.split('-')
   return (
     <Dialog
@@ -138,7 +163,7 @@ export function DaysDialog({
         footer ?? (
           <>
             <span className="mr-auto text-[12px] text-muted" data-testid={`${testId}-count`}>
-              {tooLong ? `Zakres dłuższy niż ${max ?? TYPED_MAX} dni – wybierz krótszy.` : list.length ? `Wybrane: ${countLabel(list.length, 'dzień', 'dni', 'dni')}${past ? ` (${pastLabel}: ${past})` : ''}` : 'Kliknij dzień; Ctrl+klik dodaje, Shift+klik – zakres.'}
+              {tooLong ? `Zakres dłuższy niż ${weeks ? countLabel(Math.floor((max ?? TYPED_MAX) / 7), 'tydzień', 'tygodnie', 'tygodni') : `${max ?? TYPED_MAX} dni`} – wybierz krótszy.` : list.length ? chosenText : hint}
             </span>
             <button type="button" className="btn" onClick={onClose}>
               Anuluj
@@ -165,19 +190,31 @@ export function DaysDialog({
           ›
         </button>
       </div>
-      {/* UX19 (P28): the quick picks – the month shown, whole at once; they replace the selection as a typed range does. */}
+      {/* UX19 (P28): the quick picks – the month shown, whole at once (or the caller's own – the weeks of N16); they replace the selection as a typed range does. */}
       <div className="flex flex-wrap items-center gap-1.5 text-[12px]" data-testid={`${testId}-quick`}>
-        <button type="button" className="chip" onClick={() => picked(new Set(workdaysOfMonth(month)))} title="Zaznacza poniedziałek–piątek pokazanego miesiąca" data-testid={`${testId}-quick-workdays`}>
-          pn–pt tego miesiąca
-        </button>
-        <span className="ml-2 text-muted">każdy:</span>
-        {WEEKDAY_SHORT.map((w, i) => (
-          <button key={w} type="button" className="chip" onClick={() => picked(new Set(weekdaysOfMonth(month, i + 1)))} title={`Zaznacza każdy dzień „${w}” pokazanego miesiąca`} data-testid={`${testId}-quick-weekday-${i + 1}`}>
-            {w}
-          </button>
-        ))}
+        {quick ? (
+          quick.map((q) => (
+            <button key={q.testId} type="button" className="chip" onClick={() => picked(new Set(q.days))} title={q.title} data-testid={q.testId}>
+              {q.label}
+            </button>
+          ))
+        ) : (
+          <>
+            <button type="button" className="chip" onClick={() => picked(new Set(workdaysOfMonth(month)))} title="Zaznacza poniedziałek–piątek pokazanego miesiąca" data-testid={`${testId}-quick-workdays`}>
+              pn–pt tego miesiąca
+            </button>
+            <span className="ml-2 text-muted">każdy:</span>
+            {WEEKDAY_SHORT.map((w, i) => (
+              <button key={w} type="button" className="chip" onClick={() => picked(new Set(weekdaysOfMonth(month, i + 1)))} title={`Zaznacza każdy dzień „${w}” pokazanego miesiąca`} data-testid={`${testId}-quick-weekday-${i + 1}`}>
+                {w}
+              </button>
+            ))}
+          </>
+        )}
       </div>
-      <MonthGrid month={month} today={today} selected={sel} onSelect={picked} cell={cell ?? (() => ({ tone: null, marks: null }))} data-testid={`${testId}-month`} />
+      <div onMouseDownCapture={(e) => void (ctrlPress.current = e.ctrlKey)}>
+        <MonthGrid month={month} today={today} selected={sel} onSelect={(got) => picked(got, ctrlPress.current)} cell={cell ?? (() => ({ tone: null, marks: null }))} data-testid={`${testId}-month`} />
+      </div>
       {note && <p className="text-[12px] text-muted">{note}</p>}
     </Dialog>
   )

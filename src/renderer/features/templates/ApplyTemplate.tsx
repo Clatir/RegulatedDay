@@ -85,7 +85,7 @@ export function useApplyFlow(): { start: (template: Template, dates: readonly st
       )}
       {asking && (
         <ModeDialog
-          name={asking.template.name}
+          title={`Bloki „${asking.template.name}” kolidują z planem`}
           asked={asking.asked}
           total={asking.dates.length}
           busy={busy}
@@ -239,24 +239,57 @@ function TimingDialog({ name, dates, today, busy, onClose, onPick }: { name: str
   )
 }
 
-/** „Uzupełnić luki czy nadpisać plan?” – asked once for all the days that collide (D541). */
-function ModeDialog({ name, asked, total, busy, onClose, onPick }: { name: string; asked: readonly string[]; total: number; busy: boolean; onClose: () => void; onPick: (mode: 'fill' | 'overwrite') => void }) {
+/** The words of the question of collisions: those of a template („Zastosuj do…”) by default, the copy of a week its own (N16, T2948). */
+export interface ModeWords {
+  fill: string
+  overwrite: string
+  others: (n: number) => string
+}
+const TEMPLATE_WORDS: ModeWords = {
+  fill: '„Uzupełnij luki” – dodaje tylko bloki szablonu, które mieszczą się w wolnym czasie.',
+  overwrite: '„Nadpisz plan” – odwołuje kolidujące bloki i dodaje cały szablon (sesje, wykłady, zjazdy i bloki, które już trwały, zostają).',
+  others: (n) => `Pozostałe wybrane dni (${n}) mają już bloki tego szablonu albo nic nie koliduje – tam bez pytania uzupełniam luki.`
+}
+
+/**
+ * „Uzupełnić luki czy nadpisać plan?” – asked once for all the days that collide (D541; the copy of a week the same – N16). `prefix` – of its
+ * test ids (`<prefix>-mode`, `-mode-cancel`, `-overwrite`, `-fill`).
+ */
+export function ModeDialog({
+  title,
+  asked,
+  total,
+  busy,
+  onClose,
+  onPick,
+  words = TEMPLATE_WORDS,
+  prefix = 'template-apply'
+}: {
+  title: string
+  asked: readonly string[]
+  total: number
+  busy: boolean
+  onClose: () => void
+  onPick: (mode: 'fill' | 'overwrite') => void
+  words?: ModeWords
+  prefix?: string
+}) {
   const shown = asked.slice(0, 6).map(plDate).join(', ') + (asked.length > 6 ? ` i ${asked.length - 6} więcej` : '')
   const others = total - asked.length
   return (
     <Dialog
-      title={`Bloki „${name}” kolidują z planem`}
+      title={title}
       onClose={() => !busy && onClose()}
-      data-testid="template-apply-mode"
+      data-testid={`${prefix}-mode`}
       actions={
         <>
-          <button type="button" className="btn" disabled={busy} onClick={onClose} data-testid="template-apply-mode-cancel">
+          <button type="button" className="btn" disabled={busy} onClick={onClose} data-testid={`${prefix}-mode-cancel`}>
             Anuluj
           </button>
-          <button type="button" className="btn" disabled={busy} onClick={() => onPick('overwrite')} data-testid="template-apply-overwrite">
+          <button type="button" className="btn" disabled={busy} onClick={() => onPick('overwrite')} data-testid={`${prefix}-overwrite`}>
             Nadpisz plan
           </button>
-          <button type="button" className="btn btn-accent" disabled={busy} onClick={() => onPick('fill')} data-testid="template-apply-fill">
+          <button type="button" className="btn btn-accent" disabled={busy} onClick={() => onPick('fill')} data-testid={`${prefix}-fill`}>
             Uzupełnij luki
           </button>
         </>
@@ -266,10 +299,10 @@ function ModeDialog({ name, asked, total, busy, onClose, onPick }: { name: strin
         {asked.length === 1 ? 'Dzień' : 'Dni'} {shown} {asked.length === 1 ? 'ma' : 'mają'} już w tych godzinach inne bloki.
       </p>
       <ul className="mt-2 list-disc pl-5 text-[12.5px] text-muted">
-        <li>„Uzupełnij luki” – dodaje tylko bloki szablonu, które mieszczą się w wolnym czasie.</li>
-        <li>„Nadpisz plan” – odwołuje kolidujące bloki i dodaje cały szablon (sesje, wykłady, zjazdy i bloki, które już trwały, zostają).</li>
+        <li>{words.fill}</li>
+        <li>{words.overwrite}</li>
       </ul>
-      {others > 0 && <p className="mt-2 text-[12.5px] text-muted">Pozostałe wybrane dni ({others}) mają już bloki tego szablonu albo nic nie koliduje – tam bez pytania uzupełniam luki.</p>}
+      {others > 0 && <p className="mt-2 text-[12.5px] text-muted">{words.others(others)}</p>}
     </Dialog>
   )
 }

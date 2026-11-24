@@ -107,6 +107,8 @@ export function useWeekGroup(o: {
   costsKnown?: boolean
   /** „Zapisz jako szablon / rutynę…” in the menu (N15 – „Tydzień” and „3 dni”). */
   saveAs?: boolean
+  /** The menu has „Skopiuj do tygodni…” (N16, D634 – the columns of „Tydzień” and „3 dni”); default: not. */
+  copyWeeks?: boolean
 }): WeekGroup {
   const view = o.view ?? 'week'
   const order = useMemo(() => weekOrder(o.days), [o.days])
@@ -158,6 +160,6 @@ export function useWeekGroup(o: {
     mark: (date, id, e) => void sel.onItemClick(blockKey(date, id), { ctrlKey: e.ctrlKey, shiftKey: e.shiftKey }),
     context: (date, id, at) => setMenu({ ids: [...sel.onItemContext(blockKey(date, id))], at }),
     removeTarget: removeTargetOf,
-    overlay: <BlockGroupMenu view={view} menu={menu} onClose={() => setMenu(null)} blocksOf={blocksOf} ctx={ctx} today={o.today} saveAs={o.saveAs === true} />
+    overlay: <BlockGroupMenu view={view} menu={menu} onClose={() => setMenu(null)} blocksOf={blocksOf} ctx={ctx} today={o.today} saveAs={o.saveAs === true} copyWeeks={o.copyWeeks === true} />
   }
 }

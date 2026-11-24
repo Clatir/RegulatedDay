@@ -4,7 +4,7 @@
  * the blocks as planned, on days gone by as it was (`DayGrid`). A click on the heading of a day or on a block opens its plan, as
  * in the calendar (D295); a click on an empty place of a column (or a drag over it) opens the small window of a new block
  * there (D366); a block that may be moved is dragged to another hour or day (D417). The arrows move by a week; the goals shown
- * are the month of the week (`goalsMonthOfWeek`).
+ * are the month of the week (`goalsMonthOfWeek`); „Skopiuj tydzień do…” copies the week shown to the same days of other weeks (N16, `WeekCopyFlow`).
  *
  * The heading of the page switches the view (SNT1, T936; remembered by this computer): „Tydzień”, „3 dni” (D417 – yesterday,
  * today and tomorrow in a larger scale, the arrows move by a day) and „Agenda” (D418 – seven days from today as a list).
@@ -40,6 +40,7 @@ import { inAgenda, useWeekGroup } from './weekSelect'
 import { WeekPushLine } from './WeekPushLine'
 import { GroupLine } from '../../components/GroupLine'
 import { WeekCasesPanel } from './WeekCasesPanel'
+import { WeekCopyButton } from './WeekCopyFlow'
 import { casesOpen, lastWeekMode, rememberCasesOpen, rememberWeekMode, shiftDay, threeDaysTitle, WEEK_MODES, type WeekMode } from './weekViews'
 import { agendaTitle, AGENDA_STEP } from './weekPeriod'
 import { RegenHereDayHint } from '../today/RegenHere'
@@ -127,6 +128,8 @@ export function WeekPage() {
             <button type="button" className="btn" disabled={week === thisWeek} onClick={() => setWeek(thisWeek)} data-testid="week-today">
               Ten tydzień
             </button>
+            {/* N16 (D634): the week shown copied to the same days of other weeks. */}
+            <WeekCopyButton week={week} today={today} />
           </>
         )}
         {mode === '3days' && (

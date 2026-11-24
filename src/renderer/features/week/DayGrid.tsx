@@ -243,7 +243,8 @@ export function DayGrid({
   const cols = { gridTemplateColumns: `${AXIS_PX}px repeat(${days.length}, minmax(0, 1fr))` }
   const dates = useMemo(() => days.map((d) => d.date), [days])
   // D527, D528: the selection of many blocks over the days (Ctrl+click, Shift+click, Shift+arrows, Ctrl+A, Esc, the menu of the right button); Del asks once for all.
-  const group = useWeekGroup({ days, scope: `${mode}|${dates[0]}`, today, energy: rd.general.modules.energy, namesOf, saveAs: true })
+  // N16 (D634): „Skopiuj do tygodni…” in the menu of the selection of the columns.
+  const group = useWeekGroup({ days, scope: `${mode}|${dates[0]}`, today, energy: rd.general.modules.energy, namesOf, saveAs: true, copyWeeks: true })
   useDeleteSelected(group.removeTarget)
   // N9: F2 on the one selected block (Ctrl+click) or a double click on a block's name – its name in place; the key of a block is `blockKey(date, id)`.
   const byKey = useMemo(() => new Map(days.flatMap((d) => d.blocks.map((b): [string, HorizonBlock] => [blockKey(d.date, b.id), b]))), [days])

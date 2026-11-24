@@ -58,6 +58,7 @@ paths:
 
 ## Pułapki
 - Kopia nie pyta o wymianę (spec „Wymiana”) – jak przeniesienie bloku na dziś z „Tygodnia” i sprawa upuszczona na oś.
-- `copiedDay` („Skopiuj ten dzień do…”) zostawia `task` bloku (stare zachowanie) – kopia D513 robi nową sprawę.
+- `copiedDay` („Skopiuj ten dzień do…”) zostawia `task` bloku (stare zachowanie) – kopia D513 robi nową sprawę, kopia tygodnia (N16, D631) – bez sprawy
+  (`copiedDay(plan, { take, idOf })`, reguły `kopia-tygodnia.md`).
 - Testy: `tests/unit/engine/copy.test.ts`, `tests/web/block-copy.test.ts`, `tests/web/template-push.test.ts`, `tests/fs/attachments.test.ts`
   („kopia bloku…”), E2E `tests/e2e/copy.spec.ts`.

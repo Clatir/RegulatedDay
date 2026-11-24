@@ -259,7 +259,10 @@ export function templateDayBlocks(templateId: string, version: TemplateVersion, 
       anchor = session != null ? sessionOf(session) : (ids.get(b.anchor) ?? null)
       if (!anchor) continue
     }
-    out.push({ ...b, id: ids.get(b.id)!, anchor, startMin: anchor ? null : b.startMin, origin: 'template', sourceId: b.id })
+    // Beside a block of the version (D492): the same block of the day (T2957 – a version's id is no block of the day; a session's entry – its session).
+    const besideSession = b.alongside ? entries.get(b.alongside) : undefined
+    const alongside = b.alongside ? (besideSession != null ? sessionOf(besideSession) : (ids.get(b.alongside) ?? null)) : null
+    out.push({ ...b, id: ids.get(b.id)!, anchor, alongside, startMin: anchor ? null : b.startMin, origin: 'template', sourceId: b.id })
   }
   return out
 }

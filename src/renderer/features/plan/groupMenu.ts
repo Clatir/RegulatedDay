@@ -102,6 +102,8 @@ export interface BlockMenuOn {
   cost: () => void
   /** „Przenieś na dzień…”: the window of the day. */
   moveTo: () => void
+  /** „Skopiuj do tygodni…” (N16, D634): the next 1, 2 or 4 weeks, or the window of weeks; left out – the screen has no copy of weeks. */
+  copyWeeks?: (weeks: CopyWeekStep | 'pick') => void
   /**
    * „Zapisz jako szablon…” / „Zapisz jako rutynę…” (N15, D615): the windows of the save – left out where there are none (a template's version,
    * „Agenda”, the month); `why` – both off with that reason (blocks of several days).
@@ -117,6 +119,12 @@ export const removeBlocksTarget = (n: number, run: () => unknown): DeleteTarget 
 
 /** The steps of „Przesuń o…” (minutes). */
 export const SHIFT_STEPS = [5, 15, 30, 60] as const
+
+/** The quick choices of „Skopiuj tydzień do…” and „Skopiuj do tygodni…” (N16): this many weeks after the week copied from. */
+export const COPY_WEEK_STEPS = [1, 2, 4] as const
+export type CopyWeekStep = (typeof COPY_WEEK_STEPS)[number]
+/** „Następny tydzień”, „2 następne tygodnie”, „4 następne tygodnie”. */
+export const copyStepLabel = (n: CopyWeekStep): string => (n === 1 ? 'Następny tydzień' : `${n} następne tygodnie`)
 
 const NONE_BEGUN = 'Żaden blok nie jest niezaczęty'
 const NONE_MOVABLE = 'Żaden blok nie ma godziny, którą da się przesunąć (zaczęte, sesje, wykłady i bloki za kotwicą zostają)'
@@ -169,7 +177,7 @@ const checked = (values: boolean[]): { check?: 'all' | 'some' } => {
  * The entries of „Zmień N bloków” (D528) for the `blocks` selected: „Podkategoria” and „Wariant” (✓ for the value all of them have, „—” for some;
  * the variants of the one subcategory the blocks share), „Koszt…”, „Rutyna” (for the blocks of the kind „rutyna”), „Przesuń o…” (later / earlier
  * by 5, 15, 30, 60 min or a number of the hand), „Przesuń resztę dnia o…” (N17 – the same steps for the flexible blocks from the earliest selected one
- * on), „Przenieś na dzień…”, „Odwołaj”, „Zaparkuj”, „Zapisz jako szablon…” and „Zapisz jako rutynę…”
+ * on), „Przenieś na dzień…”, „Odwołaj”, „Zaparkuj”, „Skopiuj do tygodni…” (N16 – only with `on.copyWeeks`), „Zapisz jako szablon…” and „Zapisz jako rutynę…”
  * (N15 – where the screen gives `on.saveAs`), „Usuń” – a template has no rest of the day, cancelling, parking nor move to a day. Nothing is forbidden (D72): the blocks a change does not concern are left by it and counted in the line.
  */
 export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockMenuOn): MenuEntry[] {
@@ -276,6 +284,9 @@ export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockM
       dayWhy ? { label: 'Zaparkuj', disabled: dayWhy, testId: 'block-menu-park' } : { label: 'Zaparkuj', onPick: () => on.action({ kind: 'park' }), testId: 'block-menu-park' }
     )
   }
+  // N16 (D634): the copy of the selected blocks to other weeks – only where the screen gives it (the columns of „Tydzień” and „3 dni”); never disabled (D72), the line says what was not copied.
+  const copyWeeks = on.copyWeeks
+  if (copyWeeks) entries.push({ label: 'Skopiuj do tygodni…', testId: 'block-menu-copyweeks', submenu: [...COPY_WEEK_STEPS.map((n): MenuEntry => ({ label: copyStepLabel(n), onPick: () => copyWeeks(n), testId: `block-menu-copyweeks-${n}` })), { label: 'Wybierz tygodnie…', onPick: () => copyWeeks('pick'), testId: 'block-menu-copyweeks-pick' }] })
   const save = on.saveAs
   if (save) {
     const entry = (kind: 'template' | 'routine', label: string, testId: string): MenuEntry => (save.why ? { label, disabled: save.why, testId } : { label, onPick: () => save.pick(kind), testId })

@@ -17,6 +17,7 @@ import type { DayState } from './day'
 import { stayingIds, type BlockFact, type DayFacts } from './facts'
 import type { RulesSettings } from '../model/settings'
 import { atOf, idxOfLogical } from './grid'
+import { plannedStart } from './parallel'
 
 /** A start kept in the logical day (04:00–03:59). */
 const inDay = (startMin: number): number => Math.max(PLAN_MIN, Math.min(PLAN_MAX - 1, startMin))
@@ -308,15 +309,19 @@ function asCopy(b: PlanBlock, id: string): PlanBlock {
 /**
  * A day copied to another (spec „Skopiuj ten dzień do…”): your blocks and the template's, with new ids (anchors follow
  * them), as yours; sessions and lectures come from that day's own layer and plan of lectures, so they are not copied.
- * The target's own template blocks are cancelled – its plan becomes the copied one.
+ * The target's own template blocks are cancelled – its plan becomes the copied one. The copy of a week (N16, T2942) takes the same blocks
+ * with its own filter (`take` – not taken off the plan, the ones selected) and the ids of its targets (`idOf`).
  */
-export function copiedDay(plan: readonly PlanBlock[]): PlanBlock[] {
-  const take = plan.filter((b) => b.origin === 'user' || b.origin === 'template')
-  const ids = new Map(take.map((b) => [b.id, newId()]))
+export function copiedDay(plan: readonly PlanBlock[], o: { take?: (b: PlanBlock) => boolean; idOf?: (b: PlanBlock) => string } = {}): PlanBlock[] {
+  const take = plan.filter((b) => (b.origin === 'user' || b.origin === 'template') && (o.take?.(b) ?? true))
+  const ids = new Map(take.map((b) => [b.id, o.idOf?.(b) ?? newId()]))
+  const planMap = new Map(plan.map((b) => [b.id, b]))
   const out: PlanBlock[] = []
   for (const b of take) {
     const anchor = b.anchor ? (ids.get(b.anchor) ?? null) : null
-    const start = b.anchor && !anchor ? plannedStartMin(b, plan) : b.startMin
+    const beside = b.alongside ? (ids.get(b.alongside) ?? null) : null
+    // Beside a block not copied: the group's start where it stood (T2951 – a block beside another has no hour of its own).
+    const start = b.anchor && !anchor ? plannedStartMin(b, plan) : b.alongside && !beside ? (plannedStart(b, planMap) ?? b.startMin) : b.startMin
     if (anchor == null && start == null) continue
     out.push({
       ...asCopy(b, ids.get(b.id)!),
@@ -325,7 +330,7 @@ export function copiedDay(plan: readonly PlanBlock[]): PlanBlock[] {
       // A request belongs to one day: a copy is a plain block of its category; no variant changed it there.
       requests: [],
       // Beside the copy of its group's block (T1167); that one not copied – a block of its own.
-      alongside: b.alongside ? (ids.get(b.alongside) ?? null) : null
+      alongside: beside
     })
   }
   return out

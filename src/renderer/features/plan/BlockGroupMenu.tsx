@@ -2,7 +2,8 @@
  * The menu „Zmień 4 bloki” of the right button (D528) and the two windows it opens: the cost of the blocks („Koszt…” – the four numbers of the tile's
  * window, with „Jak podkategoria”) and the day to move them to („Przenieś na dzień…”). The entries are `blockMenu` (pure); every pick goes to
  * `runBlockGroup`. One component for the axes of „Dziś” and „Szablony” and the columns of „Tydzień” and „3 dni”: the screen says which blocks the
- * ids are (`blocksOf`) and what to choose from (`ctx`).
+ * ids are (`blocksOf`) and what to choose from (`ctx`). The columns give `copyWeeks` (N16): „Skopiuj do tygodni…” – the next weeks at once, or the
+ * window of weeks (`WeeksDialog`), through the flow of „Skopiuj tydzień do…” (`useWeekCopyFlow`).
  */
 import { useMemo, useRef, useState } from 'react'
 import { groupCount } from '@shared/groupText'
@@ -17,9 +18,12 @@ import { CostInput, WideCostWarning } from './CostInput'
 import { POOL_COLOR, POOL_NAME } from './energyDraw'
 import { blockMenu, blockMenuTitle, parseBlockKey, type GroupWhere, type MenuBlock, type MenuCtx } from './groupMenu'
 import { runBlockGroup } from './groupRun'
+import { nextWeeks } from '../calendar/dayQuick'
+import { copyFromKeys, sourceWeekOf } from '../week/weekCopy'
+import { useWeekCopyFlow, WeeksDialog } from '../week/WeekCopyFlow'
 import { SaveAsWindow, type SaveAsOpen } from './SaveAsDialogs'
 
-type Window = { kind: 'cost' | 'move'; ids: string[] } | { kind: 'save'; open: SaveAsOpen }
+type Window = { kind: 'cost' | 'move' | 'weeks'; ids: string[] } | { kind: 'save'; open: SaveAsOpen }
 
 /** Why the blocks of a selection cannot be saved as a template or a routine (N15): they are of several days. */
 export const SAVE_AS_DAYS_WHY = 'Szablon i rutynę zapiszesz z bloków jednego dnia'
@@ -44,7 +48,8 @@ export function BlockGroupMenu({
   today,
   moveFrom,
   where,
-  saveAs
+  saveAs,
+  copyWeeks
 }: {
   view: GroupView
   menu: { ids: readonly string[]; at: { x: number; y: number } } | null
@@ -59,8 +64,14 @@ export function BlockGroupMenu({
   where?: GroupWhere
   /** „Zapisz jako szablon…” and „Zapisz jako rutynę…” in the menu (N15: „Dziś”, „Tydzień”, „3 dni”). */
   saveAs?: boolean
+  /** „Skopiuj do tygodni…” (N16): the ids are keys of the columns (`blockKey`); left out – no such entry. */
+  copyWeeks?: boolean
 }) {
   const [window, setWindow] = useState<Window | null>(null)
+  const copy = useWeekCopyFlow()
+  // The flow by a ref: the entries are counted once per menu opened (T1720) – a new function of the flow at a render must not count them again.
+  const copyFlow = useRef(copy)
+  copyFlow.current = copy
   const blocks = window && window.kind !== 'save' ? blocksOf(window.ids) : []
   // The entries counted for the menu opened (the engine's verdicts of the selection – one pass, T1720) and again only when what they come from
   // changes: the day or the template's version (`where`), the view, the view's data (`ctx` – its `judge` holds the model) and the blocks
@@ -73,11 +84,20 @@ export function BlockGroupMenu({
             action: (a) => void runBlockGroup(view, menu.ids, a, where),
             cost: () => setWindow({ kind: 'cost', ids: [...menu.ids] }),
             moveTo: () => setWindow({ kind: 'move', ids: [...menu.ids] }),
-            ...(saveAs ? { saveAs: saveAsEntry(saveAsSource(view, menu.ids, where), (open) => setWindow({ kind: 'save', open })) } : {})
+            ...(saveAs ? { saveAs: saveAsEntry(saveAsSource(view, menu.ids, where), (open) => setWindow({ kind: 'save', open })) } : {}),
+            ...(copyWeeks
+              ? {
+                  copyWeeks: (n: number | 'pick') => {
+                    const from = copyFromKeys(menu.ids)
+                    if (n === 'pick') setWindow({ kind: 'weeks', ids: [...menu.ids] })
+                    else void copyFlow.current.start(from, nextWeeks(sourceWeekOf(from), n))
+                  }
+                }
+              : {})
           })
         : [],
     // `where` by its value (`whereKey`): a screen may make the object anew at a render.
-    [menu, view, whereKey, ctx, blocksOf, saveAs]
+    [menu, view, whereKey, ctx, blocksOf, saveAs, copyWeeks]
   )
   return (
     <>
@@ -114,6 +134,20 @@ export function BlockGroupMenu({
           }}
         />
       )}
+      {window?.kind === 'weeks' && (
+        <WeeksDialog
+          week={sourceWeekOf(copyFromKeys(window.ids))}
+          sources={copyFromKeys(window.ids).dates}
+          today={today}
+          busy={copy.busy}
+          title={`Skopiuj ${groupCount(window.ids.length, 'block')} do…`}
+          onClose={() => setWindow(null)}
+          onPick={async (weeks) => {
+            if (await copy.start(copyFromKeys(window.ids), weeks)) setWindow(null)
+          }}
+        />
+      )}
+      {copy.dialogs}
     </>
   )
 }
