@@ -2,12 +2,12 @@
  * „Sprawy” with dates in the main window without a DOM (HKU2: D409, D451): the lists of the page ordered by the due date
  * first, a new task's words of dates („!pt”, „@jutro”) written as its fields, and Ctrl K's hint with the due date.
  */
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DataView, EditEntry, RawRecord, RdApi } from '@shared/api'
 import { caseItems } from '@shared/engine/cases'
 import { rdFrom } from '@shared/model/rd'
 import { newTask, requestFrom } from '@shared/model/requests'
-import { logicalDayOf } from '@shared/time/day'
+import { logicalDayOf, placeLogical } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { sectionsOf } from '@renderer/features/cases/casesLogic'
 import { searchRecords } from '@renderer/features/search/records'
@@ -79,6 +79,125 @@ describe('nowe zadanie w oknie: słowa daty w tytule (D409)', () => {
     expect(field(sent[0]![0]!, 'title')).toBe('Raport')
     expect(field(sent[0]![0]!, 'dueDate')).toBe('2026-12-01')
     expect(await createTask({ title: '!jutro' })).toMatchObject({ saved: false, error: 'Zadanie potrzebuje tytułu.' })
+  })
+})
+
+describe('nowe zadanie w oknie: długość, podkategoria i godzina w tytule (N10, D600–D602)', () => {
+  /** The window over an empty folder whose days are readable (`caseDays` gives each asked day as no file) – or not (`unreadable`). */
+  function stubDays(unreadable = false) {
+    const sent = stub()
+    const rd = (globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd
+    rd.caseDays = async (dates) => ({ files: unreadable ? {} : Object.fromEntries(dates.map((d) => [d, null])), gone: {}, begun: {} })
+    return sent
+  }
+
+  it('„Raport 1h30 #anal” – szacunek 90 i podkategoria Analiza, bez bloku (tylko długość i kategoria)', async () => {
+    const sent = stub()
+    const r = await createTask({ title: 'Raport #anal 1h30' })
+    expect(r.saved).toBe(true)
+    expect(sent[0]).toHaveLength(1)
+    const e = sent[0]![0]!
+    expect(field(e, 'title')).toBe('Raport')
+    expect(field(e, 'estimateMin')).toBe(90)
+    expect(field(e, 'categoryId')).toBe('analiza')
+    expect(field(e, 'day')).toBeNull()
+  })
+
+  it('„#xyz” bez dopasowania zostaje w tytule; wartości podane wprost wygrywają ze słowami', async () => {
+    const sent = stub()
+    await createTask({ title: 'Raport #xyz' })
+    expect(field(sent[0]![0]!, 'title')).toBe('Raport #xyz')
+    expect(field(sent[0]![0]!, 'categoryId')).toBe('inne')
+    await createTask({ title: 'Raport #anal 1h', estimateMin: 15, categoryId: 'nauka' })
+    expect(field(sent[1]![0]!, 'estimateMin')).toBe(15)
+    expect(field(sent[1]![0]!, 'categoryId')).toBe('nauka')
+  })
+
+  it('„@jutro 15:00 1h #anal” – jedna edycja: plik dnia jutro z blokiem 15:00–16:00 Analizy, potem sprawa „zaplanowane”; jedno „Cofnij”', async () => {
+    const sent = stubDays()
+    const today = logicalDayOf(Date.now())
+    const tomorrow = addDays(today, 1)
+    const r = await createTask({ title: 'Raport @jutro 15:00 1h #anal' })
+    expect(r.saved).toBe(true)
+    expect(r).not.toHaveProperty('notPlaced')
+    expect(sent).toHaveLength(1)
+    const [dayEntry, record] = sent[0]!
+    expect(dayEntry!.rel).toBe(`days/${tomorrow.slice(0, 4)}/${tomorrow}.json`)
+    expect(record!.after).toEqual([0])
+    expect(field(record!, 'doDate')).toBe(tomorrow)
+    expect(field(record!, 'day')).toBe(tomorrow)
+    expect(field(record!, 'estimateMin')).toBe(60)
+    const blocks = field(dayEntry!, 'blocks') as Array<{ id: string; categoryId: string; startMin: number; durationMin: number; task: string }>
+    expect(blocks).toEqual([expect.objectContaining({ id: field(record!, 'block'), categoryId: 'analiza', startMin: 900, durationMin: 60, task: r.id })])
+    expect(r.undo.map((f) => f.rel)).toEqual([dayEntry!.rel, record!.rel])
+  })
+
+  it('plik dnia nieczytelny: sprawa zapisana z datą, bez bloku, dymek mówi dlaczego', async () => {
+    const sent = stubDays(true)
+    const r = await createTask({ title: 'Raport @jutro 15:00' })
+    expect(r.saved).toBe(true)
+    expect(r.notPlaced).toBe('pliku dnia nie da się teraz odczytać')
+    expect(sent[0]).toHaveLength(1)
+    expect(field(sent[0]![0]!, 'day')).toBeNull()
+    expect(field(sent[0]![0]!, 'doDate')).toBe(addDays(logicalDayOf(Date.now()), 1))
+    expect(useUi.getState().toasts.map((t) => t.text)).toContain('Zapisano: Raport – nie postawiono na osi: pliku dnia nie da się teraz odczytać')
+  })
+
+  it('odczyt dnia odrzucony (IPC rzuca): sprawa zapisana z datą, bez bloku, „pliku dnia…”; dymek z tytułem takim, jak zapisany', async () => {
+    const sent = stub()
+    ;(globalThis as unknown as { window: { rd: Partial<RdApi> } }).window.rd.caseDays = () => Promise.reject(new Error('ipc'))
+    const r = await createTask({ title: 'Kup   mleko @jutro 15:00' })
+    expect(r.saved).toBe(true)
+    expect(r.notPlaced).toBe('pliku dnia nie da się teraz odczytać')
+    expect(sent[0]).toHaveLength(1)
+    expect(field(sent[0]![0]!, 'title')).toBe('Kup mleko')
+    expect(field(sent[0]![0]!, 'day')).toBeNull()
+    expect(useUi.getState().toasts.map((t) => t.text)).toContain('Zapisano: Kup mleko – nie postawiono na osi: pliku dnia nie da się teraz odczytać')
+  })
+
+  it('ta sama data wykonania podana wprost (albo brak / null) nie zabiera godziny: blok stoi jak zwykle; inna data – „dzień podany osobno”', async () => {
+    const tomorrow = addDays(logicalDayOf(Date.now()), 1)
+    for (const doDate of [tomorrow, null, undefined]) {
+      const sent = stubDays()
+      const r = await createTask({ title: 'Raport @jutro 15:00', ...(doDate === undefined ? {} : { doDate }) })
+      expect(r).not.toHaveProperty('notPlaced')
+      expect(sent[0]).toHaveLength(2)
+      expect(field(sent[0]![1]!, 'doDate')).toBe(tomorrow)
+      expect(field(sent[0]![1]!, 'day')).toBe(tomorrow)
+    }
+    const sent = stubDays()
+    expect((await createTask({ title: 'Raport @jutro 15:00', doDate: addDays(tomorrow, 3) })).notPlaced).toBe('dzień podany osobno')
+    expect(field(sent[0]![0]!, 'doDate')).toBe(addDays(tomorrow, 3))
+  })
+
+  it('@HH:MM dziś z godziną już minioną (D603): bez bloku, „ta godzina już minęła”; bieżąca minuta jeszcze stoi', async () => {
+    const sent = stubDays()
+    const today = logicalDayOf(Date.now())
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(placeLogical(today, 16 * 60))
+      const late = await createTask({ title: 'Raport @15:00' })
+      expect(late.notPlaced).toBe('ta godzina już minęła')
+      expect(sent[0]).toHaveLength(1)
+      expect(field(sent[0]![0]!, 'doDate')).toBe(today)
+      expect(field(sent[0]![0]!, 'day')).toBeNull()
+      expect(useUi.getState().toasts.map((t) => t.text)).toContain('Zapisano: Raport – nie postawiono na osi: ta godzina już minęła')
+      const now = await createTask({ title: 'Raport @16:00' })
+      expect(now).not.toHaveProperty('notPlaced')
+      expect(sent[1]).toHaveLength(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('data wykonania podana wprost zabiera słowu godzinę: bez bloku, dymek mówi „dzień podany osobno”', async () => {
+    const sent = stubDays()
+    const r = await createTask({ title: 'Raport @jutro 15:00', doDate: '2026-12-01' })
+    expect(r.notPlaced).toBe('dzień podany osobno')
+    expect(useUi.getState().toasts.map((t) => t.text)).toContain('Zapisano: Raport – nie postawiono na osi: dzień podany osobno')
+    expect(sent[0]).toHaveLength(1)
+    expect(field(sent[0]![0]!, 'doDate')).toBe('2026-12-01')
+    expect(field(sent[0]![0]!, 'day')).toBeNull()
   })
 })
 

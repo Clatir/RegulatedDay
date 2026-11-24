@@ -12,17 +12,25 @@ import { newId } from '@shared/model/ids'
 import { Choice, TextField } from '../../components/fields'
 import { Toggle, cx } from '../../components/ui'
 import { useBusy } from '../../lib/busy'
+import { variantKey } from '@shared/model/categoryGroup'
 import { saveVariants } from './categoryTreeEdits'
 import { CostNumbers, VARIANT_PLACE_OPTIONS, VARIANT_PLACE_SAME } from './categoryFields'
+import type { TreeRowsOf } from './useTreeSelection'
 
-function VariantRow({ categoryId, rules, v }: { categoryId: string; rules: CategoryRules; v: Variant }) {
+function VariantRow({ categoryId, rules, v, rows }: { categoryId: string; rules: CategoryRules; v: Variant; rows?: TreeRowsOf }) {
   const edit = (change: (now: readonly Variant[]) => VariantEntry[] | null) => void saveVariants(categoryId, change)
   const own = v.costs ?? null
+  // Its own background (T2715): a selected subcategory's colour does not show through it.
   return (
-    <div className={cx('flex flex-wrap items-center gap-2 rounded border border-line px-2 py-1', v.archived && 'border-dashed')} data-testid="variant-row" data-variant={v.id}>
+    <div
+      className={cx('flex flex-wrap items-center gap-2 rounded border border-line bg-panel px-2 py-1 data-[selected=true]:border-lamp data-[selected=true]:bg-lamp-soft', v.archived && 'border-dashed')}
+      {...rows?.(variantKey(categoryId, v.id))}
+      data-testid="variant-row"
+      data-variant={v.id}
+    >
       <TextField value={v.name} onCommit={(name) => edit((now) => changeVariant(now, v.id, { name }))} required max={VARIANT_NAME_MAX} shellClassName="w-[200px]" aria-label="Nazwa wariantu" data-testid="variant-name" />
       <Toggle checked={own == null} onChange={(same) => edit((now) => changeVariant(now, v.id, { costs: same ? null : { ...rules.costs } }))} label="koszt jak podkategoria" data-testid="variant-costs-same" />
-      {own && <CostNumbers costs={own} named label={(pool) => `${v.name}: ${pool}`} onCommit={(p, value) => edit((now) => changeVariant(now, v.id, { costs: { ...(now.find((x) => x.id === v.id)?.costs ?? own), [p]: value } }))} />}
+      {own && <CostNumbers wheel="gesture" costs={own} named label={(pool) => `${v.name}: ${pool}`} onCommit={(p, value) => edit((now) => changeVariant(now, v.id, { costs: { ...(now.find((x) => x.id === v.id)?.costs ?? own), [p]: value } }))} />}
       <Choice
         value={v.place ?? VARIANT_PLACE_SAME}
         options={[...VARIANT_PLACE_OPTIONS]}
@@ -45,7 +53,7 @@ function VariantRow({ categoryId, rules, v }: { categoryId: string; rules: Categ
   )
 }
 
-export function VariantRows({ categoryId, rules, showArchived }: { categoryId: string; rules: CategoryRules; showArchived: boolean }) {
+export function VariantRows({ categoryId, rules, showArchived, rows }: { categoryId: string; rules: CategoryRules; showArchived: boolean; rows?: TreeRowsOf }) {
   const [name, setName] = useState('')
   const [busy, run] = useBusy()
   // The name is taken at once (a second click adds no second variant); it comes back when nothing was saved.
@@ -62,7 +70,7 @@ export function VariantRows({ categoryId, rules, showArchived }: { categoryId: s
     <div className="flex flex-col gap-1.5" data-testid="variants">
       <span className="text-[12px] text-muted">Warianty (koszt i miejsce „jak podkategoria”, dopóki nie ustawisz własnych)</span>
       {list.map((v) => (
-        <VariantRow key={v.id} categoryId={categoryId} rules={rules} v={v} />
+        <VariantRow key={v.id} categoryId={categoryId} rules={rules} v={v} rows={rows} />
       ))}
       <div className="flex items-center gap-2">
         <input className="input w-[220px]" value={name} maxLength={VARIANT_NAME_MAX} placeholder="+ Wariant" onChange={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} data-testid="variant-new" />

@@ -75,6 +75,14 @@ export function showGroupLine(view: GroupView, line: { text: string; undo: Group
   return which
 }
 
+/**
+ * The words of the line of `view` changed – only while it is the line of `undo` (a newer change replaced it – nothing): an undo done in part says
+ * what is left to take back (the line stays to its term, T2720).
+ */
+export function retextGroupLine(view: GroupView, undo: GroupUndo, text: string): void {
+  useGroupLine.setState((s) => (s.lines[view]?.undo === undo ? { lines: { ...s.lines, [view]: { ...s.lines[view]!, text } } } : s))
+}
+
 /** How long the line still stands (ms; 0 and less – it is over, or none). */
 export const groupLineLeft = (line: GroupLineState | undefined, now = Date.now()): number => (line ? line.until - now : 0)
 

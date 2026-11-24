@@ -207,6 +207,9 @@ export function variantHasCosts(rules: CategoryRules, variantId?: string | null)
 
 const STARTING = new Map(DEFAULT_CATEGORIES.map((c) => [c.id, c]))
 
+/** Whether the subcategory is one of the starting ones (D523 gave each its starting body cost – a 0 there is a value, not a gap; „Uzupełnij ciało”, D623). */
+export const isStartingCategory = (categoryId: string): boolean => STARTING.has(categoryId)
+
 /** Whether the variant is one of the starting ones of its subcategory (D523: a variant of yours has no starting cost of the body – 0). */
 export const isStartingVariant = (categoryId: string, variantId: string): boolean => !!STARTING.get(categoryId)?.variants.some((v) => v.id === variantId)
 

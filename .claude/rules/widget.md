@@ -9,6 +9,7 @@ paths:
   - "src/renderer/widget/**"
   - "tests/unit/engine/widget-view.test.ts"
   - "tests/fs/widget.test.ts"
+  - "tests/web/bar-cost.test.ts"
 ---
 
 # Pasek, ikona, tryby ciszy (E4b)
@@ -72,7 +73,7 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
 - Sprawy (D384, D385, D402, reguły `sprawy.md`): cicha linia `task:<dzień>:<blok>` „Zadanie zrobione? · Tak · Wraca na
   listę” (`engineView` z `cases`, odpowiedź `WidgetEngine.answerTask` – zapis rekordu); „+ Skrzynka” (`QuickButton`) w każdym trybie:
   w oknie i panelu pole w pasku (akcja `quickAdd`), na pasku pulpitu akcja `quickOpen` – tylko od nadawcy `bar` → `openQuick` →
-  `QuickWindow.openFromBar` (okienko „Do skrzynki” jak skrót, D564 P15). Po udanym zapisie pasek mówi „Dodano do Skrzynki: <tytuł bez słów dat, ≤ 40 znaków>” (D470: `quickSavedText`, `say(…, ok)` – `note.ok`, spokojny kolor zamiast czerwonego; skrótem globalnym – `WidgetEngine.quickSaid` z uchwytu `CH.quickAdd`). Okienko „Do skrzynki” (`windows/quickWindow.ts`) na wierzch tylko ze skrótu i z `openFromBar` – `checkQuickWindow`.
+  `QuickWindow.openFromBar` (okienko „Do skrzynki” jak skrót, D564 P15). Po udanym zapisie pasek mówi „Dodano do Skrzynki: <tytuł bez słów dat, ≤ 40 znaków>” (D470: `quickSavedText`, `say(…, ok)` – `note.ok`, spokojny kolor zamiast czerwonego; skrótem globalnym – `WidgetEngine.quickSaid` z uchwytu `CH.quickAdd`). Lista wklejona w pole okna / panelu (N11, `CH.quickAddMany`): linia `quick:<batch>` „Dodano 5 spraw · Cofnij” (`quickListSaid`, `UNDO_LINE_MS`, po liniach `moved:`; „Cofnij” → `undoQuickList` → `hub.quickUndo`); lista z okienka – sam komunikat. Okienko „Do skrzynki” (`windows/quickWindow.ts`) na wierzch tylko ze skrótu i z `openFromBar` – `checkQuickWindow`.
 - Warianty (D313, T502): `WidgetView.variants` (znacznik, panel) ustawia `WidgetEngine.variantsView` po `engineView`;
   akcja `variants` `open` / `close` / `pick|i`, „Przestawiono … · Cofnij” to linia `moved:variant`. „Ułóż pod energię” (D369, T612): `openVariants`
   dokłada `energyOrderVariant` (tylko dzień paska = dziś) przed ostatnim „Zostaw”; bez przyczyny panel = ten wariant + `keepPlan`
@@ -140,15 +141,17 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   Przedłuż, Koniec pracy, „+ Skrzynka”, „⋯”; Odcinam się, „Prośba ▸”, „Sygnały ▸” – `bar-more-actions` w „⋯” (noc: „Prośba ▸” w wierszu); przy
   „Dalej?” wiersz bez jego odpowiedzi (C5); `BarButton fit` – nazwa się tnie (jeden wiersz przy 100 %); koszt z „Anuluj” (`cancelPending`);
   linia `clickUndo:<rodzaj>:<n>` „<akcja> · Cofnij” – pierwsza, `CLICK_UNDO_MS` 10 s; znika po udanym albo `clickGone` (`undoClick` – `timer.md`).
-- Ciąg przy komputerze (N1, D620, D621): `deskChainView` – linia `deskChain:<id startu>` „Dalej: <nazwa> · Cofnij” pierwsza, `CLICK_UNDO_MS` od
-  pierwszego zobaczenia startu `deskChain` (tylko ≤ `DESK_LINE_LATE_MS` 60 s po nim, pamięć `deskSeen` na dzień paska); „Cofnij” = `undo` startu
-  (`undoDeskChain`, silnik cofa parę). „Dalej” i „Przedłuż” wiersza, odpowiedzi „Dalej?” (blok z id pytania – `askedOf`), krok ±15 i „Potwierdź”
-  niosą `shown` – blok z przodu widoku ostatnio wysłanego (`shownFg` przy `emit`, nie `model`) albo pierwszego kliknięcia (`Pending.shown`); odmowa
-  `moved` (też próba kroku – `hub.timer` oddaje `code` / `front`) – `sayMoved(r)` „Już biegnie: <nazwa z `r.front`>”. Czekający koszt zmienia
-  tylko `setPending` (T2868: poprzedni zwalnia `hold`, nowy „Przedłuż” go bierze – `folder.holdDeskChain`, zegar monotoniczny); „Potwierdź” trzyma
-  świeży `hold` na czas zapisu (`releaseHold` w `finally`); zwolnienie bez nowego „Przedłuż” – `d.check` (przebieg od razu, `DataService.tick` w
-  trakcie przebiegu – jeszcze raz po nim); prowadzący bierze `hold` z początku `check()` (`deskHoldsNow`); krok po `await` sprawdza `pending === p`;
-  „Dalej” bez końca pokazanego – linia „Zaczęto: <nazwa>”. Tylko prowadzący (inny komputer – odmowa D621). Test w CI: `bar-windows.spec.ts`.
+- Ciąg przy komputerze (N1, D620, D621): linia „Dalej: … · Cofnij”, `shown`, czekające „Przedłuż” – reguły `ciag-przy-komputerze.md`.
+- „Koszt ▸” (D585, N12, T2500–T2514): `WidgetView.cost` (`BarCost` z `barCostOf` w `engine/costChange.ts` – blok na pierwszym planie, bez niego
+  zapauzowany, który wznowi „Wznów”; nigdy w tle ani z dnia minionego – `costEditable`, jak kafelek; `begunCosts`; `warning` – `wideCostWarning` z
+  `EngineInput.olderComputers` = `olderComputers(folder.computers, WIDE_COST_FROM)`, `bar-cost-old`) → `bar-group-cost` w „⋯”, `CostUnfold` (`bar-cost-*`;
+  pole `CommitField` tylko poza `desktop`; Shift ±10 z kliknięcia – `BarButton.onAct({ shift })`, `disabled` na brzegu; zwija się przy innym bloku –
+  `costFor`). Akcja `cost` (`barCostArg`/`barCostOp` w `shared/widget.ts`) omija podwójne 0,5 s → `WidgetEngine.costNow` → `WidgetDeps.cost`
+  (`hub.barCost` – okna słyszą od razu, `service.tick`) → `DataFolder.barCost`: `serial`, ocena na `barDay` (`barCostOf` – też „Odcinam się”; `barCostBasis`:
+  najnowsza zmiana bloku w kolejności logu), `barCostAfter`, `writeOn` z `holds` (zapis kafelka w międzyczasie – `StaleWrite`, od nowa ≤ 3 razy);
+  chwila = min(zegar paska, zegar folderu), nie przed `barCostBasis.after` (start i zmiany bloku – `costChangesOf` po minucie, potem logu; `after` ponad
+  60 s przed zegarem folderu – odmowa `BAR_COST_AHEAD_TEXT`). Odmowa –
+  `Nie zapisano: <powód>` (`COST_DAY_GONE_TEXT`, `BAR_COST_GONE_TEXT`, logi nieczytelne, folder zamknięty); błąd – tylko `say` („Potwierdź” zostaje). Bez „Cofnij”.
 - Wydarzenia całodniowe (D405, T740–T743): `WidgetView.allDay` (`barAllDay`, dziś = doba logiczna) – kropka i tytuł (≤ 20 znaków, „+N”) z lewej strony pierwszego wiersza
   paska pulpitu (`AllDayLabel`, tylko `desktop`), tylko odczyt, pełne tytuły po najechaniu w miejscu; miejsce zabiera tylko elastyczna nazwa bloku.
 

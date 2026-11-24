@@ -2,8 +2,10 @@
  * What every drawing of the energy shares (D500): the four lanes beside the axis of „Dziś” and the strip at the left edge of a
  * column of „Tydzień” and „3 dni”. The colour, the name and the letter of a pool; the smoothed shape through the samples of the
  * track – monotone between two samples, so it never goes above nor below the forecast's values (T1280); the spans below the
- * reserve; the state of the strip (the weakest pool: dobrze · uwaga · poniżej rezerwy, T1281); the words of the hover.
+ * reserve; the state of the strip (the weakest pool: dobrze · uwaga · poniżej rezerwy, T1281); the words of the hover. The curve and
+ * what is read from it every minute live in `@shared/engine/energyCurve` – the dot of a day of the month reads the same (N21, T2607).
  */
+import { curveAt, energySpan, WATCH_ABOVE_RESERVE, type Curve, type EnergyShade } from '@shared/engine/energyCurve'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
 import { logicalClock } from '@shared/format'
 import { COST_MAX, COST_MIN, costNumber } from '@shared/model/blockCosts'
@@ -22,6 +24,11 @@ export const ENERGY_SCALE = 'energia 0–100'
 export const ASSUMED_CAPTION = 'przyjęte'
 /** Such a drawing is fainter: its opacity × this (the lanes of „Dziś” and the strip of a column). */
 export const ASSUMED_FACTOR = 0.5
+/**
+ * The opacity of each shade of the weakest pool (dobrze faint, poniżej rezerwy full) – the strip of a column and the dot of a day of the
+ * month (N21); counted from the assumed check-in – `ASSUMED_FACTOR` of it.
+ */
+export const STRIP_OPACITY: Record<EnergyShade, number> = { ok: 0.3, watch: 0.65, low: 1 }
 /** The numbers at „teraz” of the lanes counted from the assumed check-in (T2430). */
 export const ASSUMED_NOW_OPACITY = 0.6
 /**
@@ -30,70 +37,12 @@ export const ASSUMED_NOW_OPACITY = 0.6
  */
 export const COST_SCALE_TEXT = `koszt na godzinę, od ${costNumber(COST_MIN)} do ${COST_MAX}; 1 = 3 punkty energii`
 
-/** A pool's curve: its samples with a value (time, value) and the slope at each one (value a minute). */
-export interface Curve {
-  t: number[]
-  v: number[]
-  m: number[]
-}
-
 /**
- * The curve of a pool through the samples of the track (a sample without a value is skipped). The slopes are Steffen's
- * (1990): at a sample between a rise and a fall the slope is 0, elsewhere at most twice the smaller of the two neighbouring
- * steps – the cubic between two samples is monotone, so it stays between their values (T1280).
+ * The smoothed curve (T1280), the numbers on the screen (T1290), the weakest pool of a minute and the strip's runs (T1281) – shared
+ * with the dot of a day of the month (N21, T2607).
  */
-export function poolCurve(track: Pick<EnergyTrack, 'samples'> | null | undefined, pool: Pool): Curve {
-  const t: number[] = []
-  const v: number[] = []
-  for (const s of track?.samples ?? []) {
-    if (!Number.isFinite(s[pool]) || (t.length > 0 && s.at <= t[t.length - 1]!)) continue
-    t.push(s.at)
-    v.push(s[pool])
-  }
-  const n = t.length
-  const d = Array.from({ length: Math.max(0, n - 1) }, (_, k) => (v[k + 1]! - v[k]!) / (t[k + 1]! - t[k]!))
-  const m = t.map((_, k) => {
-    if (n < 2) return 0
-    if (k === 0) return d[0]!
-    if (k === n - 1) return d[n - 2]!
-    const d0 = d[k - 1]!
-    const d1 = d[k]!
-    if (d0 * d1 <= 0) return 0
-    const h0 = t[k]! - t[k - 1]!
-    const h1 = t[k + 1]! - t[k]!
-    const p = (d0 * h1 + d1 * h0) / (h0 + h1)
-    return Math.sign(d0) * Math.min(Math.abs(d0), Math.abs(d1), 0.5 * Math.abs(p)) * 2
-  })
-  return { t, v, m }
-}
-
-/** The segment of the curve that holds `at` (the last one for its last sample); -1 outside the samples. */
-function segmentOf(c: Curve, at: number): number {
-  const n = c.t.length
-  if (n === 0 || at < c.t[0]! || at > c.t[n - 1]!) return -1
-  if (n === 1) return 0
-  // The last segment whose start is at or before `at` (binary search: the strip reads every minute of the day).
-  let lo = 0
-  let hi = n - 2
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1
-    if (c.t[mid]! <= at) lo = mid
-    else hi = mid - 1
-  }
-  return lo
-}
-
-/** The value of the smoothed curve at the minute `at` (the cubic of its segment); null outside the samples. */
-export function curveAt(c: Curve, at: number): number | null {
-  const k = segmentOf(c, at)
-  if (k < 0) return null
-  if (c.t.length === 1) return c.v[0]!
-  const h = c.t[k + 1]! - c.t[k]!
-  const s = (at - c.t[k]!) / h
-  const s2 = s * s
-  const s3 = s2 * s
-  return (2 * s3 - 3 * s2 + 1) * c.v[k]! + (s3 - 2 * s2 + s) * h * c.m[k]! + (-2 * s3 + 3 * s2) * c.v[k + 1]! + (s3 - s2) * h * c.m[k + 1]!
-}
+export { curveAt, energySpan, poolCurve, poolCurves, stripRuns, stripState, valuesAt, type Curve, type PoolValues, type StripRun } from '@shared/engine/energyCurve'
+export { onScreen, type OnScreen } from '@shared/engine/energyCurve'
 
 /**
  * The filled bar of a pool's lane: from its left edge `x0` to the curve and back – `x` turns the value (0–100) into the
@@ -149,25 +98,6 @@ export function spansAtLeast(c: Curve, level: number): Array<[number, number]> {
   return out
 }
 
-/** A value as the screen shows it – an integer made by `onScreen` only (T1290: the one rounding of the strip's numbers). */
-export type OnScreen = number & { readonly __onScreen: true }
-/** Rounds a value of a pool to the number the screen shows. */
-export const onScreen = (v: number): OnScreen => Math.round(v) as OnScreen
-
-/** The four pools at a minute, as numbers on the screen (rounded); null outside the samples. */
-export type PoolValues = Record<Pool, OnScreen>
-
-/** The four smoothed pools at the minute `at`, rounded – the numbers beside „teraz” (D500). */
-export function valuesAt(curves: Record<Pool, Curve>, at: number): PoolValues | null {
-  const out = {} as PoolValues
-  for (const p of POOLS) {
-    const v = curveAt(curves[p], at)
-    if (v == null) return null
-    out[p] = onScreen(v)
-  }
-  return out
-}
-
 /** The sample of the track nearest to the minute `at` (the hover shows the forecast's own numbers); null – no samples. */
 export function nearestSample(track: Pick<EnergyTrack, 'samples'> | null | undefined, at: number): EnergyTrack['samples'][number] | null {
   let best: EnergyTrack['samples'][number] | null = null
@@ -183,84 +113,14 @@ export function hoverText(at: number, v: Record<Pool, number>): string {
   return [logicalClock(at), ...POOLS.map((p) => `${POOL_NAME[p]} ${Math.round(v[p])}`)].join(' · ')
 }
 
-/** The shades of the strip of a column (D500). */
-export type StripState = 'ok' | 'watch' | 'low'
+/** The shades of the strip of a column (D500) – the shades of the weakest pool, shared with the dot of the month's day (N21, T2600). */
+export type StripState = EnergyShade
 export const STRIP_STATE_NAME: Record<StripState, string> = { ok: 'dobrze', watch: 'uwaga', low: 'poniżej rezerwy' }
-/** How far above the reserve the weakest pool still counts as „uwaga” (D500: less than reserve + 15). */
-export const WATCH_ABOVE_RESERVE = 15
-
-/**
- * The weakest pool at a minute and its shade (D500): below the reserve – „poniżej rezerwy”, less than 15 above it – „uwaga”,
- * else „dobrze”. The values are the numbers on the screen – rounded once, by `valuesAt` (T1281); the type `OnScreen`
- * lets nothing else in (T1290). A tie – the first pool (głowa, emocje, bodźce, ciało).
- */
-export function stripState(v: PoolValues, reserve: number): { pool: Pool; state: StripState } {
-  let pool: Pool = POOLS[0]!
-  for (const p of POOLS) if (v[p] < v[pool]) pool = p
-  const w = v[pool]
-  return { pool, state: w < reserve ? 'low' : w < reserve + WATCH_ABOVE_RESERVE ? 'watch' : 'ok' }
-}
-
-/** A run of the strip: from `from` to `to` (minutes) one pool is the weakest, in one shade. */
-export interface StripRun {
-  from: number
-  to: number
-  pool: Pool
-  state: StripState
-}
-
-/**
- * The runs of the strip of a column: the smoothed pools read every minute from the first sample to the last, neighbouring
- * minutes of the same weakest pool and shade joined (T1281).
- */
-export function stripRuns(track: Pick<EnergyTrack, 'samples' | 'reserve'> | null | undefined): StripRun[] {
-  if (!track) return []
-  const curves = poolCurves(track)
-  const span = spanOf(curves)
-  if (!span) return []
-  const [from, to] = span
-  const out: StripRun[] = []
-  for (let at = from; at < to; at++) {
-    const v = valuesAt(curves, at)
-    if (!v) continue
-    const { pool, state } = stripState(v, track.reserve)
-    const last = out[out.length - 1]
-    if (last && last.pool === pool && last.state === state) last.to = at + 1
-    else out.push({ from: at, to: at + 1, pool, state })
-  }
-  return out
-}
-
-/** The span of the curves: from the latest first point to the earliest last one; null when it is not a span (T1290). */
-function spanOf(curves: Record<Pool, Curve>): [number, number] | null {
-  let from = -Infinity
-  let to = Infinity
-  for (const p of POOLS) {
-    const { t } = curves[p]
-    if (t.length === 0) return null
-    from = Math.max(from, t[0]!)
-    to = Math.min(to, t.at(-1)!)
-  }
-  return from < to ? [from, to] : null
-}
-
-/**
- * The minutes every pool has a value for – from the latest first point of the curves to the earliest last one; null when that
- * is not a span (no track, one sample, pools that never overlap): nothing to draw, neither the lanes nor the strip (T1286).
- * Read from the curves, not the raw samples (T1290): `poolCurve` keeps only rising times, so a track in the wrong order or
- * with two samples of one time has no span here, as it has no curve – the lanes and the strip never disagree.
- */
-export function energySpan(track: Pick<EnergyTrack, 'samples'> | null | undefined): [number, number] | null {
-  return spanOf(poolCurves(track))
-}
+/** How far above the reserve the weakest pool still counts as „uwaga” (D500: less than reserve + 15) – `@shared/engine/energyTrack`. */
+export { WATCH_ABOVE_RESERVE }
 
 /**
  * The day has energy to draw (D500): the one test for the lanes of „Dziś”, the strip, its legend and the blocks' offset.
  * A type guard, so the callers read the track as there (the false branch narrows nothing worth using – T1293).
  */
 export const hasEnergy = <T extends Pick<EnergyTrack, 'samples'>>(track: T | null | undefined): track is T => energySpan(track) != null
-
-/** The four curves of a track. */
-export function poolCurves(track: Pick<EnergyTrack, 'samples'> | null | undefined): Record<Pool, Curve> {
-  return { head: poolCurve(track, 'head'), emotions: poolCurve(track, 'emotions'), senses: poolCurve(track, 'senses'), body: poolCurve(track, 'body') }
-}

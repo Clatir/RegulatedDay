@@ -1,11 +1,14 @@
 /**
  * The views of many days besides „Tydzień” (SNT1): which days a block may be dragged between (D417), the cell of a day of
- * the month (D418, D429: the bars of its all-day events, fixed and flexible blocks, „+N”, the load of work against the budget) and the
- * „Agenda” (D418: seven days, the all-day events on top, then the blocks by the hour). Pure: from the days of the horizon
- * (`HorizonDay`, one count of each day) and the all-day events (never an input of a day – D405, T725).
+ * the month (D418, D429: the bars of its all-day events, fixed and flexible blocks, „+N”, the load of work against the budget, the
+ * energy of its weakest pool – N21, D595) and the „Agenda” (D418: seven days, the all-day events on top, then the blocks by the
+ * hour). Pure: from the days of the horizon (`HorizonDay`, one count of each day) and the all-day events (never an input of a
+ * day – D405, T725).
  */
 import { namedOfPlan } from '../blockName'
 import { eventsOn, type AllDayEvent } from '../model/allDay'
+import { dayEnergy } from './energyCurve'
+import type { DayEnergy } from './energyCurve'
 import type { HorizonBlock, HorizonBlockState, HorizonDay, HorizonRead, HorizonWhen } from './week'
 
 /**
@@ -54,6 +57,8 @@ export interface MonthBlock {
   state: HorizonBlockState
   background: boolean
   outsidePlan: boolean
+  /** Its hour may be changed (`HorizonBlock.movable`) – the menu „Zmień N bloków” of the bars asks (N18, D597). No cost: the month counts none (T2608). */
+  movable: boolean
 }
 
 /** The block of the month's day of a block of the horizon (T1015): the fields `blockName` reads, the hour, the state. */
@@ -70,7 +75,8 @@ export function monthBlockOf(b: HorizonBlock): MonthBlock {
     session: b.session === true,
     state: b.state,
     background: b.background,
-    outsidePlan: b.outsidePlan
+    outsidePlan: b.outsidePlan,
+    movable: b.movable === true
   }
 }
 
@@ -80,7 +86,7 @@ export function monthBlockOf(b: HorizonBlock): MonthBlock {
  */
 export const monthBarred = (b: MonthBlock): boolean => !b.session && (b.fixed || (b.state !== 'missed' && !b.background))
 
-/** A day of the month as the main process gives it (D418): its blocks by the hour and its load. */
+/** A day of the month as the main process gives it (D418): its blocks by the hour, its load and its energy (N21). */
 export interface MonthDay {
   date: string
   when: HorizonWhen
@@ -97,6 +103,12 @@ export interface MonthDay {
   load: LoadLevel | null
   workMin: number | null
   limitMin: number | null
+  /**
+   * The weakest pool of the day and its shade (N21, D595, `dayEnergy`): a day gone by from its log with its module of that day (T950),
+   * today and a day to come from the curve the column draws – from the assumed check-in until a check-in of its own (`assumed`, T903,
+   * T2430). Null – not known: a day gone by without a check-in, the module off (a day gone by: then; today and to come: now), not read.
+   */
+  energy: DayEnergy | null
 }
 
 /** The month's day of a day of the horizon. */
@@ -110,7 +122,8 @@ export function monthDayOf(d: HorizonDay): MonthDay {
     blocks: d.blocks.filter(onDay).map(monthBlockOf),
     load: b ? loadLevel(b.workMin, b.limitMin) : null,
     workMin: b?.workMin ?? null,
-    limitMin: b?.limitMin ?? null
+    limitMin: b?.limitMin ?? null,
+    energy: d.read === 'unknown' ? null : dayEnergy(d.energy)
   }
 }
 

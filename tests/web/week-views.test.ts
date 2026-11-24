@@ -157,6 +157,7 @@ describe('komórka miesiąca (D418, D422)', () => {
     load: 'low',
     workMin: 310,
     limitMin: 360,
+    energy: null,
     ...o
   })
   it('do trzech pasków: najpierw wydarzenia całodniowe, potem stałe bloki, potem elastyczne; reszta jako „+N”', () => {

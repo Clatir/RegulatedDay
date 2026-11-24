@@ -91,6 +91,8 @@ export interface MenuCtx {
   template?: boolean
   /** The engine's judgement of the selection (see `MenuJudge`); left out – the states of the blocks. */
   judge?: MenuJudge
+  /** The view counted no costs of its blocks („Agenda”, the month – N18, T2614): their `costs` are unknown, not none – „Koszt…” is off (the window would show a false 0 and save over the real cost). Default: known. */
+  costsKnown?: boolean
 }
 
 /** What the menu does besides the plain actions: the two that need a window of their own. */
@@ -117,6 +119,7 @@ const ALL_PAST = 'Wszystkie wybrane bloki już minęły'
 const ALL_OFF = 'Wszystkie wybrane bloki są już zdjęte z planu (zaparkowane albo odwołane)'
 const NONE_OPEN = 'Żaden z wybranych bloków nie jest do zrobienia (zaczęte, minione albo zdjęte z planu)'
 const NOT_TODAY = 'Odwołać i zaparkować można tylko dzisiejsze bloki'
+const COSTS_UNKNOWN = 'Koszt zmienisz w „Tygodniu”, „3 dniach” albo w „Dziś”'
 const ROUTINE_ONLY = 'Rutynę wybierzesz tylko blokom podkategorii z rodzaju „rutyna”'
 const NONE_REST = 'Po tych blokach nie ma bloków elastycznych do przesunięcia (stałe, chronione, zaczęte, sesje i wykłady zostają)'
 const ALL_PAST_DAYS = 'Wszystkie wybrane bloki są z minionych dni'
@@ -177,7 +180,7 @@ export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockM
   const moveWhy = v ? verdictWhy(v.place, true) : statesMove
   const dayWhy = v ? verdictWhy(v.day) : statesDay
   const fieldWhy = verdictWhy(v?.fields)
-  const costWhy = verdictWhy(v?.cost)
+  const costWhy = ctx.costsKnown === false ? COSTS_UNKNOWN : verdictWhy(v?.cost)
   const routineWhy = verdictWhy(v?.routine)
   // The rest of the day (N17): any selected block says where it starts – only a day gone by, or no flexible block after them, leaves nothing.
   const restWhy = v
@@ -256,7 +259,8 @@ export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockM
       ? { label: 'Przesuń o…', disabled: moveWhy, testId: 'block-menu-shift' }
       : { label: 'Przesuń o…', testId: 'block-menu-shift', submenu: [shiftBy('shift', 1, 'Później o…', 'block-menu-later'), shiftBy('shift', -1, 'Wcześniej o…', 'block-menu-earlier')] }
   ]
-  if (!ctx.template) {
+  // D584: the rest of a day is for „Dziś”, „Tydzień” and „3 dni” – not a template nor „Agenda” and the month (no axis of the day; they count no costs – `costsKnown`).
+  if (!ctx.template && ctx.costsKnown !== false) {
     entries.push(
       restWhy
         ? { label: 'Przesuń resztę dnia o…', disabled: restWhy, testId: 'block-menu-rest' }

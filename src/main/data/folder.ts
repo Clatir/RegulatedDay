@@ -13,18 +13,21 @@ import { readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeFileAtomic } from '../datastore/atomic'
-import type { ComputerRow, SearchCorpus } from '@shared/api'
+import type { ComputerRow, RemovedItem, RemovedList, SearchCorpus } from '@shared/api'
 import { EventClock, type ClockSources } from '@shared/data/clock'
 import { inverseEdit, sameContentAs, setAt, type MergeConflict } from '@shared/data/merge'
 import { classify, paths, ID_COLLECTIONS } from '@shared/data/paths'
 import { readLogText } from '@shared/data/logText'
+import { dayBlocks, dayRaw, isRaw as isPlainRecord } from '@shared/data/dayEdits'
+import { REMOVED_KINDS, REMOVED_MS, removalMarks, removedWith, restoredDay, type DayRemoval } from '@shared/data/removed'
 import { activityOf, type Activity } from '@shared/engine/activity'
 import { answerEvents, autoActions, closedSince, fixedStartPausesClosed, nextCheckAt, nextDeadline, questionsOf, runFromOf, shutdownActions, type AutoEvent, type Question } from '@shared/engine/auto'
 import { simEvents } from '@shared/engine/sim'
 import { groupLogDrafts, groupLogUndo, type GroupSkip } from '@shared/engine/groupEdit'
 import { foregroundRuns, templateDoneDrafts, templateDoneUndo, type DayRun, type DoneSkipWhy } from '@shared/engine/templateApply'
-import { createDay, nextWakeForBedtime, type HolidayLookup } from '@shared/engine/createDay'
+import { createDay, nextWakeForBedtime, snapshotEntries, type HolidayLookup } from '@shared/engine/createDay'
 import { dayContextOf } from '@shared/engine/context'
+import { plannedStartMin } from '@shared/engine/planEdit'
 import { computeDay, newSegments, type DayContext, type DayState } from '@shared/engine/day'
 import { NO_POWER, powerNeedOf, type PowerNeed } from '@shared/engine/power'
 import { requestAction, type RequestAction } from '@shared/engine/requests'
@@ -55,7 +58,8 @@ import { placeOf, type Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type PlanBlock, type Template } from '@shared/model/plan'
 import { MODULES, personName, RD_SCHEMA, rdFrom, type ModuleId, type WriteOnceField } from '@shared/model/rd'
 import { runningRequestOf } from '@shared/engineView'
-import { CLICK_UNDO_MS, CLICK_UNDO_WRITE_MS, type RunningRequest } from '@shared/widget'
+import { BAR_COST_AHEAD_MS, BAR_COST_AHEAD_TEXT, BAR_COST_GONE_TEXT, barCostAfter, CLICK_UNDO_MS, CLICK_UNDO_WRITE_MS, type BarCostClick, type BarCostResult, type RunningRequest } from '@shared/widget'
+import { barCostBasis, barCostOf, COST_DAY_GONE_TEXT } from '@shared/engine/costChange'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { blockName, type Names } from '@shared/blockName'
 import { routineCostsOf, routineFrom, type Routine } from '@shared/model/routines'
@@ -402,6 +406,9 @@ const SERIES_READ_ROUNDS = 20
 /** How long the types of a series ended before yesterday stand without reading its days again (a file changed in place elsewhere). */
 const SETTLED_TRUST_MS = 10 * 60_000
 
+/** `writeOn` found what a click was judged on changed meanwhile (`holds`): nothing written, the click is judged again. */
+class StaleWrite extends Error {}
+
 export class DataFolder {
   readonly clock: EventClock
   readonly log: EventLog
@@ -491,10 +498,10 @@ export class DataFolder {
   /**
    * The days of the horizon (the week, the month's goals – D356, T553), each counted again only on a change of what it is
    * made of; the ones asked last stay (a hit goes to the end). Days being counted now: one count of a day for every ask.
-   * `curve` – what its curve was counted with (`CurveKey`; null: none counted – T914, T966).
+   * `curve` – what its curve was counted with (`CurveKey`; null: none counted – T914, T966); `costs` – with the cost on the tiles (T2608).
    */
-  private readonly horizonMemo = new Map<string, { key: string; day: HorizonDay; seq: number; curve: CurveKey }>()
-  private readonly horizonRuns = new Map<string, { key: string; curve: CurveKey; run: Promise<HorizonDay>; seq: number }>()
+  private readonly horizonMemo = new Map<string, { key: string; day: HorizonDay; seq: number; curve: CurveKey; costs: boolean }>()
+  private readonly horizonRuns = new Map<string, { key: string; curve: CurveKey; costs: boolean; run: Promise<HorizonDay>; seq: number }>()
   /** The counts of days of the horizon begun so far: a later one's result is never written over by an earlier one's. */
   private horizonSeq = 0
   /** Changes of the goals one at a time, each made from rd.json as it is in its turn. */
@@ -1020,6 +1027,148 @@ export class DataFolder {
   }
 
   /**
+   * „Ostatnio usunięte” in „Historia” (N24): what was removed in the last `REMOVED_MS` and is still gone, newest first, each
+   * at the instant you removed it (the queue's entry – `at` of the version kept at the removal, the note's time).
+   * Records (only the kinds of the list are looked at) from their history: a file gone whose newest version (conflict copies
+   * aside) is its removal – not one whose removal still waits in the queue (the file is there); a series only archived (its
+   * removal, D381 – a series without a file is no removal of yours, e.g. the „Cofnij” of its making): the record as it is now out
+   * of the archive, with its end (`until`, `count`) from its newest version not archived (the one kept at the archive). Blocks
+   * from the notes of removals (`history.removals`): for each block only its newest note of all days, on the day it names – if
+   * the day's plan as this computer sees it now (`ownContext`) does not have it, it is not moved to another day (`movedTo`), not
+   * moved here from a day that no longer says it went here (a move taken back), and not of the day's snapshot with only its own
+   * entry taken out of the file. A block shows as the day would have it put back – its context counted again with the file
+   * after „Przywróć” (the day's wake, D334, the room of the series, D401; `startMin` also for one after an anchor); one the plan
+   * would not show even then for its anchor is `anchorGone`, for another reason – left out. The attachments of each: those its
+   * very edit named (`taken`) and still so (`removedWith`); their list unreadable – `attachmentsUnknown`. Whatever cannot be read
+   * now (the history, a record, the attachments, a day's file or log) is left out with `complete` false – unknown is never „none”.
+   */
+  async removedItems(): Promise<RemovedList> {
+    const at = this.clock.now()
+    const since = at - REMOVED_MS
+    let complete = true
+    const unread = () => void (complete = false)
+    const items: Array<{ item: Omit<RemovedItem, 'attachments' | 'attachmentsUnknown'>; taken?: Record<string, number> }> = []
+    const none = { cancelled: false, frozen: false, anchorGone: false, startMin: null, date: null }
+    for (const r of await this.history.records(unread, REMOVED_KINDS)) {
+      if (r.last < since) continue
+      const rel = paths.record(r.kind as (typeof REMOVED_KINDS)[number], r.id)
+      let now: Record<string, unknown> | undefined
+      let file: Record<string, unknown> | undefined
+      try {
+        now = await this.recordView(rel)
+        file = await this.shared(rel)
+      } catch {
+        complete = false
+        continue
+      }
+      const series = r.kind === 'series'
+      // A removal still waiting in the queue (the file there, the queue's view without it; a series – archived in the queue's view
+      // only) is not written yet: not on the list.
+      if (series ? now?.archived !== true || file?.archived !== true : now !== undefined || file !== undefined) continue
+      const versions = (await this.history.list(r.kind, r.id, unread)).filter((v) => v.reason !== 'conflict' && isPlainRecord(v.record))
+      if (series) {
+        // The newest version not archived: the series just before its (last) archive (`archive` – kept at it, with when).
+        const was = versions.find((v) => (v.record as Record<string, unknown>).archived !== true)
+        const atArchive = was?.reason === 'archive' || was?.reason === 'delete'
+        const removedAt = atArchive ? (was!.at ?? was!.savedAt) : typeof now!.updatedAt === 'number' ? now!.updatedAt : null
+        if (!was || removedAt == null || removedAt < since) continue
+        const end = was.record as Record<string, unknown>
+        items.push({ item: { ...none, kind: 'series', id: r.id, rel, removedAt, value: { ...now!, archived: false, until: end.until ?? null, count: end.count ?? null } }, ...(atArchive ? { taken: was.taken } : {}) })
+        continue
+      }
+      const was = versions[0]?.reason === 'delete' ? versions[0] : undefined
+      const removedAt = was ? (was.at ?? was.savedAt) : null
+      if (!was || removedAt == null || removedAt < since) continue
+      items.push({ item: { ...none, kind: r.kind as RemovedItem['kind'], id: r.id, rel, removedAt, value: was.record as Record<string, unknown> }, taken: was.taken })
+    }
+    let notes: Awaited<ReturnType<RecordHistory['removals']>> = []
+    try {
+      notes = await this.history.removals(since, unread)
+    } catch {
+      complete = false
+    }
+    // The newest note of each block of all days (notes come newest first): an older one – on another day too – says nothing now.
+    const byDay = new Map<string, Array<{ id: string; at: number; r: DayRemoval; taken?: Record<string, number> }>>()
+    const seen = new Set<string>()
+    for (const n of notes) {
+      if (!isIsoDate(n.date)) continue
+      for (const r of n.removed) {
+        if (!r || typeof r.id !== 'string' || seen.has(r.id)) continue
+        seen.add(r.id)
+        // The attachments the note names that may be this block's (one of another block of the same edit is not; one of an owner
+        // not known when it was queued may be).
+        const taken = n.taken ? Object.fromEntries(Object.entries(n.taken).filter(([a]) => n.takenBy?.[a] == null || n.takenBy[a] === r.id)) : undefined
+        byDay.set(n.date, [...(byDay.get(n.date) ?? []), { id: r.id, at: n.savedAt, r, taken }])
+      }
+    }
+    let inp: Inputs | null = null
+    if (byDay.size) {
+      try {
+        inp = await this.inputs(true)
+      } catch {
+        complete = false
+      }
+    }
+    for (const [date, removed] of inp ? byDay : []) {
+      try {
+        const read = await this.log.readDay(date)
+        if (!read.complete && !read.away) throw new Error('log')
+        const raw = (await this.recordView(paths.day(date))) ?? null
+        const ctx = await this.ownContext(date, read, at, inp!, raw ? dayFileFrom(raw, date) : null)
+        const inPlan = new Set(ctx.plan.map((b) => b.id))
+        const movedTo = raw ? dayFileFrom(raw, date).movedTo : {}
+        // Its removal taken back since: one of yours is in the file again, one of the snapshot no longer cancelled (gone from the plan
+        // since for another reason – its anchor – it is not removed).
+        const inFile = new Set(dayBlocks(raw ?? {}).flatMap((b) => (isPlainRecord(b) && typeof b.id === 'string' ? [b.id] : [])))
+        const cancelledNow = new Set(raw ? dayFileFrom(raw, date).cancelled : [])
+        const frozen = read.events.some((e) => isKnown(e) && e.k === 'day.freeze')
+        const ofSnapshot = snapshotEntries(ctx.snapshot, date)
+        for (const { id, at: removedAt, r, taken } of removed) {
+          const cancelled = r.cancelled === true
+          if (inPlan.has(id) || id in movedTo || (cancelled ? !cancelledNow.has(id) : inFile.has(id) || ofSnapshot(id))) continue
+          const own = isPlainRecord(r.block) ? r.block : null
+          if (!cancelled && !own) continue
+          // Moved here from another day: removed here only while that day still says it went here (else the move was taken back).
+          const from = typeof own?.movedFrom === 'string' && isIsoDate(own.movedFrom) && own.movedFrom !== date ? own.movedFrom : null
+          if (from) {
+            try {
+              const source = await this.recordView(paths.day(from))
+              if (!source || dayFileFrom(source, from).movedTo[id] !== date) continue
+            } catch {
+              complete = false
+              continue
+            }
+          }
+          // The day as „Przywróć” would leave it, counted again from that file: where the block would stand, if at all.
+          const after = (await this.ownContext(date, read, at, inp!, dayFileFrom(restoredDay(dayRaw(raw, date), { id, value: own, cancelled }), date))).plan
+          const back = after.find((b) => b.id === id)
+          const shown = back ? (back as unknown as Record<string, unknown>) : (own ?? (ofSnapshot(id) as unknown as Record<string, unknown> | null))
+          if (!shown || (!back && typeof shown.anchor !== 'string')) continue
+          const startMin = back ? plannedStartMin(back, after) : null
+          items.push({ item: { kind: 'block', id, rel: paths.day(date), date, removedAt, value: cancelled ? shown : own, cancelled, frozen, anchorGone: !back, startMin }, taken })
+        }
+      } catch {
+        complete = false
+      }
+    }
+    // The attachments only when a removal took some: their list read once.
+    let attachments: Array<Record<string, unknown>> | null = []
+    if (items.some((x) => x.taken && Object.keys(x.taken).length)) {
+      try {
+        attachments = await this.collection('attachment')
+      } catch {
+        attachments = null
+        complete = false
+      }
+    }
+    const out = items.map(({ item, taken }): RemovedItem => {
+      const unknown = attachments == null && !!taken && Object.keys(taken).length > 0
+      return { ...item, attachments: attachments && !unknown ? removedWith(attachments, item, taken) : null, attachmentsUnknown: unknown }
+    })
+    return { items: out.sort((a, b) => b.removedAt - a.removedAt), complete }
+  }
+
+  /**
    * The days from `from` on that have a file (also one still in the queue), in order – a change of a series looks at the
    * occurrences changed on their days (D381). A year that cannot be listed now is an error (unknown is never „none”).
    */
@@ -1097,12 +1246,21 @@ export class DataFolder {
     const at = this.clock.now()
     const ids: string[] = []
     const queued: QueuedEdit[] = []
+    // What each entry removes with it (N24): the attachments that go after it (a day's block's – by its id), a series changed too.
+    const blockOf = new Map<string, string>()
     for (const e of entries) {
+      const c = classify(e.rel)
+      if (c?.kind !== 'attachment' || !c.id) continue
+      const a = attachmentFrom(await this.recordView(e.rel).catch(() => undefined))
+      if (a?.owner.scope === 'day') blockOf.set(a.id, a.owner.blockId)
+    }
+    const marks = removalMarks(entries, (id) => blockOf.get(id) ?? null)
+    for (const [i, e] of entries.entries()) {
       const id = `${this.o.computer}-${at.toString(36)}-${(this.editSeq++).toString(36)}`
       // The entries before it in this edit it goes with (T923), by their place.
       const after = [...new Set(e.after ?? [])].filter((i) => Number.isInteger(i) && i >= 0 && i < ids.length).map((i) => ids[i]!)
       ids.push(id)
-      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}), ...(after.length ? { after } : {}), ...(whole ? { whole: true } : {}) })
+      queued.push({ id, at, schema: e.schema ?? 1, rel: e.rel, edits: e.edits, ...(e.create ? { create: true } : {}), ...(e.remove ? { remove: true, ...(e.base !== undefined ? { base: e.base } : {}) } : {}), ...(after.length ? { after } : {}), ...(whole ? { whole: true } : {}), ...marks[i] })
     }
     // All of them on the disk at once, or none (A3-15): a save that fails leaves no part of it to be written later.
     this.queue.add(...queued)
@@ -1677,14 +1835,14 @@ export class DataFolder {
    * to the events its freeze named), today live, a day to come from its plan. rd.json or the list of templates not
    * readable now (OneDrive still bringing them): every day unknown – never a refusal of the week or of the progress.
    */
-  private async horizonDays(dates: readonly string[], at: number, energy = false): Promise<HorizonDay[]> {
+  private async horizonDays(dates: readonly string[], at: number, energy = false, costs = energy): Promise<HorizonDay[]> {
     const today = logicalDayOf(at)
     const inp = await this.inputs(true).catch(() => null)
     // The curves (D417): the energy module as the settings have it now (your queued change too) – for today and the days to
     // come; a day gone by tells its own from its grade and its log (`horizonDay`, T950) – nothing read for it here.
     const moduleOn = energy && inp ? rdFrom(await this.recordView(paths.settings).catch(() => undefined)).general.modules.energy : true
     const out: HorizonDay[] = []
-    for (const date of dates) out.push(inp ? await this.horizonDay(date, today, at, inp, energy, moduleOn) : unknownDay(date, whenOf(date, today)))
+    for (const date of dates) out.push(inp ? await this.horizonDay(date, today, at, inp, energy, costs, moduleOn) : unknownDay(date, whenOf(date, today)))
     // The days asked last stay remembered (`HORIZON_MEMO_DAYS`: the month of „Kalendarz”, the goals, the week and the days shown).
     for (const d of this.horizonMemo.keys()) if (this.horizonMemo.size > HORIZON_MEMO_DAYS) this.horizonMemo.delete(d)
     return out
@@ -1698,14 +1856,17 @@ export class DataFolder {
    * timed out or started again): this day unknown – said in the log, by its date and the kind of the error – the others
    * go on.
    */
-  private async horizonDay(date: string, today: string, at: number, inp: Inputs, curve: boolean, moduleOn: boolean): Promise<HorizonDay> {
+  private async horizonDay(date: string, today: string, at: number, inp: Inputs, curve: boolean, costs: boolean, moduleOn: boolean): Promise<HorizonDay> {
     const when = whenOf(date, today)
     const next = addDays(date, 1)
     // What the curve is counted with (T914, T966): none, or with the module of the day – a day gone by its own (T950), today
     // and a day to come the module now. A count serves an ask when it is of the same day and has the curve asked for: one
-    // without a curve (the month, the goals, „Agenda”) is served by any; one with it only by a count with the same.
+    // without a curve (the goals, „Agenda”) is served by any; one with it (the week, „3 dni”, the month – N21, T2601) only by a count with the same.
+    // The cost on the tiles (T2608): the week and „3 dni” ask for it, the month does not – a count with it serves the month, one without
+    // it never the week.
     const want: CurveKey = !curve ? null : when === 'past' ? 'own' : moduleOn ? 'on' : 'off'
-    const serves = (e: CurveKey) => want == null || e === want
+    const wantCosts = want != null && costs
+    const serves = (e: { curve: CurveKey; costs: boolean }) => want == null || (e.curve === want && (e.costs || !wantCosts))
     try {
       const read = await this.log.readDay(date)
       const dayFile = await this.dayFile(date, true)
@@ -1718,16 +1879,17 @@ export class DataFolder {
       let day: HorizonDay
       let seq: number
       let counted: CurveKey
-      if (was?.key === key && serves(was.curve)) ({ day, seq, curve: counted } = was)
+      let countedCosts: boolean
+      if (was?.key === key && serves(was)) ({ day, seq, curve: counted, costs: countedCosts } = was)
       else {
         let job = this.horizonRuns.get(date)
-        if (job?.key !== key || !serves(job.curve)) {
+        if (job?.key !== key || !serves(job)) {
           const run = (async () => {
             const ctx = dayContextOf(inp, { date, events: read.events, dayFile, nextFile }, this.o.holidays, at)
             const frozen = when === 'past' ? foldFacts(gridOf(date), read.events).frozen : null
-            return (this.o.worker ?? inProcess).run({ kind: 'horizon', ctx, when, frozen: frozen ? { know: frozen.know, grade: frozen.grade } : null, curve, moduleOn })
+            return (this.o.worker ?? inProcess).run({ kind: 'horizon', ctx, when, frozen: frozen ? { know: frozen.know, grade: frozen.grade } : null, curve, costs: wantCosts, moduleOn })
           })()
-          const mine = { key, curve: want, run, seq: ++this.horizonSeq }
+          const mine = { key, curve: want, costs: wantCosts, run, seq: ++this.horizonSeq }
           job = mine
           this.horizonRuns.set(date, mine)
           void run.then(
@@ -1738,14 +1900,16 @@ export class DataFolder {
         day = await job.run
         seq = job.seq
         counted = job.curve
+        countedCosts = job.costs
       }
       // Remembered (the last asked at the end) – unless a count begun later has written the day already, or the same day is
-      // remembered with its curve (a count without one never takes its place).
+      // remembered with more (a count without the curve never takes the place of one with it, nor one without the tiles' costs
+      // the place of one with them – T2608).
       const now = this.horizonMemo.get(date)
-      const richer = now != null && now.key === key && now.curve != null && counted == null
+      const richer = now != null && now.key === key && ((now.curve != null && counted == null) || (now.curve === counted && now.costs && !countedCosts))
       if (!now || (now.seq <= seq && !richer)) {
         this.horizonMemo.delete(date)
-        this.horizonMemo.set(date, { key, day, seq, curve: counted })
+        this.horizonMemo.set(date, { key, day, seq, curve: counted, costs: countedCosts })
       } else if (richer) {
         this.horizonMemo.delete(date)
         this.horizonMemo.set(date, now)
@@ -1771,11 +1935,14 @@ export class DataFolder {
   }
 
   /**
-   * The month shown in „Kalendarz” (D418): each of its days as the week counts it, given as its blocks (D429) and its load of
-   * work against the budget (`monthDayOf`) – the cell's bars and „+N” the window lays with the all-day events (`monthCell`).
+   * The month shown in „Kalendarz” (D418): each of its days as the week counts it, given as its blocks (D429), its load of
+   * work against the budget and the energy of its weakest pool (N21, `monthDayOf`) – the cell's bars and „+N” the window lays with
+   * the all-day events (`monthCell`). The days are counted with their curves, as the columns of „Tydzień” – but without the cost on
+   * the tiles, which the month never shows (a count of the week serves the month, not the other way – T2601, T2608); only the summary
+   * of each curve leaves the main process (`MonthDay.energy`), never the curve itself.
    */
   async monthView(month: string, at = this.clock.now()): Promise<MonthView> {
-    const days = await this.horizonDays(monthDates(month), at)
+    const days = await this.horizonDays(monthDates(month), at, true, false)
     return { month, today: logicalDayOf(at), days: days.map(monthDayOf) }
   }
 
@@ -2307,7 +2474,7 @@ export class DataFolder {
    * the days' logs readable in full now; a part that fails leaves nothing behind (the click fails, as it did). Answers the
    * events of `drafts` as written, in their order (their ids – „Cofnij” of a close, D468).
    */
-  private async writeOn(day: string, laid: readonly AutoEvent[], drafts: readonly TimerDraft[], before?: readonly AutoEvent[]): Promise<AnyEvent[]> {
+  private async writeOn(day: string, laid: readonly AutoEvent[], drafts: readonly TimerDraft[], before?: readonly AutoEvent[], holds?: () => boolean): Promise<AnyEvent[]> {
     const at = this.clock.now()
     const yesterday = addDays(day, -1)
     const carried = before ?? (day === logicalDayOf(at) ? ((await this.barActiveDay(at)).before ?? []) : [])
@@ -2320,7 +2487,8 @@ export class DataFolder {
       }
     }
     // Nothing awaited from here to the writes: this computer's own writes since the reads (the leader's check) are in
-    // its journal.
+    // its journal. `holds`: what the click was judged on still stands (nothing of it written meanwhile) – else nothing is written.
+    if (holds && !holds()) throw new StaleWrite()
     for (const d of [yesterday, day]) for (const e of this.log.ownEvents(d)) seen.add(`${d}|${e.id}`)
     const fresh = (d: string, list: readonly AutoEvent[]) => list.filter((e) => !seen.has(`${d}|${e.id}`))
     // All three checked before the first write (a part that fails leaves nothing behind); written in this order.
@@ -2390,6 +2558,51 @@ export class DataFolder {
         return { ...r, wrote: { day, ids: written.map((e) => e.id), ...(begun.length ? { begun } : {}) } }
       }
       return r
+    }
+    return this.serial(run)
+  }
+
+  /**
+   * A click of the bar's „Koszt ▸” (D585, T2503): judged on the day as the bar shows it (`barDay`) in its turn with the other clicks
+   * (`serial`) – a „Dalej” just before it ended the block: refused, never a change after the end – and written by `writeOn`. The block
+   * must be the bar's (`barCostOf`: in front, or paused for „Wznów”; a day gone by or „Odcinam się” – never); the click's intent goes over
+   * the block's newest change in the log's order (`barCostBasis`, `barCostAfter`). Its instant (T2513): the earlier of the bar's clock (its
+   * view is counted at it – the next view has the change) and this computer's (a tile saved after it, by this clock, is later in its minute
+   * too), and never before the latest instant of the block's start and changes – from its minute on the new change counts over all of them;
+   * that instant more than `BAR_COST_AHEAD_MS` past this computer's clock (another computer's clock ahead) – refused (`BAR_COST_AHEAD_TEXT`).
+   * A change of the block's cost written on this computer meanwhile (the tile's window – not one of these clicks): the click is put over it
+   * again (T2511, at most 3 times), never written over a cost it did not see.
+   */
+  barCost(c: BarCostClick): Promise<BarCostResult> {
+    const changed = 'koszt tego bloku zmienił się w międzyczasie – kliknij jeszcze raz'
+    const ownChanges = () => new Set(this.log.ownEvents(c.day).flatMap((e) => (isKnown(e) && (e.k === 'block.cost' || e.k === 'energy.cost') && e.block === c.block ? [e.id] : [])))
+    const run = async (): Promise<BarCostResult> => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        // What this computer has written of the block's cost before the read: anything after it is a change the click has not seen.
+        const seen = ownChanges()
+        const read = await this.log.readDay(c.day)
+        if (!read.complete && !read.away) return { ok: false, why: 'nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę' }
+        const own = this.clock.now()
+        const base = Math.min(c.at, own)
+        const { ctx, state, laid } = await this.barDay(c.day, read, base)
+        if (state.grid.date < logicalDayOf(base)) return { ok: false, why: COST_DAY_GONE_TEXT }
+        const now = barCostOf(ctx, state, timerNow(state), base)
+        if (!now || now.block.id !== c.block) return { ok: false, why: BAR_COST_GONE_TEXT }
+        const basis = barCostBasis(ctx, state, now.block)
+        const next = barCostAfter(basis.now, c.op)
+        if (!next) return { ok: true, wrote: false }
+        // A change from a clock far ahead (another computer's): one after it would count only from its minute – refused, never a write that does nothing.
+        if (basis.after > own + BAR_COST_AHEAD_MS) return { ok: false, why: BAR_COST_AHEAD_TEXT }
+        const at = Math.max(base, basis.after)
+        const holds = () => [...ownChanges()].every((id) => seen.has(id))
+        try {
+          await this.writeOn(c.day, laid, [{ k: 'block.cost', at, block: c.block, costs: next.costs }], undefined, holds)
+          return { ok: true, wrote: true }
+        } catch (e) {
+          if (!(e instanceof StaleWrite)) throw e
+        }
+      }
+      return { ok: false, why: changed }
     }
     return this.serial(run)
   }

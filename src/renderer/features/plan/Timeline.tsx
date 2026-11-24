@@ -10,7 +10,7 @@
  * `parallelPreview` – „Równolegle z …”). Ctrl held when it is let go (D513, `onCopy`): the block stays, its copy stands there – the
  * cursor has „+” and a dashed tile shows the copy while Ctrl is held. A block of a selection of two and more (D531, `groupDrag`) drags the
  * whole group: every selected block moves by the same difference, each drawn at its new place dashed round while it is held, Esc ends it with
- * nothing changed; with Ctrl – the group's copy.
+ * nothing changed; with Ctrl – the group's copy. A double click on a tile's name puts a field over it (N9, `rename`, `tileRename.tsx`).
  */
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
@@ -18,6 +18,7 @@ import type { EnergyTrack } from '@shared/engine/energyTrack'
 import type { DragPreview } from '@shared/engine/groupDrag'
 import type { TileCost as TileCostInfo } from '@shared/model/blockCosts'
 import type { Costs } from '@shared/model/categories'
+import type { ReserveCause } from '@shared/engine/reserveCause'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
 import type { DueBadge } from '@shared/engine/caseDates'
 import type { Priority } from '@shared/model/requests'
@@ -36,10 +37,12 @@ import { EnergyLanes } from './EnergyLanes'
 import { hasEnergy } from './energyDraw'
 import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
+import { ReserveCauseHint, ReserveRing, reserveTileProps, useReserveHint } from './ReserveCauseHint'
 import { inParallelZone, tileAt, tileLanes } from './parallelDrag'
 import type { CostAsk } from './costSave'
 import { costRoom, TileCost } from './TileCost'
 import { DecompressIcon } from './DecompressIcon'
+import { onTileName, TileNameField, type TimelineRename } from './tileRename'
 import { COPY_SPAN_ID } from '../today/dayPush'
 
 export interface TimelineItem {
@@ -92,6 +95,11 @@ export interface TimelineItem {
    * `edit` – a click on it opens the window that changes it (`Timeline.onCosts`).
    */
   cost?: TileCostInfo
+  /**
+   * The pools that first go below the reserve in this block's time (N20): the tile has a ring in the first one's colour and the hint
+   * „Tu głowa schodzi poniżej rezerwy (28 → 19)” (`dayAxis`, `reserveCauses`); absent – not a cause.
+   */
+  reserve?: ReserveCause
 }
 
 /**
@@ -314,6 +322,8 @@ export function Timeline({
   attached,
   onAttachDrop,
   onCosts,
+  reserveAction,
+  rename,
   ghost,
   draft,
   from,
@@ -401,6 +411,13 @@ export function Timeline({
   onAttachDrop?: (id: string, dt: DataTransfer) => void
   /** The block's own cost set in the window of its tile (D501), or null – the category's again; left out – the cost is only told. */
   onCosts?: (id: string, costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>
+  /** An action under the words of a tile's reserve hint (N20 – a slot; N3 puts „Wstaw regenerację tutaj” there); left out – the hint only tells. */
+  reserveAction?: (id: string, cause: ReserveCause) => ReactNode
+  /**
+   * The name changed in place (N9, `useTileRename`): a double click on a tile's name starts it, the field stands over the tile's name row while
+   * `rename.active` is the tile's id. Left out – a tile's name is only told (the wizard's axis).
+   */
+  rename?: TimelineRename
   /** The span a sprawa dragged from outside the axis would take (D384) – drawn as a band while it is held; null – none. */
   ghost?: BlockSpan | null
   /** The new block not saved yet (D466): a dashed tile with its hours; null – none. The axis widens to hold it. */
@@ -517,6 +534,8 @@ export function Timeline({
     onRange: (r) => onCreate?.(r.startMin, r.endMin - r.startMin)
   })
   const gridBind = onCreate ? grid.bind : {}
+  // N20: the hint of the tile that is a cause (one at a time) – opens under the pointer on it, never while a block is held.
+  const reserveHint = useReserveHint((key) => items.find((x) => x.id === key)?.reserve != null)
   const y = (min: number) => (min - lo) * PPM
   const height = (hi - lo) * PPM
 
@@ -664,6 +683,7 @@ export function Timeline({
       i.cost && costAt && (
         <TileCost cost={i.cost} id={`tile:${i.id}`} testId={`block-${i.id}-cost`} className={className} place={costAt} onChange={onCosts ? (costs, ask) => onCosts(i.id, costs, ask) : undefined} />
       )
+    const menu = onContext ? menuBind((at) => onContext(i.id, at)) : undefined
     return (
       <button
         key={i.id}
@@ -673,6 +693,7 @@ export function Timeline({
         data-lane={lane.lanes > 1 ? `${lane.lane}/${lane.lanes}` : undefined}
         {...NO_GRID}
         data-block-title={i.title}
+        data-reserve-cause={i.reserve?.drops[0]?.pool}
         data-movable={draggable ? 'true' : undefined}
         data-selected={selected === i.id ? 'true' : undefined}
         data-marked={marked?.(i.id) ? 'true' : undefined}
@@ -694,15 +715,26 @@ export function Timeline({
           const from = pressed.current
           pressed.current = null
           if (from && e.detail > 0 && Math.hypot(e.clientX - from.x, e.clientY - from.y) >= DRAG_FROM_PX) return
+          // N9: the second click of a double click on the name only renames (its first click opened the block already).
+          if (e.detail >= 2 && !e.ctrlKey && !e.shiftKey && rename?.info(i.id) && onTileName(e, e.currentTarget)) return
           onSelect(i.id, { ctrl: e.ctrlKey, shift: e.shiftKey })
         }}
+        // N9: a double click on the name – the name in place (`rename`); anywhere else on the tile nothing.
+        onDoubleClick={(e) => {
+          if (e.ctrlKey || e.shiftKey || !rename?.info(i.id) || !onTileName(e, e.currentTarget)) return
+          e.stopPropagation()
+          rename.start(i.id)
+        }}
         // D528: the right button and the menu key open the menu of the selection (the screen puts this block into it first).
-        {...(onContext ? menuBind((at) => onContext(i.id, at)) : {})}
+        {...(menu ? { onContextMenu: menu.onContextMenu } : {})}
+        // N20: the hint of a tile that is a cause (its pointer, focus and Tab) – the key handler of the menu goes on through it.
+        {...reserveTileProps(reserveHint, i.id, i.reserve, () => !!dragRef.current, menu?.onKeyDown)}
         // D305: the left button drags a movable block from where it is shown; its start goes on the 5-min grid. D365: from
         // an edge's handle the edge goes (never both at once), a block with no handle under the pointer is moved as before.
         onPointerDown={(e) => {
           if (e.button !== 0) return
           pressed.current = { x: e.clientX, y: e.clientY }
+          if (i.reserve) reserveHint.hide(true)
           const at = (e.target as HTMLElement).dataset.edge
           const edge: DragEdge | null = at === 'top' && topEdge ? 'top' : at === 'end' && endEdge ? 'end' : null
           if (edge == null && !draggable) return
@@ -834,12 +866,14 @@ export function Timeline({
         {...(onAttachDrop && i.attach !== undefined ? tileDrop(i.id, onAttachDrop, dropOver, setDropOver) : {})}
       >
         {i.priority && <PriorityMark priority={i.priority} testId="block-priority" apart />}
+        {/* N20: the pool that first goes below the reserve in this block's time – a ring in its colour. */}
+        <ReserveRing cause={i.reserve} />
         {/* The edges over everything in the tile (z-30 – the cost's label in the corner or shown on hover is z-20): the whole width resizes (D365, D501). */}
         {topEdge && <span data-edge="top" data-testid={`block-${i.id}-edge-top`} className={cx('absolute inset-x-0 top-0 z-30 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
         {endEdge && <span data-edge="end" data-testid={`block-${i.id}-edge-end`} className={cx('absolute inset-x-0 bottom-0 z-30 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
         <div className={cx('flex min-w-0 items-baseline gap-1.5', tiny ? 'text-[11px]' : 'pt-0.5 text-[12px]')}>
           {!narrow && <span className="num shrink-0 text-[11px] text-muted">{logicalClock(start)}</span>}
-          <span className="truncate text-fg">
+          <span className="truncate text-fg" data-tile-name="">
             {i.finished && (
               <span className="text-muted" aria-label="ukończony" data-testid="block-finished">
                 ✓{' '}
@@ -884,6 +918,29 @@ export function Timeline({
     )
   }
 
+  /** N9: the field of the name in place over the name row of the tile being renamed (where the tile is drawn now; the tile under it is never reached by its mouse). */
+  const nameField = (): ReactNode => {
+    const i = rename?.active != null ? items.find((x) => x.id === rename.active) : undefined
+    const info = i && rename ? rename.info(i.id) : null
+    if (!i || !info) return null
+    const { start, end } = spanOf(i)
+    const lane = draggedLane(i.id) ?? lanes.get(i.id) ?? { lane: 0, lanes: 1 }
+    return (
+      <TileNameField
+        key={`name-${i.id}`}
+        text={info.text}
+        hint={info.hint}
+        style={{
+          top: y(start),
+          height: Math.min(Math.max(MIN_H, (end - start) * PPM - 1), 24),
+          left: `calc(${(lane.lane / lane.lanes) * 100}% + ${lane.lane ? 1 : 0}px)`,
+          width: `calc(${100 / lane.lanes}% - ${lane.lanes > 1 ? 2 : 0}px)`
+        }}
+        onDone={(text) => rename!.finish(i.id, text)}
+      />
+    )
+  }
+
   return (
     <div className={cx('flex select-none', copying && '[&_*]:cursor-copy!')} data-testid={rest['data-testid'] ?? 'timeline'} data-axis="true" data-copying={copying ? 'true' : undefined}>
       {/* Hours. */}
@@ -910,6 +967,7 @@ export function Timeline({
         ))}
         <div className="absolute inset-y-0 right-1.5 left-1.5">
           {items.map((i) => box(i))}
+          {nameField()}
           {copying && !drag.group && dragShown && copyGhost(items.find((x) => x.id === drag.id), dragShown)}
           {groupCopies && [...groupCopies].map(([of, at]) => copyGhost(items.find((x) => x.id === of), at))}
           {draft && (
@@ -985,6 +1043,11 @@ export function Timeline({
           </div>
         ))}
       </div>
+      {/* N20: the hint of the tile that is a cause. */}
+      {reserveHint.open && (() => {
+        const at = items.find((x) => x.id === reserveHint.open!.key)
+        return at?.reserve && <ReserveCauseHint id={at.id} cause={at.reserve} anchor={reserveHint.open!.anchor} hint={reserveHint}>{reserveAction?.(at.id, at.reserve)}</ReserveCauseHint>
+      })()}
       {/* D500: the energy beside the axis – four lanes G · E · B · C (`EnergyLanes`). */}
       {hasEnergy(energy) && <EnergyLanes track={energy} lo={lo} ppm={PPM} height={height} nowAt={nowMarker?.at ?? null} nowColor={TONE[nowMarker?.tone ?? 'fg']} />}
     </div>

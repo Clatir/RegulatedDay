@@ -1,7 +1,7 @@
 /**
  * The group changes of blocks joined to the screens (D528, D529, Z4-B, Z5): `runBlockGroup` – the one place every pick of the menu „Zmień N
  * bloków” and Del of a selection go – runs the change of „Dziś” (`changeDayGroup`), of a template's version (`changeTemplateGroup`) or of the
- * columns of „Tydzień” and „3 dni” (`changeDaysGroup` – the keys `blockKey(date, id)` by their days, one edit, one „Cofnij”), and says it in the
+ * columns of „Tydzień” and „3 dni”, of „Agenda” and of the month's bars (`changeDaysGroup` – the keys `blockKey(date, id)` by their days, one edit, one „Cofnij”), and says it in the
  * line of the view (`GroupLine`, T1541): „Zmieniono 3 bloki · pominięto 1: zaczęty · Cofnij”; its „Cofnij” takes the change back and says what it
  * left as it is because it changed since (`keptText`, D313). A change that changes nothing says so in the corner, with no line. `judgeBlocks` –
  * the engine's verdicts of the menu's rules on the view's model (`MenuCtx.judge`).
@@ -126,7 +126,8 @@ export async function runBlockGroup(view: GroupView, ids: readonly string[], a: 
   const action = engineAction(a)
   const o = at != null ? { at } : {}
   let done: GroupDone | null = null
-  if (view === 'week')
+  // „Tydzień”, „3 dni” and „Agenda” say their changes in the line of „week”, the bars of the month in the one of „calendar” (N18) – the keys are the same.
+  if (view === 'week' || view === 'calendar')
     done = await changeDaysGroup(
       ids.map((k) => {
         const { date, id } = parseBlockKey(k)

@@ -11,7 +11,7 @@ import type { AnyEvent, Answer } from '../model/events'
 import type { Pool } from '../model/categories'
 import type { DayContext, DayState } from './day'
 import { computeEnergy, type EnergyState } from './energy'
-import { atOf, type Grid } from './grid'
+import { atOf, logicalSpan, type Grid } from './grid'
 import type { HorizonWhen } from './week'
 import { logicalMinuteOf } from '../time/day'
 
@@ -26,6 +26,12 @@ export interface EnergyTrack {
   reserve: number
   /** Counted from the assumed check-in (a day to come – T903; today before its own check-in – T2430), not from one you gave. */
   assumed?: true
+  /**
+   * The runs of blocks the curve was counted from, as the axis counts minutes (T2571: the cause of a pool going below the reserve is the block that
+   * runs at that minute – where the log put it, or the forecast, which may run a block elsewhere than its plan: a block under a fixed session
+   * waits). `forecast` – a run still to come. Absent – the plan's hours stand in (`reserveCauses`).
+   */
+  runs?: Array<{ id: string; startMin: number; endMin: number; background: boolean; forecast: boolean }>
 }
 
 /**
@@ -46,7 +52,8 @@ export function energyTrack(date: string, grid: Grid, e: EnergyState): EnergyTra
     const v = { head: e.series.head[k]!, emotions: e.series.emotions[k]!, senses: e.series.senses[k]!, body: e.series.body[k]! }
     if (Number.isFinite(v.head)) samples.push({ at: logicalMinuteOf(date, atOf(grid, k)), ...v })
   }
-  return { samples, reserve: e.reserve }
+  const runs = e.runs?.map((r) => ({ id: r.id, ...logicalSpan(grid, r.from, r.to), background: r.bg, forecast: r.forecast }))
+  return { samples, reserve: e.reserve, ...(runs ? { runs } : {}) }
 }
 
 /** The answers of the assumed check-in of a day to come (T903): „nie” to every question – each pool at 100. */
@@ -80,3 +87,6 @@ export function columnEnergy(ctx: DayContext, state: DayState, when: HorizonWhen
   if (when === 'past' || e.known || !e.enabled) return energyTrack(ctx.date, state.grid, e)
   return assumedEnergy(ctx, state, moduleOn)
 }
+
+/** What the dot of a day of the month and the strip share – the light module the window imports (`energyCurve.ts`, T2607). */
+export type { DayEnergy, EnergyShade, OnScreen } from './energyCurve'

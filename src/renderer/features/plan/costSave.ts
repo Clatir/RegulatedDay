@@ -15,7 +15,7 @@
 import { dayRaw } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
 import { blockInfos } from '@shared/engine/blocks'
-import { costEditable, windowPassed } from '@shared/engine/costChange'
+import { COST_DAY_GONE_TEXT, COST_ENDED_TEXT, COST_PASSED_TEXT, COST_TAKEN_OFF_TEXT, costEditable, windowPassed } from '@shared/engine/costChange'
 import { routineCostsIn } from '@shared/engine/day'
 import { idxOf } from '@shared/engine/grid'
 import type { SeriesScope } from '@shared/api'
@@ -32,11 +32,8 @@ import { patchedBlock } from '../today/dayActions'
 import { moveUncountedText, moveUnreadableText } from '../week/weekMove'
 import { blockName, type Names } from './blockView'
 
-/** Why the cost of a block is not changed any more – said after „Nie zapisano: ”. */
-export const COST_DAY_GONE_TEXT = 'ten dzień już minął'
-export const COST_ENDED_TEXT = 'ten blok już się skończył'
-export const COST_TAKEN_OFF_TEXT = 'ten blok jest zaparkowany albo odwołany'
-export const COST_PASSED_TEXT = 'czas tego bloku już minął'
+/** Why the cost of a block is not changed any more – said after „Nie zapisano: ” (one text with the bar's „Koszt ▸”, `costChange.ts`). */
+export { COST_DAY_GONE_TEXT, COST_ENDED_TEXT, COST_PASSED_TEXT, COST_TAKEN_OFF_TEXT }
 
 /** The block whose cost changes: its day, its id, and what names it (the question of a series says its name). */
 export interface CostTarget {

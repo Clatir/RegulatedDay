@@ -11,6 +11,8 @@ import { timerAction, type TimerAction } from '@shared/engine/timer'
 import { fewerAt } from '@shared/engine/modes'
 import { engineView, HARD_END_TEXT, warnDeadlines } from '@shared/engineView'
 import { stepDelay, toneOnChange } from '../../../src/main/widget'
+import { wideCostWarning } from '@shared/model/blockCosts'
+import { costsOf } from '@shared/model/categories'
 import { planBlockFrom } from '@shared/model/plan'
 import { noFolderView } from '@shared/widget'
 import { block, lm, Scenario } from './dsl'
@@ -829,5 +831,64 @@ describe('linia twardego końca projektów w pasku (D228, D240, D352)', () => {
     expect(view(s, '22:10')).toMatchObject({ night: true, lines: [] })
     click(s, '21:30', { a: 'cutOff' })
     expect(view(s, '21:40')).toMatchObject({ hidden: true, lines: [] })
+  })
+})
+
+describe('„Koszt ▸” – koszt bloku na pierwszym planie paska (D585, N12)', () => {
+  const inne = (s: Scenario, time: string) => costsOf(s.stateAt(s.at(time)).settings.categories.inne!, null)
+
+  it('tylko zaczęty i nieskończony blok pierwszego planu (także w pauzie): koszt od teraz, baza „Jak podkategoria”; bez bloku i w „Odcinam się” – nic', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 120 })] }).observe('07:00', null)
+    expect(view(s, '07:50').cost).toBeNull()
+    click(s, '08:00', { a: 'start', block: 'a' })
+    const base = inne(s, '08:10')
+    expect(view(s, '08:10').cost).toEqual({ block: 'a', name: 'Inne obowiązki', costs: base, base, own: false })
+    // A change from a minute on (`block.cost`): the bar's cost is the one of now.
+    const own = { head: 7, emotions: 0, senses: -2, body: 1 }
+    s.raw({ k: 'block.cost', block: 'a', at: s.at('08:20'), costs: own }, '08:20')
+    expect(view(s, '08:25').cost).toEqual({ block: 'a', name: 'Inne obowiązki', costs: own, base, own: true })
+    // Paused (nothing in front): the block „Wznów” resumes is still the bar's.
+    click(s, '08:30', { a: 'pause' })
+    expect(view(s, '08:35')).toMatchObject({ block: null, cost: { block: 'a', costs: own, own: true } })
+    click(s, '08:40', { a: 'start', block: 'a' })
+    click(s, '09:00', { a: 'cutOff' })
+    expect(view(s, '09:05')).toMatchObject({ hidden: true, cost: null })
+  })
+
+  it('blok skończony – nic; blok w tle – nigdy, tylko pierwszy plan', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 60 }), block({ id: 'ny', cat: 'sesja', at: '08:30', min: 60, fixed: true, bg: true })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    click(s, '08:30', { a: 'start', block: 'ny' })
+    const v = view(s, '08:40')
+    expect(v.background.map((b) => b.id)).toEqual(['ny'])
+    expect(v.cost?.block).toBe('a')
+    click(s, '08:45', { a: 'next' })
+    const after = view(s, '08:50')
+    expect(after.background.map((b) => b.id)).toEqual(['ny'])
+    expect(after.cost).toBeNull()
+  })
+
+  it('ostrzeżenie o starszym komputerze przy koszcie spoza ±5 (D568, T2440) – ten sam tekst co okienko kafelka; w zakresie albo bez starszych – brak', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'a', cat: 'inne', at: '08:00', min: 120 })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'a' })
+    const t = s.at('08:30')
+    const of = (older: string[]) => {
+      const ctx = s.contextAt(t)
+      const state = s.stateAt(t)
+      return engineView({ ctx, state, energy: null, activity: activityOf(ctx.events, state.grid.start, t, 'pca'), now: t, name: () => 'Inne obowiązki', care, modePrefs: { sessionMode: true, classMode: true }, pending: null, olderComputers: older }).cost
+    }
+    expect(of(['PC B'])).not.toHaveProperty('warning')
+    const wide = { head: 7, emotions: 0, senses: -2, body: 1 }
+    s.raw({ k: 'block.cost', block: 'a', at: s.at('08:20'), costs: wide }, '08:20')
+    expect(of(['PC B'])?.warning).toBe(wideCostWarning(['PC B'], [wide]))
+    expect(of(['PC B'])?.warning).toContain('Komputer PC B ma starszą wersję')
+    expect(of([])).not.toHaveProperty('warning')
+  })
+
+  it('wariant z własnym kosztem: baza „Jak wariant” (`baseFrom`, D510)', () => {
+    const s = new Scenario({ date: DATE, plan: [block({ id: 'n', cat: 'regeneracja', variant: 'drzemka', at: '08:00', min: 60 })] }).observe('07:00', null)
+    click(s, '08:00', { a: 'start', block: 'n' })
+    const drzemka = costsOf(s.stateAt(s.at('08:10')).settings.categories.regeneracja!, 'drzemka')
+    expect(view(s, '08:10').cost).toMatchObject({ block: 'n', costs: drzemka, base: drzemka, own: false, baseFrom: 'variant' })
   })
 })
