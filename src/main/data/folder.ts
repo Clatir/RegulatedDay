@@ -45,6 +45,7 @@ import { gameView, regenWaysOf, ROOM_ITEMS, storedWays, type Celebration, type G
 import { sideBOf, storedModules, type DayMeasure, type MeasureModules, type SideB } from '@shared/engine/sideB'
 import type { DaySummary } from '@shared/engine/daySummary'
 import { periodFrom, statsOf, type DayStats, type StatsPeriod, type StatsResult } from '@shared/engine/stats'
+import { blockDurations, DURATION_HISTORY_DAYS, durationHistoryOf, type DurationHistory, type DurationSample } from '@shared/engine/durationHistory'
 import { calibrationPeriod, costProposals, inCalibration, timeProposals, type CalibrationDay, type CalibrationPeriod, type CostEvidence, type CostProposal, type FeltCounts, type TimeProposal, type TimeSample } from '@shared/engine/calibration'
 
 import { inProcess, type Worker } from '../worker/host'
@@ -493,6 +494,10 @@ export class DataFolder {
   private readonly statsMemo = new Map<string, { key: string; stats: DayStats }>()
   /** The counts of statistics in progress, by period (the same period asked again shares it). */
   private readonly statsRuns = new Map<StatsPeriod, Promise<StatsResult>>()
+  /** „Długość z historii” (N6, T2906): the blocks finished on each day gone by, counted again only when its log changed. */
+  private readonly durationMemo = new Map<string, { key: string; samples: DurationSample[] }>()
+  /** The count of „Długość z historii” in progress, of its logical day (asked again meanwhile for the same day – shared; T2914). */
+  private durationRun: { day: string; run: Promise<DurationHistory> } | null = null
   /**
    * The days of the horizon (the week, the month's goals – D356, T553), each counted again only on a change of what it is
    * made of; the ones asked last stay (a hit goes to the end). Days being counted now: one count of a day for every ask.
@@ -1823,6 +1828,64 @@ export class DataFolder {
       days.push(stats)
     }
     return statsOf(period, days, unreadable)
+  }
+
+  /**
+   * „Długość z historii” (N6, D569, D625, T2905–T2906): the minutes the blocks finished on the last 90 days before today really ran, by
+   * subcategory (`blockDurations` – the whole log of each day, frozen or not, no engine of the day: the main process folds it), with the
+   * folder it is of (T2931). A day whose log cannot be read now is counted (`unreadable`) – with its blocks as counted before, if it
+   * was (T2930); a day is folded again only when its log changed (its computers' last numbers, its events, its conflict copies). The same ask while one is counted for the same logical day shares it; another day's is its own (T2914).
+   */
+  durationHistory(at = this.clock.now()): Promise<DurationHistory> {
+    const day = logicalDayOf(at)
+    if (this.durationRun?.day === day) return this.durationRun.run
+    const run = this.durationHistoryOnce(at).finally(() => {
+      if (this.durationRun?.run === run) this.durationRun = null
+    })
+    this.durationRun = { day, run }
+    return run
+  }
+
+  private async durationHistoryOnce(at: number): Promise<DurationHistory> {
+    const today = logicalDayOf(at)
+    const from = addDays(today, -DURATION_HISTORY_DAYS)
+    const to = addDays(today, -1)
+    const days: DurationSample[][] = []
+    let read = 0
+    let unreadable = 0
+    let missing = 0
+    const looked = new Set<string>()
+    for (let day = from; day <= to; day = addDays(day, 1)) {
+      looked.add(day)
+      const was = this.durationMemo.get(day)
+      let log: DayRead | null
+      try {
+        log = await this.log.readDay(day)
+      } catch {
+        log = null
+      }
+      if (!log?.complete) {
+        // Not readable now (T2930): counted so, but a day counted before keeps its blocks – a moment of OneDrive loses none of them;
+        // one never counted is missing (T2936).
+        unreadable++
+        if (was) days.push(was.samples)
+        else missing++
+        continue
+      }
+      read++
+      const key = JSON.stringify([log.lastByComputer, log.events.length, log.copies])
+      if (was?.key === key) {
+        days.push(was.samples)
+        continue
+      }
+      const samples = blockDurations(day, log.events)
+      this.durationMemo.set(day, { key, samples })
+      days.push(samples)
+    }
+    // The days that left the window are not kept – only by the count of the latest day asked (an older one ending later would throw
+    // out the newer window's day, T2939).
+    if (this.durationRun?.day === today) for (const day of this.durationMemo.keys()) if (!looked.has(day)) this.durationMemo.delete(day)
+    return { ...durationHistoryOf(from, to, days, { read, unreadable, missing }), folder: this.o.dataDir }
   }
 
   /**

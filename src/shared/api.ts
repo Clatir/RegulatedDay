@@ -6,6 +6,7 @@ import type { CalibrationPeriod, CostProposal, FeltCounts, ReviewPrompt, TimePro
 import type { Celebration, GameView } from './engine/progress'
 import type { SideB } from './engine/sideB'
 import type { StatsPeriod, StatsResult } from './engine/stats'
+import type { DurationHistory } from './engine/durationHistory'
 import type { GoalsView } from './engine/goals'
 import type { DaysView, WeekView } from './engine/week'
 import type { MonthView } from './engine/calendarViews'
@@ -111,6 +112,7 @@ export const CH = {
   goals: 'rd:goals',
   setGoals: 'rd:setGoals',
   stats: 'rd:stats',
+  durationHistory: 'rd:durationHistory',
   planPushed: 'rd:planPushed',
   planArranged: 'rd:planArranged',
   searchDays: 'rd:searchDays',
@@ -1075,6 +1077,8 @@ export interface RdApi {
   calibration(): Promise<CalibrationScreen>
   /** The statistics of the frozen days of a period (D358): energy, estimates, requests by person, boundaries. */
   stats(period: StatsPeriod): Promise<StatsResult>
+  /** „Długość z historii” (N6, D625): the minutes the blocks finished in the last 90 days before today ran, by subcategory. */
+  durationHistory(): Promise<DurationHistory>
   /** The blocks of all days with files, past and coming, for the global search (Ctrl K); read when the palette opens. */
   searchDays(): Promise<SearchCorpus>
   /**

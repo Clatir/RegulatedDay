@@ -96,6 +96,7 @@ const api: RdApi = {
   sideB: () => ipcRenderer.invoke(CH.sideB),
   calibration: () => ipcRenderer.invoke(CH.calibration),
   stats: (period) => ipcRenderer.invoke(CH.stats, period),
+  durationHistory: () => ipcRenderer.invoke(CH.durationHistory),
   searchDays: () => ipcRenderer.invoke(CH.searchDays),
   weekView: (date) => ipcRenderer.invoke(CH.weekView, date),
   daysView: (dates, opts) => ipcRenderer.invoke(CH.daysView, dates, opts),

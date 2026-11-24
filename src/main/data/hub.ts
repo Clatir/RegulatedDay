@@ -34,6 +34,7 @@ import { CSV_HEADERS } from '@shared/engine/csv'
 import { reviewPrompt } from '@shared/engine/calibration'
 import type { SideB } from '@shared/engine/sideB'
 import type { StatsPeriod, StatsResult } from '@shared/engine/stats'
+import type { DurationHistory } from '@shared/engine/durationHistory'
 import type { GoalsView } from '@shared/engine/goals'
 import { DAYS_VIEW_MAX, type DaysView, type WeekView } from '@shared/engine/week'
 import type { MonthView } from '@shared/engine/calendarViews'
@@ -1454,6 +1455,11 @@ export class DataHub {
   /** The statistics of the frozen days of a period (D358, spec „Etap 2”). */
   stats(period: StatsPeriod): Promise<StatsResult> {
     return this.need().stats(period)
+  }
+
+  /** „Długość z historii” (N6, D625): the minutes the blocks finished in the last 90 days ran, by subcategory. */
+  durationHistory(): Promise<DurationHistory> {
+    return this.need().durationHistory()
   }
 
   /** The week of a date (D356): seven days from Monday on one axis – type, blocks, boundary, regeneration. */

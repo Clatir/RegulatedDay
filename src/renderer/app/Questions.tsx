@@ -128,11 +128,11 @@ function QuestionsDialog({ questions, onClose }: { questions: EditQuestion[]; on
                 <span className="text-muted">{fieldText(q.rel, f.path, names, [f.mine, f.theirs])}</span>
                 <span>
                   {q.kind === 'changed' ? 'gdy usuwałeś: ' : 'tutaj: '}
-                  {valueText(keyOf(f.path), f.mine, names)}
+                  {valueText(keyOf(f.path), f.mine, names, f.path)}
                 </span>
                 <span>
                   {q.kind === 'changed' ? 'tam teraz: ' : 'tam: '}
-                  {valueText(keyOf(f.path), f.theirs, names)}
+                  {valueText(keyOf(f.path), f.theirs, names, f.path)}
                 </span>
               </div>
             ))}

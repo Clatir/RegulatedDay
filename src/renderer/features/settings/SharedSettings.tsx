@@ -172,10 +172,13 @@ export function FieldsSection({ group }: { group: FieldGroup }) {
         )
       })}
       {TOGGLE_FIELDS.filter((f) => f.group === group).map((f) => {
-        const on = f.path.reduce<unknown>((v, k) => (v as Record<string, unknown>)[k], s) === true
+        // A switch of the shared settings that work at once (N6: „Podpowiedzi długości z historii”) – rd.json „general”, no date.
+        const atOnce = f.scope === 'general'
+        const on = (atOnce ? (general as unknown as Record<string, unknown>)[f.path[0]!] : f.path.reduce<unknown>((v, k) => (v as Record<string, unknown>)[k], s)) === true
+        const change = (v: boolean) => void (atOnce ? saveGeneral({ [f.path[0]!]: v }) : save(f.path.reduceRight<unknown>((inner, k) => ({ [k]: inner }), v) as Record<string, unknown>))
         return (
           <Field key={f.key} label={f.label} hint={f.hint} labelWidth={260} data-testid={`field-${f.key}`}>
-            <Toggle checked={on} onChange={(v) => void save(f.path.reduceRight<unknown>((inner, k) => ({ [k]: inner }), v) as Record<string, unknown>)} label={on ? 'włączone' : 'wyłączone'} data-testid={`setting-${f.key}`} />
+            <Toggle checked={on} onChange={change} label={on ? 'włączone' : 'wyłączone'} data-testid={`setting-${f.key}`} />
           </Field>
         )
       })}
