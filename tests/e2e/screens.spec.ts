@@ -8,9 +8,10 @@
  * logical day, always still to come) proposes the boundary; yesterday has a block of its own from `seed` (a Sunday has
  * none from a template).
  */
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { DEFAULT_GENERAL, rdFrom } from '../../src/shared/model/rd'
 import { DEFAULT_SESSIONS, DEFAULT_SETTINGS } from '../../src/shared/model/settings'
@@ -1069,10 +1070,22 @@ test('gra (D322): „Passa · nuty” w nagłówku „Dziś”, świętowanie pa
     mkdirSync(join(dataDir, 'grades', y), { recursive: true })
     writeFileSync(join(dataDir, 'grades', y, 'seed.jsonl'), `${lines.filter((l) => l.includes(`"day":"${y}`)).join('\n')}\n`)
   }
-  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  // The memory of celebrations on this computer (T510) damaged at the start: nothing to celebrate rather than every
+  // celebration again. The celebration lasts at most 5 s from the first count of the game, which on a busy computer comes
+  // seconds before `launch` returns (the window shows at its first paint) – so the test lets it come when it looks.
+  const userData = join(mkdtempSync(join(tmpdir(), 'rd-e2e-')), 'userData')
+  // The folder's state as `stateDirFor` (main/data/service.ts – outside the e2e project) names it; the journal the app
+  // writes there says it is the one.
+  const stateDir = join(userData, 'folders', createHash('sha1').update(resolve(dataDir).toLowerCase()).digest('hex').slice(0, 16))
+  const memory = join(stateDir, 'celebrated.json')
+  mkdirSync(stateDir, { recursive: true })
+  writeFileSync(memory, '{')
+  const { app, page, errors } = await launch({ userData, env: { RD_DATA_DIR: dataDir } })
   try {
     await withMainLog(userData, async () => {
       await expect(page.getByTestId('game-line')).toContainText('Passa 7 · 56 nut', { timeout: 30_000 })
+      await expect.poll(() => existsSync(join(stateDir, 'journal.v1.jsonl')), { timeout: 15_000 }).toBe(true)
+      await expect(page.getByTestId('celebration')).toHaveCount(0)
       // The streak of 7 reached yesterday: celebrated full-screen – not in a quiet mode, the night or „Odcinam się”, and
       // only with the main window in front (a runner may leave a new window without the focus).
       await page.bringToFront()
@@ -1080,8 +1093,13 @@ test('gra (D322): „Passa · nuty” w nagłówku „Dziś”, świętowanie pa
         const v = await window.rd.widget()
         return !v.quiet && !v.hidden && !v.night && document.hasFocus()
       })
+      // The memory gone – the first time on this computer, the streak of yesterday is news – and a change of the data (the
+      // goals of the month skipped, as „Pomiń” in the morning plan does): the game is counted again at once, at the latest
+      // at its next minute.
+      rmSync(memory)
+      await page.evaluate((month) => window.rd.setGoals(month, { skipped: true }), today.slice(0, 7))
       if (calm) {
-        await expect(page.getByTestId('celebration')).toContainText('Passa 7 dni')
+        await expect(page.getByTestId('celebration')).toContainText('Passa 7 dni', { timeout: 70_000 })
         await shot(page, 'e7-02-celebration')
         await page.keyboard.press('Space')
         await expect(page.getByTestId('celebration')).toHaveCount(0)
