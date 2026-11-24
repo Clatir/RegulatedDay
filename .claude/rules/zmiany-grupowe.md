@@ -15,6 +15,13 @@ paths:
   - "src/renderer/features/plan/groupDrag.ts"
   - "tests/unit/engine/group-drag.test.ts"
   - "tests/web/group-drag.test.ts"
+  - "src/shared/engine/saveAs.ts"
+  - "src/renderer/features/plan/saveAs.ts"
+  - "src/renderer/features/plan/SaveAsDialogs.tsx"
+  - "tests/unit/engine/save-as.test.ts"
+  - "tests/fs/save-as.test.ts"
+  - "tests/web/save-as.test.ts"
+  - "tests/e2e/save-as.spec.ts"
   - "src/shared/engine/shiftRest.ts"
   - "tests/unit/engine/shift-rest.test.ts"
 ---
@@ -111,3 +118,22 @@ linii – moduł Z1 (`src/shared/groupText.ts`); tu tylko dane.
   trzymanie z podglądu miejsca upuszczenia – `groupPreviewAt`, T1776; chwycony, który zostaje – bez trzymania, T1767). `DayGrid`: `Lift.members`, dni grupy
   liczone przy pierwszym ruchu ponad próg (`countDragDays`, T1774), pasma `week-group-drop[data-of]` i przyciemnienie z oceny upuszczenia (`dragGoing` →
   `groupBands`, T1765) tylko przy zmianie kolumny, startu, Ctrl (`placedFor`, T1775); Esc grupy także przed progiem (T1771).
+
+## „Zapisz jako szablon / rutynę…” (N15, D615–D619)
+- Czyste – `engine/saveAs.ts`: `blocksToSave(plan, ids|null, { off, ofSeries })` → `take` (po planowanym starcie) i `skipped` (`seria`, `sesja`, `wykład`, `zjazd`,
+  `zdjęty` – zaparkowany / odwołany bez startu); `templateBlocksOf(take, plan, { date, templateId, version, mode, newId, taskTitle })` – pola bloku przez `planBlock`
+  (bez faktów, `task`, `requests`, `recorder`, historii; kroki `freshSteps`), blok tego szablonu (`isOfTemplate`) zachowuje id = `sourceId`, „Dołóż” – taki, który wersja ma, pomija
+  (`inTemplate`), nowe id nigdy z `allIds` (wszystkie wersje); kotwica → id w wersji / `session:<id>` sesji wersji / godzina z planu (`plannedStartMin`); blok bez miejsca
+  i zakotwiczone do niego – `left` („bez godziny”, do punktu stałego; rutyna bierze je jako kroki na końcu); godziny szablonu – `wake` = `wakeFrameOf(snapshot, dayFile, date,
+  templates)`: A – blok szablonu migawki bez nadpisania w pliku zawsze `asMade` (godzina z wersji `templateFrom` po `sourceId`, gdy blok wersji = blok migawki poza godziną
+  przesuniętą przez serię – `shapeOf`; inaczej surowe `startMin` migawki; nigdy `templateVersionOn(date)`); B – każdy inny `unshiftedStart` (`dayWakeMin` − `templateWakeMin`, granica
+  = pierwszy stały wersji po zapisie, wpis sesji w godzinie na `date` z samego wpisu – `entryDef` → `sessionBlock`; nie wie o wykładach przyszłych dni); `alongside` zawsze null. `savedTemplate` = `withTemplateVersion` od `from` („Zastąp” zostawia `isSessionEntry`);
+  `sameVersionBody` (bloki po id, kotwica do wpisu sesji jako `session:<id>`) – „bez zmian”. `saveAsFrom` (D616), `savedDayTwice(date, from, szablon dnia po zapisie, next)` – też
+  wersja obowiązująca w dniu = ta od `from`; z `dayTemplateAfter` i `bringsNewBlocks(save, dayFile)` (`TemplateSave.sources`: blok z pliku dnia, nie blok tego szablonu dnia);
+  `routineStepsOf` (1–240 min, ≤ 40).
+- Okno – `plan/saveAs.ts`: `saveAsTemplate` – `from` ≥ `firstFrom()` (jutro teraz), dzień czytany i liczony w turze (`countedDay`), jedna edycja szablonu przez `withAttachments`
+  (`templateActions.ts`); „Zastąp”, które zdejmuje z wersji jakikolwiek blok (nie wpis sesji), przy `attachmentsUnread` – odmowa (T848); los `SaveFate` (`saved` / `unchanged` /
+  `asked` – pytanie albo wynik nieznany po wysłaniu, `SendState` / `refused`; okna – szablonu i rutyny – zostają tylko przy `refused`); linia `showGroupLine(view)` tylko przy `saved`; „Cofnij” `undoTemplateSave` – rekord jak po zapisie → przed; inaczej tylko wersja `from`
+  (przywrócona albo usunięta), gdy stoi jak zapisana, zmieniona – zostaje z komunikatem. `saveAsRoutine` / `undoRoutineSave` (rekord jak „Rutyny”, „Cofnij” – usunięcie, gdy bez zmian).
+  `SaveAsDialogs.tsx`: `SaveAsWindow` (`useDay(date)` – podgląd; zapis liczy od nowa; okno rutyny liczy początek raz – `useState`), menu: `BlockGroupMenu saveAs` (`saveAsSource` – bloki jednego dnia, inaczej `SAVE_AS_DAYS_WHY`),
+  `useAxisGroup` / `useWeekGroup` `saveAs: true` tylko „Dziś” i `DayGrid` (nie szablon, „Agenda”, miesiąc); menu dnia – `DayMenu` w „Dziś”, `week-day-menu` w `DayGrid`.
