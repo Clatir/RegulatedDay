@@ -4,7 +4,7 @@ Plan i rytm – `docs/plan.md` „Ciąg N” (strumień D). Drzewo `.claude/work
 Numery: D610–D619, T2750–T2849. Po wznowieniu czytaj ten plik, potem `git -C .claude/worktrees/n-d log --oneline -5`.
 
 ## Stan
-- N24 scalone do `claude/ciag-n` (4c4bdd9a). N15 scalone do `claude/ciag-n`. Dalej N23 (N16 → A1).
+- N24 i N15 scalone do `claude/ciag-n` (4c4bdd9a, eddafb21). W toku: N23 (wykonawca-opus, od 24.11 ~23:50); D poza pulą – D620+ (zgłoszone koordynatorowi). N16 → A1.
 
 ## Zadania (kolejność)
 - [x] N24
