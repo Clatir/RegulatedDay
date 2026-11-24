@@ -5,7 +5,7 @@
  * limit w schemacie ma taki sam limit w polu edycji”); the test of the settings goes through every one, with values in
  * and out of its range.
  */
-import { durationLabel, logicalClock, parseDuration, parseInteger, parseLogicalTime, type Parsed } from '../format'
+import { countLabel, durationLabel, logicalClock, parseDuration, parseInteger, parseLogicalTime, type Parsed } from '../format'
 import { GENERAL_RANGES } from './rd'
 import { DAY_TYPES, DAY_TYPE_NAMES, RANGES, type DayTypeId } from './settings'
 
@@ -23,26 +23,43 @@ export interface NumberField {
   /** 0 switches it off (besides the range). */
   offAllowed?: boolean
   unit?: string
+  /** The unit by the number („1 dzień”, „2 dni”, „5 dni”) – where it is counted (`settingValueText`). */
+  unitForms?: readonly [string, string, string]
   hint?: string
   group: FieldGroup
 }
 
-/** A dated setting that is on or off (rd.json „settings”), drawn in its group after the fields with a number. */
+/**
+ * A setting that is on or off, drawn in its group after the fields with a number: dated (rd.json „settings”) or – `scope: 'general'` –
+ * one of the shared settings that work at once (rd.json „general”, its path one key).
+ */
 export interface ToggleField {
   key: string
+  scope?: 'dated' | 'general'
   path: string[]
   label: string
   hint: string
   group: FieldGroup
 }
 
-/** „Bloki poza komputerem jednym ciągiem” (D553–D556), „Bufory dekompresji” (D569) and the proposal „Gorszy dzień” (D570): off by default. */
+/**
+ * „Bloki poza komputerem jednym ciągiem” (D553–D556), „… przy komputerze …” (D570), „Bufory dekompresji” (D569) and the proposal
+ * „Gorszy dzień” (D570): off by default; „Podpowiedzi długości z historii” (N6, D569, D625): on by default, at once.
+ */
 export const TOGGLE_FIELDS: readonly ToggleField[] = [
   {
     key: 'awayChain',
     path: ['awayChain'],
     label: 'Bloki poza komputerem jednym ciągiem',
     hint: 'Gdy nikogo nie ma przy komputerze, każdy blok poza komputerem (posiłek, rutyna, sprawy domowe, spacer…) kończy się o swoim planowanym końcu i od razu zaczyna się następny – bez pytania po powrocie; każdy start i koniec jest na liście „zrobione automatycznie” z „Cofnij”. Powrót w trakcie bloku kończy go jak dotąd.',
+    group: 'timer'
+  },
+  // „Bloki przy komputerze jednym ciągiem” (D570, D620): off by default.
+  {
+    key: 'deskChain',
+    path: ['deskChain'],
+    label: 'Bloki przy komputerze jednym ciągiem',
+    hint: 'Gdy blok przy komputerze dobiega końca, a Ty pracujesz (klawiatura albo mysz w ostatnich 2 min), kończy się o planowanym końcu jako zrobiony i od razu zaczyna się następny blok przy komputerze, jeśli zaczyna się najpóźniej 5 min później – zamiast pytania „Dalej?”. Pasek mówi „Dalej: <nazwa> · Cofnij” przez 10 s. Nie przed sesją, wykładem, zjazdem, dojazdem, blokiem stałym, buforem dekompresji, blokiem za granicą ani po ostatnim bloku pracy.',
     group: 'timer'
   },
   // „Bufory dekompresji” (D386, D403, D569): off by default, beside its thresholds.
@@ -59,6 +76,15 @@ export const TOGGLE_FIELDS: readonly ToggleField[] = [
     path: ['worseDay', 'propose'],
     label: 'Proponuj „Gorszy dzień” po check-inie',
     hint: 'Gdy check-in pokaże gorzej w co najmniej dwóch pulach (wynik puli 65 albo niżej – jedno „tak” albo dwa razy „trochę”), plan poranny zaproponuje „Gorszy dzień” – rutyny w wersji na gorsze dni i wcześniejszą granicę. Przycisk „Gorszy dzień” w planie porannym działa zawsze.',
+    group: 'plan'
+  },
+  // „Podpowiedzi długości z historii” (N6, D569, D625): on by default, beside its thresholds; only a hint of the window – at once.
+  {
+    key: 'durationHints',
+    scope: 'general',
+    path: ['durationHints'],
+    label: 'Podpowiedzi długości z historii',
+    hint: 'Przy polu „Długość” bloku i „Szacunek” sprawy: „zwykle trwa 45 min · Przyjmij”, gdy mediana faktycznego czasu zakończonych bloków tej podkategorii z ostatnich 90 dni różni się od wpisanej. Nic nie zmienia się samo.',
     group: 'plan'
   }
 ]
@@ -130,11 +156,34 @@ export const NUMBER_FIELDS: readonly NumberField[] = [
   { key: 'decompress.minCost', scope: 'dated', path: ['decompress', 'minCost'], label: 'Bufor dekompresji przy koszcie od', kind: 'integer', range: RANGES.decompressCost, unit: '/h', group: 'plan', hint: 'Koszt głowy, emocji albo bodźców na godzinę (1 = 3 punkty energii na godzinę).' },
   { key: 'worseDay.earlierMin', scope: 'dated', path: ['worseDay', 'earlierMin'], label: 'O ile wcześniej kończyć pracę w gorszy dzień', kind: 'duration', range: RANGES.worseDayEarlierMin, group: 'plan', hint: 'Tyle wcześniej staje granica po przyjęciu „Gorszego dnia” – nie przed chwilą przyjęcia; 0 zostawia granicę.' },
   { key: 'parallelMax', scope: 'general', path: ['parallelMax'], label: 'Najwięcej bloków naraz', kind: 'integer', range: GENERAL_RANGES.parallelMax, group: 'plan', hint: 'Blok przeciągnięty na inny biegnie razem z nim; ponad tę liczbę staje zaraz po grupie.' },
-  { key: 'deadlineDays', scope: 'general', path: ['deadlineDays'], label: 'Ostrzegaj o terminie na', kind: 'integer', range: GENERAL_RANGES.deadlineDays, unit: 'dni', group: 'cases', hint: 'Plan poranny pokazuje sprawy po terminie i z terminem do tylu dni naprzód (2 – dziś, jutro i pojutrze).' }
+  // The thresholds of „Podpowiedzi długości z historii” (N6, D569: thresholds in the settings; D625).
+  { key: 'durationHintBlocks', scope: 'general', path: ['durationHintBlocks'], label: 'Podpowiedź długości od bloków', kind: 'integer', range: GENERAL_RANGES.durationHintBlocks, group: 'plan', hint: 'Tyle zakończonych bloków podkategorii w ostatnich 90 dniach potrzeba do podpowiedzi.' },
+  { key: 'durationHintPct', scope: 'general', path: ['durationHintPct'], label: 'Podpowiedź przy różnicy od', kind: 'integer', range: GENERAL_RANGES.durationHintPct, unit: '%', group: 'plan', hint: 'O tyle procent wpisanej długości musi różnić się mediana.' },
+  { key: 'durationHintMin', scope: 'general', path: ['durationHintMin'], label: 'Podpowiedź przy różnicy co najmniej', kind: 'duration', range: GENERAL_RANGES.durationHintMin, group: 'plan', hint: 'I o tyle minut – oba progi naraz.' },
+  { key: 'deadlineDays', scope: 'general', path: ['deadlineDays'], label: 'Ostrzegaj o terminie na', kind: 'integer', range: GENERAL_RANGES.deadlineDays, unit: 'dni', unitForms: ['dzień', 'dni', 'dni'], group: 'cases', hint: 'Plan poranny pokazuje sprawy po terminie i z terminem do tylu dni naprzód (2 – dziś, jutro i pojutrze).' }
 ]
 
 export function fieldByKey(key: string): NumberField | undefined {
   return NUMBER_FIELDS.find((f) => f.key === key)
+}
+
+/** A setting's value with its unit as the settings show it („20 %”, „3 /h”, „1 dzień”, „2 dni”; a duration and a time as `formatField`). */
+export function settingValueText(f: Pick<NumberField, 'kind' | 'unit' | 'unitForms'>, v: number): string {
+  if (f.kind !== 'integer' || !f.unit) return formatField(f, v)
+  return f.unitForms ? countLabel(v, ...f.unitForms) : `${v} ${f.unit}`
+}
+
+/**
+ * The field with a unit whose value stands at `path` (a record's path – the field's own path at its end, e.g. `decompress.minCost`
+ * under a change of the settings, `deadlineDays` under `general`; T2938). Another record's field of the same last name is not it.
+ */
+export function unitFieldAt(path: readonly string[]): NumberField | undefined {
+  return NUMBER_FIELDS.find((f) => f.unit && f.kind === 'integer' && f.path.length <= path.length && f.path.every((k, i) => path[path.length - f.path.length + i] === k))
+}
+
+/** The name of a setting by its key – a field with a number or a switch (T2915: the questions and the history name a shared switch too). */
+export function settingLabelOf(key: string): string | undefined {
+  return (fieldByKey(key) ?? TOGGLE_FIELDS.find((f) => f.key === key))?.label
 }
 
 /** How a value of the field is shown. */

@@ -12,6 +12,7 @@ import { dayRaw } from '@shared/data/dayEdits'
 import { paths } from '@shared/data/paths'
 import { movableBlock, plannedSpan } from '@shared/engine/blocks'
 import { mayMoveBetween } from '@shared/engine/calendarViews'
+import { dayPlan } from '@shared/engine/createDay'
 import { moveBetweenDays, movedBlock, stayRuleOf } from '@shared/engine/planEdit'
 import { pushApart, withBlock } from '@shared/engine/pushApart'
 import { plDateWithWeekday } from '@shared/format'
@@ -198,10 +199,8 @@ async function moveToDay(m: WeekMove, today: string, at: number): Promise<WeekMo
     const startMin = onto?.startMin ?? m.startMin
     const alongside = onto?.alongside ?? null
     if (onto) text = onto.text
-    const two = moveBetweenDays(fromFile, toFile, b, source.ctx.plan, m.from, m.to, true, { startMin, alongside, stay: stayRuleOf(source.state.facts, source.ctx.snapshot.settings) })
+    const { two, starts, toAll } = movedAcross(source, there, fromFile, toFile, b, m, startMin, alongside)
     stayed = stayedOf(two.stayers, { ctx: source.ctx, facts: source.state.facts }, m.names)
-    const starts = there ? pushedOn(there, { ...movedBlock(b, source.ctx.plan, m.from, true, startMin), alongside }, two.followers) : []
-    const toAll = withPushed(two.target, m.to, (r) => r, starts)
     // The target in two entries: the block with its followers (the owner), then the pushed starts over it.
     const bring = editOf(paths.day(m.to), toFile, two.target)
     const push = editOf(paths.day(m.to), two.target, toAll)
@@ -224,6 +223,36 @@ async function moveToDay(m: WeekMove, today: string, at: number): Promise<WeekMo
     pushed,
     ...(said != null ? { parallel: { text: said, undo: null } } : {})
   }
+}
+
+/**
+ * What the drop of `b` onto `m.to` writes there (T952): the block with the blocks anchored to it that go with it (`moveBetweenDays`, D424), the starts
+ * they push apart on the target day (`pushedOn`, D367) and the target's file with all of it – one rule for the write (`moveToDay`) and for the energy on
+ * trial (`movedDayPlan`). `there` – the target day counted (null: not counted – nothing is pushed).
+ */
+function movedAcross(source: DayModel, there: DayModel | null, fromFile: RawRecord | null, toFile: RawRecord | null, b: PlanBlock, m: Pick<WeekMove, 'from' | 'to'>, startMin: number, alongside: string | null) {
+  const two = moveBetweenDays(fromFile, toFile, b, source.ctx.plan, m.from, m.to, true, { startMin, alongside, stay: stayRuleOf(source.state.facts, source.ctx.snapshot.settings) })
+  const starts = there ? pushedOn(there, { ...movedBlock(b, source.ctx.plan, m.from, true, startMin), alongside }, two.followers) : []
+  return { two, starts, toAll: withPushed(two.target, m.to, (r) => r, starts) }
+}
+
+/**
+ * The plan of day `there` after block `m.blockId` of `source` is dropped on it at `m.startMin` (N19, the energy on trial): the written file's plan –
+ * the block with its followers, what they push apart – by the very functions of the drop (`movedAcross`), from the days as the window counts them
+ * (their files and logs, not read again). Null – the block cannot be dragged now (it is gone, begun…).
+ */
+export function movedDayPlan(source: DayModel, there: DayModel, m: Pick<WeekMove, 'blockId' | 'from' | 'to' | 'startMin'>, today: string): PlanBlock[] | null {
+  let was: PlanBlock
+  try {
+    was = movingOf(source, m.blockId, today)
+  } catch {
+    return null
+  }
+  const fromFile = source.data.dayFile ?? null
+  const toFile = there.data.dayFile ?? null
+  const b = blockNow(dayRaw(fromFile, m.from), m.from, was)
+  const { toAll } = movedAcross(source, there, fromFile, toFile, b, m, m.startMin, null)
+  return dayPlan(there.ctx.snapshot, dayFileFrom(toAll, m.to))
 }
 
 /**

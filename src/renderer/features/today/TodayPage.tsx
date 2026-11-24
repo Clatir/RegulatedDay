@@ -53,12 +53,15 @@ import { dayAxis } from '../plan/dayItems'
 import { menuCtxOf, type MenuState } from '../plan/groupMenu'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
 import { useAxisGroup, type AxisTile } from '../plan/useAxisGroup'
+import { SaveAsWindow, type SaveAsOpen } from '../plan/SaveAsDialogs'
 import { renameInfo, useTileRename } from '../plan/tileRename'
 import { judgeBlocks } from '../plan/groupRun'
 import { rememberNewBlockCategory } from '../plan/lastCategory'
 import { edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
-import { Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
+import { Timeline, type BlockSpan, type DragEdge, type EdgeLimits, type TimelineTrial, type TrialDrag } from '../plan/Timeline'
+import { changeTrial, type Trial } from '../plan/trialEnergy'
+import { costTrial, resizeTrial } from '@shared/engine/trialEnergy'
 import { useAxisOpening, type PlacedDay } from './axisOpening'
 import { EnergyLegendHelp, LANES_WIDTH } from '../plan/EnergyLanes'
 import { hasEnergy } from '../plan/energyDraw'
@@ -169,7 +172,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
   const [exchange, setExchange] = useState<{ block: PlanBlock; proposal: ExchangeProposal } | null>(null)
   // The exchange asked for a block of another day is no longer asked.
   useEffect(() => setExchange(null), [date])
-  const [dialog, setDialog] = useState<null | 'type' | 'copy' | { move: PlanBlock } | 'addType'>(null)
+  const [dialog, setDialog] = useState<null | 'type' | 'copy' | { move: PlanBlock } | 'addType' | { save: SaveAsOpen }>(null)
   // D365: the bottom edge of a running block dropped past the boundary – its cost waits for „Potwierdź” or „Anuluj” for 10 s,
   // nothing is written meanwhile; the confirmation is the same click again (`confirm`) to the same instant.
   const [pending, setPending] = useState<{ id: string; to: number; endMin: number; text: string; seq: number } | null>(null)
@@ -314,7 +317,8 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
     ctx: menuCtx,
     stateOf,
     where,
-    judge
+    judge,
+    saveAs: true
   })
   // N9: F2 on the one selected block or a double click on a tile's name – its name in place, saved as the panel's „Nazwa” saves it but for this day alone
   // (a block of a series asks no scope, D430); a block begun outside the plan, or one the axis does not draw, has no field.
@@ -505,6 +509,34 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
     const i = axis.items.find((x) => x.id === id)
     return i ? { startMin: i.startMin, endMin: i.endMin } : null
   }
+  /**
+   * N19: the lowest energy before and with the change a drag in progress would write – the same change the preview draws and the drop saves (the
+   * plan after `dragChange` / `parallelChange` / `copyChange`, a group's `dragPreview`, the events of a running block's edge), counted on trial
+   * off the pointer's path (`useTrialLowest`); a day gone by is history – nothing to say. The key holds all the change depends on.
+   */
+  const trialOfDrag = (d: TrialDrag): Trial | null => {
+    const at = `${d.id}|${d.edge ?? ''}|${d.span.startMin}|${d.span.endMin}|${d.shown.startMin}|${d.shown.endMin}|${d.copy}`
+    if (d.group) {
+      const ids = group.sel.selected
+      const via = isToday ? 'forecast' : 'plan'
+      return { key: `g|${d.id}|${d.minutes}|${d.copy}|${ids.join(',')}`, change: () => { const plan = dragPreview(model, ids, d.minutes, today, { copy: d.copy, axis: via })?.plan; return plan ? { plan } : null } }
+    }
+    if (d.onto) {
+      const target = d.onto
+      return { key: `o|${d.id}|${target}`, change: () => { const c = ontoChange(d.id, target); return c && c !== 'same' ? changeTrial(model, c) : null } }
+    }
+    const item = axis.items.find((i) => i.id === d.id)
+    if (item?.movable) {
+      return { key: `m|${at}`, change: () => { const c = d.copy ? copyChange(d.id, d.span.startMin) : movableChange(d.id, d.span, d.edge, d.shown); return c ? changeTrial(model, c) : null } }
+    }
+    // A running block's bottom edge: the events the timer's resize writes (confirmed past the boundary, as „Potwierdź”).
+    if (item?.resize === 'end' && d.edge === 'end') {
+      return { key: `r|${d.id}|${d.span.endMin}`, change: () => { const p = previewOf(d.id, d.span.endMin); return p ? resizeTrial(model, d.id, p.to) : null } }
+    }
+    return null
+  }
+  // The window of a tile's cost says the energy only with the module on (without it – no line, no place for it).
+  const energyTrial: TimelineTrial | undefined = pushes ? { day: model, drag: trialOfDrag, cost: rd.general.modules.energy ? (day, id, costs) => costTrial(day, id, costs) : undefined } : undefined
 
   /**
    * A new block: in the panel first, drawn dashed on the axis (D466); an hour long, or as long as the range dragged over the axis
@@ -695,6 +727,9 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
         <DayMenu
           items={[
             { label: 'Skopiuj ten dzień do…', onPick: () => setDialog('copy'), testId: 'day-copy' },
+            // N15 (D615): the whole plan of the day as a template's version from a date, or as a new routine.
+            { label: 'Zapisz jako szablon…', onPick: () => setDialog({ save: { kind: 'template', date, ids: null } }), testId: 'day-save-template' },
+            { label: 'Zapisz jako rutynę…', onPick: () => setDialog({ save: { kind: 'routine', date, ids: null } }), testId: 'day-save-routine' },
             ...(isToday && model.state.facts.snapshots.some((s) => s.reason === 'type')
               ? [{ label: `Dodaj bloki typu ${DAY_TYPE_NAMES[currentType].toLowerCase()}…`, onPick: () => setDialog('addType'), testId: 'day-add-type' }]
               : [])
@@ -738,6 +773,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
               }}
               // D501: the window of the cost on a tile – one path with „3 dni” and „Tydzień” (a block of a series not begun asks its scope as
               // the panel does, once a window; a begun block costs so from now on).
+              energyTrial={energyTrial}
               onCosts={(id, costs, ask) => saveTileCosts({ date, blockId: id, names, ofSeries: plan.find((x) => x.id === id)?.origin === 'series' }, costs, { ask })}
               rename={rename}
               markers={axis.markers}
@@ -858,6 +894,8 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
             names={names}
             computers={view.computers}
             onChange={(patch) => changeBlock(block, patch, draft != null)}
+            // N6 (T2933): a block begun (running, paused, over) has no hint of its length from the history.
+            begun={started}
             // D3, D8, D563 P10: what the side panel says of the day stands in the panel of the block, which replaces it – the warnings and a routine waiting.
             dayNotes={<BlockDayNotes model={model} names={names} today={today} onShow={closePanel} openId={block.id} />}
             // „Zamknij” leaves a new block – saved as it stands, a bare click of the axis untouched thrown away (D461, T1045); Esc
@@ -938,6 +976,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
       {dialog === 'type' && <TypeChangeDialog model={model} names={names} isToday={isToday} onClose={() => setDialog(null)} />}
       {dialog === 'addType' && <TypeChangeDialog model={model} names={names} isToday onlyAdd onClose={() => setDialog(null)} />}
       {dialog === 'copy' && <CopyDayDialog model={model} today={today} onClose={() => setDialog(null)} />}
+      {dialog && typeof dialog === 'object' && 'save' in dialog && <SaveAsWindow open={dialog.save} view="today" onClose={() => setDialog(null)} />}
       {dialog && typeof dialog === 'object' && 'move' in dialog && <MoveDialog model={model} block={dialog.move} names={names} today={today} onClose={() => setDialog(null)} />}
       {group.overlay}
     </div>

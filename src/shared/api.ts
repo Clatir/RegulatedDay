@@ -6,6 +6,7 @@ import type { CalibrationPeriod, CostProposal, FeltCounts, ReviewPrompt, TimePro
 import type { Celebration, GameView } from './engine/progress'
 import type { SideB } from './engine/sideB'
 import type { StatsPeriod, StatsResult } from './engine/stats'
+import type { DurationHistory } from './engine/durationHistory'
 import type { GoalsView } from './engine/goals'
 import type { DaysView, WeekView } from './engine/week'
 import type { MonthView } from './engine/calendarViews'
@@ -111,6 +112,7 @@ export const CH = {
   goals: 'rd:goals',
   setGoals: 'rd:setGoals',
   stats: 'rd:stats',
+  durationHistory: 'rd:durationHistory',
   planPushed: 'rd:planPushed',
   planArranged: 'rd:planArranged',
   searchDays: 'rd:searchDays',
@@ -583,6 +585,8 @@ export interface TimerIn {
   confirm?: boolean
   /** Only judged (its cost or refusal), never written. */
   probe?: boolean
+  /** „Dalej” and „Przedłuż” of the bar (D621): the block it showed in front (null – none); another one there now – refused (`moved`). */
+  shown?: string | null
   categoryId?: string
   durationMin?: number
   variantId?: string | null
@@ -619,6 +623,8 @@ export interface TimerResult {
   wrote?: { day: string; ids: string[]; begun?: string[] }
   /** Why it did nothing, when the caller must tell it from other refusals (D336, T1109): never read from `why`. */
   code?: ResultCode
+  /** `moved` (D621): the block in front the refusal saw – the bar names it („Już biegnie: …”). */
+  front?: string
 }
 
 /** A day closed (D468): `written` – the ids of the events of the close, for its „Cofnij” (none when refused). */
@@ -1076,6 +1082,8 @@ export interface RdApi {
   calibration(): Promise<CalibrationScreen>
   /** The statistics of the frozen days of a period (D358): energy, estimates, requests by person, boundaries. */
   stats(period: StatsPeriod): Promise<StatsResult>
+  /** „Długość z historii” (N6, D625): the minutes the blocks finished in the last 90 days before today ran, by subcategory. */
+  durationHistory(): Promise<DurationHistory>
   /** The blocks of all days with files, past and coming, for the global search (Ctrl K); read when the palette opens. */
   searchDays(): Promise<SearchCorpus>
   /**

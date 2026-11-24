@@ -45,6 +45,7 @@ import { gameView, regenWaysOf, ROOM_ITEMS, storedWays, type Celebration, type G
 import { sideBOf, storedModules, type DayMeasure, type MeasureModules, type SideB } from '@shared/engine/sideB'
 import type { DaySummary } from '@shared/engine/daySummary'
 import { periodFrom, statsOf, type DayStats, type StatsPeriod, type StatsResult } from '@shared/engine/stats'
+import { blockDurations, DURATION_HISTORY_DAYS, durationHistoryOf, type DurationHistory, type DurationSample } from '@shared/engine/durationHistory'
 import { calibrationPeriod, costProposals, inCalibration, timeProposals, type CalibrationDay, type CalibrationPeriod, type CostEvidence, type CostProposal, type FeltCounts, type TimeProposal, type TimeSample } from '@shared/engine/calibration'
 
 import { inProcess, type Worker } from '../worker/host'
@@ -447,6 +448,8 @@ export class DataFolder {
    * they are still not there for the window (a new file of such a day waits in the queue), the others are unknown.
    */
   private readonly absent = new Set<string>()
+  /** Blocks with a „Przedłuż” of this computer's bar waiting for its second click (T2861, T2867): the block → until when (monotonic ms). */
+  private readonly deskHolds = new Map<string, number>()
   private lastSeenPeers = new Map<string, number>()
   /** Computers seen with a fresh presence in this run: one that stops refreshing it is „Brak zmian z … od …” (A8-07). */
   private readonly freshSeen = new Set<string>()
@@ -493,6 +496,10 @@ export class DataFolder {
   private readonly statsMemo = new Map<string, { key: string; stats: DayStats }>()
   /** The counts of statistics in progress, by period (the same period asked again shares it). */
   private readonly statsRuns = new Map<StatsPeriod, Promise<StatsResult>>()
+  /** „Długość z historii” (N6, T2906): the blocks finished on each day gone by, counted again only when its log changed. */
+  private readonly durationMemo = new Map<string, { key: string; samples: DurationSample[] }>()
+  /** The count of „Długość z historii” in progress, of its logical day (asked again meanwhile for the same day – shared; T2914). */
+  private durationRun: { day: string; run: Promise<DurationHistory> } | null = null
   /**
    * The days of the horizon (the week, the month's goals – D356, T553), each counted again only on a change of what it is
    * made of; the ones asked last stay (a hit goes to the end). Days being counted now: one count of a day for every ask.
@@ -1304,6 +1311,8 @@ export class DataFolder {
 
   /** One check (every 15 s): presences, who leads, the journal against OneDrive, the queue, and the leader's tasks. */
   async check(): Promise<CheckResult> {
+    // The bar's waiting „Przedłuż” as at the pass's start (T2861): one let go while the pass reads the day still holds its chain.
+    const hold = this.deskHoldsNow()
     const now = this.clock.now()
     const epoch = this.planWrites
     // A step of „Zastosuj szablon” on the plans and the facts went on during this pass (`planWrite`): what it read may show a block gone
@@ -1441,7 +1450,7 @@ export class DataFolder {
         // What the app does by itself (spec „Działania automatyczne”): today's, and yesterday's while a block of it runs
         // through 04:00 (it belongs to the day it began). Apart, so the timer never stops the rest.
         try {
-          const r = await this.autoTasks(day, read, ctx, state, now, gate, stale)
+          const r = await this.autoTasks(day, read, ctx, state, now, gate, hold, stale)
           autos += r.written
           nextAt = r.nextAt
           const yesterday = addDays(day, -1)
@@ -1449,7 +1458,7 @@ export class DataFolder {
           if (yRead.complete && spillsOver(yesterday, yRead.events)) {
             const yCtx = await this.dayContext(yesterday, yRead, now)
             // Input after 04:00 is in today's logs: both gates hold (`gateOf` – the bar's overlay takes the same, D345).
-            const y = await this.autoTasks(yesterday, yRead, yCtx, computeDay(yCtx), now, await this.gateOf(yesterday, yRead, now), stale)
+            const y = await this.autoTasks(yesterday, yRead, yCtx, computeDay(yCtx), now, await this.gateOf(yesterday, yRead, now), hold, stale)
             autos += y.written
             if (y.nextAt != null) nextAt = nextAt == null ? y.nextAt : Math.min(nextAt, y.nextAt)
           }
@@ -1823,6 +1832,64 @@ export class DataFolder {
       days.push(stats)
     }
     return statsOf(period, days, unreadable)
+  }
+
+  /**
+   * „Długość z historii” (N6, D569, D625, T2905–T2906): the minutes the blocks finished on the last 90 days before today really ran, by
+   * subcategory (`blockDurations` – the whole log of each day, frozen or not, no engine of the day: the main process folds it), with the
+   * folder it is of (T2931). A day whose log cannot be read now is counted (`unreadable`) – with its blocks as counted before, if it
+   * was (T2930); a day is folded again only when its log changed (its computers' last numbers, its events, its conflict copies). The same ask while one is counted for the same logical day shares it; another day's is its own (T2914).
+   */
+  durationHistory(at = this.clock.now()): Promise<DurationHistory> {
+    const day = logicalDayOf(at)
+    if (this.durationRun?.day === day) return this.durationRun.run
+    const run = this.durationHistoryOnce(at).finally(() => {
+      if (this.durationRun?.run === run) this.durationRun = null
+    })
+    this.durationRun = { day, run }
+    return run
+  }
+
+  private async durationHistoryOnce(at: number): Promise<DurationHistory> {
+    const today = logicalDayOf(at)
+    const from = addDays(today, -DURATION_HISTORY_DAYS)
+    const to = addDays(today, -1)
+    const days: DurationSample[][] = []
+    let read = 0
+    let unreadable = 0
+    let missing = 0
+    const looked = new Set<string>()
+    for (let day = from; day <= to; day = addDays(day, 1)) {
+      looked.add(day)
+      const was = this.durationMemo.get(day)
+      let log: DayRead | null
+      try {
+        log = await this.log.readDay(day)
+      } catch {
+        log = null
+      }
+      if (!log?.complete) {
+        // Not readable now (T2930): counted so, but a day counted before keeps its blocks – a moment of OneDrive loses none of them;
+        // one never counted is missing (T2936).
+        unreadable++
+        if (was) days.push(was.samples)
+        else missing++
+        continue
+      }
+      read++
+      const key = JSON.stringify([log.lastByComputer, log.events.length, log.copies])
+      if (was?.key === key) {
+        days.push(was.samples)
+        continue
+      }
+      const samples = blockDurations(day, log.events)
+      this.durationMemo.set(day, { key, samples })
+      days.push(samples)
+    }
+    // The days that left the window are not kept – only by the count of the latest day asked (an older one ending later would throw
+    // out the newer window's day, T2939).
+    if (this.durationRun?.day === today) for (const day of this.durationMemo.keys()) if (!looked.has(day)) this.durationMemo.delete(day)
+    return { ...durationHistoryOf(from, to, days, { read, unreadable, missing }), folder: this.o.dataDir }
   }
 
   /**
@@ -2319,16 +2386,35 @@ export class DataFolder {
   }
 
   /** The leader's automatic actions of one day up to the gate, and the day's next deadline. */
-  private async autoTasks(day: string, read: DayRead, ctx: DayContext, state: DayState, now: number, gate: number, stale: () => boolean = () => false): Promise<{ written: number; nextAt: number | null }> {
+  private async autoTasks(day: string, read: DayRead, ctx: DayContext, state: DayState, now: number, gate: number, hold: ReadonlySet<string>, stale: () => boolean = () => false): Promise<{ written: number; nextAt: number | null }> {
     const activity = await this.activityFor(day, read, now)
     // A step of „Zastosuj szablon” went on meanwhile (`planWrite`): the next pass, with both its plan and its facts.
-    if (stale()) return { written: 0, nextAt: nextDeadline(state) }
+    if (stale()) return { written: 0, nextAt: nextDeadline(state, now) }
     let written = 0
-    for (const e of autoActions({ ctx, state, activity, now, gate: Math.min(gate, now) })) {
+    // A „Przedłuż” waiting on this computer's bar (`hold`, from the pass's start): no chain at the computer ends its block meanwhile (T2861).
+    for (const e of autoActions({ ctx, state, activity, now, gate: Math.min(gate, now), hold })) {
       this.append({ ...e, day, dom: 'timer' })
       written++
     }
-    return { written, nextAt: nextCheckAt(written, now, nextDeadline(state)) }
+    return { written, nextAt: nextCheckAt(written, now, nextDeadline(state, now)) }
+  }
+
+  /**
+   * The bar's „Przedłuż” of `block` waits for its second click `ms` long (T2861; 0 – it went: cancelled or confirmed, T2867): the leader's
+   * chain at the computer waits for it – on this computer only (a bar of another computer holds nothing: its confirmation is refused
+   * as „Już biegnie: …”, D621).
+   */
+  /** The blocks the bar's waiting „Przedłuż” holds now (T2861; monotonic). */
+  private deskHoldsNow(): ReadonlySet<string> {
+    const mono = this.o.clock.mono()
+    return new Set([...this.deskHolds].filter(([, until]) => until > mono).map(([block]) => block))
+  }
+
+  holdDeskChain(block: string | null, ms: number): void {
+    const now = this.o.clock.mono()
+    for (const [b, until] of this.deskHolds) if (until <= now) this.deskHolds.delete(b)
+    if (block && ms > 0) this.deskHolds.set(block, now + ms)
+    else if (block) this.deskHolds.delete(block)
   }
 
   /**

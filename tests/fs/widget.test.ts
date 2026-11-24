@@ -22,6 +22,7 @@ import { arrangedIn, begunOf, planArrangedIpc, planPushedIpc, pushedIn, WidgetEn
 import { recordEdit } from '@shared/data/merge'
 import { putBlock } from '@shared/data/dayEdits'
 import { dayFileFrom } from '@shared/model/plan'
+import type { TimerResult } from '@shared/api'
 
 const DAY = '2026-10-21'
 let root: string
@@ -44,7 +45,7 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
-async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; remindersNotice?: boolean; opened?: string[]; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>; quickUndo?: (batch: string) => Promise<{ ok: boolean; error: string | null; undone: number; kept: number }>; openQuick?: () => void; cost?: (c: BarCostClick) => Promise<BarCostResult>; folderAhead?: number; timerHook?: (c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null }> | null } = {}) {
+async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFailed?: boolean; taken?: () => boolean; present?: () => boolean; refuse?: () => boolean; logs?: string[]; from?: number; during?: () => void; fs?: DataFs; hardEndNotice?: boolean; remindersNotice?: boolean; opened?: string[]; modePrefs?: () => { sessionMode: boolean; classMode: boolean }; quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null }>; quickUndo?: (batch: string) => Promise<{ ok: boolean; error: string | null; undone: number; kept: number }>; openQuick?: () => void; cost?: (c: BarCostClick) => Promise<BarCostResult>; folderAhead?: number; timerHook?: (c: { a: string; probe?: boolean }) => Promise<{ ok: boolean; why: string | null; confirm: null } | TimerResult> | null; check?: () => void } = {}) {
   // `now` is the wall clock; setting it moves the monotonic one by the same step (time passes), `jump` moves the wall clock
   // alone (Windows sets the time back or forward – the monotonic clock goes on).
   const clock = {
@@ -76,7 +77,7 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
         const hooked = o.timerHook?.(c)
         if (hooked) return hooked
         const r = await folder.timerClick(c as never)
-        return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}), ...(r.wrote ? { wrote: r.wrote } : {}) }
+        return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}), ...(!r.ok && r.front ? { front: r.front } : {}), ...(r.wrote ? { wrote: r.wrote } : {}) }
       },
       edit: async (entries) => {
         if (editFails) throw new Error('plik jest teraz nieczytelny – zmiana nie została zapisana, spróbuj za chwilę')
@@ -117,7 +118,8 @@ async function make(o: { batterySaver?: boolean; oneDrive?: boolean; backupFaile
       ...(o.quickAdd ? { quickAdd: o.quickAdd } : {}),
       ...(o.quickUndo ? { quickUndo: o.quickUndo } : {}),
       ...(o.openQuick ? { openQuick: o.openQuick } : {}),
-      ...(o.cost ? { cost: o.cost } : {})
+      ...(o.cost ? { cost: o.cost } : {}),
+      ...(o.check ? { check: o.check } : {})
     })
   const w = build()
   return { folder, clock, w, build, shown, failLater, views, closeFolder: () => (open = false), openFolder: () => (open = true), failEdits: () => (editFails = true), at: (min: number) => (clock.now = placeLogical(DAY, min)) }
@@ -3554,5 +3556,358 @@ describe('„Koszt ▸” z paska (D585, N12)', () => {
     const end = 11 * 60 - 4 * 60
     expect(after.slice(0, change + 1)).toEqual(before.slice(0, change + 1))
     expect(after[end]!).toBeLessThan(before[end]!)
+  })
+})
+
+describe('„Dalej: <nazwa> · Cofnij” po ciągu przy komputerze (N1, D620, D621, T2499)', () => {
+  /** Pisanie 10:00–11:00, Raport at 11:00 (a project – no cost after the boundary), work after it (Pisanie is no last work); the setting on. */
+  const chainDay = (on = true) => {
+    if (on) writeFileSync(join(dataDir, paths.settings), JSON.stringify({ schema: 1, settings: [{ id: 's', from: '2026-01-01', at: null, patch: { deskChain: true } }] }))
+    writeFileSync(
+      join(dataDir, paths.day(DAY)),
+      JSON.stringify({
+        schema: 1,
+        date: DAY,
+        blocks: [
+          { id: 'a', categoryId: 'inne', name: 'Pisanie', startMin: 10 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'b', categoryId: 'projekty', name: 'Raport', startMin: 11 * 60, durationMin: 60, fixed: false, origin: 'user' },
+          { id: 'c', categoryId: 'inne', name: 'Maile', startMin: 12 * 60, durationMin: 30, fixed: false, origin: 'user' }
+        ]
+      })
+    )
+  }
+  const chainLine = (w: WidgetEngine) => w.current().lines.find((l) => l.id.startsWith('deskChain:')) ?? null
+
+  it('o końcu bloku przy aktywności: linia „Dalej: Raport · Cofnij” pierwsza, 10 s; „Cofnij” – Pisanie biegnie dalej, Raport niezaczęty', async () => {
+    chainDay()
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(11 * 60)
+    await folder.check()
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
+    await w.refresh()
+    expect(w.current().lines[0]).toEqual({ id: expect.stringMatching(/^deskChain:/), text: 'Dalej: Raport', actions: [{ id: 'undo', label: 'Cofnij' }], dot: false })
+    clock.now += 2_000
+    await w.act('line', `${chainLine(w)!.id}|undo`, 'bar')
+    const t = await folder.timer(DAY)
+    expect(t.fg?.info.id).toBe('a')
+    expect((await folder.readDay(DAY)).events.filter((e) => e.k === 'block.start' && (e as { block?: string }).block === 'b')).toHaveLength(1)
+    expect(t.next?.id).toBe('b')
+    expect(chainLine(w)).toBeNull()
+    // Taken back: the chain does not come again – „Dalej?” as before.
+    clock.now += 5_000
+    await folder.check()
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+  })
+
+  it('linia znika po 10 s; ciąg zobaczony ponad 60 s po nim – bez linii, tylko na liście', async () => {
+    chainDay()
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(11 * 60)
+    await folder.check()
+    await w.refresh()
+    expect(chainLine(w)?.text).toBe('Dalej: Raport')
+    clock.now += 9_000
+    await w.refresh()
+    expect(chainLine(w)).not.toBeNull()
+    clock.now += 1_001
+    await w.refresh()
+    expect(chainLine(w)).toBeNull()
+
+    // Another bar (a restart) seeing it 2 min later: no line, the row in „zrobione automatycznie”.
+    const late = await make()
+    late.clock.now = placeLogical(DAY, 11 * 60 + 2)
+    await late.w.refresh()
+    expect(chainLine(late.w)).toBeNull()
+    expect(late.w.current().autos.items.map((x) => x.text)).toContain('Raport zaczęty o 11:00 (jednym ciągiem przy komputerze)')
+  })
+
+  it('„Dalej” kliknięte na pasku, który pokazywał jeszcze poprzedni blok: odmowa „Już biegnie: Raport” – nic nie kończy (D621)', async () => {
+    chainDay()
+    const { w, folder, at } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(11 * 60)
+    // The bar counted the day before the leader wrote the chain: it still shows Pisanie in front.
+    await w.refresh()
+    expect(w.current().block?.name).toBe('Pisanie')
+    await folder.check()
+    await w.act('next', undefined, 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
+    expect(w.current().note?.text).toBe('Już biegnie: Raport')
+  })
+
+  it('„Przedłuż” czekające na drugie kliknięcie: prowadzący czeka z ciągiem, po 10 s – ten sam koniec (T2861)', async () => {
+    chainDay()
+    const { w, folder, at, clock } = await make()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    clock.now = placeLogical(DAY, 11 * 60) - 5_000
+    await w.refresh()
+    await w.act('extend', undefined, 'bar')
+    expect(w.current().pending).toMatchObject({ button: 'extend' })
+    at(11 * 60)
+    clock.now += 1_000
+    await folder.check()
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+    clock.now += 5_000
+    await folder.check()
+    const t = await folder.timer(DAY)
+    expect(t.fg?.info.id).toBe('b')
+    const end = (await folder.readDay(DAY)).events.find((e) => e.k === 'block.end' && (e as { block?: string }).block === 'a') as { at: number; autoRule?: string } | undefined
+    expect(end).toMatchObject({ at: placeLogical(DAY, 11 * 60), autoRule: 'deskChain' })
+  })
+
+  it('odpowiedź „Dalej” / „Przedłuż” na „Dalej?”, gdy z przodu jest już inny blok: odmowa „Już biegnie: Raport” (T2862)', async () => {
+    chainDay(false)
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(11 * 60 + 1)
+    await w.refresh()
+    const q = w.current().question!
+    expect(q.id).toMatch(/^next:/)
+    // Another computer (or the window) began Raport meanwhile.
+    await folder.timerClick({ a: 'start', block: 'b' })
+    await w.act('line', `${q.id}|next`, 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
+    expect(w.current().note?.text).toBe('Już biegnie: Raport')
+    clock.now += 1_000
+    await w.act('line', `${q.id}|extend|15`, 'bar')
+    expect((await folder.timer(DAY)).fg?.extendedMin).toBe(0)
+  })
+
+  it('„Przedłuż” z krokiem +15 i „Potwierdź”, gdy z przodu jest już inny blok: odmowa, nic nie przedłużone (T2862)', async () => {
+    chainDay(false)
+    const { w, folder, at, clock } = await make()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 59)
+    await w.refresh()
+    await w.act('extend', undefined, 'bar')
+    clock.now += 1_000
+    await w.act('extendStep', '15', 'bar')
+    expect(w.current().pending).toMatchObject({ button: 'extend' })
+    await folder.timerClick({ a: 'start', block: 'b' })
+    clock.now += 1_000
+    await w.act('confirm', undefined, 'bar')
+    const t = await folder.timer(DAY)
+    expect(t.fg?.info.id).toBe('b')
+    expect(t.fg?.extendedMin).toBe(0)
+    expect(w.current().note?.text).toBe('Już biegnie: Raport')
+  })
+
+  it('kliknięcie w trakcie przeliczania paska: liczy się blok z widoku, który pasek pokazał, nie z liczonego właśnie dnia (T2862)', async () => {
+    chainDay()
+    let hook: (() => void) | null = null
+    let clicked: Promise<void> | null = null
+    const m = await make({ during: () => { const h = hook; hook = null; h?.() } })
+    await m.w.refresh()
+    await m.w.act('start', undefined, 'bar')
+    m.at(10 * 60 + 59)
+    await m.w.refresh()
+    expect(m.w.current().block?.name).toBe('Pisanie')
+    m.at(11 * 60)
+    await m.folder.check()
+    // „Dalej” clicked while the bar counts the day with the chain (its model already has Raport in front, its view – Pisanie).
+    hook = () => void (clicked = m.w.act('next', undefined, 'bar'))
+    await m.w.refresh()
+    await clicked
+    expect((await m.folder.timer(DAY)).fg?.info.id).toBe('b')
+    expect(m.w.current().note?.text).toBe('Już biegnie: Raport')
+  })
+
+  it('czekające „Przedłuż”: „Anuluj” zwalnia prowadzącego od razu; krok bez kosztu odnawia czekanie (T2867)', async () => {
+    chainDay()
+    const { w, folder, clock } = await make()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    clock.now = placeLogical(DAY, 11 * 60) - 5_000
+    await w.refresh()
+    await w.act('extend', undefined, 'bar')
+    clock.now += 2_000
+    await w.act('cancelPending', undefined, 'bar')
+    clock.now = placeLogical(DAY, 11 * 60) + 1_000
+    await folder.check()
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
+  })
+
+  it('krok „Przedłuż” bez kosztu (granica przesunięta w międzyczasie) odnawia czekanie prowadzącego (T2867)', async () => {
+    chainDay()
+    const { w, folder, clock } = await make()
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    clock.now = placeLogical(DAY, 11 * 60) - 5_000
+    await w.refresh()
+    await w.act('extend', undefined, 'bar')
+    clock.now += 2_000
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: clock.now, boundary: placeLogical(DAY, 13 * 60), auto: false }])
+    clock.now = placeLogical(DAY, 11 * 60) + 1_000
+    await w.act('extendStep', '15', 'bar')
+    expect(w.current().pending?.text).toContain('bez kosztu')
+    clock.now = placeLogical(DAY, 11 * 60) + 7_000
+    await folder.check()
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+  })
+
+  it('„Potwierdź” czekającego „Przedłuż”: prowadzący nie pisze ciągu, póki przedłużenie się zapisuje – blok przedłużony (T2868)', async () => {
+    chainDay()
+    let folderOf: DataFolder | null = null
+    // The leader's pass runs while the confirmed extension is being written (between the click and its write).
+    const confirmHook = (c: { a: string; probe?: boolean; confirm?: boolean }) =>
+      c.a === 'extend' && c.confirm && folderOf
+        ? (async () => {
+            await folderOf!.check()
+            const r = await folderOf!.timerClick(c as never)
+            return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}), ...(!r.ok && r.front ? { front: r.front } : {}) } as TimerResult
+          })()
+        : null
+    const { w, folder, clock } = await make({ timerHook: confirmHook })
+    folderOf = folder
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    clock.now = placeLogical(DAY, 11 * 60) - 5_000
+    await w.refresh()
+    await w.act('extend', undefined, 'bar')
+    clock.now = placeLogical(DAY, 11 * 60) + 1_000
+    await w.act('confirm', undefined, 'bar')
+    const t = await folder.timer(DAY)
+    expect(t.fg?.info.id).toBe('a')
+    expect(t.fg?.extendedMin).toBe(15)
+  })
+
+  it('„Anuluj” w trakcie oceny kroku ±15: krok nie przywraca kosztu, prowadzący od razu wolny i od razu sprawdzenie (T2868)', async () => {
+    chainDay()
+    let checks = 0
+    let stepHook: (() => void) | null = null
+    const { w, folder, clock } = await make({ check: () => void checks++, timerHook: (c) => (c.probe ? (stepHook?.(), null) : null) })
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    clock.now = placeLogical(DAY, 11 * 60) - 5_000
+    await w.refresh()
+    await w.act('extend', undefined, 'bar')
+    // „Anuluj” while the step's cost is being judged: the step does not bring the cost (nor its hold) back.
+    stepHook = () => {
+      stepHook = null
+      void w.act('cancelPending', undefined, 'bar')
+    }
+    clock.now += 1_000
+    await w.act('extendStep', '15', 'bar')
+    expect(w.current().pending).toBeNull()
+    expect(checks).toBe(1)
+    clock.now = placeLogical(DAY, 11 * 60) + 1_000
+    await folder.check()
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
+  })
+
+  it('„Potwierdź”: czekanie prowadzącego odnowione na czas zapisu – nie wygasa w trakcie przedłużania (T2868)', async () => {
+    chainDay()
+    let folderOf: DataFolder | null = null
+    let clockOf: { now: number } | null = null
+    // The extension takes long to write: the pending's own 10 s run out meanwhile, and the leader's pass runs then.
+    const slow = (c: { a: string; probe?: boolean; confirm?: boolean }) =>
+      c.a === 'extend' && c.confirm && folderOf && clockOf
+        ? (async () => {
+            clockOf!.now += 4_000
+            await folderOf!.check()
+            const r = await folderOf!.timerClick(c as never)
+            return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}) } as TimerResult
+          })()
+        : null
+    const { w, folder, clock } = await make({ timerHook: slow })
+    folderOf = folder
+    clockOf = clock
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    clock.now = placeLogical(DAY, 11 * 60) - 5_000
+    await w.refresh()
+    await w.act('extend', undefined, 'bar')
+    clock.now = placeLogical(DAY, 11 * 60) + 4_000
+    await w.act('confirm', undefined, 'bar')
+    expect((await folder.timer(DAY)).fg).toMatchObject({ info: { id: 'a' }, extendedMin: 15 })
+  })
+
+  it('prowadzący bierze czekania z początku przebiegu: zwolnione w trakcie – ten przebieg dalej czeka (T2861)', async () => {
+    chainDay()
+    const { w, folder, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    clock.now = placeLogical(DAY, 11 * 60) - 1_000
+    folder.holdDeskChain('a', 10_000)
+    clock.now = placeLogical(DAY, 11 * 60) + 1_000
+    const run = folder.check()
+    folder.holdDeskChain('a', 0)
+    await run
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('a')
+    await folder.check()
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
+  })
+
+  it('czekanie prowadzącego zwolnione wygaśnięciem kosztu: od razu sprawdzenie (T2868)', async () => {
+    chainDay()
+    let checks = 0
+    const { w, folder, clock } = await make({ check: () => void checks++ })
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    clock.now = placeLogical(DAY, 11 * 60) - 5_000
+    await w.refresh()
+    await w.act('extend', undefined, 'bar')
+    clock.now += 11_000
+    await w.refresh()
+    expect(w.current().pending).toBeNull()
+    expect(checks).toBe(1)
+  })
+
+  it('krok ±15 po starcie innego bloku gdzie indziej: „Już biegnie: Raport”; wyjątek kliknięcia zwalnia czekanie (T2862, T2868)', async () => {
+    chainDay()
+    let boom = false
+    const { w, folder, clock } = await make({ timerHook: (c) => (boom && !c.probe ? Promise.reject(new Error('dysk')) : null) })
+    await folder.userEvents([{ k: 'boundary.approve', day: DAY, at: placeLogical(DAY, 9 * 60), boundary: placeLogical(DAY, 11 * 60), auto: false }])
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    clock.now = placeLogical(DAY, 10 * 60 + 50)
+    await w.refresh()
+    await w.act('extend', undefined, 'bar')
+    await folder.timerClick({ a: 'start', block: 'b' })
+    clock.now += 1_000
+    await w.act('extendStep', '15', 'bar')
+    expect(w.current().note?.text).toBe('Już biegnie: Raport')
+    expect(w.current().pending).toBeNull()
+
+    // A throw of a click while a „Przedłuż” waits (`catch` in `act`): the wait goes with it.
+    await folder.timerClick({ a: 'start', block: 'a' })
+    clock.now = placeLogical(DAY, 10 * 60 + 59) + 50_000
+    await w.refresh()
+    await w.act('extend', undefined, 'bar')
+    expect(w.current().pending).toMatchObject({ button: 'extend' })
+    boom = true
+    clock.now += 1_000
+    await w.act('pause', undefined, 'bar')
+    expect(w.current().pending).toBeNull()
+  })
+
+  it('„Dalej” po bloku skończonym gdzie indziej: linia „Zaczęto: Raport · Cofnij”, nie „Skończono: Pisanie” (T2869)', async () => {
+    chainDay(false)
+    const { w, folder, at, clock } = await make()
+    await w.refresh()
+    await w.act('start', undefined, 'bar')
+    at(10 * 60 + 30)
+    await w.refresh()
+    await folder.timerClick({ a: 'finish', block: 'a' })
+    clock.now += 1_000
+    await w.act('next', undefined, 'bar')
+    expect((await folder.timer(DAY)).fg?.info.id).toBe('b')
+    expect(w.current().lines.find((l) => l.id.startsWith('clickUndo:'))?.text).toBe('Zaczęto: Raport')
   })
 })

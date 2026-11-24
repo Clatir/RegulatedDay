@@ -8,14 +8,20 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { defaultTemplates, firstComputerRecords } from '../../src/shared/model/defaults'
 import { DEFAULT_GENERAL, rdFrom } from '../../src/shared/model/rd'
-import { DEFAULT_SESSIONS, DEFAULT_SETTINGS } from '../../src/shared/model/settings'
+import { DEFAULT_SESSIONS, DEFAULT_SETTINGS, type RulesSettings } from '../../src/shared/model/settings'
 import { paths } from '../../src/shared/data/paths'
 import { addDays } from '../../src/shared/time/zone'
 import { logicalToday } from './app'
 
-export function seedAwake(dir: string, blocks: ReadonlyArray<Record<string, unknown>>): { today: string; dayFile: string } {
+/**
+ * `extra` – shared settings of the test on top of the defaults (e.g. `deskChain`, N1); `maxMin` – the ordinary day's
+ * maximum (a logical minute; default as the settings' – 19:00, N5).
+ */
+export function seedAwake(dir: string, blocks: ReadonlyArray<Record<string, unknown>>, o: Partial<RulesSettings> & { maxMin?: number } = {}): { today: string; dayFile: string } {
   const today = logicalToday()
-  const settings = { ...DEFAULT_SETTINGS, dayTypes: { ...DEFAULT_SETTINGS.dayTypes, zwykly: { ...DEFAULT_SETTINGS.dayTypes.zwykly, bedtimeMin: 27 * 60 + 59 } } }
+  const { maxMin, ...extra } = o
+  const zwykly = { ...DEFAULT_SETTINGS.dayTypes.zwykly, bedtimeMin: 27 * 60 + 59, ...(maxMin != null ? { maxMin } : {}) }
+  const settings = { ...DEFAULT_SETTINGS, ...extra, dayTypes: { ...DEFAULT_SETTINGS.dayTypes, zwykly } }
   const records = firstComputerRecords(
     { settings, general: DEFAULT_GENERAL, categories: rdFrom(undefined).categories, people: [], templates: defaultTemplates(), lectures: [], days: {} },
     Date.now(),

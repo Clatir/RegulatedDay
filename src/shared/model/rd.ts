@@ -42,6 +42,15 @@ export interface GeneralSettings {
   deadlineDays: number
   /** The most blocks at once in a group of parallel blocks (D476, D492): one more dropped on the group stands right after it. */
   parallelMax: number
+  /**
+   * „Podpowiedzi długości z historii” (N6, D569, D625): by „Długość” of a block and „Szacunek” of a sprawa „zwykle trwa … · Przyjmij” when
+   * the median of at least `durationHintBlocks` blocks finished in 90 days differs from the value by `durationHintPct` % and by
+   * `durationHintMin` minutes (both). Only a hint of the window – no engine reads it, so it works at once.
+   */
+  durationHints: boolean
+  durationHintBlocks: number
+  durationHintPct: number
+  durationHintMin: number
 }
 
 export const GENERAL_RANGES = {
@@ -50,7 +59,10 @@ export const GENERAL_RANGES = {
   breakMin: [5, 60],
   solitudeAfterMin: [10, 180],
   deadlineDays: [1, 7],
-  parallelMax: [1, 5]
+  parallelMax: [1, 5],
+  durationHintBlocks: [3, 30],
+  durationHintPct: [5, 100],
+  durationHintMin: [5, 60]
 } as const
 
 export const DEFAULT_GENERAL: GeneralSettings = {
@@ -60,7 +72,11 @@ export const DEFAULT_GENERAL: GeneralSettings = {
   breakMin: 15,
   solitudeAfterMin: 30,
   deadlineDays: 2,
-  parallelMax: 3
+  parallelMax: 3,
+  durationHints: true,
+  durationHintBlocks: 5,
+  durationHintPct: 20,
+  durationHintMin: 10
 }
 
 /** What a category is called and how it looks; its rules are dated settings (RulesSettings.categories). */
@@ -180,7 +196,11 @@ export function generalFrom(v: unknown): GeneralSettings {
     breakMin: intIn(r.breakMin, GENERAL_RANGES.breakMin, DEFAULT_GENERAL.breakMin),
     solitudeAfterMin: intOrOff(r.solitudeAfterMin, GENERAL_RANGES.solitudeAfterMin, DEFAULT_GENERAL.solitudeAfterMin),
     deadlineDays: intIn(r.deadlineDays, GENERAL_RANGES.deadlineDays, DEFAULT_GENERAL.deadlineDays),
-    parallelMax: intIn(r.parallelMax, GENERAL_RANGES.parallelMax, DEFAULT_GENERAL.parallelMax)
+    parallelMax: intIn(r.parallelMax, GENERAL_RANGES.parallelMax, DEFAULT_GENERAL.parallelMax),
+    durationHints: typeof r.durationHints === 'boolean' ? r.durationHints : DEFAULT_GENERAL.durationHints,
+    durationHintBlocks: intIn(r.durationHintBlocks, GENERAL_RANGES.durationHintBlocks, DEFAULT_GENERAL.durationHintBlocks),
+    durationHintPct: intIn(r.durationHintPct, GENERAL_RANGES.durationHintPct, DEFAULT_GENERAL.durationHintPct),
+    durationHintMin: intIn(r.durationHintMin, GENERAL_RANGES.durationHintMin, DEFAULT_GENERAL.durationHintMin)
   }
 }
 

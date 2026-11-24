@@ -71,6 +71,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `minutes` = tyle, ile `closeGap` przesunie (bufor zostaje). `closeGap` – lustro `pushApart`: elastyczne od luki do pierwszego
   stałego/czekającego, każdy o `tryMin` wcześniej, nie przed teraz ani przed blokiem, który zostaje; zapis = prognoza.
   `freedByEdit` – pola `plan.freed` (usunięcie: suma długości z zakotwiczonymi). Testy: `gaps.test.ts`.
+- `engine/gapFill.ts` (D624, „Rozłóż w luki” – reguły w nagłówku pliku i `sprawy.md`): `fillGaps`, `dayGaps`, `gapBounds`, `fillDayGaps`. Testy `gap-fill.test.ts`.
 - `engine/day.ts` – `computeDay`: granica, koniec pracy, klasyfikacja minut, budżet, regeneracja, minimum, pora snu,
   twardy koniec, pula, regeneracja każdej minuty (`rest`, dla energii); `newSegments` (odcinki do zapisu przez
   prowadzącego); `settingsAtMinute`. Energia (E2) – osobne reguły `energia.md`.
@@ -78,7 +79,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `withoutZjazd`, `zjazdTypeRaw`, `classImport`, `sameDayFile`); bloki `origin: 'zjazd'` i zajęcia zdalne w dniu zjazdu
   (`blockInfos(…, routines, typeAt)`, D359) są `lectureOrCommute`; `PlanBlock.name` – nowe pole bloku dopisz w `planBlock()`,
   `planBlockFrom` i literale w `blockInfos`. `RULES_VERSION` 7 od 1.4.0 (`block.shorten`, D365), 8 – serie w `day.create` (T716), 9 – bez drugiej
-  zmiany (D467), 10 – bloki bez komputera same, zamiana przy „Zacznij” (D475, D478) i grupy w prognozie (T1162), 11 – timer grupy (D493), 12 – przejęcie przodu grupy (T1259), 13 – koszt zaczętego bloku od minuty (`block.cost`, dziedzina timera, bierne – `PASSIVE`; D501), 14 – koszt rutyny (`Routine.costs`, `planned.routineCosts`; D512, reguły `koszt.md`), 15 – sesje w szablonach (D511, D515), 16 – pula „ciało” (D520, T1524), 17 – bloki poza komputerem jednym ciągiem (D553, T1968), 18 – tolerancja trafności z ustawienia dnia (UX13), 19 – koszt −100…100 (D568, T2440; reguły `koszt.md`), 20 – bufory dekompresji (N7, T2453), 21 – N4 „Gorszy dzień” (reguły `gorszy-dzien.md`; i N1 z A1, to samo wydanie 1.38).
+  zmiany (D467), 10 – bloki bez komputera same, zamiana przy „Zacznij” (D475, D478) i grupy w prognozie (T1162), 11 – timer grupy (D493), 12 – przejęcie przodu grupy (T1259), 13 – koszt zaczętego bloku od minuty (`block.cost`, dziedzina timera, bierne – `PASSIVE`; D501), 14 – koszt rutyny (`Routine.costs`, `planned.routineCosts`; D512, reguły `koszt.md`), 15 – sesje w szablonach (D511, D515), 16 – pula „ciało” (D520, T1524), 17 – bloki poza komputerem jednym ciągiem (D553, T1968), 18 – tolerancja trafności z ustawienia dnia (UX13), 19 – koszt −100…100 (D568, T2440; reguły `koszt.md`), 20 – bufory dekompresji (N7, T2453), 21 – N1 bloki przy komputerze jednym ciągiem (`deskChain`, D620) i N4 „Gorszy dzień” (reguły `gorszy-dzien.md`) – to samo wydanie 1.38.
 - Serie (OPS1, D381, D382, D401, D404, T700–T719): `model/series.ts` (rekord, `ruleFallsOn`, `seriesVersionOn`,
   `specialOutcome`, licznik `countedBefore`/`seriesLast`, `seriesPlans` – `SeriesPlan { series, last }`, `countDatesToRead`,
   `seriesOfBlock`, `currentSeries` – lista), `engine/series.ts` (`seriesBlocks` w `createDay`, `pushedBySeries` – rozsuwanie
