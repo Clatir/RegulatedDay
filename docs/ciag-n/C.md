@@ -1,15 +1,15 @@
 # Ciąg N – strumień C
 
 Plan i rytm – `docs/plan.md` „Ciąg N” (strumień C). Drzewo `.claude/worktrees/n-c`, gałąź `claude/n-c`, scalanie do `claude/ciag-n`.
-Numery: D600–D609, T2650–T2749. Po wznowieniu czytaj ten plik, potem `git -C .claude/worktrees/n-c log --oneline -5`.
+Numery: D600–D609, T2650–T2749; numery dodatkowe: D623–D629 (koordynator, 24.11). Po wznowieniu czytaj ten plik, potem `git -C .claude/worktrees/n-c log --oneline -5`.
 
 ## Stan
-- 24.11: N10, N11 scalone do `claude/ciag-n` (N11: unit 5449, E2E 144); N13 – kod u wykonawcy-opus gotowy, przegląd xhigh w toku (niezacommitowane w drzewie). Cron :37 (sesja regulatedday-87).
+- 24.11: N10, N11, N13 scalone do `claude/ciag-n` (N13: E2E 154 ok, `screens.spec.ts:67` pada też na czystym ciag-n – zgłoszone koordynatorowi). N14: kod i 2 rundy przeglądu gotowe, NIEZACOMMITOWANE w drzewie – następny krok: commit N14, pełne testy, push, wpis (uwagi R2: powód „idzie za podkategorią”, ostrzeżenie starszej wersji tylko z wierszy ≠ 0, pomijanie zarchiwizowanych przy zapisie). Potem N5, N6. Cron :37 (sesja regulatedday-87).
 
 ## Zadania (kolejność)
 - [x] N10
 - [x] N11
-- [ ] N13
+- [x] N13
 - [ ] N14
 - [ ] N5
 - [ ] N6
@@ -55,6 +55,23 @@ Numery: D600–D609, T2650–T2749. Po wznowieniu czytaj ten plik, potem `git -C
   - N11.4 – Jak sprawdzić: w oknie głównym „+ Skrzynka” w pasku, wpisz „Zadzwonić”, wklej 3 linie, Enter. Oczekiwany efekt: 3 sprawy, pasek „Dodano 3 sprawy · Cofnij”, w polu zostaje „Zadzwonić”. Nie przechodzi, gdy: „Zadzwonić” znika.
 - **CHANGELOG:** „Wklejona lista to od razu kilka spraw: wklej kilka linii w „Do skrzynki”, w „+ Skrzynka” albo w „Nowe zadanie” – Enter dodaje wszystkie (znaczniki „- ”, „1. ”, „[ ] ” znikają), Esc wkleja jeden tytuł, „Cofnij” zdejmuje całą listę.” Poprawka: „„Cofnij” zmiany grupowej spraw nie zostawia już bloku sprawy, która się nie cofnęła.”
 - **Uwagi na później (N11):** (1) „Cofnij” listy z linii paska nie przeżywa restartu aplikacji (pamięć procesu); (2) zapis listy kończący się pytaniem kolejki nie ma „Cofnij”.
+
+### N13 – zaznaczanie w Ustawieniach → Kategorie
+- **Zakres:** Ctrl / Shift / Ctrl+A / Esc na podkategoriach i wariantach drzewa; prawy przycisk, Shift+F10 albo „Zaznaczone: 6 · Zmień 6 ▾” nad drzewem – menu „Koszt…” (okno z ✓ / „—”, [−] [+] i wpisywaniem, zapis tylko ruszonych pul), „Miejsce”, „Przenieś do kategorii ▸”, „Usuń”; zapis od daty paska Ustawień jedną edycją rd.json; linia „Zmieniono 6 podkategorii · Cofnij”.
+- **Commit:** d49da2d (+ merge 9cdccd9, konflikt w `docs/specyfikacja.md` – „Zaznaczanie wielu” z N18 strumienia B2 połączone z dopiskiem o drzewie „Kategorii”). Czas ok. 4,5 h (wykonawca-opus 32 min + 3 rundy poprawek, przegląd, testy).
+- **Przegląd:** 3 rundy xhigh. R1: 1 ważna (łatka z datą zapisywała cały obiekt kosztu – zamrażała nieruszone pule) + 6 drobnych; R2: 1 ważna (przeniesienie paska do `FromBar` psuło Esc) + 8 drobnych – przeniesienie wycofane (T2708 → T2710), linia „Przelicz koszty ×N” wróciła na swoje miejsce; R3: 2 ważne („Cofnij” na linii czyścił zaznaczenie; przy pytaniu brak komunikatu o zatrzymanej części) + 6 drobnych – wszystkie poprawione z testami.
+- **D (rekomendacja, bez pytania):**
+  - D608: zaznaczanie jak w „Sprawach” i na osi – klik zaznacza jeden, Ctrl+klik dokłada / zdejmuje, Shift+klik – zakres w kolejności widocznej (warianty tylko rozwiniętej podkategorii), Ctrl+A – wszystkie widoczne, Esc i klik obok czyszczą; menu z prawego przycisku, Shift+F10 albo „Zmień N ▾” (od 2 zaznaczonych); kategorie główne się nie zaznaczają; zaznaczenie zostaje po zmianie.
+  - D609: „Przenieś do kategorii” – tylko podkategorie (warianty pominięte z powodem), od razu; „Usuń” – jak pojedyncze (podkategoria do archiwum od razu, dodana od przyszłej daty znika całkiem; wariant od daty paska); „Koszt…” i „Miejsce” – od daty paska, wariant „jak podkategoria” dostaje własną wartość; w podkategorii zapisują się tylko ruszone pule, wariant – w całości (lista wariantów zastępowana całą tablicą); „Cofnij” przywraca tylko wartości nadal takie jak po zmianie („Cofnięto · 2 zostały, bo się zmieniły”).
+- **T:** T2690 klucze drzewa i `treeOrder`; T2691 jedna edycja rd.json (część z datą – jeden wpis `withSettingsChange`); T2692 pola bez daty liść po liściu (`leafEdits`, `made`); T2693 podkategoria dodana od przyszłej daty znika całkiem; T2694 wariant bez własnego kosztu / miejsca dostaje własne; T2695 ✓/„—” i start pól okna „Koszt…”; T2696 `madeAfter`; T2697 zaznaczony wariant po zwinięciu zostaje, Ctrl+A i Shift – widoczne; T2698 fokus i „klik obok”; T2699 (zastąpione); T2700 biernik / mianownik w tytułach; T2701 zaznaczenie zostaje po zmianie; T2702 „Nic się nie zmienia – …”; T2703 „Cofnij” przy nieczytelnym rd.json / odmowie zostawia linię; T2704 tylko ruszone pule podkategorii; T2705 cofanie bez daty w odwrotnej kolejności; T2706 ✓ „Przenieś do” z archiwum; T2707 brak rd.json = `{ schema: 1 }`; T2708 WYCOFANE (pasek w `FromBar`); T2709 przełączanie „Zmień N ▾” (`keep`, `aria-expanded`); T2710 pasek zaznaczenia w sekcji nad drzewem, nieprzyklejony, linia na dawnym miejscu; T2711 „Zapisz” zawsze aktywne, zatwierdza wpisywane pole; T2712 wariant od daty w całości; T2713 `failed` przy niewysłanym zapisie; T2714 „od dziś” z nieczytelnym dniem – tylko część bez daty, też w „Cofnij”; T2715 tło wiersza wariantu; T2716 menu `from: 'bar' | 'row'`, `seq`; T2717 linia i jej „Cofnij” nie są „klikiem obok”; T2718 komunikat o części zatrzymanej także przy pytaniu / odmowie; T2719 klawisze z fokusem w sekcji, pasku „od jutra” i na `body` przy zaznaczeniu; T2720 `retextGroupLine` po częściowym „Cofnij”; T2721 pula ruszona tam i z powrotem to nie zmiana.
+- **Testy:** nowe `tests/unit/category-group.test.ts` (17), `tests/web/category-group.test.ts` (30); E2E `tests/e2e/category-tree.spec.ts` (6 podkategorii → ciało 2 od jutra, dziś bez zmiany, „Cofnij”).
+- **Odbiór:**
+  - N13.1 – Jak sprawdzić: Ustawienia → Kategorie, pasek „od jutra”, Ctrl+klik 6 podkategorii, „Zmień 6 ▾” → „Koszt…”, ciało 2, „Zapisz”. Oczekiwany efekt: nad drzewem „Zmieniono 6 podkategorii · Cofnij”; od jutra ciało 2 w każdej, inne pule bez zmian, przełączenie paska na „od dziś” pokazuje stare wartości. Nie przechodzi, gdy: zmienia się od dziś albo zmieniają się nieruszone pule.
+  - N13.2 – Jak sprawdzić: „Cofnij” z N13.1. Oczekiwany efekt: ciało wraca w 6 podkategoriach. Nie przechodzi, gdy: któraś zostaje z 2 (bez zmiany w międzyczasie).
+  - N13.3 – Jak sprawdzić: zaznacz 2 podkategorie i wariant, prawy przycisk → „Przenieś do kategorii ▸” → inna kategoria. Oczekiwany efekt: podkategorie w nowej kategorii, linia mówi o pominiętym wariancie. Nie przechodzi, gdy: wariant odłączony od podkategorii albo nic się nie dzieje.
+  - N13.4 – Jak sprawdzić: Shift+klik od pierwszej do piątej podkategorii, Esc. Oczekiwany efekt: zaznaczone 5, po Esc żadna. Nie przechodzi, gdy: zaznaczenie inne niż w kolejności drzewa.
+- **CHANGELOG:** „Ustawienia → Kategorie: zaznacz kilka podkategorii i wariantów (Ctrl, Shift) i zmień je naraz – koszt, miejsce, kategoria albo usunięcie – od jutra, od dziś albo od daty; „Cofnij” przywraca wszystkie.”
+- **Uwagi na później (N13):** (1) wiersze drzewa, jak wiersze spraw, nie mają roli ARIA ani przystanku Tab (a mają `aria-selected` bez roli); (2) Del na zaznaczeniu drzewa (jak „Usuń”) – poza zakresem; (3) przy niepustym zaznaczeniu Ctrl+A z fokusem w pasku „od jutra” zaznacza drzewo.
 
 ## Koniec strumienia
 - [ ] Strumień gotowy (wszystkie zadania scalone do `claude/ciag-n`, pełne testy zielone na `claude/ciag-n`) – potem czekaj na CI (T2852), cron zostaje
