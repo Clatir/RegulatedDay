@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { logicalDayOf } from '../../src/shared/time/day'
 
 export interface Launched {
@@ -165,6 +165,19 @@ export async function mainPage(app: ElectronApplication): Promise<Page> {
     await new Promise((r) => setTimeout(r, 100))
   }
   throw new Error('Okno główne nie pojawiło się.')
+}
+
+/**
+ * Opens a block of the axis (its panel, the selection) with a click on the tile's own left part – its hour. Never the middle of
+ * the tile: a low tile (30 min and less) has its cost's label at the end of the name's row (D501), whose click opens the cost's
+ * window instead, and in a narrow window that label covers the middle. Seen 24.11: on a screen 856 px wide the axis was 182 px
+ * and the label 92 px – „Start” of the block's panel never came; the same run with a wide screen (RD_WORK_AREA=1280x800) passed.
+ */
+export async function openBlock(tile: Locator): Promise<void> {
+  const box = await tile.boundingBox()
+  if (!box) throw new Error('Kafelek bloku nie jest widoczny.')
+  // Past the edge's handles at the top and the bottom (5–6 px) and past the left border (3 px) with its padding.
+  await tile.click({ position: { x: 10, y: Math.round(box.height / 2) } })
 }
 
 /** The page of the desktop bar or the panel. */

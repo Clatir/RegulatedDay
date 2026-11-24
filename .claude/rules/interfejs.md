@@ -108,6 +108,7 @@ paths:
   Limit i ostrzeżenie o starszym komputerze: `shared/model/note.ts` (`LONG_NOTE_FROM`), wersje z `DataView.computers[].appVersion`.
 - Testy E2E: `launch({ data: true })` daje pusty folder (`RD_DATA_DIR`) – bez niego okno pokazuje kreator. Wartości
   pól sprawdzaj `toHaveValue` (tekst strony ich nie zawiera). `RD_E2E_SHOTS=<folder>` zapisuje zrzuty w testach E3.
+  Blok na osi otwieraj `openBlock(kafelek)` (`app.ts`, klik w godzinę z lewej) – środek niskiego kafelka w wąskim oknie to napis kosztu (D501), który otwiera okienko kosztu, nie panel.
 - Kolory nowych tła tekstu dopisz do `contrastPairs` (`shared/theme.ts`) – test kontrastu przy każdej jasności.
 - Podpis widoku (`hub.signature`) obejmuje pliki dni wczoraj–jutro; inne dni okno czyta ponownie co 30 s
   (`useDayData`, `useDayFiles`). Pole, którego wartość schemat odrzuca po cichu (pobudka dnia 04:00–12:00), dostaje

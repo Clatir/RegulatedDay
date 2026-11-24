@@ -22,7 +22,7 @@ import { createDailyBackup } from '../../src/main/data/backup'
 import { RULES_VERSION } from '../../src/shared/model/events'
 import { logicalMinuteOf, placeLogical } from '../../src/shared/time/day'
 import { addDays } from '../../src/shared/time/zone'
-import { launch, logicalToday, viewPage, withMainLog, DAY_NUMBER } from './app'
+import { launch, logicalToday, openBlock, viewPage, withMainLog, DAY_NUMBER } from './app'
 import { seedAwake } from './seedAwake'
 
 const shots = process.env.RD_E2E_SHOTS
@@ -151,7 +151,7 @@ test('ekrany E3: plan poranny, wymiana, kalendarz, prośby, rutyny, szablony, hi
       await expect.poll(() => (JSON.parse(readFileSync(dayPath, 'utf8')) as { blocks: Array<{ id: string; startMin: number }> }).blocks.find((b) => b.id === 'late')?.startMin).toBe(Math.round((before - 60) / 5) * 5)
       // The drop selected nothing; a click right after it still does.
       await expect(late).not.toHaveAttribute('data-selected', 'true')
-      await late.click()
+      await openBlock(late)
       await expect(late).toHaveAttribute('data-selected', 'true')
       // The edges need the block ahead of now: at night (from 30 min before its new start) a not started block whose
       // start has passed stands at the current minute (the forecast), so the drags would start from there.
@@ -486,7 +486,7 @@ test('timer E4a/E4b: Start, Pauza, Wznów i Dalej w pasku u góry okna, blok na 
     await withMainLog(userData, async () => {
       // „Start” from the block's panel (it works at any hour – at night the bar shows only the running block).
       await expect(page.getByTestId('block-late')).toBeVisible({ timeout: 30_000 })
-      await page.getByTestId('block-late').click()
+      await openBlock(page.getByTestId('block-late'))
       await page.getByTestId('block-timer-start').click()
       await expect(page.getByTestId('bar-block')).toContainText('Inne obowiązki')
       await expect(page.getByTestId('bar-main')).toHaveAttribute('data-tone', 'praca')
@@ -543,7 +543,7 @@ test('trwający blok (D365): dolna krawędź na osi przedłuża i skraca przez t
       const late = page.getByTestId('block-late')
       await expect(late).toBeVisible({ timeout: 30_000 })
       await page.evaluate((a) => window.rd.logEvents([{ k: 'boundary.approve', day: a.day, boundary: a.boundary, auto: false }]), { day: logicalToday(), boundary: Math.round((Date.now() + (28 * 60 - nowMin - 1) * 60_000) / 60_000) * 60_000 })
-      await late.click()
+      await openBlock(late)
       await page.getByTestId('block-timer-start').click()
       await expect(page.getByTestId('bar-block')).toContainText('Inne obowiązki')
       // A running block has the bottom edge only (its start is no longer its plan's to move).
@@ -610,7 +610,7 @@ test('trwający blok (D365): za granicą koszt i „Potwierdź · Anuluj” – 
       const late = page.getByTestId('block-late')
       await expect(late).toBeVisible({ timeout: 30_000 })
       await page.evaluate((a) => window.rd.logEvents([{ k: 'boundary.approve', day: a.day, boundary: a.boundary, auto: false }]), { day: logicalToday(), boundary: Math.round((Date.now() + 45 * 60_000) / 60_000) * 60_000 })
-      await late.click()
+      await openBlock(late)
       await page.getByTestId('block-timer-start').click()
       await expect(page.getByTestId('bar-block')).toContainText('Inne obowiązki')
       const logFile = async () => join(dataDir, 'log', logicalToday().slice(0, 4), logicalToday(), `${(await page.evaluate(() => window.rd.dataView())).computer}.jsonl`)
@@ -977,7 +977,7 @@ test('rytuał zamknięcia (D318): po „Koniec pracy” karta w „Dziś” i �
     await withMainLog(userData, async () => {
       await expect(page.getByTestId('block-late')).toBeVisible({ timeout: 30_000 })
       await expect(page.getByTestId('ritual')).toHaveCount(0)
-      await page.getByTestId('block-late').click()
+      await openBlock(page.getByTestId('block-late'))
       await page.getByTestId('block-timer-start').click()
       await expect(page.getByTestId('bar-block')).toContainText('Inne obowiązki')
       await page.evaluate(() => window.rd.widgetAction('endWork'))
