@@ -37,7 +37,7 @@ afterEach(() => {
   delete (globalThis as { window?: unknown }).window
   useData.setState(data, true)
   useUi.setState({ toasts: [] })
-  for (const v of ['today', 'template', 'week'] as const) clearGroupLine(v)
+  for (const v of ['today', 'template', 'week', 'calendar'] as const) clearGroupLine(v)
 })
 
 /** The folder of day files: the edits apply; the logs as given. */
@@ -85,7 +85,7 @@ const names = () => {
   return { rd, settings: settingsOn(rd.settings, TODAY), routines: [], requests: [] }
 }
 const menuBlocks = (plan: readonly PlanBlock[], ids: readonly string[]): MenuBlock[] => plan.filter((b) => ids.includes(b.id)).map((b) => ({ id: b.id, categoryId: b.categoryId, variantId: b.variantId, routine: b.routine, costs: null, state: 'open', movable: true }))
-const line = (view: 'today' | 'template' | 'week') => useGroupLine.getState().lines[view]?.text
+const line = (view: 'today' | 'template' | 'week' | 'calendar') => useGroupLine.getState().lines[view]?.text
 
 describe('„Dziś”: menu → zmiana → linia → „Cofnij”', () => {
   it('przykład spec.: podkategoria „Analiza” 4 bloków, w tym zaczętego – „Zmieniono 3 bloki · pominięto 1: zaczęty”; „Cofnij” – wraca tylko podkategoria', async () => {
@@ -192,6 +192,21 @@ describe('„Tydzień”: kilka dni jedną zmianą, jedno „Cofnij”', () => {
     expect(blocksOf(s.files[TODAY], TODAY).map((b) => b.variantId)).toEqual([null, null])
     expect(blocksOf(s.files[SUN2], SUN2).map((b) => b.variantId)).toEqual([null, null])
     expect(blocksOf(s.files[SUN3], SUN3).map((b) => b.variantId)).toEqual(['spacer'])
+  })
+
+  it('N18, D597: paski miesiąca – te same klucze `date|id`, jedna edycja, linia widoku „calendar” (nie „week”), jedno „Cofnij”', async () => {
+    const reg = (id: string, at: string) => flex(id, at, 30, { categoryId: 'regeneracja' })
+    const days = { [TODAY]: [reg('a1', '10:00')], [SUN2]: [reg('b1', '10:00')], [SUN3]: [reg('c1', '10:00')] }
+    const s = stub(Object.fromEntries(Object.entries(days).map(([d, p]) => [d, fileOf(d, p)])))
+    const keys = Object.entries(days).flatMap(([d, p]) => p.map((b) => blockKey(d, b.id)))
+    await runBlockGroup('calendar', keys, { kind: 'category', categoryId: 'analiza', variantId: null }, undefined, AT)
+    expect(s.sent).toHaveLength(1)
+    expect(s.sent[0]!.map((e) => dateOf(e.rel)).sort()).toEqual([TODAY, SUN2, SUN3])
+    expect(line('calendar')).toBe('Zmieniono 3 bloki')
+    expect(line('week')).toBeUndefined()
+    await undoGroupLine('calendar')
+    for (const d of [TODAY, SUN2, SUN3]) expect(blocksOf(s.files[d], d).map((b) => b.categoryId)).toEqual(['regeneracja'])
+    expect(line('calendar')).toBeUndefined()
   })
 
   it('„Zaparkuj” w „Tygodniu”: dzisiejsze idą do procesu głównego, bloki innych dni – pominięte „nie dziś”', async () => {

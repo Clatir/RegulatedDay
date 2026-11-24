@@ -208,6 +208,14 @@ describe('menu prawego przycisku i Del na blokach kolumn (D528)', () => {
     expect(runs).toEqual([{ view: 'week', ids: [K(MON, 'm1'), K(MON, 'm2'), K(WED, 'w1')], action: { kind: 'park' } }])
   })
 
+  it('N18, T2614: w „Tygodniu” „Koszt…” zostaje czynny (kolumny liczą koszty)', async () => {
+    await mount()
+    await click(cell(MON, 'm1'), { ctrlKey: true })
+    await click(cell(WED, 'w1'), { ctrlKey: true })
+    await rightClick(cell(WED, 'w1'))
+    expect(q('block-menu-cost')!.getAttribute('aria-disabled')).not.toBe('true')
+  })
+
   it('Del przy jednym zaznaczonym bloku (UX17, F8): pytanie z nazwą bloku, `remove` tego jednego; Esc anuluje bez zapisu', async () => {
     await mount()
     await click(cell(MON, 'm1'), { ctrlKey: true })

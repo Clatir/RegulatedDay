@@ -3,12 +3,14 @@
  * early close of the market, the week of the session shift, its own wake); several dates are selected by dragging, with Ctrl or Shift
  * (`useSelection`, D527: Shift+arrows, Ctrl+A for the month, Esc) and get a type or a wake at once – from the bar or from the menu of the
  * right button (D528); a change of two days or more says „Zmieniono N dni · Cofnij” (D529); a click on a day opens its plan.
+ * The bars of the blocks in the cells are picked too (N18, D597): Ctrl+click and Shift+click select blocks (never the day under the bar), Ctrl+A with a block
+ * selected takes every bar of the month, the right button on a selected bar opens „Zmień N bloków” (the line of `calendar`); blocks and days exclude each other.
  * Every day also shows up to three bars of its all-day events, fixed blocks and flexible blocks, „+N” for all the rest it holds
  * and the dot of its load (D418, D422, D429 – `useMonthView`, `monthCellView`).
  * „Wczytaj PDF zjazdów” (D357) reads a schedule into a preview you correct; only „Zapisz” writes the days, its toast has
  * „Cofnij”.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { groupCount, groupLineText } from '@shared/groupText'
 import type { RawRecord, ZjazdSaveResult, ZjazdUndoDay } from '@shared/api'
 import { marketDay } from '@shared/calendar/holidays'
@@ -36,6 +38,7 @@ import { TimeField } from '../../components/fields'
 import { GroupLine } from '../../components/GroupLine'
 import { dayFilesNow, editNotice, editOf, isSaved, readDayFiles, trySaveWith, useData } from '../../store/data'
 import { useBusy } from '../../lib/busy'
+import { useDeleteSelected } from '../../lib/deleteKey'
 import { useSelection } from '../../lib/useSelection'
 import { showGroupLine } from '../../store/groupLine'
 import { movedDay, type WeekPushedDay } from '../../store/weekPush'
@@ -45,6 +48,7 @@ import { openDay, setBlockDraft, setMemory, toast, undoToast, useUi } from '../.
 import { useNewShortcut } from '../../lib/escape'
 import { usePeriodKeys } from '../../lib/periodKeys'
 import { NewBlockPopover } from '../week/NewBlockPopover'
+import { blocksLine, inMonthGrid, useWeekGroup } from '../week/weekSelect'
 import { NEW_BLOCK_WIDTH, popoverPlace } from '../week/weekLayout'
 import { dayWakeMin, freeHourStart, newBlockDay, NO_NEW_DAY_TEXT, type BusySpan } from '../week/weekNew'
 import { DEFAULT_NEW_BLOCK_MIN } from '../plan/gridCreate'
@@ -57,6 +61,7 @@ import { questionsText, savedText, skippedLines, undoneText, unchangedText } fro
 import { undoDayEdits } from './dayGroup'
 import { useApplyFlow } from '../templates/ApplyTemplate'
 import { dayMenu, type MenuDay } from './dayMenu'
+import { weekOrder } from '../plan/groupMenu'
 import { runInTurn } from './zjazdyRun'
 import { closeZjazdy, keepZjazdy, openZjazdy, useZjazdy } from './zjazdyStore'
 import { ZjazdyPreviewPanel } from './ZjazdyPreview'
@@ -89,13 +94,15 @@ export function CalendarPage() {
   usePeriodKeys({ prev: () => setMonth(shiftMonth(month, -1)), next: () => setMonth(shiftMonth(month, 1)), today: () => setMonth(thisMonth) }, !importing && !fresh && !asking)
   const [wake, setWake] = useState<number | null>(null)
   const dates = useMemo(() => gridDates(month), [month])
+  // Whether a block is selected (N18, set below by the selection of blocks): the days' keys wait while one is.
+  const blocksOn = useRef(false)
   // The selection of days (D527): kept across months (a day of another month stays selected), Ctrl+A takes the days of the month shown.
   const monthDates = useMemo(() => dates.filter((d) => d.startsWith(month)), [dates, month])
   // The order of Shift+click and Shift+arrows: the days by date from the grid's first to its last – and over every selected day outside the
   // grid (another month), so a range reaches over months as it always did.
   const [reach, setReach] = useState<{ lo: string; hi: string } | null>(null)
   const order = useMemo(() => daysBetween(dates, reach), [dates, reach])
-  const selection = useSelection({ order, all: monthDates, arrows: 'grid', prune: false, enabled: !importing })
+  const selection = useSelection({ order, all: monthDates, arrows: 'grid', prune: false, enabled: !importing, when: () => !blocksOn.current })
   useEffect(() => {
     const ids = selection.selected
     const next = ids.length ? { lo: ids.reduce((a, b) => (b < a ? b : a)), hi: ids.reduce((a, b) => (b > a ? b : a)) } : null
@@ -123,6 +130,33 @@ export function CalendarPage() {
     }
     return { monthDays: days, hiddenBlocks }
   }, [monthView, hiddenCalendars, rd])
+  const namesOf = useCallback((d: string) => ({ rd, settings: settingsOn(rd.settings, d), routines, requests }), [rd, routines, requests])
+  // The cells as they are drawn (once per change): the bars of the blocks in them are what the blocks' selection runs over (N18).
+  const cells = useMemo(() => new Map(dates.map((d) => [d, monthCellView(monthDays.get(d) ?? emptyMonthDay(d), shownEvents, namesOf(d), brightness)])), [dates, monthDays, shownEvents, namesOf, brightness])
+  const barDays = useMemo(() => dates.map((d) => ({ date: d, blocks: (cells.get(d)?.bars ?? []).flatMap((b) => (b.block ? [b.block] : [])) })), [dates, cells])
+  // Ctrl+A takes the bars of the month's own days (as Ctrl+A of the days takes the days of the month, not the neighbours of its grid).
+  const monthBarKeys = useMemo(() => weekOrder(barDays.filter((d) => d.date.startsWith(month))), [barDays, month])
+  // Blocks and days exclude each other: while a block is selected the days' keys (Ctrl+A, Esc) are not heard, and the blocks' keys only while one is.
+  const barGroup = useWeekGroup({ days: barDays, scope: month, today, energy: false, namesOf, view: 'calendar', when: (e) => blocksOn.current && inMonthGrid(e), arrows: false, enabled: !importing, all: monthBarKeys, costsKnown: false })
+  blocksOn.current = barGroup.sel.count > 0
+  // The preview of the PDF of „zjazdy” takes the grid's place: no block stays selected under it, and Del removes none.
+  useEffect(() => {
+    if (importing && barGroup.sel.count > 0) barGroup.sel.clear()
+  }, [importing, barGroup.sel.count])
+  useDeleteSelected(importing ? null : barGroup.removeTarget)
+  // A day selected (Ctrl+click, the drag, Ctrl+A) takes the selected blocks off – the change of the days' selection is the newer one.
+  // A layout effect: no frame shows both selections.
+  useLayoutEffect(() => {
+    if (selection.count > 0 && barGroup.sel.count > 0) barGroup.sel.clear()
+  }, [selection.state])
+  const bars = {
+    isMarked: barGroup.isMarked,
+    mark: (date: string, id: string, e: { ctrlKey: boolean; shiftKey: boolean }) => {
+      if (selection.count > 0) selection.clear()
+      barGroup.mark(date, id, e)
+    },
+    context: barGroup.context
+  }
   useEffect(() => {
     let alive = true
     // The grid's days, with the day before it and the day after its end.
@@ -176,7 +210,6 @@ export function CalendarPage() {
         if (root.current && seq === askSeq.current && shown.current.month === asked && !shown.current.importing) open(blocks)
       })
   })
-  const namesOf = (d: string) => ({ rd, settings: settingsOn(rd.settings, d), routines, requests })
   /** The menu opens once the files of its days are known: the ✓ and „—” are of the days as they are, whichever month they are in. */
   const openMenu = (ids: readonly string[], at: { x: number; y: number }) => {
     const asked = ++menuAsked.current
@@ -397,13 +430,14 @@ export function CalendarPage() {
             selection={selection}
             onContext={openMenu}
             onOpen={(d) => openDay(d)}
+            bars={bars}
             cell={(d) => {
               const i = info(d)
               return {
                 tone: blockFill(DAY_TYPE_COLORS[i.type], brightness),
                 title: i.title,
                 events: eventsOn(shownEvents, d),
-                detail: monthCellView(monthDays.get(d) ?? emptyMonthDay(d), shownEvents, { rd, settings: settingsOn(rd.settings, d), routines, requests }, brightness),
+                detail: cells.get(d),
                 marks: i.marks.map((x) => (
                   <span key={x} className="rounded-sm bg-bg/60 px-1">
                     {x}
@@ -414,6 +448,11 @@ export function CalendarPage() {
           />
           <div className="flex flex-wrap items-center gap-2 rounded border border-line bg-panel px-3 py-2" data-testid="calendar-actions">
             <span className="text-[12px] text-muted" data-testid="calendar-selection">Zaznaczone dni: {selection.count} (przeciągnij albo klikaj z Ctrl; zwykłe kliknięcie otwiera plan dnia)</span>
+            {barGroup.sel.count > 0 && (
+              <span className="text-[12px] text-fg" data-testid="calendar-block-selection">
+                {blocksLine(barGroup.sel.count, barGroup.summary)}
+              </span>
+            )}
             <span className="flex-1" />
             {DAY_TYPES.map((t) => (
               <button key={t} type="button" className="btn" disabled={!selection.count || busy} onClick={() => void setType(t)} data-testid={`calendar-type-${t}`}>
@@ -457,6 +496,7 @@ export function CalendarPage() {
       )}
       {menu && menuEntries && <ContextMenu title={`Zmień ${groupCount(menu.dates.length, 'day')}`} at={menu.at} items={menuEntries} onClose={() => setMenu(null)} testId="calendar-menu" />}
       {apply.dialogs}
+      {barGroup.overlay}
     </div>
   )
 }
