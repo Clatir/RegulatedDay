@@ -17,7 +17,7 @@ import { templateJson } from '../../src/shared/model/defaults'
 import { dayFileFrom, planBlock, templateFrom, type Template } from '../../src/shared/model/plan'
 import { logicalMinuteOf } from '../../src/shared/time/day'
 import { addDays } from '../../src/shared/time/zone'
-import { launch, logicalToday, withMainLog } from './app'
+import { launch, logicalToday, withMainLog, DAY_NUMBER } from './app'
 import { seedAwake } from './seedAwake'
 
 type Json = Record<string, unknown>
@@ -349,8 +349,8 @@ test('szablon (UX19, P28): „Zastosuj szablon ▸” w menu zaznaczonych dni Ka
 
       // The menu of the selected days of the Calendar: the template on both days, no question (the days are empty).
       await page.getByTestId('nav-calendar').click()
-      await page.getByTestId(`day-${d1}`).click({ modifiers: ['Control'] })
-      await page.getByTestId(`day-${d2}`).click({ modifiers: ['Control'] })
+      await page.getByTestId(`day-${d1}`).click({ modifiers: ['Control'], position: DAY_NUMBER })
+      await page.getByTestId(`day-${d2}`).click({ modifiers: ['Control'], position: DAY_NUMBER })
       await page.getByTestId(`day-${d2}`).click({ button: 'right' })
       await expect(page.getByTestId('calendar-menu')).toHaveAttribute('aria-label', 'Zmień 2 dni')
       await page.getByTestId('calendar-menu-apply').click()
