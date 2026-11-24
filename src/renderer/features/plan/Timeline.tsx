@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } 
 import { durationLabel, logicalClock } from '@shared/format'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
 import type { DragPreview } from '@shared/engine/groupDrag'
+import type { TrialChange, TrialDay } from '@shared/engine/trialEnergy'
 import type { TileCost as TileCostInfo } from '@shared/model/blockCosts'
 import type { Costs } from '@shared/model/categories'
 import type { ReserveCause } from '@shared/engine/reserveCause'
@@ -41,6 +42,8 @@ import { ReserveCauseHint, ReserveRing, reserveTileProps, useReserveHint } from 
 import { inParallelZone, tileAt, tileLanes } from './parallelDrag'
 import type { CostAsk } from './costSave'
 import { costRoom, TileCost } from './TileCost'
+import { TrialCaption, trialText } from './TrialCaption'
+import { useTrialLowest, type Trial } from './trialEnergy'
 import { DecompressIcon } from './DecompressIcon'
 import { onTileName, TileNameField, type TimelineRename } from './tileRename'
 import { COPY_SPAN_ID } from '../today/dayPush'
@@ -261,6 +264,32 @@ interface Drag {
 }
 
 /**
+ * A drag in progress as the energy on trial sees it (N19): the block, the edge (null – the body), where it is held (`span`) and was grabbed
+ * (`shown`), Ctrl (`copy`), the block it is over (`onto`, D492), and for a group (`group`) the minutes it moved by.
+ */
+export interface TrialDrag {
+  id: string
+  edge: DragEdge | null
+  span: BlockSpan
+  shown: BlockSpan
+  copy: boolean
+  onto: string | null
+  group: boolean
+  minutes: number
+}
+
+/**
+ * The energy on trial of an axis (N19): `day` – the day counted with its energy (null – nothing to say: a day gone by, the module off); `drag`
+ * – the change a drag in progress would write, as a trial (its key and how it is built – null: nothing to try); `cost` – the same for the
+ * window of a tile's cost (`costs` null – „Jak podkategoria”). Left out – the axis says nothing of energy while dragging.
+ */
+export interface TimelineTrial {
+  day: TrialDay | null
+  drag: (d: TrialDrag) => Trial | null
+  cost?: (day: TrialDay, id: string, costs: Costs | null) => TrialChange | null
+}
+
+/**
  * D531: the drag of a block of the selection of many (two and more) is the group's. `has` – the block is in such a selection; `preview` – where
  * the group (`moved`, the grabbed one too), the blocks it pushes apart (`pushed`) and the copies (`copies`, Ctrl) would stand with every selected
  * block `minutes` later (earlier) – the grabbed one's drop less where its tile stood – null: nothing moves; `drop` – let go there.
@@ -322,6 +351,7 @@ export function Timeline({
   attached,
   onAttachDrop,
   onCosts,
+  energyTrial,
   reserveAction,
   rename,
   ghost,
@@ -411,6 +441,8 @@ export function Timeline({
   onAttachDrop?: (id: string, dt: DataTransfer) => void
   /** The block's own cost set in the window of its tile (D501), or null – the category's again; left out – the cost is only told. */
   onCosts?: (id: string, costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>
+  /** N19: the lowest energy before and with the change a drag, an edge or the window of a tile's cost has not written yet – said beside it. */
+  energyTrial?: TimelineTrial
   /** An action under the words of a tile's reserve hint (N20 – a slot; N3 puts „Wstaw regenerację tutaj” there); left out – the hint only tells. */
   reserveAction?: (id: string, cause: ReserveCause) => ReactNode
   /**
@@ -478,6 +510,9 @@ export function Timeline({
   }, [waitingSeq])
   // Let go anywhere (the block drawn anew in another column loses the pointer): the drag ends without a move.
   const holding = drag != null && !drag.dropped
+  // Whether this axis has the energy on trial (the handler of Esc reads it – it is set up once for a hold).
+  const trialOn = useRef(false)
+  trialOn.current = energyTrial != null
   useEffect(() => {
     if (!holding) return
     const end = (e: PointerEvent) => {
@@ -492,10 +527,12 @@ export function Timeline({
       if (copy !== d.copy) setDrag({ ...d, copy, onto: copy ? null : d.onto })
     }
     // D531 (T1764): Esc while a group is held – moved or not yet past the 4 px – ends its gesture with nothing changed; it is the drag's alone
-    // (heard first, in the capture phase): it never clears the selection under it, and the click after it is muted.
+    // (heard first, in the capture phase): it never clears the selection under it, and the click after it is muted. N19 (T2581): the same for a block
+    // or an edge once it has moved (as in „Tydzień”), on the axis that says the energy on trial („Dziś”: `energyTrial`; „Szablony” – as before) – the caption
+    // goes with it, nothing is written.
     const escape = (e: KeyboardEvent) => {
       const d = dragRef.current
-      if (e.key !== 'Escape' || !d || d.dropped || !d.group) return
+      if (e.key !== 'Escape' || !d || d.dropped || !(d.group || (d.moved && trialOn.current))) return
       e.preventDefault()
       e.stopPropagation()
       setDrag(null)
@@ -601,6 +638,18 @@ export function Timeline({
   // Where the dragged block is drawn: under the pointer, where it will stand (`pushPreview` with its own id), or beside the
   // block it is dropped onto (D492).
   const dragShown: BlockSpan | null = drag ? shownSpan(drag, hint, pushed) : null
+  // N19: the lowest energy of the day before the change the drag (or the edge) would write and with it – counted off the pointer's path (`useTrialLowest`);
+  // once it is let go (or Esc) there is no trial: the caption goes at once.
+  const trying = drag?.moved && !drag.dropped && energyTrial ? drag : null
+  // A drop that writes nothing (back at its own place, a group moved by no minutes, a drop onto a block of its own group) has no trial: no caption. A drop
+  // onto a block writes its place beside it (`alongside`) even where the block stands now – only the block's own group (`hint.same`) is nothing.
+  const stays = trying != null && dragShown != null && (trying.group ? trying.start === trying.from : trying.onto ? hint?.same === true : staysPut(dragShown, trying))
+  const tried = useTrialLowest(
+    energyTrial?.day ?? null,
+    trying && energyTrial && !stays
+      ? energyTrial.drag({ id: trying.id, edge: trying.edge, span: { startMin: trying.start, endMin: trying.end }, shown: { startMin: trying.from, endMin: trying.fromEnd }, copy: trying.copy, onto: trying.onto, group: trying.group, minutes: trying.start - trying.from })
+      : null
+  )
 
   // D513: a copy being dragged – the block stays at its place among the others (a copy never changes it: never drawn pushed), a
   // dashed tile of the copy goes with the pointer (D531: of every copy of the group, where it will stand).
@@ -681,7 +730,7 @@ export function Timeline({
     const costAt = !i.cost ? null : !tiny && !narrow ? 'corner' : tiny && lane.lanes === 1 ? 'row' : 'hover'
     const costLabel = (className: string) =>
       i.cost && costAt && (
-        <TileCost cost={i.cost} id={`tile:${i.id}`} testId={`block-${i.id}-cost`} className={className} place={costAt} onChange={onCosts ? (costs, ask) => onCosts(i.id, costs, ask) : undefined} />
+        <TileCost cost={i.cost} id={`tile:${i.id}`} testId={`block-${i.id}-cost`} className={className} place={costAt} trial={energyTrial?.cost ? { day: () => energyTrial.day, change: (day, costs) => energyTrial.cost!(day, i.id, costs) } : undefined} onChange={onCosts ? (costs, ask) => onCosts(i.id, costs, ask) : undefined} />
       )
     const menu = onContext ? menuBind((at) => onContext(i.id, at)) : undefined
     return (
@@ -1031,6 +1080,14 @@ export function Timeline({
             {staysPut(dragShown!, drag)
               ? 'bez zmian'
               : (resizeNote?.(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }) ?? durationLabel(dragShown!.endMin - dragShown!.startMin))}
+            {/* N19: the lowest energy with the new length – a line of the hint itself (it already stands at the edge). */}
+            <TrialCaption shown={tried} className="block" />
+          </div>
+        )}
+        {/* N19: the lowest energy of the day before and with the drag of a block or a group – under the place it would stand at. */}
+        {trying && !trying.edge && dragShown && trialText(tried) && (
+          <div className="pointer-events-none absolute right-3 z-30 rounded-sm border border-line bg-bg/90 px-1.5 py-0.5 text-[11px]" style={{ top: y(dragShown.endMin) }} data-testid="energy-trial-box">
+            <TrialCaption shown={tried} />
           </div>
         )}
         {markers.map((m) => (

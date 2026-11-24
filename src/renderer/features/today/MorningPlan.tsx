@@ -30,7 +30,9 @@ import { morningAllDayLine } from './morningAllDay'
 import { CalibrationCard } from '../calibration/CalibrationEntry'
 import { SideBStep, sideBShown } from './SideBStep'
 import { GoalsStep } from './GoalsStep'
-import { checkinAnswersOf, checkinOpen } from './checkinLogic'
+import { checkinAnswersOf, checkinOpen, shortNightNote, shownAnswers } from './checkinLogic'
+import { useCheckinHint, useShortNight } from './shortNight'
+import type { ShortNight } from '@shared/engine/shortNight'
 import { goalsStepOpen } from './goalsStepLogic'
 import { logEvents, useData } from '../../store/data'
 import { useDayFiles, type DayModel } from '../../store/day'
@@ -42,7 +44,7 @@ import { queueRowText } from '../cases/casesUi'
 import { DueMark } from '../cases/DueMark'
 import { GapFillButton } from '../cases/GapFillButton'
 import { gapCases } from '../cases/gapFill'
-import { navigate, setCheckinAnswers, toast, useUi } from '../../store/ui'
+import { navigate, setCheckinAnswers, setCheckinSaved, toast, useUi } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { answerSeries } from '../series/seriesActions'
 import { arrangeDayBlocks, energyOrderCached, energyOrderKey, leaveEnergyOrder, saveDay, skipCheckinDay, skipDeadline, variantStarts } from './dayActions'
@@ -60,9 +62,10 @@ export function morningOutcome(r: Pick<MorningResult, 'saved' | 'made' | 'skippe
 /** No answers asked in the day's file yet (a stable value for the memo of the card „Terminy”). */
 const NO_ASKED: Readonly<Record<string, string>> = {}
 
-const QUESTIONS: Array<{ pool: Pool; text: string }> = [
+/** `shortSleep` – the question of a short night (D571): its hint and „tak” beforehand stand at it. */
+const QUESTIONS: Array<{ pool: Pool; text: string; shortSleep?: true }> = [
   { pool: 'head', text: 'Trudno zebrać myśli?' },
-  { pool: 'head', text: 'Spałem krócej niż zwykle?' },
+  { pool: 'head', text: 'Spałem krócej niż zwykle?', shortSleep: true },
   { pool: 'emotions', text: 'Drażnią mnie pytania i rozmowy?' },
   { pool: 'emotions', text: 'Wczoraj było dużo kontaktu z ludźmi?' },
   { pool: 'senses', text: 'Potrzebuję ciemnych okularów?' },
@@ -70,6 +73,8 @@ const QUESTIONS: Array<{ pool: Pool; text: string }> = [
   { pool: 'body', text: 'Ciało jest ciężkie, bolą mięśnie?' },
   { pool: 'body', text: 'Spałem niespokojnie?' }
 ]
+/** The place of „Spałem krócej niż zwykle?” among the answers. */
+const SLEEP_Q = QUESTIONS.findIndex((q) => q.shortSleep)
 const POOL_NAMES: Record<Pool, string> = { head: 'głowa', emotions: 'emocje', senses: 'bodźce', body: 'ciało' }
 const EXCEPTION_REASONS = ['NFP', 'CPI', 'FOMC', 'inne dane']
 
@@ -88,6 +93,16 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
   // „Pomiń” here (the window) or in the day's log (UX13: the facts' answer, a „Cofnij” undoes it) – counted once per change.
   const skippedInLog = s.facts.answers.has(checkinSkipId(model.date))
   const checkin = useMemo(() => checkinOpen(needCheckin, checkinSkipped, model.date, skippedInLog), [needCheckin, checkinSkipped, model.date, skippedInLog])
+  // D571: yesterday is read while the check-in is to come (also during „Strona B” and „Cele”), so it shows with its hint at once; the
+  // hint of this showing is kept here (T2526), so folding the card is no return to the screen.
+  const night = useShortNight(model.date, checkin)
+  const answeredSleep = checkinAnswersOf(useUi((u) => u.checkinAnswers), model.date)[SLEEP_Q] != null
+  const hint = useCheckinHint(model.date, night, answeredSleep)
+  // The day has its check-in now: the form saved here is gone (were it ever back – a check-in undone – it comes clean, never frozen).
+  const checkinAt = model.energy.checkinAt
+  useEffect(() => {
+    if (checkinAt != null) setCheckinSaved(model.date, null)
+  }, [checkinAt, model.date])
   // On Monday „Strona B tygodnia” comes first (spec „Plan poranny”), until „Dalej” on any computer.
   const sideBClosed = useUi((u) => u.sideBClosed)
   const sideB = sideBShown(model.date, !!model.dayFile?.asked.sideB, sideBClosed)
@@ -108,7 +123,7 @@ export function MorningPlan({ model, names }: { model: DayModel; names: Names })
       )}
       {open && (
         <div className="flex flex-col gap-3 border-t border-line px-4 py-3">
-          {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep key={month} month={month} /> : checkin ? <Checkin model={model} /> : <Plan model={model} names={names} busy={busy} />}
+          {sideB ? <SideBStep model={model} /> : goals ? <GoalsStep key={month} month={month} /> : checkin ? <Checkin key={model.date} model={model} hint={hint} /> : <Plan model={model} names={names} busy={busy} />}
         </div>
       )}
     </section>
@@ -152,17 +167,34 @@ export function MorningHeader({ model, open, plan, onToggle, busy: shared }: { m
 /** The first check-in: 8 questions, two per pool (D521: the body's too), no / a little / yes (spec „Pierwszy check-in”). */
 /**
  * The first check-in; „Pomiń” – `skipCheckinDay` (the window at once, the day's log behind it, UX13) unless the caller gives its own;
- * „Pomiń” and „Zapisz” share the card's `useBusy` – one at a time.
+ * „Pomiń” and „Zapisz” share the card's `useBusy` – one at a time. `hint` – the short night's hint of this showing (D571:
+ * `useShortNight` and `useCheckinHint` in the morning plan, T2526).
  */
-export function Checkin({ model, onSkip }: { model: DayModel; onSkip?: () => void }) {
+export function Checkin({ model, onSkip, hint: given = null }: { model: DayModel; onSkip?: () => void; hint?: ShortNight | null }) {
   // In the store, per day (B5, D563): a trip to another screen and back keeps what you ticked.
-  const answers = checkinAnswersOf(useUi((u) => u.checkinAnswers), model.date)
+  const own = checkinAnswersOf(useUi((u) => u.checkinAnswers), model.date)
+  // From „Zapisz” the form stays as saved until the day has its check-in (`checkinSaved` in the store, T2526 – a fold of the card or
+  // another screen and back too): the answers kept are cleared once it is written, so without it the form would fall back to the
+  // answers beforehand – and a second „Zapisz” would write a second check-in. Set before the write, taken back when it is refused.
+  const stored = useUi((u) => u.checkinSaved)
+  const saved = stored?.date === model.date ? stored : null
+  const hint = saved ? saved.hint : given
+  // D571: after a short night „tak” stands beforehand at „Spałem krócej niż zwykle?” – only the form's state, your answer wins.
+  const answers = saved ? saved.answers : shownAnswers(own, QUESTIONS.map((q) => (q.shortSleep && hint ? 2 : 0)))
   const byPool = Object.fromEntries(POOLS.map((p) => [p, QUESTIONS.flatMap((q, i) => (q.pool === p ? [answers[i]!] : []))])) as Record<Pool, [Answer, Answer]>
   const result = checkinStates(byPool)
   const [busy, run] = useBusy()
   const save = (fewer: boolean) =>
     run(async () => {
-      if (!(await logEvents([{ k: 'energy.checkin', day: model.date, answers: byPool }]))) return
+      if (useUi.getState().checkinSaved?.date === model.date) return
+      setCheckinSaved(model.date, { answers, hint })
+      let ok = false
+      try {
+        ok = await logEvents([{ k: 'energy.checkin', day: model.date, answers: byPool }])
+      } finally {
+        if (!ok) setCheckinSaved(model.date, null)
+      }
+      if (!ok) return
       setCheckinAnswers(model.date, null)
       if (!fewer) return
       await window.rd.timer({ a: 'fewer', day: model.date }).catch((e: unknown) => toast(`Nie włączono „mniej pytań”: ${e instanceof Error ? e.message : String(e)}`, 'error', 8000))
@@ -171,35 +203,43 @@ export function Checkin({ model, onSkip }: { model: DayModel; onSkip?: () => voi
     <div className="flex flex-col gap-2" data-testid="checkin">
       <span className="text-[12.5px] text-muted">Pytania o objawy – z nich aplikacja wylicza energię na dziś (nie oceniasz jej liczbą).</span>
       {QUESTIONS.map((q, i) => (
-        <div key={q.text} className="flex items-center gap-3">
-          <span className="w-[300px]">{q.text}</span>
-          <Segmented
-            value={answers[i]!}
-            options={[
-              { value: 0 as Answer, label: 'nie' },
-              { value: 1 as Answer, label: 'trochę' },
-              { value: 2 as Answer, label: 'tak' }
-            ]}
-            onChange={(v) => setCheckinAnswers(model.date, answers.map((a, j) => (j === i ? v : a)))}
-            aria-label={q.text}
-            data-testid={`checkin-${i}`}
-          />
+        <div key={q.text} className="flex flex-col gap-0.5" data-checkin-row>
+          <div className="flex items-center gap-3">
+            <span className="w-[300px]">{q.text}</span>
+            <Segmented
+              value={answers[i]!}
+              options={[
+                { value: 0 as Answer, label: 'nie' },
+                { value: 1 as Answer, label: 'trochę' },
+                { value: 2 as Answer, label: 'tak' }
+              ]}
+              onChange={(v) => saved || setCheckinAnswers(model.date, own.map((a, j) => (j === i ? v : a)))}
+              aria-label={q.text}
+              data-testid={`checkin-${i}`}
+            />
+          </div>
+          {/* The hint stays after your answer: it is what yesterday's logs say, not a choice. */}
+          {q.shortSleep && hint && (
+            <span className="text-[12px] text-muted" data-testid="checkin-short-night">
+              {shortNightNote(hint)}
+            </span>
+          )}
         </div>
       ))}
       <span className="text-[12px] text-muted">
         Wynik: {POOLS.map((p) => `${POOL_NAMES[p]} ${result[p]}`).join(' · ')}
       </span>
       <div className="flex gap-2">
-        <button type="button" className="btn btn-accent" disabled={busy} onClick={() => void save(false)} data-testid="checkin-save">
+        <button type="button" className="btn btn-accent" disabled={busy || saved != null} onClick={() => void save(false)} data-testid="checkin-save">
           Zapisz
         </button>
         {/* „Drażnią mnie pytania” – tak: the proposal of „mniej pytań” is here, in the check-in itself (spec „Cisza”). */}
         {answers[2] === 2 && (
-          <button type="button" className="btn" disabled={busy} onClick={() => void save(true)} data-testid="checkin-save-fewer">
+          <button type="button" className="btn" disabled={busy || saved != null} onClick={() => void save(true)} data-testid="checkin-save-fewer">
             Zapisz i włącz „mniej pytań”
           </button>
         )}
-        <button type="button" className="btn" disabled={busy} onClick={() => void run(async () => (onSkip ? onSkip() : void (await skipCheckinDay(model.date))))} data-testid="checkin-skip">
+        <button type="button" className="btn" disabled={busy || saved != null} onClick={() => void run(async () => (onSkip ? onSkip() : void (await skipCheckinDay(model.date))))} data-testid="checkin-skip">
           Pomiń
         </button>
       </div>

@@ -213,3 +213,25 @@ describe('usługa folderu danych', () => {
     await s.stop('quit')
   })
 })
+
+describe('sprawdzenie na żądanie w trakcie przebiegu (N1, T2868)', () => {
+  it('drugie `tick()` w trakcie przebiegu daje jeszcze jeden przebieg po nim – nic nie czeka 15 s', async () => {
+    const clock = { now: placeLogical(DAY, 10 * 60) }
+    const s = await DataService.start(options(clock))
+    try {
+      // A pass of the start may still run: done first.
+      await s.tick()
+      let checks = 0
+      const check = s.folder.check.bind(s.folder)
+      s.folder.check = () => (checks++, check())
+      const first = s.tick()
+      const second = s.tick()
+      await first
+      await second
+      expect(checks).toBe(2)
+    } finally {
+      await s.stop('quit')
+    }
+  })
+})
+

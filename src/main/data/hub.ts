@@ -1114,10 +1114,11 @@ export class DataHub {
    */
   async timer(click: TimerIn): Promise<TimerResult> {
     const r = await this.need().timerClick(click as TimerClick)
-    if (click.probe) return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm }
+    // A probe (the cost of a step of „Przedłuż”) says why too (D621, T2862: `moved` with the block in front).
+    if (click.probe) return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}), ...(!r.ok && r.front ? { front: r.front } : {}) }
     this.changed()
     if (r.ok) void this.service?.tick()
-    return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}), ...(r.wrote ? { wrote: r.wrote } : {}) }
+    return { ok: r.ok, why: r.ok ? null : r.why, confirm: r.confirm, ...(!r.ok && r.code ? { code: r.code } : {}), ...(!r.ok && r.front ? { front: r.front } : {}), ...(r.wrote ? { wrote: r.wrote } : {}) }
   }
 
   /**

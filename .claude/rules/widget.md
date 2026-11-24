@@ -141,6 +141,7 @@ D291, D298, D311–D314. Decyzje T472–T476, T502, T503.
   Przedłuż, Koniec pracy, „+ Skrzynka”, „⋯”; Odcinam się, „Prośba ▸”, „Sygnały ▸” – `bar-more-actions` w „⋯” (noc: „Prośba ▸” w wierszu); przy
   „Dalej?” wiersz bez jego odpowiedzi (C5); `BarButton fit` – nazwa się tnie (jeden wiersz przy 100 %); koszt z „Anuluj” (`cancelPending`);
   linia `clickUndo:<rodzaj>:<n>` „<akcja> · Cofnij” – pierwsza, `CLICK_UNDO_MS` 10 s; znika po udanym albo `clickGone` (`undoClick` – `timer.md`).
+- Ciąg przy komputerze (N1, D620, D621): linia „Dalej: … · Cofnij”, `shown`, czekające „Przedłuż” – reguły `ciag-przy-komputerze.md`.
 - „Koszt ▸” (D585, N12, T2500–T2514): `WidgetView.cost` (`BarCost` z `barCostOf` w `engine/costChange.ts` – blok na pierwszym planie, bez niego
   zapauzowany, który wznowi „Wznów”; nigdy w tle ani z dnia minionego – `costEditable`, jak kafelek; `begunCosts`; `warning` – `wideCostWarning` z
   `EngineInput.olderComputers` = `olderComputers(folder.computers, WIDE_COST_FROM)`, `bar-cost-old`) → `bar-group-cost` w „⋯”, `CostUnfold` (`bar-cost-*`;

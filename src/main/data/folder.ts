@@ -448,6 +448,8 @@ export class DataFolder {
    * they are still not there for the window (a new file of such a day waits in the queue), the others are unknown.
    */
   private readonly absent = new Set<string>()
+  /** Blocks with a „Przedłuż” of this computer's bar waiting for its second click (T2861, T2867): the block → until when (monotonic ms). */
+  private readonly deskHolds = new Map<string, number>()
   private lastSeenPeers = new Map<string, number>()
   /** Computers seen with a fresh presence in this run: one that stops refreshing it is „Brak zmian z … od …” (A8-07). */
   private readonly freshSeen = new Set<string>()
@@ -1309,6 +1311,8 @@ export class DataFolder {
 
   /** One check (every 15 s): presences, who leads, the journal against OneDrive, the queue, and the leader's tasks. */
   async check(): Promise<CheckResult> {
+    // The bar's waiting „Przedłuż” as at the pass's start (T2861): one let go while the pass reads the day still holds its chain.
+    const hold = this.deskHoldsNow()
     const now = this.clock.now()
     const epoch = this.planWrites
     // A step of „Zastosuj szablon” on the plans and the facts went on during this pass (`planWrite`): what it read may show a block gone
@@ -1446,7 +1450,7 @@ export class DataFolder {
         // What the app does by itself (spec „Działania automatyczne”): today's, and yesterday's while a block of it runs
         // through 04:00 (it belongs to the day it began). Apart, so the timer never stops the rest.
         try {
-          const r = await this.autoTasks(day, read, ctx, state, now, gate, stale)
+          const r = await this.autoTasks(day, read, ctx, state, now, gate, hold, stale)
           autos += r.written
           nextAt = r.nextAt
           const yesterday = addDays(day, -1)
@@ -1454,7 +1458,7 @@ export class DataFolder {
           if (yRead.complete && spillsOver(yesterday, yRead.events)) {
             const yCtx = await this.dayContext(yesterday, yRead, now)
             // Input after 04:00 is in today's logs: both gates hold (`gateOf` – the bar's overlay takes the same, D345).
-            const y = await this.autoTasks(yesterday, yRead, yCtx, computeDay(yCtx), now, await this.gateOf(yesterday, yRead, now), stale)
+            const y = await this.autoTasks(yesterday, yRead, yCtx, computeDay(yCtx), now, await this.gateOf(yesterday, yRead, now), hold, stale)
             autos += y.written
             if (y.nextAt != null) nextAt = nextAt == null ? y.nextAt : Math.min(nextAt, y.nextAt)
           }
@@ -2382,16 +2386,35 @@ export class DataFolder {
   }
 
   /** The leader's automatic actions of one day up to the gate, and the day's next deadline. */
-  private async autoTasks(day: string, read: DayRead, ctx: DayContext, state: DayState, now: number, gate: number, stale: () => boolean = () => false): Promise<{ written: number; nextAt: number | null }> {
+  private async autoTasks(day: string, read: DayRead, ctx: DayContext, state: DayState, now: number, gate: number, hold: ReadonlySet<string>, stale: () => boolean = () => false): Promise<{ written: number; nextAt: number | null }> {
     const activity = await this.activityFor(day, read, now)
     // A step of „Zastosuj szablon” went on meanwhile (`planWrite`): the next pass, with both its plan and its facts.
-    if (stale()) return { written: 0, nextAt: nextDeadline(state) }
+    if (stale()) return { written: 0, nextAt: nextDeadline(state, now) }
     let written = 0
-    for (const e of autoActions({ ctx, state, activity, now, gate: Math.min(gate, now) })) {
+    // A „Przedłuż” waiting on this computer's bar (`hold`, from the pass's start): no chain at the computer ends its block meanwhile (T2861).
+    for (const e of autoActions({ ctx, state, activity, now, gate: Math.min(gate, now), hold })) {
       this.append({ ...e, day, dom: 'timer' })
       written++
     }
-    return { written, nextAt: nextCheckAt(written, now, nextDeadline(state)) }
+    return { written, nextAt: nextCheckAt(written, now, nextDeadline(state, now)) }
+  }
+
+  /**
+   * The bar's „Przedłuż” of `block` waits for its second click `ms` long (T2861; 0 – it went: cancelled or confirmed, T2867): the leader's
+   * chain at the computer waits for it – on this computer only (a bar of another computer holds nothing: its confirmation is refused
+   * as „Już biegnie: …”, D621).
+   */
+  /** The blocks the bar's waiting „Przedłuż” holds now (T2861; monotonic). */
+  private deskHoldsNow(): ReadonlySet<string> {
+    const mono = this.o.clock.mono()
+    return new Set([...this.deskHolds].filter(([, until]) => until > mono).map(([block]) => block))
+  }
+
+  holdDeskChain(block: string | null, ms: number): void {
+    const now = this.o.clock.mono()
+    for (const [b, until] of this.deskHolds) if (until <= now) this.deskHolds.delete(b)
+    if (block && ms > 0) this.deskHolds.set(block, now + ms)
+    else if (block) this.deskHolds.delete(block)
   }
 
   /**

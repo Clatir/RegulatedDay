@@ -585,6 +585,8 @@ export interface TimerIn {
   confirm?: boolean
   /** Only judged (its cost or refusal), never written. */
   probe?: boolean
+  /** „Dalej” and „Przedłuż” of the bar (D621): the block it showed in front (null – none); another one there now – refused (`moved`). */
+  shown?: string | null
   categoryId?: string
   durationMin?: number
   variantId?: string | null
@@ -621,6 +623,8 @@ export interface TimerResult {
   wrote?: { day: string; ids: string[]; begun?: string[] }
   /** Why it did nothing, when the caller must tell it from other refusals (D336, T1109): never read from `why`. */
   code?: ResultCode
+  /** `moved` (D621): the block in front the refusal saw – the bar names it („Już biegnie: …”). */
+  front?: string
 }
 
 /** A day closed (D468): `written` – the ids of the events of the close, for its „Cofnij” (none when refused). */
