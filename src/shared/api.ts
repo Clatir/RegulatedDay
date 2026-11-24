@@ -327,6 +327,8 @@ export type WidgetAction =
   | 'step'
   /** The version of a routine picked in „Kroki ▸” (D481): `<block>|<version>` – the day's version of the block at once. */
   | 'routineVersion'
+  /** „Koszt ▸” of „⋯” (D585): the cost of the bar's block from now on – `barCostArg` (`<block>|<pool>|<±n>`, `<block>|<pool>|=<n>`, `<block>|reset`). */
+  | 'cost'
 
 /**
  * The bar's own actions: laid again („Pokaż pasek”), put in a corner (the wizard), the icon's panel opened (tests), the

@@ -55,7 +55,8 @@ import { placeOf, type Pool } from '@shared/model/categories'
 import { dayFileFrom, lectureFrom, templateFrom, type DayFile, type LectureSeries, type PlanBlock, type Template } from '@shared/model/plan'
 import { MODULES, personName, RD_SCHEMA, rdFrom, type ModuleId, type WriteOnceField } from '@shared/model/rd'
 import { runningRequestOf } from '@shared/engineView'
-import { CLICK_UNDO_MS, CLICK_UNDO_WRITE_MS, type RunningRequest } from '@shared/widget'
+import { BAR_COST_AHEAD_MS, BAR_COST_AHEAD_TEXT, BAR_COST_GONE_TEXT, barCostAfter, CLICK_UNDO_MS, CLICK_UNDO_WRITE_MS, type BarCostClick, type BarCostResult, type RunningRequest } from '@shared/widget'
+import { barCostBasis, barCostOf, COST_DAY_GONE_TEXT } from '@shared/engine/costChange'
 import { requestFrom, type RequestRecord } from '@shared/model/requests'
 import { blockName, type Names } from '@shared/blockName'
 import { routineCostsOf, routineFrom, type Routine } from '@shared/model/routines'
@@ -401,6 +402,9 @@ export interface Inputs {
 const SERIES_READ_ROUNDS = 20
 /** How long the types of a series ended before yesterday stand without reading its days again (a file changed in place elsewhere). */
 const SETTLED_TRUST_MS = 10 * 60_000
+
+/** `writeOn` found what a click was judged on changed meanwhile (`holds`): nothing written, the click is judged again. */
+class StaleWrite extends Error {}
 
 export class DataFolder {
   readonly clock: EventClock
@@ -2284,7 +2288,7 @@ export class DataFolder {
    * the days' logs readable in full now; a part that fails leaves nothing behind (the click fails, as it did). Answers the
    * events of `drafts` as written, in their order (their ids – „Cofnij” of a close, D468).
    */
-  private async writeOn(day: string, laid: readonly AutoEvent[], drafts: readonly TimerDraft[], before?: readonly AutoEvent[]): Promise<AnyEvent[]> {
+  private async writeOn(day: string, laid: readonly AutoEvent[], drafts: readonly TimerDraft[], before?: readonly AutoEvent[], holds?: () => boolean): Promise<AnyEvent[]> {
     const at = this.clock.now()
     const yesterday = addDays(day, -1)
     const carried = before ?? (day === logicalDayOf(at) ? ((await this.barActiveDay(at)).before ?? []) : [])
@@ -2297,7 +2301,8 @@ export class DataFolder {
       }
     }
     // Nothing awaited from here to the writes: this computer's own writes since the reads (the leader's check) are in
-    // its journal.
+    // its journal. `holds`: what the click was judged on still stands (nothing of it written meanwhile) – else nothing is written.
+    if (holds && !holds()) throw new StaleWrite()
     for (const d of [yesterday, day]) for (const e of this.log.ownEvents(d)) seen.add(`${d}|${e.id}`)
     const fresh = (d: string, list: readonly AutoEvent[]) => list.filter((e) => !seen.has(`${d}|${e.id}`))
     // All three checked before the first write (a part that fails leaves nothing behind); written in this order.
@@ -2367,6 +2372,51 @@ export class DataFolder {
         return { ...r, wrote: { day, ids: written.map((e) => e.id), ...(begun.length ? { begun } : {}) } }
       }
       return r
+    }
+    return this.serial(run)
+  }
+
+  /**
+   * A click of the bar's „Koszt ▸” (D585, T2503): judged on the day as the bar shows it (`barDay`) in its turn with the other clicks
+   * (`serial`) – a „Dalej” just before it ended the block: refused, never a change after the end – and written by `writeOn`. The block
+   * must be the bar's (`barCostOf`: in front, or paused for „Wznów”; a day gone by or „Odcinam się” – never); the click's intent goes over
+   * the block's newest change in the log's order (`barCostBasis`, `barCostAfter`). Its instant (T2513): the earlier of the bar's clock (its
+   * view is counted at it – the next view has the change) and this computer's (a tile saved after it, by this clock, is later in its minute
+   * too), and never before the latest instant of the block's start and changes – from its minute on the new change counts over all of them;
+   * that instant more than `BAR_COST_AHEAD_MS` past this computer's clock (another computer's clock ahead) – refused (`BAR_COST_AHEAD_TEXT`).
+   * A change of the block's cost written on this computer meanwhile (the tile's window – not one of these clicks): the click is put over it
+   * again (T2511, at most 3 times), never written over a cost it did not see.
+   */
+  barCost(c: BarCostClick): Promise<BarCostResult> {
+    const changed = 'koszt tego bloku zmienił się w międzyczasie – kliknij jeszcze raz'
+    const ownChanges = () => new Set(this.log.ownEvents(c.day).flatMap((e) => (isKnown(e) && (e.k === 'block.cost' || e.k === 'energy.cost') && e.block === c.block ? [e.id] : [])))
+    const run = async (): Promise<BarCostResult> => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        // What this computer has written of the block's cost before the read: anything after it is a change the click has not seen.
+        const seen = ownChanges()
+        const read = await this.log.readDay(c.day)
+        if (!read.complete && !read.away) return { ok: false, why: 'nie wszystkie logi dnia są teraz czytelne – spróbuj za chwilę' }
+        const own = this.clock.now()
+        const base = Math.min(c.at, own)
+        const { ctx, state, laid } = await this.barDay(c.day, read, base)
+        if (state.grid.date < logicalDayOf(base)) return { ok: false, why: COST_DAY_GONE_TEXT }
+        const now = barCostOf(ctx, state, timerNow(state), base)
+        if (!now || now.block.id !== c.block) return { ok: false, why: BAR_COST_GONE_TEXT }
+        const basis = barCostBasis(ctx, state, now.block)
+        const next = barCostAfter(basis.now, c.op)
+        if (!next) return { ok: true, wrote: false }
+        // A change from a clock far ahead (another computer's): one after it would count only from its minute – refused, never a write that does nothing.
+        if (basis.after > own + BAR_COST_AHEAD_MS) return { ok: false, why: BAR_COST_AHEAD_TEXT }
+        const at = Math.max(base, basis.after)
+        const holds = () => [...ownChanges()].every((id) => seen.has(id))
+        try {
+          await this.writeOn(c.day, laid, [{ k: 'block.cost', at, block: c.block, costs: next.costs }], undefined, holds)
+          return { ok: true, wrote: true }
+        } catch (e) {
+          if (!(e instanceof StaleWrite)) throw e
+        }
+      }
+      return { ok: false, why: changed }
     }
     return this.serial(run)
   }

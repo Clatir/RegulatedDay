@@ -10,7 +10,8 @@
  * window, the bar staying where it lay in the order. The bar's „↗” clicked for real brings the main window to the foreground
  * with one click (D564 P12), its „+ Skrzynka” the window „Do skrzynki” on top with the focus (P15) – the bar stays under the
  * other windows. Hidden by its „×” and shown again by the settings (P16), it lies under them too. The row of a block of work stands in
- * one line at 100% and 125% (C4, P17 – with a shot of the bar), and a real „Dalej” with its „Cofnij” (P18) opens no window.
+ * one line at 100% and 125% (C4, P17 – with a shot of the bar), and a real „Dalej” with its „Cofnij” (P18) opens no window, nor do the
+ * real clicks of „⋯”, „Koszt ▸” and its [+] (D585) – the cost unfolds inside the bar, which stays under the other windows.
  */
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -635,6 +636,66 @@ test('„Dalej” i „Cofnij” paska pulpitu prawdziwym kliknięciem: linia �
       const orderAfter = topWindows()
       expect(movedAcross(orderBefore, orderAfter, bar.hwnd)).toEqual([])
       expect(zIndex(orderAfter, bar.hwnd)).toBeLessThan(desktopIndex(orderAfter, bar.hwnd))
+    })
+  } finally {
+    await app.close()
+  }
+})
+
+/**
+ * „Koszt ▸” of the desktop bar (D585, N12) clicked for real: „⋯”, „Koszt ▸” and [+] of the head – the unfolded cost stays inside the bar
+ * (no new window, nothing takes the focus), the bar under the window that overlaps it and right above the desktop (D229); the click is a
+ * `block.cost` – the view's cost of the head one more.
+ */
+test('„Koszt ▸” paska pulpitu prawdziwym kliknięciem: rozwinięcie w pasku, [+] zapisuje koszt od teraz – bez nowego okna, pasek dalej pod oknami (D585)', async () => {
+  test.setTimeout(120_000)
+  // The cost of a block of a day gone by is never changed (T2509): not in the last 20 min of the logical day (its end at 04:00).
+  test.skip(logicalMinuteOf(logicalToday(), Date.now()) > 28 * 60 - 20, 'doba logiczna kończy się o 04:00 – blok byłby z dnia minionego')
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-bar-cost-real-'))
+  seedAwake(dataDir, [])
+  const { app, page: main, userData } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect.poll(async () => (await barInfo(app)).visible, { timeout: 30_000 }).toBe(true)
+      await expect.poll(() => main.evaluate(async () => (await window.rd.widget()).day), { timeout: 30_000 }).not.toBeNull()
+      await main.evaluate(() => window.rd.timer({ a: 'startNew', block: 'e2e-cost', categoryId: 'inne', durationMin: 60 }))
+      const head = () => main.evaluate(async () => (await window.rd.widget()).cost?.costs.head ?? null)
+      await expect.poll(head, { timeout: 30_000 }).toBe(1)
+      const page = await viewPage(app, 'bar')
+      await expect(page.getByTestId('bar-group-more')).toBeVisible({ timeout: 30_000 })
+      await settledBarBounds(app)
+      const bar = await barInfo(app)
+      const covers = uncover(bar.hwnd)
+      const before = pidWindows(bar.pid)
+      const orderBefore = topWindows()
+      const more = await barPoint(app, 'bar-group-more')
+      await expect.poll(() => windowsAt([more]), { message: `„⋯” zasłonięte (${covers.join(', ') || 'nic nie zminimalizowano'})`, timeout: 10_000 }).toEqual([bar.hwnd])
+      click(...more)
+      await expect(page.getByTestId('bar-group-cost')).toBeVisible({ timeout: 5_000 })
+      // The bar grew by the unfold: its new place first, then each real click.
+      await settledBarBounds(app)
+      const open = await barPoint(app, 'bar-group-cost')
+      await expect.poll(() => windowsAt([open]), { timeout: 5_000 }).toEqual([bar.hwnd])
+      click(...open)
+      await expect(page.getByTestId('bar-cost-title')).toHaveText('Koszt od teraz: Inne obowiązki', { timeout: 5_000 })
+      await settledBarBounds(app)
+      const plus = await barPoint(app, 'bar-cost-head-plus')
+      await expect.poll(() => windowsAt([plus]), { timeout: 5_000 }).toEqual([bar.hwnd])
+      click(...plus)
+      await expect.poll(head, { timeout: 10_000 }).toBe(2)
+      await expect(page.getByTestId('bar-cost-head-value')).toHaveText('2')
+      expect(pidWindows(bar.pid)).toEqual(before)
+      const orderAfter = topWindows()
+      expect(movedAcross(orderBefore, orderAfter, bar.hwnd)).toEqual([])
+      expect(zIndex(orderAfter, bar.hwnd)).toBeLessThan(desktopIndex(orderAfter, bar.hwnd))
+      // A window over the unfolded bar lies above it (the bar never comes up over it).
+      const cover = await windowOverBar(app, 'RD-CI-okno-koszt', true)
+      await expect
+        .poll(() => {
+          const l = topWindows()
+          return zIndex(l, cover) < zIndex(l, bar.hwnd) && zIndex(l, bar.hwnd) < desktopIndex(l, bar.hwnd)
+        }, { timeout: 10_000 })
+        .toBe(true)
     })
   } finally {
     await app.close()
