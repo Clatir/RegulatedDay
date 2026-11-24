@@ -91,3 +91,69 @@ test('drzewo kategorii: nowa kategoria, przeniesienie podkategorii, usunięcie z
     await app.close()
   }
 })
+
+test('zaznaczanie w „Kategoriach” (D608, D609): 6 podkategorii Ctrl+klik → „Zmień 6” → „Koszt…” → ciało 2 od jutra, dziś bez zmiany, „Cofnij” przywraca', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-tree-group-'))
+  seed(dataDir)
+  const { app, page, userData } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-settings').click()
+      // Six subcategories with no body cost (D523): „Praca”, „Nauka”, „Wolne”.
+      const six = [
+        ['analiza', 'Analiza'],
+        ['journaling', 'Journaling'],
+        ['sesja', 'Sesja tradingowa'],
+        ['nauka', 'Nauka (NotebookLM)'],
+        ['ogladanie', 'Oglądanie wykładu'],
+        ['projekty', 'Projekty']
+      ] as const
+      const row = (id: string) => page.locator(`[data-testid="category-row"][data-category="${id}"]`)
+      const body = (id: string, name: string) => row(id).getByLabel(`${name}: ciało`, { exact: true })
+      for (const [id, name] of six) await expect(body(id, name)).toHaveValue('0')
+      // A click on the row's frame (beside its fields) selects it; Ctrl adds the next ones.
+      await row(six[0][0]).click({ position: { x: 3, y: 3 } })
+      for (const [id] of six.slice(1)) await row(id).click({ position: { x: 3, y: 3 }, modifiers: ['Control'] })
+      await expect(page.locator('[data-tree-item][data-selected="true"]')).toHaveCount(6)
+      await expect(page.getByTestId('tree-selection')).toContainText('Zaznaczone: 6')
+
+      await page.getByTestId('tree-selection-menu').click()
+      await expect(page.getByTestId('tree-menu')).toContainText('Zmień 6 podkategorii')
+      await page.getByTestId('tree-menu-cost').click()
+      const dialog = page.getByTestId('tree-cost')
+      await expect(dialog).toBeVisible()
+      await expect(page.getByTestId('tree-cost-body-state')).toHaveText('✓')
+      await expect(page.getByTestId('tree-cost-head-state')).toHaveText('—')
+      await page.getByTestId('tree-cost-body-plus').click()
+      await page.getByTestId('tree-cost-body-plus').click()
+      await expect(page.getByTestId('tree-cost-body-value')).toHaveValue('2')
+      await page.getByTestId('tree-cost-apply').click()
+      await expect(dialog).toHaveCount(0)
+      await expect(page.getByTestId('group-line-settings')).toContainText('Zmieniono 6 podkategorii')
+
+      // From tomorrow (the bar's default): 2; today („od dziś” shows the settings in force now) – still 0.
+      for (const [id, name] of six) await expect(body(id, name)).toHaveValue('2')
+      const from = page.getByTestId('settings-from')
+      await from.getByRole('radio', { name: 'od dziś' }).click()
+      for (const [id, name] of six) await expect(body(id, name)).toHaveValue('0')
+      await from.getByRole('radio', { name: 'od jutra' }).click()
+      await expect(body('analiza', 'Analiza')).toHaveValue('2')
+
+      // „Cofnij” brings the six back.
+      await page.getByTestId('group-line-settings-undo').click()
+      for (const [id, name] of six) await expect(body(id, name)).toHaveValue('0')
+      await expect(page.getByTestId('group-line-settings')).toHaveCount(0)
+
+      // Esc clears the selection.
+      await row('analiza').click({ position: { x: 3, y: 3 } })
+      await row('sesja').click({ position: { x: 3, y: 3 }, modifiers: ['Control'] })
+      await expect(page.locator('[data-tree-item][data-selected="true"]')).toHaveCount(2)
+      await page.keyboard.press('Escape')
+      await expect(page.locator('[data-tree-item][data-selected="true"]')).toHaveCount(0)
+    })
+  } finally {
+    await app.close()
+  }
+})

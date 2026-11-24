@@ -27,6 +27,7 @@ import { createCategory, NEW_CATEGORY_COSTS } from './categoryFields'
 import { saveTree, undoTree } from './categoryTreeEdits'
 import { GroupRemoveDialog } from './GroupRemoveDialog'
 import { useShared } from './SharedSettings'
+import { useTreeSelection, type TreeRowsOf } from './useTreeSelection'
 
 /**
  * „Cofnij” of a removal of a category (`undoTree`): what it cannot do it says – the file is never overwritten. A question (`asked`, T1420)
@@ -104,6 +105,8 @@ export function CategoriesSection() {
   const live = useMemo(() => rd.categoryGroups.filter((g) => !g.archived), [rd.categoryGroups])
   const ids = useMemo(() => Object.keys(s.categories), [s.categories])
   const [busy, run] = useBusy()
+  // D608: the subcategories and the variants shown, selected with Ctrl / Shift and changed together („Zmień 6 ▾”).
+  const select = useTreeSelection({ tree, s, src: rd, groups: live, open, showArchived })
 
   // The name is taken at once: a second click (or Enter and a click) while it saves adds no second category. It comes back to the field only
   // when nothing was sent. The category is made in the turn of the save, from the record then (`newGroup`).
@@ -155,6 +158,8 @@ export function CategoriesSection() {
       </p>
       {/* D568 (T2440): a cost past ±5 here while a computer of an older version is in the folder – it may write the default over it. */}
       <WideCostWarning costs={Object.values(s.categories).flatMap((c) => [c.costs, ...c.variants.flatMap((v) => (v.costs ? [v.costs] : []))])} testId="settings-categories-old" />
+      {/* „Zaznaczone: 6 · Zmień 6 ▾” over the tree (D608); the line of a change stays where the section's line always was (T2710). */}
+      {select.bar}
       {tree.map(({ group: g, categories: groupIds }) => (
         <GroupBox
           key={g.id}
@@ -169,6 +174,7 @@ export function CategoriesSection() {
           showArchived={showArchived}
           busy={busy}
           onRemove={() => askRemove(g)}
+          rows={select.rowProps}
         />
       ))}
       <div className="flex items-center gap-2">
@@ -191,6 +197,7 @@ export function CategoriesSection() {
         </span>
       </div>
       <GroupLine view="settings" />
+      {select.overlay}
       {scaling && <CostScaleDialog onClose={() => setScaling(false)} />}
       {removing && (
         <GroupRemoveDialog
@@ -220,7 +227,8 @@ function GroupBox({
   onOpen,
   showArchived,
   busy,
-  onRemove
+  onRemove,
+  rows
 }: {
   group: CategoryGroup
   ids: readonly string[]
@@ -233,6 +241,7 @@ function GroupBox({
   showArchived: boolean
   busy: boolean
   onRemove: () => void
+  rows: TreeRowsOf
 }) {
   const [name, setName] = useState('')
   const [adding, run] = useBusy()
@@ -268,7 +277,7 @@ function GroupBox({
       </div>
       {ids.map((id) => {
         const c = s.categories[id]
-        return c ? <CategoryRow key={id} id={id} rules={c} rd={rd} settings={s} groups={groups} open={open === id} onToggle={() => onOpen(id)} save={save} showArchived={showArchived} /> : null
+        return c ? <CategoryRow key={id} id={id} rules={c} rd={rd} settings={s} groups={groups} open={open === id} onToggle={() => onOpen(id)} save={save} showArchived={showArchived} rows={rows} /> : null
       })}
       {!g.archived && (
         <div className="flex items-center gap-2">

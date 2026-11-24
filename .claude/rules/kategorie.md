@@ -13,6 +13,13 @@ paths:
   - "tests/web/category-tree-screen.test.ts"
   - "tests/web/category-tree-log.test.ts"
   - "tests/fs/category-tree.test.ts"
+  - "src/shared/model/categoryGroup.ts"
+  - "src/renderer/features/settings/categoryGroupEdits.ts"
+  - "src/renderer/features/settings/categoryMenu.ts"
+  - "src/renderer/features/settings/useTreeSelection.tsx"
+  - "src/renderer/features/settings/TreeCostDialog.tsx"
+  - "tests/unit/category-group.test.ts"
+  - "tests/web/category-group.test.ts"
 ---
 
 # Drzewo kategorii (D510, T1310–T1324, T1390–T1394, T1420–T1426)
@@ -59,3 +66,29 @@ drzewa; „kategoria” drzewa to grupa (`CategoryGroup`, `categoryGroups`).
   Ctrl K: rekordy `kind: 'category'` – kategoria (`GROUP_PICK` + id), podkategoria (id), wariant (id, `parent` = podkategoria, podpowiedź
   z nazwą podkategorii albo „podkategoria usunięta”, T1426); wszystkie otwierają to drzewo (`takeFoundPick` w `CategoriesSection`, selektor
   przez `CSS.escape`, T1393).
+- Zaznaczanie w drzewie (D608, D609, N13, T2690–T2699): czyste `model/categoryGroup.ts` – klucze `categoryKey` / `variantKey` (`treeItemOf`),
+  `treeOrder` (kolejność widoczna: podkategorie po grupach, warianty tylko otwartej, archiwalne z archiwum), `treeGroupStep(raw, klucze, akcja,
+  { from, at }, dziś)` → `{ raw, patch, changes, skipped, same }`: „Koszt…” (tylko ruszone pule – `pools`; łatka podkategorii pisze tylko je, „Cofnij” sprawdza i cofa tylko je, T2704; wariant – lista wariantów cała od daty, bo zmiana zastępuje `variants` całą tablicą (T2712), „Cofnij” w niej też tylko ruszone pule; wariant bez własnego kosztu wraca do „jak podkategoria” tylko przy całym koszcie jak po zmianie), „Miejsce”, „Usuń” wariantu – jeden `patch`
+  ustawień z datą liczony z `settingsOn` rd.json z tury zapisu (lista wariantów cała; wariant bez własnego kosztu / miejsca dostaje własne);
+  „Przenieś do kategorii” (`setCategoryGroupRaw`) i „Usuń” podkategorii (archiwum; dodana od daty – całkiem, `withoutPlannedCategory`, jej
+  warianty z nią) – od razu, pole po polu (`leafEdits`: obiekt zrobiony przez zmianę – jego pola i `made`). Pominięte z powodem (`TREE_SKIP`:
+  wariant przy przeniesieniu, już w archiwum, nie ma od tej daty). „Cofnij” – `treeGroupUndo`: pola rd.json od ostatniej zmiany (T2705), póki stoją jak po zmianie (dodana od
+  daty – póki data przed nami; puste obiekty `made` znikają), część z datą – nowym wpisem od tej samej daty i chwili, póki ustawienia mają
+  wartość po zmianie; reszta – `kept`. Słowa: `treeLineText`, `treeNothingText`, `treeKeptText`, `treeCount`/`treeTitleCount`; ✓/„—” okna –
+  `treeValues`, `commonPools`.
+- Okno: `settings/categoryGroupEdits.ts` `changeTreeGroup(klucze, akcja, f?)` – jedna edycja rd.json w turze zapisu (brak rd.json – od `{ schema: 1 }`, nic do zmiany – nic nie idzie; odmowa tylko bez widoku folderu, T2707; `withSettingsChange` z
+  `made` dalej niż każda zmiana w pliku – `madeAfter`, „Cofnij” w tej samej milisekundzie nie leży pod zmianą), data z paska (`changeFrom`),
+  „od dziś” – `day.snapshot` po zapisie, gdy był `patch`; pasek „Zaznaczone: N · Zmień N ▾” w sekcji nad drzewem (z tłem, nieprzyklejony – T2710, T2708 wycofane: klawisze zaznaczenia
+  działają tylko z fokusem w sekcji), linia `GroupLine view="settings"` – wspólna z „Przelicz koszty ×N”, na swoim miejscu pod nim. Nieczytelny dzień
+  „od dziś”: zapisuje się część od razu, część z datą nie (`TREE_TODAY_PART_TEXT` – także przy pytaniu albo odmowie, T2718; „Cofnij” –
+  `TREE_UNDO_TODAY_TEXT`, linia zostaje i mówi, co zostało – `retextGroupLine`, T2714, T2720); nic nie
+  wysłane – `failed` (bez „Nic się nie zmienia”, „Cofnij” – `UndoNotDone`, T2713). Ekran: `useTreeSelection` (`useSelection` z `when` = fokus w sekcji, `present` – też warianty zwiniętych (`treeOrder(…, 'all')`: zaznaczony wariant zostaje po „mniej”); wiersz `rowProps` – klik poza polami,
+  przyciskami, przełącznikami i etykietami, fokus na wiersz, prawy przycisk / Shift+F10 tylko na własnym wierszu – wariant w podkategorii ma
+  swój; klik obok – `useOutsidePointer`, „obok” nie jest: wiersze, menu, pasek zaznaczenia, linia `group-line-settings` z „Cofnij” (T2717), pasek „od jutra”;
+  klawisze – fokus w sekcji, w pasku „od jutra” albo na body przy niepustym zaznaczeniu, T2719), menu `categoryMenu.ts`
+  (`treeMenu`: „Koszt…”, „Miejsce ▸” ✓/„—” wg wartości teraz, „Przenieś do kategorii ▸” – ✓ wg `groupOfCategory(…, { archived: true })`, T2706; same warianty: wyłączone `VARIANTS_STAY`, „Usuń” –
+  wszystkie w archiwum: `ALL_ARCHIVED`), okno `TreeCostDialog` (pula ✓ z wartością albo „—” z pustym polem, [−] [+] i kółko od wartości
+  pierwszego, „Zapisz” tylko ruszone pule, nieaktywne bez zmiany, pole z odmową – nic). Kategorie (grupy) się nie zaznaczają.
+  „Zmień N ▾” – `keep` menu i przełączanie (drugi klik zamyka, `aria-expanded`, T2709) tylko dla menu paska (`from: 'bar' | 'row'`; przy menu
+  wiersza klik otwiera menu paska, T2716). Okno „Koszt…”: „Zapisz” zawsze aktywne, najpierw `commitActiveField` (`flushSync`), nic nieruszone albo pula wrócona do wspólnej wartości – zamyka (T2711, T2721).
+  Wiersz wariantu ma własne tło `bg-panel` (T2715). Wiersze jak w „Sprawach”: bez roli, `tabIndex −1`.
