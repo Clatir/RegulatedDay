@@ -259,7 +259,8 @@ export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockM
       ? { label: 'Przesuń o…', disabled: moveWhy, testId: 'block-menu-shift' }
       : { label: 'Przesuń o…', testId: 'block-menu-shift', submenu: [shiftBy('shift', 1, 'Później o…', 'block-menu-later'), shiftBy('shift', -1, 'Wcześniej o…', 'block-menu-earlier')] }
   ]
-  if (!ctx.template) {
+  // D584: the rest of a day is for „Dziś”, „Tydzień” and „3 dni” – not a template nor „Agenda” and the month (no axis of the day; they count no costs – `costsKnown`).
+  if (!ctx.template && ctx.costsKnown !== false) {
     entries.push(
       restWhy
         ? { label: 'Przesuń resztę dnia o…', disabled: restWhy, testId: 'block-menu-rest' }

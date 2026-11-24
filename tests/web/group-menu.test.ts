@@ -54,6 +54,12 @@ describe('„Koszt…” w widoku bez kosztów (N18, T2614)', () => {
     expect(costOpened).toBe(0)
   })
 
+  it('Agenda i miesiąc (`costsKnown: false`): bez „Przesuń resztę dnia o…” (D584 – tylko „Dziś”, „Tydzień”, „3 dni”)', () => {
+    const entries = blockMenu([b('a'), b('b')], { ...CTX, costsKnown: false }, ON)
+    expect(JSON.stringify(entries)).not.toContain('block-menu-rest')
+    expect(JSON.stringify(blockMenu([b('a'), b('b')], CTX, ON))).toContain('block-menu-rest')
+  })
+
   it('„Tydzień”, „3 dni” i „Dziś”: blok bez kosztu własnego (costs: null) – pozycja czynna, jak dotąd', () => {
     for (const ctx of [CTX, { ...CTX, costsKnown: true }]) {
       const cost = item(blockMenu([b('a', { costs: null })], ctx, ON), 'block-menu-cost')

@@ -30,7 +30,7 @@ export function stateOfWeek(state: HorizonBlock['state']): MenuState {
  * of the selected blocks `ids` on (where the column draws it: a begun one where it began), a block the push apart moves (`HorizonBlock.pushable` –
  * the engine's rule, D367).
  */
-export function restLeftIn(day: Pick<HorizonDay, 'blocks'>, ids: readonly string[]): boolean {
+export function restLeftIn(day: { blocks: readonly GroupTile[] }, ids: readonly string[]): boolean {
   const from = Math.min(...day.blocks.filter((b) => ids.includes(b.id)).map((b) => b.startMin))
   return day.blocks.some((b) => b.startMin >= from && b.pushable === true)
 }
@@ -64,6 +64,8 @@ export interface GroupTile {
   endMin: number
   state: HorizonBlock['state']
   movable?: boolean | undefined
+  /** The push apart moves it (`HorizonBlock.pushable`, N17); a bar of the month has none. */
+  pushable?: true | undefined
   named: MonthNamed
   cost?: { costs: Costs } | null | undefined
 }
