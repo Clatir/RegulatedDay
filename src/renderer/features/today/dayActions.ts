@@ -121,29 +121,48 @@ export function withPushed(raw: RawRecord, date: string, change: (raw: RawRecord
 const PLACE_FIELDS = ['startMin', 'durationMin', 'anchor', 'fixed', 'alongside', 'categoryId'] as const
 
 /**
- * The plan a change was counted on still stands in the day's file in its turn (T2870): every block it moves at the start it was counted
- * from (the window's plan) – or at its new one already (another computer, an earlier click: nothing left to write there) – and every
- * block it counts on (`kept`: the block a regeneration stands before) with its place as the window knew it. A block of the file the
- * window saw (`seen`) that is gone from it now, cancelled or moved to another day – changed. False: the change was counted on a plan
- * that is no more (a swap saved a moment before, another computer's change) – nothing may be written over it.
+ * The plan a change was counted on still stands in the day's file in its turn (T2870, T2877, T2878) – checked against the file the window
+ * saw (`seen`: the plan's own starts – never those the buffers of decompression lay over the window's plan, T2877):
+ * - every block it moves stands at the start the seen file gave it (a block of the snapshot not in a file – the window's), or at its new
+ *   one already (another computer, an earlier click: nothing left to write there);
+ * - every block it counts on (`kept`: the block a regeneration stands before) has its place as the seen file gave it;
+ * - no block of the seen file is gone from it (taken out, cancelled, moved to another day);
+ * - no block new in the file (not in the seen one) stands across what the change moves or puts (`spans`, logical minutes – the same
+ *   proposal clicked on another computer, a block put in the gap meanwhile, T2878).
+ * False: the change was counted on a plan that is no more – nothing may be written over it.
  */
-export function countedPlanStands(raw: RawRecord, date: string, seen: RawRecord | null, starts: readonly PushedStart[], kept: readonly PlanBlock[] = []): boolean {
+export function countedPlanStands(raw: RawRecord, date: string, seen: RawRecord | null, starts: readonly PushedStart[], kept: readonly PlanBlock[] = [], spans: ReadonlyArray<{ startMin: number; endMin: number }> = []): boolean {
   const now = dayFileFrom(raw, date)
-  const knew = new Set(dayFileFrom(dayRaw(seen, date), date).blocks.map((b) => b.id))
+  const knew = new Map(dayFileFrom(dayRaw(seen, date), date).blocks.map((b) => [b.id, b]))
   const left = new Set([...now.cancelled, ...Object.keys(now.movedTo)])
   // The block as the file holds it now; one of the snapshot not in the file – as the window knew it; one gone – null.
   const nowOf = (b: PlanBlock): PlanBlock | null => (left.has(b.id) ? null : (now.blocks.find((x) => x.id === b.id) ?? (knew.has(b.id) ? null : b)))
-  return (
-    starts.every((p) => {
-      const x = nowOf(p.block)
-      return x != null && (x.startMin === p.block.startMin || x.startMin === p.startMin)
-    }) &&
-    kept.every((b) => {
-      const x = nowOf(b)
-      return x != null && PLACE_FIELDS.every((k) => (x[k] ?? null) === (b[k] ?? null))
+  // The block as the seen file had it (its own start, without the buffers), else as the window knew it.
+  const wasOf = (b: PlanBlock): PlanBlock => knew.get(b.id) ?? b
+  const moved = starts.every((p) => {
+    const x = nowOf(p.block)
+    return x != null && (x.startMin === wasOf(p.block).startMin || x.startMin === p.startMin)
+  })
+  const placed = kept.every((b) => {
+    const x = nowOf(b)
+    const was = wasOf(b)
+    return x != null && PLACE_FIELDS.every((k) => (x[k] ?? null) === (was[k] ?? null))
+  })
+  if (!moved || !placed) return false
+  // What the change moves or puts, from its earliest place to its latest end.
+  const ends = [
+    ...spans,
+    ...starts.flatMap((p) => {
+      const from = wasOf(p.block).startMin
+      return from == null ? [] : [{ startMin: Math.min(from, p.startMin), endMin: Math.max(from, p.startMin) + p.block.durationMin }]
     })
-  )
+  ]
+  if (!ends.length) return true
+  const lo = Math.min(...ends.map((s) => s.startMin))
+  const hi = Math.max(...ends.map((s) => s.endMin))
+  return !now.blocks.some((b) => !knew.has(b.id) && !left.has(b.id) && b.startMin != null && b.startMin < hi && b.startMin + b.durationMin > lo)
 }
+
 
 /**
  * A change of the plan that pushes blocks apart (D367, rozsuwanie): the change and the pushed blocks' new starts as one

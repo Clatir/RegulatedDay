@@ -24,7 +24,8 @@ import { useCalendarFilter } from '@renderer/features/calendars/calendarFilter'
 import { BlockDayNotes } from '@renderer/features/today/DayNotes'
 import { SidePanel } from '@renderer/features/today/TodayPage'
 import { CheapestSwapLine } from '@renderer/features/today/CheapestSwap'
-import { GONE_DAYS, PLAN_ALREADY_TEXT, PLAN_CHANGED_TEXT, cheapestSwapCached, cheapestSwapKeyOf, cheapestSwapPeek, energyOrderCached, energyOrderKey, resetEnergyOrderCache, resetSwapCache, swapGone, swapLineText, swappedText } from '@renderer/features/today/dayActions'
+import { regenHereKeyOf, regenMemory, resetRegenCache } from '@renderer/features/today/regenActions'
+import { GONE_DAYS, PLAN_ALREADY_TEXT, PLAN_CHANGED_TEXT, cheapestSwapCached, cheapestSwapKeyOf, cheapestSwapPeek, energyOrderCached, energyOrderKey, resetEnergyOrderCache, resetSwapCache, swapBack, swapGone, swapLineText, swappedText } from '@renderer/features/today/dayActions'
 import { useData } from '@renderer/store/data'
 import type { DayModel } from '@renderer/store/day'
 import { NO_MEMORY, useUi } from '@renderer/store/ui'
@@ -74,6 +75,7 @@ beforeEach(() => {
   useData.setState({ view: { today: DATE, allDay: [], computers: [] } as unknown as DataView, allDay: [] })
   useUi.setState({ page: 'today', day: null, pick: null, toasts: [], from: null, memory: NO_MEMORY })
   resetSwapCache()
+  resetRegenCache()
   resetEnergyOrderCache()
   useCalendarFilter.setState({ hidden: [], revealed: null })
 })
@@ -86,7 +88,14 @@ afterEach(() => {
 })
 
 /** In an act, until the line's search put off past the paint (T2635) has counted the day's key – a condition, no fixed delay. */
-const settle = (m: DayModel) => act(() => vi.waitFor(() => expect(cheapestSwapPeek(m, cheapestSwapKeyOf(m)).due).toBe(false)))
+const settle = (m: DayModel) =>
+  act(() =>
+    vi.waitFor(() => {
+      expect(cheapestSwapPeek(m, cheapestSwapKeyOf(m)).due).toBe(false)
+      // The panel's other line by the warning (N3) counts after the paint too: both counted, no state update after the test.
+      expect(regenMemory.peek(m, regenHereKeyOf(m)).due).toBe(false)
+    })
+  )
 
 /** `node` rendered; with `m` – also until its line's search has counted `m` (`settle`). */
 async function render(node: Parameters<Root['render']>[0], m?: DayModel): Promise<void> {
@@ -497,5 +506,28 @@ describe('„Najtańsza zamiana” w oknie (N22)', () => {
     await vi.waitFor(() => expect(useUi.getState().toasts.map((t) => t.text)).toContain(PLAN_CHANGED_TEXT))
     expect(sent).toEqual([])
     await vi.waitFor(() => expect(q('cheapest-swap-text')?.textContent).toBe(LINE))
+  })
+
+  it('T2878: dwie zrobione zamiany tego dnia – druga nie odsłania pierwszej; cofnięcie jednej zdejmuje tylko jej znak', () => {
+    const m = model()
+    const key = cheapestSwapKeyOf(m)!
+    const swap = cheapestSwapCached(m)!
+    const other = { a: 'c', b: 'e', changes: [] }
+    swapGone(DATE, swap)
+    swapGone(DATE, other)
+    expect(cheapestSwapPeek(m, key).swap).toBeNull()
+    swapBack(DATE, other)
+    expect(cheapestSwapPeek(m, key).swap).toBeNull()
+    swapBack(DATE, swap)
+    expect(cheapestSwapPeek(m, key).swap).toMatchObject({ a: 'r', b: 'e' })
+  })
+
+  it('T2878: w przerwie stanął w międzyczasie nowy blok (inny komputer) – „Zamień” nic nie zapisuje, „Plan zmienił się…”', async () => {
+    const added = { ...FILE, blocks: [...(FILE.blocks as unknown[]), blockJson(block({ id: 'nowy', cat: 'inne', at: '09:30', min: 30, origin: 'user' }))] }
+    const { sent } = stub(added)
+    await side(model())
+    await act(async () => void q('cheapest-swap-apply')!.click())
+    await vi.waitFor(() => expect(useUi.getState().toasts.map((t) => t.text)).toContain(PLAN_CHANGED_TEXT))
+    expect(sent).toEqual([])
   })
 })

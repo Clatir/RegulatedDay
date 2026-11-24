@@ -10,7 +10,6 @@
 import { useMemo } from 'react'
 import { namingOf } from '@shared/engine/context'
 import { regenWayName } from '@shared/engine/regenHere'
-import { REGEN_CATEGORY } from '@shared/model/categories'
 import { useBusy } from '../../lib/busy'
 import type { DayModel } from '../../store/day'
 import { nameById, type Names } from '../plan/blockView'
@@ -30,7 +29,7 @@ export function RegenHereLine({ model, names, past, openId = null, dayKey }: { m
   if (!r || key == null) return null
   const before = nameById(r.beforeId, namingOf(model.ctx, model.state.facts), names)
   const way = regenWayName(model.state.settings, r.variantId)
-  const apply = () => run(() => insertRegen(model.date, model.data.dayFile, model.ctx.plan, r, { way, rules: model.ctx.snapshot.settings.categories[REGEN_CATEGORY], openId }))
+  const apply = () => run(() => insertRegen(model, r, { way, openId }))
   return (
     <li className="flex flex-wrap items-center gap-2" data-testid="regen-here">
       <span className="min-w-0 flex-1" data-testid="regen-here-text">

@@ -12,7 +12,7 @@
  * nothing is blocked (D72).
  */
 import { POOLS, REGEN_CATEGORY, type Pool } from '../model/categories'
-import { PLAN_MAX } from '../model/plan'
+import { PLAN_MAX, type PlanBlock } from '../model/plan'
 import type { RulesSettings } from '../model/settings'
 import { logicalMinuteOf } from '../time/day'
 import { computeDay, type DayContext, type DayState } from './day'
@@ -31,7 +31,8 @@ export const REGEN_HERE_MIN = 15
 export const REGEN_HERE_ID = 'regen-here'
 /**
  * The step of the clock (minutes): a regeneration starts no earlier than the end of the current step – the window counts the
- * proposal again once a step (`ENERGY_ORDER_HOLD_MIN`), so a start shown is never past while it is shown.
+ * proposal once a step (`ENERGY_ORDER_HOLD_MIN`), so a start it counted is not past within that step. A click later than that (the
+ * window not counted again – asleep, the folder away) is checked by the live clock when it saves (`insertRegen`, T2879).
  */
 const STEP_MIN = 5
 /** The days counted again at most: the pools with a descent, the earliest first, until one gives a proposal. */
@@ -55,8 +56,23 @@ export interface RegenHere {
   after: number
   /** The blocks it pushes apart (D367) – their new starts, as the window writes them with the block. */
   pushed: PushedBlock[]
+  /** The buffer of decompression it stands on and takes away (D582 – cancelled in the same edit); null – none. */
+  takes: PlanBlock | null
 }
 
+
+/**
+ * What the caller adds to the count (T2877): `id` – the id of the block it writes (T2872); `taken` – the buffer of decompression the block
+ * stands on (D582, `bufferTakenBy` of the window; it is gone from the plan counted and from the file written); `replan` – the plan of the
+ * file after the change (its own starts, without the buffers – `ctx.basePlan`) with the buffers laid again (`replanned`, D583: the buffers
+ * move the blocks after them as the next count of the day will), with the buffer taken gone. Without them the plan counted is the
+ * window's (`ctx.plan`) with the block and the pushed starts.
+ */
+export interface RegenOptions {
+  id?: string
+  taken?: (block: PlanBlock) => PlanBlock | null
+  replan?: (base: readonly PlanBlock[], taken: PlanBlock | null) => readonly PlanBlock[]
+}
 /** A descent of the day's forecast: the pool, the minute (index) and the block of the foreground in whose time it falls. */
 export interface DescentPlace {
   pool: Pool
@@ -99,9 +115,9 @@ export const descentPlace = (state: DayState, energy: EnergyState | null): Desce
  * with the blocks after it; any other (fixed, waiting for „Zacznij”, protected, anchored) keeps its place – the regeneration ends at
  * its start, the flexible blocks there go behind it. A start before the end of the current step of 5 minutes (the block begun or
  * due) – the next full 5 minutes after now, at the latest the minute of the descent (a regeneration there still takes the switch
- * into the block off it). `id` – the id of the block (the one the caller writes – equal starts are ordered by the ids, T2872).
+ * into the block off it). `opts` – the id of the block and the buffers of decompression (`RegenOptions`, T2872, T2877).
  */
-export function regenHere(ctx: DayContext, state: DayState, energy: EnergyState | null, opts: { id?: string } = {}): RegenHere | null {
+export function regenHere(ctx: DayContext, state: DayState, energy: EnergyState | null, opts: RegenOptions = {}): RegenHere | null {
   // A day gone by (now past its last minute) has nothing left to put in.
   if (!energy || state.now >= state.grid.length) return null
   const g = state.grid
@@ -111,7 +127,7 @@ export function regenHere(ctx: DayContext, state: DayState, energy: EnergyState 
   let counts = 0
   for (const d of descentPlaces(state, energy, state.now)) {
     if (counts >= REGEN_COUNTS) break
-    const tried = tryDescent(ctx, state, energy, d, step, lm, opts.id ?? REGEN_HERE_ID)
+    const tried = tryDescent(ctx, state, energy, d, step, lm, opts)
     if (tried.counted) counts++
     if (tried.value) return tried.value
   }
@@ -126,7 +142,7 @@ function tryDescent(
   d: DescentPlace,
   step: number,
   lm: (idx: number) => number,
-  id: string
+  opts: RegenOptions
 ): { value: RegenHere | null; counted: boolean } {
   const none = { value: null, counted: false }
   const { pool, at, placed: where } = d
@@ -139,12 +155,18 @@ function tryDescent(
   if (start > at || lm(start) > PLAN_MAX || idxOfLogical(g, lm(start)) !== start) return none
   const startMin = lm(start)
   const variantId = suggestRegen(state.settings, pool)
+  const id = opts.id ?? REGEN_HERE_ID
   const block = newUserBlock(REGEN_CATEGORY, startMin, REGEN_HERE_MIN, ctx.snapshot.settings.categories[REGEN_CATEGORY], { id, variantId })
-  const plan = withBlock(ctx.plan, block)
+  // D582: on a buffer of decompression it takes its place – the buffer is gone from the plan (T2877).
+  const takes = opts.taken?.(block) ?? null
+  const without = (list: readonly PlanBlock[]) => withBlock(takes ? list.filter((b) => b.id !== takes.id) : list, block)
+  const plan = without(ctx.plan)
   // A block that is pushed goes behind the regeneration from where the axis shows it (also one due by now, shown at now).
   const pushed = pushApart(ctx, state, plan, block.id, pushes ? { atMin: lm(where.from) } : {})
   const starts = new Map(pushed.map((p) => [p.id, p.startMin]))
-  const counted = { ...ctx, plan: plan.map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b)) }
+  const moved = (list: readonly PlanBlock[]) => list.map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b))
+  // The day as the next count after the write has it (T2877): the file's plan with the change and the buffers laid again.
+  const counted = { ...ctx, plan: ctx.basePlan && opts.replan ? [...opts.replan(moved(without(ctx.basePlan)), takes)] : moved(plan) }
   // The one count of the day again (and of its energy) for this descent.
   const day = computeDay(counted)
   const placed = day.forecast.find((p) => p.block.id === block.id)
@@ -160,7 +182,7 @@ function tryDescent(
   const watched = (p: Pool) => shadeOf(onScreen(shown(now, p)), energy.reserve) !== 'ok'
   const worse = POOLS.some((p) => p !== pool && ((shown(now, p) < shown(was, p) && watched(p)) || (was.reserveAt[p] == null && now.reserveAt[p] != null)))
   if (after <= before || worse) return { value: null, counted: true }
-  return { value: { id, pool, beforeId: where.block.id, startMin, durationMin: REGEN_HERE_MIN, variantId, before, after, pushed }, counted: true }
+  return { value: { id, pool, beforeId: where.block.id, startMin, durationMin: REGEN_HERE_MIN, variantId, before, after, pushed, takes }, counted: true }
 }
 
 /** The next full 5 minutes after now – the end of the current step (an index whose minute has a number of its own), within the day. */

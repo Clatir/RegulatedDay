@@ -57,7 +57,7 @@ const workDay = (o: { w?: string; e?: Partial<PlanBlock>; mealMin?: number; extr
   ]
 
 /** The day with the proposal written as the window writes it: the block (with the proposal's id) and the pushed starts. */
-function written(d: Day, r: RegenHere) {
+function written(d: Day, r: Omit<RegenHere, 'takes'>) {
   const starts = new Map(r.pushed.map((p) => [p.id, p.startMin]))
   const regen = newUserBlock('regeneracja', r.startMin, r.durationMin, d.ctx.snapshot.settings.categories.regeneracja, { id: r.id, variantId: r.variantId })
   const ctx = { ...d.ctx, plan: [...d.ctx.plan.map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b)), regen] }

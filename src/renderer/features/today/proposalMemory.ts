@@ -42,9 +42,12 @@ export interface ProposalMemory<T> {
    * its words – T2643) – none, fresh or held. `key` null – nothing (no warning).
    */
   peek(m: ProposalDay, key: string | null, shownKey?: string | null): ProposalSeen<T>
-  /** The proposal with these words (`signature`) is done on its day – marked before its save starts (another day's stays, T2640). */
+  /**
+   * The proposal with these words (`signature`) is done on its day – marked before its save starts; every one done that day stays done
+   * (T2878: a second one does not bring back the first), another day's too (T2640).
+   */
   done(date: string, signature: string): void
-  /** It is not done after all (T2643): its save failed, or its „Cofnij” took it back – shown again (while it is the one marked). */
+  /** It is not done after all (T2643): its save failed, or its „Cofnij” took it back – shown again; the others done that day stay. */
   back(date: string, signature: string): void
   /** `f` told whenever a proposal is done or comes back (the lines look again at what they show); the way back – the unsubscription. */
   onDone(f: () => void): () => void
@@ -58,7 +61,8 @@ export interface ProposalMemory<T> {
  */
 export function proposalMemory<T>(o: { what: string; search: (m: ProposalDay) => T | null; signature: (x: T) => string; holds: (m: ProposalDay, x: T) => boolean }): ProposalMemory<T> {
   let last: { key: string; date: string; value: T | null } | null = null
-  const gone = new Map<string, string>()
+  // The words of the proposals done, by date (the last `GONE_DAYS` days marked; a day marked again goes last).
+  const gone = new Map<string, Set<string>>()
   const listeners = new Set<() => void>()
   const tell = () => {
     for (const f of listeners) f()
@@ -79,20 +83,22 @@ export function proposalMemory<T>(o: { what: string; search: (m: ProposalDay) =>
     peek(m, key, shownKey = null) {
       if (key == null) return { value: null, fresh: false, due: false }
       const done = gone.get(m.date)
-      const open = (x: T | null | undefined): T | null => (x != null && o.signature(x) !== done ? x : null)
+      const open = (x: T | null | undefined): T | null => (x != null && !done?.has(o.signature(x)) ? x : null)
       if (last && last.key === key) return { value: open(last.value), fresh: true, due: false }
       const held = open(last?.value)
       return { value: held && last!.key === shownKey && last!.date === m.date && o.holds(m, held) ? held : null, fresh: false, due: true }
     },
     done(date, signature) {
+      const day = gone.get(date) ?? new Set<string>()
       gone.delete(date)
-      gone.set(date, signature)
+      gone.set(date, day.add(signature))
       while (gone.size > GONE_DAYS) gone.delete(gone.keys().next().value!)
       tell()
     },
     back(date, signature) {
-      if (gone.get(date) !== signature) return
-      gone.delete(date)
+      const day = gone.get(date)
+      if (!day?.delete(signature)) return
+      if (!day.size) gone.delete(date)
       tell()
     },
     onDone(f) {

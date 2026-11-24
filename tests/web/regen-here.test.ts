@@ -15,7 +15,11 @@ import { blockJson } from '@shared/data/dayEdits'
 import { setAt } from '@shared/data/merge'
 import { paths } from '@shared/data/paths'
 import { computeDay } from '@shared/engine/day'
-import { computeEnergy } from '@shared/engine/energy'
+import { computeEnergy, shownOf, toUnits } from '@shared/engine/energy'
+import { dayContextOf, type PlanInputs } from '@shared/engine/context'
+import { isBuffer } from '@shared/engine/decompress'
+import { logicalSpan } from '@shared/engine/grid'
+import { marketDay } from '@shared/calendar/holidays'
 import { lowestEnergy } from '@shared/engine/energyOrder'
 import { regenHere } from '@shared/engine/regenHere'
 import type { Pool } from '@shared/model/categories'
@@ -25,12 +29,13 @@ import { CATEGORY_COLORS, rdFrom } from '@shared/model/rd'
 import { useCalendarFilter } from '@renderer/features/calendars/calendarFilter'
 import { BlockDayNotes } from '@renderer/features/today/DayNotes'
 import { SidePanel } from '@renderer/features/today/TodayPage'
-import { PLAN_CHANGED_TEXT, cheapestSwapCached, resetEnergyOrderCache, resetSwapCache, swapDayBlocks } from '@renderer/features/today/dayActions'
-import { regenDoneText, regenHereCached, regenHereKeyOf, regenLineText, regenMemory, resetRegenCache } from '@renderer/features/today/regenActions'
+import { PLAN_CHANGED_TEXT, arrangeDayBlocks, cheapestSwapCached, resetEnergyOrderCache, resetSwapCache, swapDayBlocks } from '@renderer/features/today/dayActions'
+import { REGEN_PAST_TEXT, regenDoneText, regenHereCached, regenHereKeyOf, regenLineText, regenMemory, regenSignature, resetRegenCache } from '@renderer/features/today/regenActions'
 import { useData } from '@renderer/store/data'
 import type { DayModel } from '@renderer/store/day'
 import { NO_MEMORY, useUi } from '@renderer/store/ui'
 import { block, lm, Scenario } from '../unit/engine/dsl'
+import { placeLogical } from '@shared/time/day'
 
 // A pass-through spy: how many times the window looks for the proposal.
 vi.mock('@shared/engine/energyOrder', async (orig) => {
@@ -79,6 +84,9 @@ beforeAll(() => {
 })
 const data = useData.getState()
 beforeEach(() => {
+  // The clock of the click (T2879): the model's morning – a proposal of 14:00 is still to come.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(placeLogical(DATE, lm('07:30')))
   useData.setState({ view: { today: DATE, allDay: [], computers: [] } as unknown as DataView, allDay: [] })
   useUi.setState({ page: 'today', day: null, pick: null, toasts: [], from: null, memory: NO_MEMORY })
   resetRegenCache()
@@ -92,6 +100,7 @@ afterEach(() => {
   root = host = null
   document.body.innerHTML = ''
   useData.setState(data, true)
+  vi.useRealTimers()
 })
 
 /** In an act, until the line's search put off past the paint has counted the day's key – a condition, no fixed delay. */
@@ -112,17 +121,17 @@ const texts = () => useUi.getState().toasts.map((t) => t.text)
 const toastOf = (text: string) => useUi.getState().toasts.find((t) => t.text === text)!
 
 /** The data folder as the window talks to it: the day's file now, the edits sent, the bar's calls. */
-function stub(file: RawRecord | null = FILE) {
+function stub(file: RawRecord | null = FILE, date = DATE) {
   const sent: EditEntry[][] = []
   const state = { file }
   const bar = vi.fn(async () => undefined)
   const rd: Partial<RdApi> = {
-    dayFiles: async () => ({ [DATE]: state.file }),
+    dayFiles: async () => ({ [date]: state.file }),
     edit: async (entries) => {
       sent.push(entries)
       return entries.map(() => ({ status: 'applied' as const }))
     },
-    dataView: async () => ({ today: DATE }) as DataView,
+    dataView: async () => ({ today: date }) as DataView,
     planArranged: bar,
     planPushed: bar
   }
@@ -382,5 +391,151 @@ describe('„Wstaw regenerację tutaj” w oknie (N3)', () => {
     const html = renderToStaticMarkup(createElement(SidePanel, sideProps(m)))
     expect(html).toContain('regen-here-text')
     expect(key).toHaveBeenCalledTimes(1)
+  })
+
+  it('T2878: dwie wstawione propozycje tego dnia – druga nie odsłania pierwszej; „Cofnij” jednej zdejmuje tylko jej znak', () => {
+    const m = model()
+    const r = regenHereCached(m)!
+    const key = regenHereKeyOf(m)
+    regenMemory.done(DATE, regenSignature(r))
+    regenMemory.done(DATE, regenSignature({ ...r, beforeId: 'c' }))
+    expect(regenMemory.peek(m, key).value).toBeNull()
+    regenMemory.back(DATE, regenSignature({ ...r, beforeId: 'c' }))
+    expect(regenMemory.peek(m, key).value).toBeNull()
+    regenMemory.back(DATE, regenSignature(r))
+    expect(regenMemory.peek(m, key).value).toEqual(r)
+  })
+
+  it('T2878: ta sama propozycja kliknięta wcześniej na innym komputerze (jego regeneracja o 13:45 przed stałym, nic nie przesunięte) – nic nie zapisane', async () => {
+    // „Analiza” 14:00 fixed, the meal 13:30–13:45: the regeneration 13:45 pushes nothing – only the block put in tells the two apart.
+    const fixedFile: RawRecord = { ...FILE, blocks: (FILE.blocks as Array<Record<string, unknown>>).map((b) => (b.id === 'e' ? { ...b, fixed: true } : b.id === 'p' ? { ...b, durationMin: 15 } : b)) }
+    const m = model({ file: fixedFile })
+    const r = regenHereCached(m)!
+    expect(r).toMatchObject({ beforeId: 'e', startMin: lm('13:45'), pushed: [] })
+    // The other computer wrote the same proposal with an id of its own.
+    const theirs = { ...PLAN[0]!, id: 'inny', categoryId: 'regeneracja', variantId: 'drzemka', startMin: r.startMin, durationMin: 15 }
+    const { sent } = stub({ ...fixedFile, blocks: [...(fixedFile.blocks as unknown[]), blockJson(theirs)] })
+    await side(m)
+    await act(async () => void q('regen-here-apply')!.click())
+    await vi.waitFor(() => expect(texts()).toContain(PLAN_CHANGED_TEXT))
+    expect(sent.flat().filter((e) => e.edits.length > 0)).toEqual([])
+  })
+
+
+  it('T2879: start propozycji minął na zegarze (okno nie policzyło jej od nowa) – nic nie zapisane, dymek „Ta propozycja już minęła.”', async () => {
+    const { sent } = stub()
+    await side(model())
+    vi.setSystemTime(placeLogical(DATE, lm('14:01')))
+    await act(async () => void q('regen-here-apply')!.click())
+    await vi.waitFor(() => expect(texts()).toContain(REGEN_PAST_TEXT))
+    expect(sent).toEqual([])
+  })
+})
+
+/** N7's buffers of decompression on (D386): a Saturday counted as the window counts it (`dayContextOf`, the settings' changes). */
+describe('„Wstaw regenerację tutaj”, „Zamień”, „Ułóż” przy buforach dekompresji (T2877)', () => {
+  const SAT = '2026-10-31'
+  const CHANGES = [{ id: 'c1', from: '2026-10-01', at: null, made: 1, patch: { decompress: { on: true }, reserve: 20, transitionBufferMin: 0 } }]
+  const INPUTS: PlanInputs = { changes: CHANGES, templates: [], lectures: [], series: [], routines: [] }
+  /** The day of `plan` with a check-in at `checkin`, counted at `now` – the plan with its buffers (`ctx.plan`), the file without them. */
+  function bufModel(plan: PlanBlock[], file?: RawRecord, t: { checkin?: string; now?: string } = {}): DayModel {
+    const raw = file ?? { schema: 1, date: SAT, dayType: 'weekend', blocks: plan.map((b) => blockJson(b)) }
+    const s = new Scenario({ date: SAT, plan, wake: '06:30', settings: { transitionBufferMin: 0, reserve: 20 } }).observe('06:30', null)
+    s.checkin(t.checkin ?? '07:00', FULL)
+    const ctx = dayContextOf(INPUTS, { date: SAT, events: s.events, dayFile: dayFileFrom(raw, SAT), nextFile: null }, marketDay, s.at(t.now ?? '07:30'))
+    const state = computeDay(ctx)
+    return { date: SAT, ctx, state, energy: computeEnergy(ctx, state), dayFile: dayFileFrom(raw, SAT), data: { dayFile: raw } } as unknown as DayModel
+  }
+  const at = (m: DayModel, id: string) => {
+    const p = m.state.forecast.find((x) => x.block.id === id)!
+    return logicalSpan(m.state.grid, p.from, p.to)
+  }
+  beforeEach(() => {
+    vi.setSystemTime(placeLogical(SAT, lm('07:30')))
+    useData.setState({ rd: rdFrom({ schema: 1, settings: CHANGES }) })
+  })
+
+  it('„Wstaw”: starty z pliku (bez buforów) się zgadzają – zapis idzie; po zapisie dzień stoi tak, jak propozycja mówi (bufor nie przesuwa drugi raz)', async () => {
+    const m = bufModel(PLAN)
+    expect(m.ctx.basePlan).toBeDefined()
+    // „Analiza” 14:00 in the file, 14:35 on the plan after the buffers.
+    expect(m.ctx.plan.find((b) => b.id === 'e')!.startMin).toBe(lm('14:35'))
+    const { sent, state } = stub(m.data.dayFile, SAT)
+    await side(m)
+    const r = regenHereCached(m)!
+    expect(r).toMatchObject({ pool: 'head', beforeId: 'e', startMin: lm('14:35'), takes: null })
+    await act(async () => void q('regen-here-apply')!.click())
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    const entry = sent[0]![0]!
+    expect(fields(entry)).toEqual(expect.arrayContaining([['blocks.#e.startMin', lm('14:00'), lm('14:50')]]))
+    // The day counted again from the file written: the regeneration and „Analiza” where the proposal put them, the head as it said.
+    const after = bufModel(PLAN, applied(state.file!, entry))
+    expect(at(after, r.id)).toEqual({ startMin: lm('14:35'), endMin: lm('14:50') })
+    expect(at(after, 'e').startMin).toBe(lm('14:50'))
+    expect(shownOf(toUnits(after.energy.forecast!.min.head))).toBe(r.after)
+  })
+
+  it('„Wstaw” na buforze (D582): regeneracja przed stałym zabiera bufor po „Analizie” – odwołany tą samą edycją, dzień liczony bez niego', async () => {
+    const plan = [
+      block({ id: 'x', cat: 'analiza', at: '07:30', min: 240, origin: 'user' }),
+      block({ id: 'd', cat: 'analiza', at: '11:50', min: 300, fixed: true, origin: 'user' }),
+      block({ id: 'c', cat: 'inne', at: '16:50', min: 60, origin: 'user' })
+    ]
+    const m = bufModel(plan)
+    const buffer = m.ctx.plan.find((b) => isBuffer(b) && b.sourceId === 'x')!
+    const { sent, state } = stub(m.data.dayFile, SAT)
+    await side(m)
+    const r = regenHereCached(m)!
+    expect(r).toMatchObject({ beforeId: 'd', startMin: lm('11:35') })
+    expect(r.takes?.id).toBe(buffer.id)
+    await act(async () => void q('regen-here-apply')!.click())
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    const file = applied(state.file!, sent[0]![0]!)
+    expect(dayFileFrom(file, SAT).cancelled).toContain(buffer.id)
+    const after = bufModel(plan, file)
+    expect(after.ctx.plan.some((b) => b.id === buffer.id)).toBe(false)
+    expect(at(after, r.id)).toEqual({ startMin: lm('11:35'), endMin: lm('11:50') })
+    expect(shownOf(toUnits(after.energy.forecast!.min.head))).toBe(r.after)
+  })
+
+  /** A block of „Analiza” 06:45 with its buffer: the nap and „Inne” after it stand 10 min later on the plan than in the file. */
+  const SWAP_PLAN = [
+    block({ id: 'x', cat: 'analiza', at: '06:45', min: 60, origin: 'user' }),
+    block({ id: 'r', cat: 'regeneracja', variant: 'drzemka', at: '07:45', min: 60, origin: 'user' }),
+    block({ id: 'c', cat: 'inne', at: '08:45', min: 60, origin: 'user' }),
+    block({ id: 'w', cat: 'zajecia-zdalne', at: '12:00', min: 600, fixed: true, origin: 'user' })
+  ]
+  const swapModel = (file?: RawRecord) => bufModel(SWAP_PLAN, file, { checkin: '06:35', now: '06:40' })
+  /** The nap and „Inne” in each other's place, as the plan shows them (after the buffer): „Inne” 07:55, the nap 08:55. */
+  const swapStarts = (m: DayModel) => [
+    { block: m.ctx.plan.find((b) => b.id === 'c')!, startMin: lm('07:55') },
+    { block: m.ctx.plan.find((b) => b.id === 'r')!, startMin: lm('08:55') }
+  ]
+
+  it('„Zamień”: bloki przesunięte buforem – zapis idzie (starty z pliku), po zapisie stoją tam, gdzie zamiana je kładzie', async () => {
+    vi.setSystemTime(placeLogical(SAT, lm('06:40')))
+    const m = swapModel()
+    expect(m.ctx.plan.find((b) => b.id === 'c')!.startMin).toBe(lm('08:55'))
+    const { sent, state } = stub(m.data.dayFile, SAT)
+    const done = await swapDayBlocks(SAT, m.data.dayFile, swapStarts(m), { a: 'r', b: 'c', changes: [] }, 'Zamieniono: drzemka ↔ Inne')
+    expect(done.saved).toBe(true)
+    expect(fields(sent[0]![0]!)).toEqual([
+      ['blocks.#r.startMin', lm('07:45'), lm('08:55')],
+      ['blocks.#c.startMin', lm('08:45'), lm('07:55')]
+    ])
+    const after = swapModel(applied(state.file!, sent[0]![0]!))
+    expect(at(after, 'c').startMin).toBe(lm('07:55'))
+    expect(at(after, 'r').startMin).toBe(lm('08:55'))
+  })
+
+  it('„Ułóż”: bloki przesunięte buforem – zapis idzie, pasek dostaje „Przestawiono”', async () => {
+    vi.setSystemTime(placeLogical(SAT, lm('06:40')))
+    const m = swapModel()
+    const { sent, bar } = stub(m.data.dayFile, SAT)
+    const done = await arrangeDayBlocks(SAT, m.data.dayFile, swapStarts(m), 'Ułóż pod energię')
+    expect(done.already).toBe(false)
+    expect(sent).toHaveLength(1)
+    expect(bar).toHaveBeenCalledTimes(1)
+    expect(texts()).not.toContain(PLAN_CHANGED_TEXT)
   })
 })
