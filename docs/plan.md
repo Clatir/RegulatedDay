@@ -38,6 +38,8 @@ Jedno wydanie **1.38.0** na końcu (D572, jak D562).
 - **Numery:** A1 – D580–D584, T2450–T2499; A2 – D585–D589, T2500–T2549; B1 – D590–D594, T2550–T2599; B2 – D595–D599,
   T2600–T2649; C – D600–D609, T2650–T2749; D – D610–D619, T2750–T2849; koordynator – T2850–T2899. Zachowanie widoczne
   nierozstrzygnięte w tabeli – według rekomendacji, jako D z dopiskiem „rekomendacja, bez pytania”.
+  Numery dodatkowe (koordynator): A1 – D620–D622, D630–D634, T2860–T2869, T2940–T2959; B2 – T2870–T2879, T2920–T2929,
+  T2960–T2969; C – D623–D629, T2900–T2919, T2930–T2939; D – D635–D639; koordynator – T2880–T2883; N16 przeniesione z D do A1.
 - **Wznowienie:** każda sesja ustawia `CronCreate` co godzinę (A1 :07, A2 :13, B1 :19, B2 :25, C :37, D :43, koordynator :53), który
   w bezczynności czyta plik strumienia i drzewo i kontynuuje; po limicie praca rusza sama.
 - **Kolejność okien, pasek, powiadomienia** (N1, N11, N12) sprawdza tylko CI na Windows – wynik w PR końcowym;

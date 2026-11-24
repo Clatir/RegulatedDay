@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.38.0
+Wersja „lżejsza obsługa”: aplikacja sama prowadzi więcej rachunków, Ty poprawiasz jednym ruchem tam, gdzie patrzysz, a wszystko się cofa.
+
+**Plan dnia i energia**
+- Bufory dekompresji: po długim bloku o wysokim koszcie głowy, emocji albo bodźców plan wstawia „Dekompresję” (5–20 min), przesuwa kolejne elastyczne bloki i sam ją zaczyna po końcu bloku. Blok położony w jej miejscu ją zabiera – blok pracy z ostrzeżeniem. Włączysz w Ustawieniach → „Plan dnia” (domyślnie wyłączone, progi obok).
+- Kafelek bloku, w którym energia puli pierwszy raz schodzi poniżej rezerwy, ma obwódkę w kolorze tej puli i podpowiedź, ile spada („Dziś”, „3 dni”, „Tydzień”).
+- W trakcie przeciągania bloku, zmiany jego długości i w okienku kosztu widzisz, jak zmieni się najniższa energia dnia („najniższa energia 52 → 44 (G)”), zanim cokolwiek zapiszesz; Esc niczego nie zapisuje.
+- Dziś: przy ostrzeżeniu o rezerwie propozycja „Najtańsza zamiana” dwóch bloków, która najbardziej podnosi najniższą energię dnia – jednym kliknięciem, z „Cofnij”.
+- Dziś: przy ostrzeżeniu o rezerwie przycisk „Wstaw regenerację tutaj” – 15 minut regeneracji najlepszej dla tej puli przed blokiem, w którym energia schodzi poniżej rezerwy, z przesunięciem dalszych bloków i „Cofnij”.
+- Kalendarz: obok kropki pracy kropka energii – najsłabsza pula dnia w odcieniach paska (dobrze / uwaga / poniżej rezerwy); dni przyszłe przygaszone.
+- Plan poranny: gdy wczoraj pisałeś albo ruszałeś myszą co najmniej 30 min po porze snu (na którymkolwiek komputerze), pytanie „Spałem krócej niż zwykle?” mówi „Wczoraj przy komputerze do 01:40 (pora snu 23:00)” i ma wstępnie zaznaczone „tak”; sam włączony komputer się nie liczy, a Twoja odpowiedź wygrywa.
+- „Gorszy dzień” w planie porannym: jednym kliknięciem rutyny dnia w wersji na gorsze dni i granica pracy godzinę wcześniej (do ustawienia), z „Cofnij”; po słabym check-inie propozycja – gdy włączysz ją w Ustawieniach → Plan dnia.
+- Plan poranny: „Rozłóż w luki” stawia niezaplanowane sprawy z „Dziś” w wolnych miejscach dnia, w kolejności listy, bez przesuwania tego, co już stoi; „Cofnij” zdejmuje wszystkie.
+
+**Timer i pasek**
+- Nowe ustawienie „Bloki przy komputerze jednym ciągiem” (Pytania w ciągu dnia, domyślnie wyłączone): gdy pracujesz, blok przy komputerze kończy się o planowanym końcu i od razu zaczyna się następny, jeśli startuje najpóźniej 5 min później – pasek mówi „Dalej: <nazwa> · Cofnij”.
+- Koszt trwającego bloku zmienisz z paska: „⋯” → „Koszt ▸” – [−] / [+] (z Shift o 10), w oknie i panelu też wpisaną liczbą; nowy koszt liczy się od teraz do końca bloku.
+
+**Zmiany kilku bloków i przesuwanie**
+- Nowe: „Przesuń resztę dnia o…” w menu bloku (prawy przycisk) w „Dziś”, „Tygodniu” i „3 dniach” – ten blok i wszystkie elastyczne po nim o 5, 15, 30, 60 min albo własną liczbę, później albo wcześniej. Stałe, chronione i zaczęte zostają, elastyczny przeskakuje stały. Gdy praca wyjdzie za granicę albo plan za porę snu, linia ostrzega; „Cofnij” przywraca godziny.
+- „Skopiuj tydzień do…” w „Tygodniu”: bloki tygodnia (albo zaznaczone) na te same dni kolejnych tygodni – pytanie o kolizje raz, dni minione bez zmian, jedno „Cofnij”.
+- „Zapisz jako szablon…” i „Zapisz jako rutynę…” – w menu zaznaczonych bloków i w menu dnia („Dziś”, „Tydzień”, „3 dni”): plan dnia staje się nową wersją wybranego szablonu od wybranej daty (zastępuje jego bloki albo je uzupełnia; dni wcześniejsze bez zmian) albo nową rutyną z krokami z nazw i długości bloków – z „Cofnij”.
+- Agenda i Kalendarz: bloki zaznaczysz Ctrl i Shift (w Kalendarzu – na paskach w dniu) i zmienisz naraz z menu „Zmień N bloków”, z „Cofnij”.
+- Ustawienia → Kategorie: zaznacz kilka podkategorii i wariantów (Ctrl, Shift) i zmień je naraz – koszt, miejsce, kategoria albo usunięcie – od jutra, od dziś albo od daty; „Cofnij” przywraca wszystkie.
+- Ustawienia → Kategorie: linia „6 podkategorii ma ciało 0 · Uzupełnij” otwiera okno, w którym uzupełnisz pulę „ciało” dla wszystkich naraz; „×” chowa ją na zawsze.
+
+**Edycja w miejscu i szybki zapis**
+- Koszt bloku zmienisz kółkiem myszy nad polem puli: o 1 na ząbek, z Shift o 10 (okienko kafelka, „Koszt…”, okna podkategorii i wariantu, Ustawienia). Przewijanie strony przez pola nie zmienia kosztów.
+- Nazwę bloku zmienisz w miejscu: F2 na zaznaczonym bloku albo dwuklik w nazwę na kafelku („Dziś”, „Tydzień”, „3 dni”, „Szablony”); Enter zapisuje, Esc anuluje.
+- Szybki zapis rozumie więcej: „1h30” to szacunek, „#anal” – podkategoria (wystarczy początek nazwy, bez polskich znaków), „@jutro 15:00” stawia sprawę od razu na osi. Pod polem widać, co rozpoznano.
+- Wklejona lista to od razu kilka spraw: wklej kilka linii w „Do skrzynki”, w „+ Skrzynka” albo w „Nowe zadanie” – Enter dodaje wszystkie (znaczniki „- ”, „1. ”, „[ ] ” znikają), Esc wkleja jeden tytuł, „Cofnij” zdejmuje całą listę.
+- Przy „Długość” bloku i „Szacunek” sprawy aplikacja podpowiada, ile to zwykle trwa (mediana z co najmniej 5 Twoich zakończonych bloków tej podkategorii z 90 dni) – „Przyjmij” jednym kliknięciem; nic nie zmienia się samo. Wyłącznik i progi: Ustawienia → „Plan dnia”.
+
+**Historia**
+- Historia → „Usunięte · 30 dni”: bloki, sprawy, rutyny, szablony, serie i wydarzenia usunięte w ostatnich 30 dniach wracają jednym „Przywróć” na dawne miejsce (blok na te same godziny, z załącznikami i „Cofnij”); w dniu zamrożonym przycisk jest wyłączony z powodem.
+
+**Poprawki**
+- „Cofnij” zmiany grupowej spraw nie zostawia już bloku sprawy, która się nie cofnęła.
+- „Zastosuj szablon”: bloki równoległe szablonu stoją w dniu razem.
+<!-- N23 – do dopisania -->
+
 ## 1.37.0
 - Koszt na godzinę bloku, zajęcia, rutyny, wariantu i podkategorii może mieć teraz od −100 do 100 w każdej puli (dotąd od −5 do 5). Jednostka się nie zmienia: 1 = 3 punkty energii na godzinę, więc koszt 100 opróżnia pełną pulę w 20 minut. Regeneracja działa tak samo w drugą stronę.
 - Okienko kosztu na kafelku i okno „Koszt…” przy zmianie kilku bloków mają pole, w które wpisujesz liczbę – przyciski [−] i [+] zostają. Liczba spoza zakresu albo z częścią ułamkową nie zapisze się; pod polem stoi powód.

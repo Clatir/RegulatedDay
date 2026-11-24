@@ -366,6 +366,100 @@ testy (wiele z nich w CI na prawdziwym Windows), a czego nie widzą – Twojego 
    - [ ] EA1.2 Kolumna dzisiejsza „Tygodnia” i „3 dni” przed check-inem – „przyjęte”, po check-inie pełna (1.36.0)
    - [ ] KZ1.1 Koszt do ±100 wpisany w okienku kafelka i w „Koszt…” kilku bloków; 101 odrzucone (1.37.0)
    - [ ] KZ1.2 Duży koszt w energii i napis na kafelku – pasy, suma równoległych, miejsce napisu (1.37.0)
+   - [ ] N7.1 Ustawienia: „Bufory dekompresji” wyłączone, z progami (1.38.0)
+   - [ ] N7.2 Wyłączone – brak buforów (1.38.0)
+   - [ ] N7.3 Bufor po długim kosztownym bloku (Dziś i Tydzień) (1.38.0)
+   - [ ] N7.4 Krótki albo tani blok – bez bufora (1.38.0)
+   - [ ] N7.5 Dziś: bufor startuje sam (1.38.0)
+   - [ ] N7.6 „Przedłuż” źródła (1.38.0)
+   - [ ] N7.7 Blok na buforze zabiera go (1.38.0)
+   - [ ] N7.8 „Usuń” na buforze (1.38.0)
+   - [ ] N7.9 Wyłączenie od dziś (1.38.0)
+   - [ ] N7.10 Zajęcia o wysokim koszcie (1.38.0)
+   - [ ] N7.11 Sprawa z panelu na bufor (1.38.0)
+   - [ ] N7.12 Szablony przy włączonych buforach (1.38.0)
+   - [ ] N7.13 Dziś: inny blok po końcu źródła (1.38.0)
+   - [ ] N7.14 „Dodaj” w „Tygodniu” w miejscu bufora (1.38.0)
+   - [ ] N7.15 Upuszczenie na prawą część kafla „Dekompresja” (1.38.0)
+   - [ ] N17.1 „Później o 30” z bloku A (1.38.0)
+   - [ ] N17.2 „Cofnij” (1.38.0)
+   - [ ] N17.3 Od trwającego bloku (1.38.0)
+   - [ ] N17.4 „Wcześniej o 60” (1.38.0)
+   - [ ] N17.5 „Tydzień” / „3 dni”: dwa dni naraz (1.38.0)
+   - [ ] N17.6 Ostatni stały blok dnia i „Szablony” (1.38.0)
+   - [ ] N17.7 Z buforami dekompresji (1.38.0)
+   - [ ] N17.8 Koniec doby (1.38.0)
+   - [ ] N17.9 Blok zaczęty bez planu albo skończony (1.38.0)
+   - [ ] N17.10 Grupa równoległa z zaparkowanym blokiem (1.38.0)
+   - [ ] N1.1 Ustawienie „Bloki przy komputerze jednym ciągiem” (1.38.0)
+   - [ ] N1.2 Ciąg A → B (1.38.0)
+   - [ ] N1.3 „Cofnij” w 10 s (1.38.0)
+   - [ ] N1.4 Bezczynność przed końcem A (1.38.0)
+   - [ ] N1.5 Przypadki bez ciągu (1.38.0)
+   - [ ] N1.6 „Przedłuż” za granicą tuż przed 0:00 (1.38.0)
+   - [ ] N1.7 Pasek pod oknami przy linii (D229) (1.38.0)
+   - [ ] N1.8 Drugi komputer (1.38.0)
+   - [ ] N1.9 Nieaktualny pasek (1.38.0)
+   - [ ] N1.10 Prowadzący zajęty / uśpiony (1.38.0)
+   - [ ] N12.1 „Koszt ▸” z paska pulpitu (1.38.0)
+   - [ ] N12.2 Pole liczby w oknie i panelu (1.38.0)
+   - [ ] N12.3 „Jak podkategoria” i koniec bloku (1.38.0)
+   - [ ] N2.1 Dopisek krótkiej nocy (1.38.0)
+   - [ ] N2.2 Sam włączony komputer się nie liczy (1.38.0)
+   - [ ] N2.3 Drugi komputer i zmiana odpowiedzi (1.38.0)
+   - [ ] N4.1 „Gorszy dzień” – przyjęcie (1.38.0)
+   - [ ] N4.2 „Gorszy dzień” – „Cofnij” (1.38.0)
+   - [ ] N4.3 Propozycja „Gorszy dzień?” po check-inie (1.38.0)
+   - [ ] N8.1 Kółko myszy nad kosztem (1.38.0)
+   - [ ] N9.1 Nazwa w miejscu (1.38.0)
+   - [ ] N20.1 Obwódka przy przyczynie (1.38.0)
+   - [ ] N19.1 Energia na żywo (1.38.0)
+   - [ ] N21.1 Kropka energii w miesiącu (1.38.0)
+   - [ ] N21.2 Dzień miniony bez check-inu (1.38.0)
+   - [ ] N18.1 Zaznaczanie w Agendzie (1.38.0)
+   - [ ] N18.2 Zaznaczanie w paskach miesiąca (1.38.0)
+   - [ ] N22.1 „Najtańsza zamiana” (1.38.0)
+   - [ ] N22.2 Dzień bez poprawy (1.38.0)
+   - [ ] N3.1 „Wstaw regenerację tutaj” (1.38.0)
+   - [ ] N3.2 „Zamień” i zaraz „Wstaw” (1.38.0)
+   - [ ] N10.1 Szybki zapis: długość, podkategoria i godzina (1.38.0)
+   - [ ] N10.2 Nieznana podkategoria (1.38.0)
+   - [ ] N10.3 Godzina już minęła (1.38.0)
+   - [ ] N10.4 „Nowe zadanie” w „Sprawach” (1.38.0)
+   - [ ] N11.1 Wklejenie listy (1.38.0)
+   - [ ] N11.2 „Cofnij” listy (1.38.0)
+   - [ ] N11.3 Esc – jeden tytuł (1.38.0)
+   - [ ] N11.4 „+ Skrzynka” w pasku okna (1.38.0)
+   - [ ] N13.1 Zmiana kosztu wielu podkategorii (1.38.0)
+   - [ ] N13.2 „Cofnij” zmiany w drzewie (1.38.0)
+   - [ ] N13.3 „Przenieś do kategorii” (1.38.0)
+   - [ ] N13.4 Shift+klik i Esc w drzewie (1.38.0)
+   - [ ] N14.1 Linia „Uzupełnij ciało” (1.38.0)
+   - [ ] N14.2 „Uzupełnij” – zapis (1.38.0)
+   - [ ] N14.3 „×” chowa linię na zawsze (1.38.0)
+   - [ ] N5.1 „Rozłóż w luki” (1.38.0)
+   - [ ] N5.2 „Cofnij” po „Rozłóż w luki” (1.38.0)
+   - [ ] N5.3 Dzień bez wolnego miejsca (1.38.0)
+   - [ ] N6.1 Podpowiedź długości z historii (1.38.0)
+   - [ ] N6.2 Wyłącznik podpowiedzi (1.38.0)
+   - [ ] N6.3 Podpowiedź przy sprawie (1.38.0)
+   - [ ] N6.4 Dzień miniony i trwający blok (1.38.0)
+   - [ ] N24.1 Przywrócenie bloku (1.38.0)
+   - [ ] N24.2 Przywrócenie sprawy (1.38.0)
+   - [ ] N24.3 Załączniki (1.38.0)
+   - [ ] N24.4 Dzień zamrożony (1.38.0)
+   - [ ] N15.1 „Zapisz jako szablon…” (1.38.0)
+   - [ ] N15.2 „Cofnij” zapisu szablonu (1.38.0)
+   - [ ] N15.3 „Zapisz jako rutynę…” (1.38.0)
+   - [ ] N15.4 Godziny poranka przy innej pobudce (1.38.0)
+   - [ ] N16.1 „Skopiuj tydzień do…” (1.38.0)
+   - [ ] N16.2 Kolizje w kopii (1.38.0)
+   - [ ] N16.3 „Cofnij” kopii (1.38.0)
+   - [ ] N16.4 Ta sama kopia drugi raz (1.38.0)
+   - [ ] N16.5 Kopia zaznaczonych bloków (1.38.0)
+   - [ ] N16.6 „Wybierz tygodnie…” (1.38.0)
+   - [ ] N16.7 Kopia na bieżący tydzień (1.38.0)
+   - [ ] N16.8 Bloki równoległe szablonu (1.38.0)
    - [ ] 1.22-B.1 Zamiana przy „Zacznij” – przerwany blok czeka na miejscu klikniętego (1.22.0)
    - [ ] I3 Szybki zapis „+” – „Dodano do Skrzynki: …”, także skrótem globalnym (1.21.0)
    - [ ] I2 „Szukaj · Ctrl K” u dołu menu bocznego (1.21.0)
@@ -3183,6 +3277,585 @@ Decyzje z nocy 12/13.11 oznaczone „do potwierdzenia” (D451–D456) – przy 
 - **Jak sprawdzić:** po check-inie daj blokowi 60 min koszt głowy `30`; obejrzyj pasy energii przy osi „Dziś”. Potem daj blokowi `−100 · −100 · −100 · −100` i obejrzyj kafelek w „Dziś”, „3 dniach” i „Tygodniu”.
 - **Oczekiwany efekt:** pas głowy spada w trakcie bloku o ok. 90 punktów (30 × 3), nie więcej niż do 0; napis kosztu na kafelku jest cały (w bardzo wąskiej kolumnie może być ucięty – pełny w podpowiedzi po najechaniu), godziny obok skracają się wielokropkiem, napis nie wychodzi poza kafelek ani nie zasłania sąsiedniej kolumny.
 - **Nie przechodzi, gdy:** energia spada tak, jakby koszt był 5; napis nachodzi na godziny albo wychodzi poza kafelek; pas schodzi poniżej 0.
+
+### N – ciąg „lżejsza obsługa” (1.38.0, D569–D634)
+
+Zachowanie z rekomendacji bez pytania (D573) – do przejrzenia po powrocie; zmiany po przejrzeniu – nowa decyzja. Testy kolejności okien, paska i powiadomień (N1, N11, N12) sprawdza tylko CI na Windows.
+
+#### N7.1 Ustawienia: „Bufory dekompresji” wyłączone, z progami
+- [ ] Odebrane
+- **Jak sprawdzić:** Ustawienia → „Plan dnia”.
+- **Oczekiwany efekt:** przełącznik „Bufory dekompresji” wyłączony, progi 45 min i 3/h, pasek daty.
+- **Nie przechodzi, gdy:** domyślnie włączony, brak progów.
+
+#### N7.2 Wyłączone – brak buforów
+- [ ] Odebrane
+- **Jak sprawdzić:** dzień z blokiem 90 min o koszcie 4, przy wyłączonym ustawieniu.
+- **Oczekiwany efekt:** brak „Dekompresji”, godziny bez zmian.
+- **Nie przechodzi, gdy:** cokolwiek się przesunie.
+
+#### N7.3 Bufor po długim kosztownym bloku (Dziś i Tydzień)
+- [ ] Odebrane
+- **Jak sprawdzić:** włącz od jutra; jutro blok 90 min z kosztem emocji 4, za nim blok elastyczny i stały; to samo obejrzyj w „Tygodniu”.
+- **Oczekiwany efekt:** zaraz po bloku „Dekompresja” 15 min (zieleń morska, filiżanka), następny elastyczny +15 min, stały na miejscu.
+- **Nie przechodzi, gdy:** brak bufora, nakładanie, stały przesunięty.
+
+#### N7.4 Krótki albo tani blok – bez bufora
+- [ ] Odebrane
+- **Jak sprawdzić:** blok 30 min albo blok o koszcie 2.
+- **Oczekiwany efekt:** bez bufora.
+- **Nie przechodzi, gdy:** bufor się pojawia.
+
+#### N7.5 Dziś: bufor startuje sam
+- [ ] Odebrane
+- **Jak sprawdzić:** dziś „Skończyłem” na takim bloku, pracuj dalej na komputerze.
+- **Oczekiwany efekt:** pasek „Dekompresja · 15 min” sam, bez dźwięku, koniec po 15 min; „Dalej” kończy wcześniej.
+- **Nie przechodzi, gdy:** brak startu, dźwięk, koniec przy pierwszym użyciu komputera.
+
+#### N7.6 „Przedłuż” źródła
+- [ ] Odebrane
+- **Jak sprawdzić:** „Przedłuż” +30 na bloku z buforem.
+- **Oczekiwany efekt:** bufor za nowym końcem, 20 min.
+- **Nie przechodzi, gdy:** bufor zostaje na starym miejscu albo ma inną długość.
+
+#### N7.7 Blok na buforze zabiera go
+- [ ] Odebrane
+- **Jak sprawdzić:** przeciągnij blok pracy na bufor (także pierwsza minuta, kopia Ctrl); posiłek; blok w tle; zmiana długości bloku już leżącego na buforze.
+- **Oczekiwany efekt:** ostrzeżenie w trakcie, zapis od razu, bufor znika, dymek; „Cofnij” przywraca oba; posiłek zabiera po cichu; blok w tle nie zabiera; zmiana długości bloku już leżącego na buforze go nie zabiera.
+- **Nie przechodzi, gdy:** blokada zapisu, bufor zostaje pod blokiem pracy.
+
+#### N7.8 „Usuń” na buforze
+- [ ] Odebrane
+- **Jak sprawdzić:** „Usuń” na buforze, potem „Cofnij”.
+- **Oczekiwany efekt:** bufor znika, „Cofnij” go przywraca.
+- **Nie przechodzi, gdy:** bufor wraca sam albo nie wraca po „Cofnij”.
+
+#### N7.9 Wyłączenie od dziś
+- [ ] Odebrane
+- **Jak sprawdzić:** wyłącz ustawienie od dziś.
+- **Oczekiwany efekt:** przyszłe bufory znikają, minione zostają.
+- **Nie przechodzi, gdy:** minione bufory znikają.
+
+#### N7.10 Zajęcia o wysokim koszcie
+- [ ] Odebrane
+- **Jak sprawdzić:** zajęcia o wysokim koszcie.
+- **Oczekiwany efekt:** bufor dopiero po ich końcu.
+- **Nie przechodzi, gdy:** bufor stoi w trakcie zajęć.
+
+#### N7.11 Sprawa z panelu na bufor
+- [ ] Odebrane
+- **Jak sprawdzić:** przeciągnij sprawę z panelu na bufor; potem grupę spraw.
+- **Oczekiwany efekt:** sprawa stoi, bufor znika, „Cofnij” przywraca; grupa spraw – jeden dymek.
+- **Nie przechodzi, gdy:** bufor zostaje pod sprawą albo dymków jest kilka.
+
+#### N7.12 Szablony przy włączonych buforach
+- [ ] Odebrane
+- **Jak sprawdzić:** edytor szablonów i „Zastosuj szablon” przy włączonych buforach.
+- **Oczekiwany efekt:** brak „Dekompresji”, godziny bez zmian.
+- **Nie przechodzi, gdy:** bufor widać w szablonie.
+
+#### N7.13 Dziś: inny blok po końcu źródła
+- [ ] Odebrane
+- **Jak sprawdzić:** dziś po końcu kosztownego bloku od razu zacznij inny; potem zaparkuj bufor.
+- **Oczekiwany efekt:** bufor znika, przesunięty blok wraca na godzinę; zaparkowany bufor – przygaszony w „Zaparkowane”, przesunięty blok wraca.
+- **Nie przechodzi, gdy:** dziura albo fantomowy kafel.
+
+#### N7.14 „Dodaj” w „Tygodniu” w miejscu bufora
+- [ ] Odebrane
+- **Jak sprawdzić:** „Dodaj” w „Tygodniu” blok pracy w miejscu bufora.
+- **Oczekiwany efekt:** bufor znika, dymek.
+- **Nie przechodzi, gdy:** bufor zostaje pod nowym blokiem.
+
+#### N7.15 Upuszczenie na prawą część kafla „Dekompresja”
+- [ ] Odebrane
+- **Jak sprawdzić:** upuść blok na prawą część kafla „Dekompresja” (Dziś, Tydzień).
+- **Oczekiwany efekt:** blok nie dołącza „obok”, staje o godzinie upuszczenia.
+- **Nie przechodzi, gdy:** blok znika z osi.
+
+#### N17.1 „Później o 30” z bloku A
+- [ ] Odebrane
+- **Jak sprawdzić:** „Dziś” → jutro: A 18:00 (1 h), B 19:00 (1 h 15), stały F 20:30 (1 h), C 21:30 (30 min), D 23:00 (30 min); prawy przycisk na A → „Przesuń resztę dnia o…” → „Później o…” → 30 min.
+- **Oczekiwany efekt:** A 18:30, B 21:30 (za F), C 22:45, D 23:30, F 20:30; linia „Przesunięto 4 bloki · praca kończy się po maksimum (…) · Cofnij”.
+- **Nie przechodzi, gdy:** F się rusza, B nachodzi na F, inna liczba, brak ostrzeżenia, blokada.
+
+#### N17.2 „Cofnij”
+- [ ] Odebrane
+- **Jak sprawdzić:** „Cofnij” w linii albo Ctrl+Z po N17.1.
+- **Oczekiwany efekt:** wszystkie godziny jak przed zmianą.
+- **Nie przechodzi, gdy:** którakolwiek godzina inna niż przed zmianą.
+
+#### N17.3 Od trwającego bloku
+- [ ] Odebrane
+- **Jak sprawdzić:** dziś zacznij blok, „Później o 15” z niego.
+- **Oczekiwany efekt:** trwający, sesje i stałe zostają, elastyczne po nim (także za sesją) +15.
+- **Nie przechodzi, gdy:** ruszy się trwający blok, sesja albo stały.
+
+#### N17.4 „Wcześniej o 60”
+- [ ] Odebrane
+- **Jak sprawdzić:** „Wcześniej o 60” z bloku tuż za innym / stałym; z blokiem zakotwiczonym za nim; z blokiem zaplanowanym pod stałym.
+- **Oczekiwany efekt:** nic przed teraz, przed blokiem przed nim ani przed stałym; zakotwiczony zaraz za nim, następny za zakotwiczonym; blok zaplanowany pod stałym – godzina bez zmian, poza liczbą w linii.
+- **Nie przechodzi, gdy:** blok wchodzi przed „teraz”, przed blok, który zostaje, albo przed stały.
+
+#### N17.5 „Tydzień” / „3 dni”: dwa dni naraz
+- [ ] Odebrane
+- **Jak sprawdzić:** Ctrl+klik bloków dwóch dni → „Później o 15”.
+- **Oczekiwany efekt:** każdy dzień od swojego zaznaczonego, jedna linia, jedno „Cofnij” dla obu; blok leżący w planie na stałym – zapisany tam, gdzie pokazuje go kolumna.
+- **Nie przechodzi, gdy:** dwie linie albo „Cofnij” cofa tylko jeden dzień.
+
+#### N17.6 Ostatni stały blok dnia i „Szablony”
+- [ ] Odebrane
+- **Jak sprawdzić:** prawy przycisk na ostatnim stałym bloku dnia (Dziś i Tydzień); menu w „Szablonach”.
+- **Oczekiwany efekt:** pozycja wyłączona z powodem; w „Szablonach” jej nie ma.
+- **Nie przechodzi, gdy:** pozycja działa albo jest w „Szablonach”.
+
+#### N17.7 Z buforami dekompresji
+- [ ] Odebrane
+- **Jak sprawdzić:** bufory włączone, źródło 90 min z kosztem → „Później o 30”; potem „Wcześniej”.
+- **Oczekiwany efekt:** bufor za nowym końcem źródła, bez ostrzeżenia „Na miejscu dekompresji”; „Wcześniej” – następny blok stoi za pełnym buforem tam, gdzie zapisano jego godzinę.
+- **Nie przechodzi, gdy:** bufor przykryty albo ostrzeżenie o miejscu bufora.
+
+#### N17.8 Koniec doby
+- [ ] Odebrane
+- **Jak sprawdzić:** przy końcu doby stały 03:57/03:59 i bloki przesuwane za niego.
+- **Oczekiwany efekt:** każdy blok zostaje w planie (≤ 03:59, nie przed stałym), linia „za końcem doby”.
+- **Nie przechodzi, gdy:** blok znika z planu.
+
+#### N17.9 Blok zaczęty bez planu albo skończony
+- [ ] Odebrane
+- **Jak sprawdzić:** dziś blok zaczęty bez planu albo już skończony – „Później o 15” z niego.
+- **Oczekiwany efekt:** przesuwa bloki od miejsca, w którym biegł; linia bez „pominięto”.
+- **Nie przechodzi, gdy:** linia mówi „pominięto” albo przesunięcie liczy od innego miejsca.
+
+#### N17.10 Grupa równoległa z zaparkowanym blokiem
+- [ ] Odebrane
+- **Jak sprawdzić:** grupa równoległa z zaparkowanym blokiem obok – „Wcześniej o 30” z pierwszego.
+- **Oczekiwany efekt:** zaparkowany zostaje na starej godzinie, poza grupą.
+- **Nie przechodzi, gdy:** zaparkowany jedzie z grupą.
+
+#### N1.1 Ustawienie „Bloki przy komputerze jednym ciągiem”
+- [ ] Odebrane
+- **Jak sprawdzić:** Ustawienia → „Pytania w ciągu dnia”.
+- **Oczekiwany efekt:** przełącznik wyłączony; włączenie z „od jutra / od dziś / od daty”.
+- **Nie przechodzi, gdy:** domyślnie włączony, brak przełącznika.
+
+#### N1.2 Ciąg A → B
+- [ ] Odebrane
+- **Jak sprawdzić:** od dziś; A przy komputerze, B przy komputerze o godzinie końca A; pracuj do 0:00.
+- **Oczekiwany efekt:** A skończony, B biegnie, „Dalej: B · Cofnij” ~10 s, bez „Dalej?”, dwa wiersze w „Zrobione automatycznie”.
+- **Nie przechodzi, gdy:** „Dalej?”, B nie rusza, brak linii.
+
+#### N1.3 „Cofnij” w 10 s
+- [ ] Odebrane
+- **Jak sprawdzić:** „Cofnij” w ciągu 10 s od startu B.
+- **Oczekiwany efekt:** A biegnie dalej, B niezaczęty, „Dalej?”; ciąg nie wraca (także po „Przedłuż”).
+- **Nie przechodzi, gdy:** ciąg wraca albo A jest skończone.
+
+#### N1.4 Bezczynność przed końcem A
+- [ ] Odebrane
+- **Jak sprawdzić:** 3 min bez klawiatury i myszy przed końcem A.
+- **Oczekiwany efekt:** „Dalej?” jak dotąd.
+- **Nie przechodzi, gdy:** ciąg rusza mimo bezczynności.
+
+#### N1.5 Przypadki bez ciągu
+- [ ] Odebrane
+- **Jak sprawdzić:** osobno: B 6 min po końcu, B posiłek, sesja/wykład/dojazd w 5 min, trwające okno stałego, bufor dekompresji po A, A ostatni blok pracy, B za zatwierdzoną granicą.
+- **Oczekiwany efekt:** zawsze „Dalej?”.
+- **Nie przechodzi, gdy:** w którymkolwiek przypadku B rusza sam.
+
+#### N1.6 „Przedłuż” za granicą tuż przed 0:00
+- [ ] Odebrane
+- **Jak sprawdzić:** za granicą „Przedłuż” kilka sekund przed 0:00; potem „Potwierdź” i osobno „Anuluj”.
+- **Oczekiwany efekt:** ciąg nie rusza, póki czeka koszt; „Potwierdź” – A przedłużony; „Anuluj” – ciąg rusza od razu (≤ 60 s po końcu).
+- **Nie przechodzi, gdy:** przedłuża się B, A kończy się mimo kosztu.
+
+#### N1.7 Pasek pod oknami przy linii (D229)
+- [ ] Odebrane
+- **Jak sprawdzić:** okno nachodzące na pasek w chwili linii „Dalej: …”.
+- **Oczekiwany efekt:** pasek pod oknami (D229).
+- **Nie przechodzi, gdy:** pasek wychodzi nad inne okna.
+
+#### N1.8 Drugi komputer
+- [ ] Odebrane
+- **Jak sprawdzić:** drugi komputer prowadzi; na nieprowadzącym „Potwierdź” czekającego „Przedłuż”.
+- **Oczekiwany efekt:** ciąg tak samo; „Już biegnie: B”, „Cofnij” linii przywraca A.
+- **Nie przechodzi, gdy:** ciąg dwa razy, przedłuża się B.
+
+#### N1.9 Nieaktualny pasek
+- [ ] Odebrane
+- **Jak sprawdzić:** wyłączone; „Dalej?” dla A, w oknie głównym zacznij B, potem „Dalej” w starym pytaniu; osobno A skończone w oknie – „Dalej” na pasku; A zapauzowane.
+- **Oczekiwany efekt:** B biegnie, „Już biegnie: B”; „Dalej” zaczyna B („Zaczęto: B · Cofnij”); zapauzowane – „ten blok jest teraz zapauzowany”.
+- **Nie przechodzi, gdy:** stary pasek trafia w inny blok.
+
+#### N1.10 Prowadzący zajęty / uśpiony
+- [ ] Odebrane
+- **Jak sprawdzić:** prowadzący zajęty albo uśpiony > 1 min po końcu A.
+- **Oczekiwany efekt:** zwykłe „Dalej?”, bez ciągu po fakcie.
+- **Nie przechodzi, gdy:** ciąg rusza po fakcie.
+
+#### N12.1 „Koszt ▸” z paska pulpitu
+- [ ] Odebrane
+- **Jak sprawdzić:** zacznij blok, na pasku pulpitu „⋯” → „Koszt ▸” → [+] przy głowie, potem [+] z Shift.
+- **Oczekiwany efekt:** rozwinięcie w samym pasku „Koszt od teraz: <nazwa>”; głowa +1, potem +10; kafelek w „Dziś” mówi nowy koszt; pasek zostaje pod oknem, które na nim leży.
+- **Nie przechodzi, gdy:** otwiera się osobne okno, pasek wychodzi nad inne okna, kliknięcie przepada albo Shift nie daje 10.
+
+#### N12.2 Pole liczby w oknie i panelu
+- [ ] Odebrane
+- **Jak sprawdzić:** w pasku okna głównego albo w panelu ikony wpisz 5 w polu „ciało” i Enter, potem 500.
+- **Oczekiwany efekt:** ciało 5 na pasku i kafelku; 500 odrzucone z powodem pod polem.
+- **Nie przechodzi, gdy:** 500 się zapisze albo pole jest na pasku pulpitu.
+
+#### N12.3 „Jak podkategoria” i koniec bloku
+- [ ] Odebrane
+- **Jak sprawdzić:** zmiana „Jak podkategoria (…)”, potem zakończ blok i otwórz „⋯”.
+- **Oczekiwany efekt:** koszt wraca do podkategorii; po końcu bloku nie ma „Koszt ▸”; prognoza energii zmienia się od chwili zmiany, wcześniejsze minuty bez zmian.
+- **Nie przechodzi, gdy:** zmieniają się minione minuty albo „Koszt ▸” zostaje bez bloku.
+
+#### N2.1 Dopisek krótkiej nocy
+- [ ] Odebrane
+- **Jak sprawdzić:** wieczorem pisz albo ruszaj myszą ≥ 30 min po porze snu (np. pora snu 23:00, ostatnie pisanie 01:40), rano otwórz plan poranny i przejdź do pytań o objawy.
+- **Oczekiwany efekt:** pod „Spałem krócej niż zwykle?” dopisek „Wczoraj przy komputerze do 01:40 (pora snu 23:00)”, zaznaczone „tak”.
+- **Nie przechodzi, gdy:** brak dopisku, godzina to wyłączenie komputera zamiast ostatniego pisania, „tak” nie jest zaznaczone.
+
+#### N2.2 Sam włączony komputer się nie liczy
+- [ ] Odebrane
+- **Jak sprawdzić:** zostaw komputer włączony bez dotykania od 23:10 do 02:00 (albo uśpiony, który sam się wybudza w nocy).
+- **Oczekiwany efekt:** rano bez dopisku, odpowiedzi „nie”.
+- **Nie przechodzi, gdy:** dopisek się pojawia (liczy się sam włączony / wybudzony komputer).
+
+#### N2.3 Drugi komputer i zmiana odpowiedzi
+- [ ] Odebrane
+- **Jak sprawdzić:** pisz do 01:40 na drugim komputerze, check-in otwórz na pierwszym; zmień „tak” na „nie”, przejdź na inny ekran i wróć, potem „Zapisz”.
+- **Oczekiwany efekt:** dopisek na pierwszym komputerze, „nie” zostaje po powrocie, zapisuje się „nie”, przed „Zapisz” w logu nie ma check-inu.
+- **Nie przechodzi, gdy:** „tak” wraca po zmianie ekranu, zapisuje się „tak”, check-in trafia do logu przed „Zapisz”.
+
+#### N4.1 „Gorszy dzień” – przyjęcie
+- [ ] Odebrane
+- **Jak sprawdzić:** w „Dziś” zaplanuj na później blok rutyny z wersją „na gorsze dni”, w planie porannym kliknij „Gorszy dzień” w nagłówku.
+- **Oczekiwany efekt:** dymek „Gorszy dzień: 1 rutyna na gorsze dni, granica X → X−1 h · Cofnij”; rutyna w wersji na gorsze dni; propozycja granicy wcześniej (nie przed teraz); w nagłówku znak „Gorszy dzień · Cofnij”; na karcie granicy „; gorszy dzień – 1 h wcześniej”.
+- **Nie przechodzi, gdy:** przełącza się rutyna zaczęta albo minięta, granica wypada przed teraz albo nie ma znaku.
+
+#### N4.2 „Gorszy dzień” – „Cofnij”
+- [ ] Odebrane
+- **Jak sprawdzić:** „Cofnij” przy znaku albo w dymku; drugi raz to samo, ale przed cofnięciem przełącz rutynę ręcznie na zwykłą.
+- **Oczekiwany efekt:** najpierw wersja zwykła, granica jak przedtem, przycisk wraca, dymek „Cofnięto gorszy dzień.”, propozycja nie wraca; za drugim razem dymek „zostaje: 1 rutyna zmieniona w międzyczasie”.
+- **Nie przechodzi, gdy:** cofnięcie nadpisuje zmianę zrobioną po przyjęciu albo znak zostaje.
+
+#### N4.3 Propozycja „Gorszy dzień?” po check-inie
+- [ ] Odebrane
+- **Jak sprawdzić:** check-in z „tak” w dwóch pulach bez ustawienia; potem Ustawienia → Plan dnia – włącz „Proponuj „Gorszy dzień” po check-inie” od dziś, powtórz check-in, kliknij „×”.
+- **Oczekiwany efekt:** bez ustawienia brak propozycji; z ustawieniem linia „Gorszy dzień? · Przyjmij · ×”; „×” chowa ją do końca dnia; jedno „trochę” w puli – bez propozycji.
+- **Nie przechodzi, gdy:** propozycja bez ustawienia, przy jednej puli, przy samych „trochę” w jednej puli albo po „×”.
+
+#### N8.1 Kółko myszy nad kosztem
+- [ ] Odebrane
+- **Jak sprawdzić:** w „Dziś” kliknij koszt na kafelku i nad polem „głowa” przekręć kółko 3 ząbki w górę, potem 3 z Shift; w Ustawieniach → Kategorie przewiń stronę kółkiem tak, by kursor przejechał przez pola kosztu; zatrzymaj się nad polem i przekręć 1 ząbek.
+- **Oczekiwany efekt:** +3, potem +30; na 100 dalej nie rośnie. Przy przewijaniu strona jedzie dalej, a koszty się nie zmieniają. Po zatrzymaniu jeden ząbek zmienia liczbę o 1 i zapisuje ją. Ctrl+kółko powiększa okno, kosztu nie zmienia.
+- **Nie przechodzi, gdy:** jeden ząbek zmienia o więcej niż 1; przewijanie przez pola zmienia koszt; nad polem przewija się strona; po zamknięciu okienka Esc w trakcie obracania liczba nie zostaje zapisana.
+
+#### N9.1 Nazwa w miejscu
+- [ ] Odebrane
+- **Jak sprawdzić:** w „Dziś” kliknij blok, naciśnij F2, wpisz „Raport”, Enter; potem F2, wpisz coś i Esc; potem F2, wyczyść pole, Enter. W „Tygodniu” dwukliknij nazwę bloku i wpisz nową, kliknij obok; pojedynczy klik w nazwę.
+- **Oczekiwany efekt:** nazwa „Raport” na kafelku i w panelu; Esc nic nie zmienia; puste – nazwa jak podkategoria. W „Tygodniu” dwuklik nie przenosi do „Dziś”, a nazwa się zmienia. Pojedynczy klik w nazwę otwiera dzień po krótkiej chwili. Blok serii zmienia nazwę tylko w tym dniu.
+- **Nie przechodzi, gdy:** dwuklik przenosi do „Dziś”; Delete lub strzałki w polu usuwają lub przesuwają blok; Esc zamyka panel albo zdejmuje zaznaczenie; zmiana nazwy wystąpienia serii zmienia inne dni.
+
+#### N20.1 Obwódka przy przyczynie
+- [ ] Odebrane
+- **Jak sprawdzić:** zaplanuj na jutro drogi blok (np. głowa 30/h przez 2 h) i lekki później; otwórz jutro w „Dziś”, potem „Tydzień” i „3 dni”; najedź na kafelek z obwódką, potem Tab na kafelek.
+- **Oczekiwany efekt:** obwódka w kolorze głowy tylko na drogim bloku; podpowiedź „Tu głowa schodzi poniżej rezerwy (… → …)”; dzień bez zejścia – żadnej obwódki; te same kafelki we wszystkich trzech widokach.
+- **Nie przechodzi, gdy:** obwódka na bloku po zejściu albo na kilku; podpowiedź wychodzi poza okno albo otwiera się w trakcie przeciągania; fokus z klawiatury na kafelku jest niewidoczny.
+
+#### N19.1 Energia na żywo
+- [ ] Odebrane
+- **Jak sprawdzić:** w „Dziś” (jutro) z regeneracją w planie przeciągnij drogi blok tuż przed inny drogi; zatrzymaj się, nie puszczaj; Esc; potem pociągnij dolną krawędź; otwórz koszt kafelka i kliknij [+] kilka razy na głowie; to samo w „Tygodniu” (także na inny dzień).
+- **Oczekiwany efekt:** przed puszczeniem pod miejscem bloku „najniższa energia X → Y (G) · przyjęte” ze spadkiem; Esc – blok wraca, nic nie zapisane; ruch, który nie zmienia najniższej – bez podpisu; przeciąganie nie zacina się.
+- **Nie przechodzi, gdy:** podpis zostaje po puszczeniu; Esc zapisuje zmianę; podpis pokazuje inną liczbę niż linia po upuszczeniu; przeciąganie w „Tygodniu” wyraźnie się zacina.
+
+#### N21.1 Kropka energii w miesiącu
+- [ ] Odebrane
+- **Jak sprawdzić:** Kalendarz, miesiąc z dniem przyszłym z drogimi blokami.
+- **Oczekiwany efekt:** kropka pełna w kolorze puli, podpowiedź z wartością (np. „Energia: najsłabsza bodźce 18 · poniżej rezerwy (rezerwa 20)”).
+- **Nie przechodzi, gdy:** brak kropki albo inny odcień niż pasek tego dnia w „Tygodniu”.
+
+#### N21.2 Dzień miniony bez check-inu
+- [ ] Odebrane
+- **Jak sprawdzić:** w miesiącu dzień miniony bez check-inu.
+- **Oczekiwany efekt:** bez kropki.
+- **Nie przechodzi, gdy:** kropka jest.
+
+#### N18.1 Zaznaczanie w Agendzie
+- [ ] Odebrane
+- **Jak sprawdzić:** „Tydzień” → Agenda, Ctrl+klik trzech bloków → prawy przycisk → podkategoria; potem „Cofnij”.
+- **Oczekiwany efekt:** linia „… · Cofnij”; „Cofnij” przywraca.
+- **Nie przechodzi, gdy:** zwykły klik przestał otwierać blok albo zmiana dotknęła innych bloków.
+
+#### N18.2 Zaznaczanie w paskach miesiąca
+- [ ] Odebrane
+- **Jak sprawdzić:** Kalendarz, Ctrl+klik dwóch pasków → „Zmień 2 bloki”; potem Ctrl+klik dnia.
+- **Oczekiwany efekt:** menu „Zmień 2 bloki”; Ctrl+klik dnia czyści bloki i zaznacza dzień; prawy przycisk na niezaznaczonym pasku – menu dnia.
+- **Nie przechodzi, gdy:** prawy przycisk na niezaznaczonym pasku nie daje menu dnia.
+
+#### N22.1 „Najtańsza zamiana”
+- [ ] Odebrane
+- **Jak sprawdzić:** dziś z ostrzeżeniem o rezerwie (drogi blok przy dołku); w panelu linia; „Zamień”; „Cofnij”.
+- **Oczekiwany efekt:** „Najtańsza zamiana: A ↔ B – najniższa energia dnia x → y · Zamień”; „Zamień” przestawia, dymek „Zamieniono … · Cofnij”, „Cofnij” przywraca i linia wraca.
+- **Nie przechodzi, gdy:** linia jest bez ostrzeżenia albo zmienia się pasek pulpitu.
+
+#### N22.2 Dzień bez poprawy
+- [ ] Odebrane
+- **Jak sprawdzić:** dzień, w którym zamiana nie poprawia najniższej energii o ≥ 5.
+- **Oczekiwany efekt:** brak linii.
+- **Nie przechodzi, gdy:** linia jest.
+
+#### N3.1 „Wstaw regenerację tutaj”
+- [ ] Odebrane
+- **Jak sprawdzić:** dziś z ostrzeżeniem o rezerwie w elastycznym bloku; klik w linię; „Cofnij”.
+- **Oczekiwany efekt:** linia „… 15 min przed <blok> · <pula> x → y”; klik wstawia regenerację, blok i dalsze elastyczne przesunięte o 15 min, stały na miejscu; „Cofnij” przywraca.
+- **Nie przechodzi, gdy:** regeneracja staje przed „teraz” albo przesuwa stały.
+
+#### N3.2 „Zamień” i zaraz „Wstaw”
+- [ ] Odebrane
+- **Jak sprawdzić:** „Zamień” i od razu „Wstaw”.
+- **Oczekiwany efekt:** zapisuje się tylko pierwsze, drugie mówi „Plan zmienił się…”.
+- **Nie przechodzi, gdy:** zapisują się oba.
+
+#### N10.1 Szybki zapis: długość, podkategoria i godzina
+- [ ] Odebrane
+- **Jak sprawdzić:** Win+Alt+N, wpisz „Raport @jutro 15:00 1h #anal” (podkategoria zaczynająca się na „anal”), Enter.
+- **Oczekiwany efekt:** pod polem przed Enter „Wykonać: jutro 15:00 · 1 h · Analiza”; w „Dziś” jutro blok 15:00–16:00 tej podkategorii „Raport”, w „Sprawach” „zaplanowane jutro 15:00”.
+- **Nie przechodzi, gdy:** tytuł zawiera słowa, blok nie stoi albo ma inną długość/kategorię.
+
+#### N10.2 Nieznana podkategoria
+- [ ] Odebrane
+- **Jak sprawdzić:** „Coś #xyz” (bez takiej podkategorii).
+- **Oczekiwany efekt:** sprawa „Coś #xyz” w Skrzynce, kategoria „Inne”.
+- **Nie przechodzi, gdy:** „#xyz” znika z tytułu.
+
+#### N10.3 Godzina już minęła
+- [ ] Odebrane
+- **Jak sprawdzić:** po 15:00 wpisz „Telefon @14:00”.
+- **Oczekiwany efekt:** sprawa zapisana (wykonać dziś), bez bloku, pasek „Zapisano: Telefon – nie postawiono na osi: ta godzina już minęła”.
+- **Nie przechodzi, gdy:** blok w przeszłości albo „Nie zapisano”.
+
+#### N10.4 „Nowe zadanie” w „Sprawach”
+- [ ] Odebrane
+- **Jak sprawdzić:** w „Sprawach” „Nowe zadanie” – „Czytanie 45m #…”.
+- **Oczekiwany efekt:** podgląd jak w okienku, sprawa z szacunkiem 45 min i podkategorią.
+- **Nie przechodzi, gdy:** podgląd inny niż zapis.
+
+#### N11.1 Wklejenie listy
+- [ ] Odebrane
+- **Jak sprawdzić:** skopiuj 5 linii („- mleko”, „- chleb”, „- [ ] masło”, „1. jajka”, „Raport @jutro 15:00”), Win+Alt+N, Ctrl+V, Enter.
+- **Oczekiwany efekt:** pole puste, pod nim „Dodać 5 spraw? · Enter · Esc – jeden tytuł”; Enter – 5 spraw (tytuły bez znaczników, „Raport” z blokiem jutro 15:00), okienko zostaje z „Dodano 5 spraw · Cofnij”.
+- **Nie przechodzi, gdy:** wkleja się jeden tytuł, znaczniki zostają, okienko się zamyka bez „Cofnij”.
+
+#### N11.2 „Cofnij” listy
+- [ ] Odebrane
+- **Jak sprawdzić:** „Cofnij” z N11.1.
+- **Oczekiwany efekt:** 5 spraw i blok jutro znikają.
+- **Nie przechodzi, gdy:** coś zostaje.
+
+#### N11.3 Esc – jeden tytuł
+- [ ] Odebrane
+- **Jak sprawdzić:** wklejenie tych samych linii, Esc.
+- **Oczekiwany efekt:** jeden tytuł z liniami połączonymi spacją w polu, okienko otwarte.
+- **Nie przechodzi, gdy:** okienko się zamyka albo dodaje 5 spraw.
+
+#### N11.4 „+ Skrzynka” w pasku okna
+- [ ] Odebrane
+- **Jak sprawdzić:** w oknie głównym „+ Skrzynka” w pasku, wpisz „Zadzwonić”, wklej 3 linie, Enter.
+- **Oczekiwany efekt:** 3 sprawy, pasek „Dodano 3 sprawy · Cofnij”, w polu zostaje „Zadzwonić”.
+- **Nie przechodzi, gdy:** „Zadzwonić” znika.
+
+#### N13.1 Zmiana kosztu wielu podkategorii
+- [ ] Odebrane
+- **Jak sprawdzić:** Ustawienia → Kategorie, pasek „od jutra”, Ctrl+klik 6 podkategorii, „Zmień 6 ▾” → „Koszt…”, ciało 2, „Zapisz”.
+- **Oczekiwany efekt:** nad drzewem „Zmieniono 6 podkategorii · Cofnij”; od jutra ciało 2 w każdej, inne pule bez zmian, przełączenie paska na „od dziś” pokazuje stare wartości.
+- **Nie przechodzi, gdy:** zmienia się od dziś albo zmieniają się nieruszone pule.
+
+#### N13.2 „Cofnij” zmiany w drzewie
+- [ ] Odebrane
+- **Jak sprawdzić:** „Cofnij” z N13.1.
+- **Oczekiwany efekt:** ciało wraca w 6 podkategoriach.
+- **Nie przechodzi, gdy:** któraś zostaje z 2 (bez zmiany w międzyczasie).
+
+#### N13.3 „Przenieś do kategorii”
+- [ ] Odebrane
+- **Jak sprawdzić:** zaznacz 2 podkategorie i wariant, prawy przycisk → „Przenieś do kategorii ▸” → inna kategoria.
+- **Oczekiwany efekt:** podkategorie w nowej kategorii, linia mówi o pominiętym wariancie.
+- **Nie przechodzi, gdy:** wariant odłączony od podkategorii albo nic się nie dzieje.
+
+#### N13.4 Shift+klik i Esc w drzewie
+- [ ] Odebrane
+- **Jak sprawdzić:** Shift+klik od pierwszej do piątej podkategorii, Esc.
+- **Oczekiwany efekt:** zaznaczone 5, po Esc żadna.
+- **Nie przechodzi, gdy:** zaznaczenie inne niż w kolejności drzewa.
+
+#### N14.1 Linia „Uzupełnij ciało”
+- [ ] Odebrane
+- **Jak sprawdzić:** Ustawienia → Kategorie, dodaj 3 własne podkategorie (ciało 0).
+- **Oczekiwany efekt:** nad drzewem „3 podkategorie mają ciało 0 · Uzupełnij · ×”.
+- **Nie przechodzi, gdy:** linii nie ma albo liczy startowe.
+
+#### N14.2 „Uzupełnij” – zapis
+- [ ] Odebrane
+- **Jak sprawdzić:** „Uzupełnij”, wpisz 1, 2, 3, „Zapisz”.
+- **Oczekiwany efekt:** od daty paska ciało 1, 2, 3, linia nad drzewem znika, linia „Uzupełniono ciało: 3 podkategorie · Cofnij”.
+- **Nie przechodzi, gdy:** zmieniają się inne pule albo linia zostaje.
+
+#### N14.3 „×” chowa linię na zawsze
+- [ ] Odebrane
+- **Jak sprawdzić:** przy nowej podkategorii z ciałem 0 kliknij „×”, potem dodaj kolejną.
+- **Oczekiwany efekt:** linia nie wraca (też na drugim komputerze).
+- **Nie przechodzi, gdy:** linia wraca.
+
+#### N5.1 „Rozłóż w luki”
+- [ ] Odebrane
+- **Jak sprawdzić:** rano, plan z dwiema lukami (np. 30 i 45 min), na „Dziś” trzy niezaplanowane sprawy 30, 45, 30 min; plan poranny → „Rozłóż w luki”.
+- **Oczekiwany efekt:** dwie sprawy na osi w lukach, linia „Zaplanowano 2 sprawy w lukach · 1 się nie zmieściła · … · Cofnij”; żaden istniejący blok nie zmienił miejsca.
+- **Nie przechodzi, gdy:** coś się przesunęło albo sprawa stoi przed teraz / za maksimum.
+
+#### N5.2 „Cofnij” po „Rozłóż w luki”
+- [ ] Odebrane
+- **Jak sprawdzić:** „Cofnij” z N5.1.
+- **Oczekiwany efekt:** bloki znikają, sprawy na „Dziś” bez bloku.
+- **Nie przechodzi, gdy:** blok albo „zaplanowane” zostaje.
+
+#### N5.3 Dzień bez wolnego miejsca
+- [ ] Odebrane
+- **Jak sprawdzić:** dzień bez wolnego miejsca, „Rozłóż w luki”.
+- **Oczekiwany efekt:** dymek „Żadna sprawa nie mieści się w lukach dnia”, nic nie zapisane.
+- **Nie przechodzi, gdy:** pusta linia z „Cofnij”.
+
+#### N6.1 Podpowiedź długości z historii
+- [ ] Odebrane
+- **Jak sprawdzić:** podkategoria z ≥ 5 blokami zakończonymi „Skończyłem” po ok. 45 min w ostatnich dniach; w „Dziś” jutro nowy blok tej podkategorii na 30 min.
+- **Oczekiwany efekt:** pod „Długość” „zwykle trwa 45 min · Przyjmij”; „Przyjmij” – blok 45 min, linia znika.
+- **Nie przechodzi, gdy:** podpowiedź bez 5 bloków albo „Przyjmij” nie zmienia długości.
+
+#### N6.2 Wyłącznik podpowiedzi
+- [ ] Odebrane
+- **Jak sprawdzić:** Ustawienia → „Plan dnia” → wyłącz „Podpowiedzi długości z historii”.
+- **Oczekiwany efekt:** podpowiedzi znikają wszędzie, od razu.
+- **Nie przechodzi, gdy:** zostają.
+
+#### N6.3 Podpowiedź przy sprawie
+- [ ] Odebrane
+- **Jak sprawdzić:** sprawa tej podkategorii z szacunkiem 30 min w „Sprawach”.
+- **Oczekiwany efekt:** pod wierszem ta sama podpowiedź; „Przyjmij” ustawia szacunek 45.
+- **Nie przechodzi, gdy:** brak albo zmienia się co innego.
+
+#### N6.4 Dzień miniony i trwający blok
+- [ ] Odebrane
+- **Jak sprawdzić:** panel bloku wczoraj albo trwającego dziś.
+- **Oczekiwany efekt:** bez podpowiedzi.
+- **Nie przechodzi, gdy:** jest.
+
+#### N24.1 Przywrócenie bloku
+- [ ] Odebrane
+- **Jak sprawdzić:** w „Dziś” usuń blok, Historia → „Usunięte · 30 dni” → „Przywróć”.
+- **Oczekiwany efekt:** blok na liście z dniem i godzinami; wraca na te same godziny bez przesuwania innych i znika z listy; „Cofnij” z dymka usuwa go znowu.
+- **Nie przechodzi, gdy:** bloku nie ma na liście, wraca gdzie indziej, przesuwa inne albo zostaje na liście.
+
+#### N24.2 Przywrócenie sprawy
+- [ ] Odebrane
+- **Jak sprawdzić:** usuń sprawę w „Sprawach”, przywróć ją z „Usunięte · 30 dni”.
+- **Oczekiwany efekt:** wraca z tytułem, listą i szacunkiem, znika z usuniętych.
+- **Nie przechodzi, gdy:** lista pokazuje id zamiast nazwy, sprawa wraca zmieniona albo zostaje na liście.
+
+#### N24.3 Załączniki
+- [ ] Odebrane
+- **Jak sprawdzić:** blok z załącznikiem usuń, przywróć.
+- **Oczekiwany efekt:** załącznik wraca przy bloku.
+- **Nie przechodzi, gdy:** blok wraca bez załącznika.
+
+#### N24.4 Dzień zamrożony
+- [ ] Odebrane
+- **Jak sprawdzić:** blok usunięty z dnia zamrożonego.
+- **Oczekiwany efekt:** „Przywróć” wyłączone, pod nazwą „Dzień zamrożony – nie można zmienić”.
+- **Nie przechodzi, gdy:** przycisk działa albo powodu nie widać.
+
+#### N15.1 „Zapisz jako szablon…”
+- [ ] Odebrane
+- **Jak sprawdzić:** w „Dziś” z kilkoma własnymi blokami „⋯” → „Zapisz jako szablon…” → „Zapisz” (szablon dnia, „Zastąp”, od jutra), potem otwórz dzień roboczy za 2–3 dni.
+- **Oczekiwany efekt:** linia „Zapisano N bloków w szablonie „…” od DD.MM · Cofnij”; tamten dzień ma te same bloki w tych samych godzinach z nazwami; dziś i dni minione bez zmian.
+- **Nie przechodzi, gdy:** inne godziny lub brak nazw, zmienia się dziś albo dzień miniony, w „Szablonach” znika wcześniejsza wersja.
+
+#### N15.2 „Cofnij” zapisu szablonu
+- [ ] Odebrane
+- **Jak sprawdzić:** po N15.1 „Cofnij” w linii (albo Ctrl+Z).
+- **Oczekiwany efekt:** przyszły dzień wraca do starego szablonu, w „Szablonach” nie ma wersji od jutra.
+- **Nie przechodzi, gdy:** wersja zostaje albo cofnięcie rusza inne zmiany szablonu.
+
+#### N15.3 „Zapisz jako rutynę…”
+- [ ] Odebrane
+- **Jak sprawdzić:** w „Tygodniu” Ctrl+klik 3 bloki jednego dnia → prawy przycisk → „Zapisz jako rutynę…” → „Zapisz”; potem to samo z blokami dwóch dni.
+- **Oczekiwany efekt:** okno z nazwą pierwszego bloku i krokami w kolejności startu; nowa rutyna w „Rutynach”, bloki bez zmian; przy dwóch dniach pozycja wyłączona z podpowiedzią.
+- **Nie przechodzi, gdy:** zła kolejność lub długość kroków, bloki dostają rutynę, pozycja przy dwóch dniach działa.
+
+#### N15.4 Godziny poranka przy innej pobudce
+- [ ] Odebrane
+- **Jak sprawdzić:** dzień z własną pobudką o godzinę później zapisz jako szablon od jutra, otwórz przyszły dzień z pobudką jak w szablonie.
+- **Oczekiwany efekt:** bloki poranne o godzinę wcześniej niż w zapisanym dniu (jak po przeciągnięciu w „Szablonach”), stałe w tych samych godzinach.
+- **Nie przechodzi, gdy:** poranek przesunięty dwa razy albo stałe zmieniają godziny.
+
+#### N16.1 „Skopiuj tydzień do…”
+- [ ] Odebrane
+- **Jak sprawdzić:** nagłówek „Tygodnia” → „Skopiuj tydzień do…” → „2 następne tygodnie”.
+- **Oczekiwany efekt:** pn na pn, śr na śr, te same godziny, linia „Skopiowano tydzień … · Cofnij”.
+- **Nie przechodzi, gdy:** inny dzień/godzina, skopiowane sesje/serie/bufory, zmiana typu dnia.
+
+#### N16.2 Kolizje w kopii
+- [ ] Odebrane
+- **Jak sprawdzić:** kolizja w obu docelowych poniedziałkach; grupa w celu pełna („Najwięcej bloków naraz”) + kopia „obok”.
+- **Oczekiwany efekt:** jedno pytanie z obiema datami; „Uzupełnij” pomija, „Nadpisz” odwołuje kolidujący; grupa pełna – bez pytania, „pominięto 1 (grupa pełna)”.
+- **Nie przechodzi, gdy:** dwa pytania, pytanie bez kolizji, odwołana sesja/zaczęty/blok własnej grupy.
+
+#### N16.3 „Cofnij” kopii
+- [ ] Odebrane
+- **Jak sprawdzić:** „Cofnij” w linii albo Ctrl+Z.
+- **Oczekiwany efekt:** wszystkie dni jak przed kopią.
+- **Nie przechodzi, gdy:** któryś dzień zostaje zmieniony.
+
+#### N16.4 Ta sama kopia drugi raz
+- [ ] Odebrane
+- **Jak sprawdzić:** ta sama kopia drugi raz; kopia odwołana w celu; blok zakotwiczony do niej.
+- **Oczekiwany efekt:** „Nic nie skopiowano – bloki są już w planie (N)”; kopia odwołana w celu – „pominięto 1 (odwołane lub zaparkowane w tym dniu)”, zakotwiczony do niej – „(zakotwiczone do odwołanych)”.
+- **Nie przechodzi, gdy:** duplikaty, odwołana wraca.
+
+#### N16.5 Kopia zaznaczonych bloków
+- [ ] Odebrane
+- **Jak sprawdzić:** Ctrl+klik dwóch bloków → „Skopiuj do tygodni…” → „Następny tydzień”.
+- **Oczekiwany efekt:** tylko te dwa, „Skopiowano 2 bloki na 1 tydzień”.
+- **Nie przechodzi, gdy:** kopiują się inne bloki.
+
+#### N16.6 „Wybierz tygodnie…”
+- [ ] Odebrane
+- **Jak sprawdzić:** „Wybierz tygodnie…” – klik dnia, Ctrl+klik; zaznaczenie z dwóch tygodni („3 dni”); zakres > 52 tygodnie.
+- **Oczekiwany efekt:** klik dnia zaznacza tydzień, Ctrl+klik dokłada/zdejmuje, „ten tydzień” nie do zaznaczenia; dzień w późniejszym tygodniu ma znak „źródło”, jego tydzień do wyboru; > 52 – „Zakres dłuższy niż 52 tygodnie – wybierz krótszy.”.
+- **Nie przechodzi, gdy:** „ten tydzień” da się zaznaczyć albo brak komunikatu o 52 tygodniach.
+
+#### N16.7 Kopia na bieżący tydzień
+- [ ] Odebrane
+- **Jak sprawdzić:** kopia z poprzedniego tygodnia na bieżący.
+- **Oczekiwany efekt:** dni przed dziś bez zmian, dziś zakończone pominięte („pominięto N (minione)”).
+- **Nie przechodzi, gdy:** dni minione się zmieniają.
+
+#### N16.8 Bloki równoległe szablonu
+- [ ] Odebrane
+- **Jak sprawdzić:** szablon z blokami równoległymi → jego dzień albo „Zastosuj do…”.
+- **Oczekiwany efekt:** bloki razem w czasie pierwszego; gdy pierwszy wypada – drugi też („obok pominiętego”), chyba że grupa jest już w planie.
+- **Nie przechodzi, gdy:** blok obok w innej godzinie albo sam.
+
+#### Uwagi na później (ciąg N)
+Z plików strumieni; nie blokują odbioru.
+- **Silnik i plan (A1):** bufory N7 – `planOnAxis`/`groupPlan`/`groupDrag` licząc przesunięcia nie widzą przyszłych przesunięć buforów do następnego przeliczenia; przeniesienie bufora na inny dzień – tam znika; blok zakotwiczony do zmienionego bufora znika po wyłączeniu ustawienia; wyliczony start bloku przesuniętego przez bufor utrwala się przy edycji tego bloku; `passedToday` liczy miejsce od teraz bez kursora prognozy; sekcja „Plan dnia” jest teraz `mixed`; `planWithBuffers` składa fakty dziś przy każdym `dayContextOf` (~1–2 ms). N17 – linia w „Tygodniu” nie mówi „w K dniach” i nie liczy ukrytych; „Cofnij” przywraca pola bloków, nie surowy JSON; pozycja w „Szablonach” – do decyzji; przy braku minut za 03:59 ostatnie bloki dzielą 03:59. N1 – `hub.answer` nie przekazuje `code`/`front` (odpowiedź z okna głównego dostaje ogólny tekst); czekające „Przedłuż” na komputerze, który nie prowadzi, nie wstrzymuje ciągu (chroni odmowa D621); `bar-windows.spec.ts` – pierwszy przebieg dopiero w CI. N16 – blok szablonu usunięty w celu przez plik kopia przywraca jako Twój; kopia bloku sprawy bez sprawy nazywa się jak podkategoria (propozycja: nazwa z tytułu sprawy); propozycje: „Skopiuj ten dzień do…”, kopia tygodni w „Agendzie” i paskach miesiąca; okno tygodni bez testu Shift+klik/przeciągania.
+- **Timer, pasek, plan poranny (A2):** „Koszt ▸” w ciszy nocnej – wymaga decyzji; kolory pul w pasku (`POOL_COLOR` w `features/`); podgląd liczby dopiero po zapisie (kilkadziesiąt ms); odmowa przy własnym zegarze cofniętym > 1 min (`BAR_COST_AHEAD_MS`) – może wymagać decyzji; zapis kafelka bez dolnej granicy `after`. N2 – wejście po 04:00 się nie liczy (pisanie do 05:00 daje „do 04:00”); `bedtime.recalc` nie jest czytane; tracker gubi `gap.open`/`gap.close` po wybudzeniu przed `unsettle('wake')`; wybudzenie, które samo zgłasza wejście, wygląda jak prawdziwe; pisanie krótsze niż 2 min tuż po starcie aplikacji nie daje podpowiedzi; dwie miary „po porze snu” (Strona B i N2) celowo różne. N4 – migawka dnia ze starszej wersji nie ma `worseDay` w ustawieniach; krok 15 min dla pól minut w Ustawieniach; granica zatwierdzona sama, której prowadzący nie zapisał przed przyjęciem, po „Cofnij” wraca bez wpisu w „zrobione automatycznie” – do decyzji; prowadzący bez logu przyjęcia może dopisać zatwierdzenie z wcześniejszym `at`.
+- **Oś, kafelki, energia (B1):** N8 – liczba wpisana w pole i nie zatwierdzona przepada przy obrocie kółkiem; szybkie przejechanie z pola na sąsiednie (< 400 ms) traktuje pierwszy obrót jak przewijanie; touchpad bez `wheelDelta` wielokrotności 120 z dużymi deltami daje 1 krok na 100 px. N9 – pole nazwy w czasie trzymania upuszczonego bloku stoi na jego starym miejscu; w krótkich kafelkach „Tygodnia” (≤ 30 min) środek kafelka to nazwa, więc opóźnienie 300 ms dotyczy prawie każdego kliku; asercje E2E `toBeFocused` i `placeholder` sprawdzi dopiero wspólne CI. N20 – w grupie równoległej właściciel może różnić się od bloku „z przodu” silnika; oś dnia przyszłego rysuje kafelki na planowanych godzinach, a prognoza wykonuje je inaczej; w „Dziś” przyczyny liczą się co 30 s od nowa. N19 – okno grupowe „Koszt…” i grupa / upuszczenie na blok w „Tygodniu” bez podpisu; dzień źródłowy przy przeniesieniu w „Tygodniu” nie jest pokazywany; E2E „Tygodnia” dla podpisu – tylko jsdom.
+- **Kalendarz i propozycje energii (B2):** N21 – zimne otwarcie miesiąca ~3 s już przed N21; przejście miesiąc → tydzień liczy dni tygodnia od nowa; kropka nie czyta ostatniej minuty krzywej (jak pasek). N18 – paski miesiąca niedostępne z klawiatury; „Koszt…” w Agendzie i miesiącu wyłączony, bo widoki nie liczą kosztów kafelków. N22 – `saveStarts` pisze starty z bazą z pliku (zamknięte w N3 przez T2870/T2927); karta „Ułóż” liczy J5 w renderze (~15–40 ms); w panelu bloku „Zamień” po edycji pola bez Enter może nadpisać nowy start; moduł pamięci zamiany jednoslotowy; ukryte kalendarze w „Ułóż”. N3 – zysk 15 min bywa mały (~+2); propozycja nie pojawia się przy trwającym bloku z zejściem.
+- **Sprawy, Ustawienia, podpowiedzi (C):** N10 – `#…` szuka nazw z dzisiejszych ustawień, a blok bierze reguły dnia wykonania; brak testu, że okienko zostaje otwarte przy `asked`; `#domowe` nie znajduje „Prośby domowe”; w nocy podgląd mówi „jutro 15:00”. N11 – „Cofnij” listy z linii paska nie przeżywa restartu aplikacji; zapis listy kończący się pytaniem kolejki nie ma „Cofnij”. N13 – wiersze drzewa nie mają roli ARIA ani przystanku Tab; Del na zaznaczeniu drzewa – poza zakresem; przy niepustym zaznaczeniu Ctrl+A z fokusem w pasku „od jutra” zaznacza drzewo. N14 – wariant, który w czasie otwartego okna przeszedł na „jak podkategoria”, jest pomijany z powodem „ciało już ustawione”; ostrzeżenie o starszej wersji w oknie liczy też wiersze zostawione na 0; zapis nie pomija podkategorii zarchiwizowanej w czasie otwartego okna; pole liczbowe w oknie pokazuje ASCII „-1”. N5 – „Zaplanuj…” grupy liczy energię „przed” z pliku okna (istniejące); start grupy przycięty przez `inDay` daje nakładające się bloki (istniejące); brak biernika w `groupCount`; luki kończą się na maksimum granicy także dla spraw, które nie są pracą. N6 – „Nowy blok” w „Tygodniu” i grupowy „Szacunek” bez podpowiedzi; przekazanie `begun` z `TodayPage` bez testu web; czas liczenia 90 dni logu na prawdziwych danych niezmierzony; przycięty koniec stałego bloku rozpoznawany po opóźnieniu zapisu ≥ 1 min.
+- **Dane hurtem i cofanie (D):** N24 – bloki usunięte przed 1.38.0 nie są na liście (brak notatek); „Przywróć” bloku zaczętego (D336) nie otwiera przebiegu; edycje systemowe (`dropChanged`, Cofnij importu zjazdów i „Zastosuj szablon”) dają pozycje na liście; `seriesAnswer` „nie” w dniu specjalnym liczy się jak „Odwołaj na ten dzień”; załączniki szablonu/serii usuniętych offline zależą od `taken` z kolejki; sprzątanie notatek przy każdym usunięciu (można raz na godzinę). N15 – brak pozycji w miesiącu i „Agendzie”; okno bez „Nowy szablon”; „Zastąp” przy częściowym zaznaczeniu zdejmuje z wersji wszystkie inne bloki; własne załączniki bloków dnia nie przechodzą do szablonu; reguła A bierze za przesunięcie serią także wersję zmienioną po utworzeniu dnia; granica poranka nie wie o wykładach ani odpowiedziach „nie” sesji w przyszłych dniach; `NewThingDialogs.NewRoutineDialog` – `isSaved([])` daje true przy niewysłaniu; „Cofnij” idzie przez `showGroupLine` – N23 podepnie stos tam.
+- **Koordynator:** (a) świętowanie może mignąć w trybie ciszy albo przy starcie w zasobniku, gdy gra przyjdzie przed widokiem dnia (niesprawdzone, do sprawdzenia na Windows); (b) ok. 55 kliknięć w środek kafelka w innych E2E – przejść na `openBlock` (T2882); (c) pytanie produktowe: przy oknie ~860 px napis kosztu niskiego kafelka zajmuje ponad połowę kafelka, nazwa skraca się do „I…”, klik w środek otwiera koszt; (d) `stateDirFor` do małego modułu dla E2E; (e) przegląd PR końcowego obejmie N3 T2927 (jedna reguła zapisu propozycji, bez rundy przeglądu) i podpięcie N20 (c88c5380: `RegenHere.tsx`, `TodayPage.tsx`, `WeekPage.tsx`, `useProposal.ts`).
+<!-- N23 – do dopisania -->
 
 ### UX – ciąg poprawek użytkowych (1.34.0, D561–D565)
 
