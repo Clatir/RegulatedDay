@@ -27,6 +27,8 @@ import { COST_SCALE_TEXT, POOL_COLOR, POOL_NAME } from './energyDraw'
 import { NO_GRID } from './gridDrag'
 import { TrialCaption, trialText } from './TrialCaption'
 import { useTrialLowest } from './trialEnergy'
+import { useNow } from '../../lib/clock'
+import { useData } from '../../store/data'
 
 /** What the window shows: four costs and whether they are the block's own. */
 interface Shown {
@@ -35,30 +37,47 @@ interface Shown {
 }
 const sameShown = (a: Shown, b: Shown): boolean => a.own === b.own && sameCosts(a.costs, b.costs)
 /**
- * The energy on trial of a tile's window (N19): `useDay` – the day counted with its energy (a hook, called only while the window is open: „Dziś” has
- * its day at hand, a column of „Tydzień” counts its own; null – nothing to say) and `change` – what the tile's cost `costs` (null – „Jak podkategoria”)
- * would write on that day (`costTrial`).
+ * The energy on trial of a tile's window (N19): `day` – the day counted with its energy, asked when the window is open and again as the data change
+ * („Dziś” has it at hand – a value; a column of „Tydzień” counts its own, once for the grid – a promise; null – nothing to say) and `change` – what the
+ * tile's cost `costs` (null – „Jak podkategoria”) would write on that day (`costTrial`).
  */
 export interface CostTrial {
-  useDay: () => TrialDay | null
+  day: () => TrialDay | null | Promise<TrialDay | null>
   change: (day: TrialDay, costs: Costs | null) => TrialChange | null
 }
 
-/** The line of the window with the lowest energy before and with the cost it shows (`costs`; undefined – it shows what is saved: nothing to try). Said to `onText` whether it has words. */
-function CostEnergy({ trial, id, costs, onText }: { trial: CostTrial; id: string; costs: Costs | null | undefined; onText: (has: boolean) => void }) {
-  const day = trial.useDay()
+/**
+ * The line of the window with the lowest energy before and with the cost it shows now (`costs`; undefined – it shows what is saved: nothing to say): the
+ * trial alone (`trialLowest`, the two numbers of one instant), for as long as the numbers differ from the saved ones – clicks on their way to the save,
+ * a number the wheel turned. Once the save is read back they are the saved ones: the line goes (D594 – the change is in the day already). It has a place of
+ * its own in the window, a fixed height (two lines, empty without words): its coming and going never moves the window nor takes it off the screen.
+ */
+function CostEnergy({ trial, id, costs }: { trial: CostTrial; id: string; costs: Costs | null | undefined }) {
+  const stamp = useData((s) => s.stamp)
+  // The day is counted again as the window counts it (half a minute) – asked again then.
+  const tick = useNow(30_000)
+  const got = trial.day()
+  const [read, setRead] = useState<{ from: Promise<TrialDay | null>; day: TrialDay | null } | null>(null)
+  useEffect(() => {
+    if (!(got instanceof Promise)) return
+    let alive = true
+    // A read that failed (null) does not wipe the day that was counted: it stands until a good one comes.
+    void got.then((day) => alive && setRead((was) => (was?.from === got && was.day === (day ?? was.day) ? was : { from: got, day: day ?? was?.day ?? null })))
+    return () => {
+      alive = false
+    }
+  }, [got, stamp, tick])
+  const day = got instanceof Promise ? (read?.day ?? null) : got
   const key = costs === undefined ? null : `cost|${id}|${costs ? POOL_ORDER.map((p) => costs[p]).join(',') : 'base'}`
-  const energy = useTrialLowest(day, key && day ? { key, change: () => trial.change(day, costs ?? null) } : null)
-  const has = trialText(energy) != null
-  useLayoutEffect(() => {
-    onText(has)
-    return () => onText(false)
-  }, [has])
-  if (!has) return null
+  const said = useTrialLowest(day, key && day ? { key, change: () => trial.change(day, costs ?? null) } : null)
   return (
-    <p role="note" className="text-[11px] leading-snug" data-testid="cost-pop-energy">
-      <TrialCaption shown={energy} />
-    </p>
+    <div className="h-[30px] overflow-hidden text-[11px] leading-[15px]" data-testid="cost-pop-energy-slot">
+      {trialText(said) && (
+        <p role="note" data-testid="cost-pop-energy">
+          <TrialCaption shown={said} />
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -205,11 +224,10 @@ export function TileCost({
     setHidden(aside)
   }, [asked, held])
   useEscapeLayer(open, close)
-  // N19: the cost the window shows and the tile has not saved (a click on its way to the save, a number the wheel turned, typed and not left):
-  // the lowest energy with it – counted off the clicks (`useTrialLowest`), nothing written; the window shut or nothing differs – no trial.
+  // N19: the cost the window shows and the tile has not saved (clicks on their way to the save, a number the wheel turned and has not sent): the lowest
+  // energy with it – counted off the clicks (`useTrialLowest`), nothing written; nothing differs – no trial.
   const intent: Shown = { costs: { ...shown.costs, ...turn }, own: shown.own || Object.keys(turn).length > 0 }
   const tried = !sameShown(intent, saved(cost)) ? (intent.own ? intent.costs : null) : undefined
-  const [energyLine, setEnergyLine] = useState(false)
   useEffect(() => {
     if (!open) setTurn((t) => (Object.keys(t).length ? {} : t))
   }, [open])
@@ -241,7 +259,7 @@ export function TileCost({
     if (!place || !h) return
     const next = popPlace(place.anchor, { width: window.innerWidth, height: window.innerHeight }, h)
     if (next.left !== place.left || next.top !== place.top) setPlace({ ...place, ...next })
-  }, [place?.anchor, warned != null, energyLine])
+  }, [place?.anchor, warned != null])
   // The tile became one that may not be changed (it ended, its day went by): its window goes.
   useLayoutEffect(() => {
     if (!editable) setPlace(null)
@@ -371,7 +389,7 @@ export function TileCost({
               </div>
             ))}
             {/* N19: what these numbers do to the lowest energy of the day, before they are saved. */}
-            {trial && <CostEnergy trial={trial} id={id} costs={tried} onText={setEnergyLine} />}
+            {trial && <CostEnergy trial={trial} id={id} costs={tried} />}
             {warned && (
               <p role="note" className="text-[11px] leading-snug text-lamp" data-testid="cost-pop-old">
                 {warned}

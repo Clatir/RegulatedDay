@@ -43,7 +43,6 @@ import { attachBadge, attachBadgeTitle, dayPlace } from '../attachments/attachVi
 import { EnergyStrip, STRIP_WIDTH } from './EnergyStrip'
 import { costRoom, TileCost, type CostTrial } from '../plan/TileCost'
 import { costTrial } from '@shared/engine/trialEnergy'
-import { useDay } from '../../store/day'
 import { hasEnergy } from '../plan/energyDraw'
 import { ReserveCauseHint, ReserveRing, reserveTileProps, useReserveHint } from '../plan/ReserveCauseHint'
 import { reserveCauses, type ReserveCause } from '@shared/engine/reserveCause'
@@ -60,14 +59,14 @@ import { inParallelZone, tileAt } from '../plan/parallelDrag'
 import { undoEditToast } from '../today/dayActions'
 import { useWeekGroup, type WeekGroup } from './weekSelect'
 import { blockKey, parseBlockKey } from '../plan/groupMenu'
-import { WeekTrial, type WeekTrialDrop } from './WeekTrial'
+import { WeekDays, WeekTrial, type WeekTrialDrop } from './WeekTrial'
 import { countDragDays, dragDayGroup, dragGoing } from '../plan/groupDrag'
 
 const AXIS_PX = 48
 const TONE_CLASS: Record<Tone, string> = { ok: 'text-sea', bad: 'text-rose', muted: 'text-muted', plain: 'text-fg' }
 
-/** N19: the window of a tile's cost in a column says the lowest energy of that day before and with the cost – the day counted when the window is open. */
-const weekCostTrial = (date: string, id: string): CostTrial => ({ useDay: () => useDay(date), change: (day, costs) => costTrial(day, id, costs) })
+/** N19: the window of a tile's cost in a column says the lowest energy of that day before and with the cost – the day counted by the grid when the window is open (`WeekDays`). */
+const weekCostTrial = (days: WeekDays, date: string, id: string): CostTrial => ({ day: () => days.of(date), change: (day, costs) => costTrial(day, id, costs) })
 
 /** The drop of a block into a day gone by changes nothing (D417) – said when the save is refused after all (the day turned over). */
 export const PAST_DROP_TEXT = 'Dni minionych nie zmieniasz przeciąganiem.'
@@ -327,7 +326,9 @@ export function DayGrid({
   const muted = useRef(false)
   const [flight, setFlight] = useState<string | null>(null)
   /** The block held, where it would land and how long it is (the band of its drop – kept from the lift, the view may change meanwhile). */
-  const [drop, setDrop] = useState<{ blockId: string; at: BlockDrop; durationMin: number; from: string; copy: boolean; group: boolean } | null>(null)
+  // N19: the days counted for the energy on trial – one memory for the whole grid (the drag over the columns, the windows of the tiles' costs).
+  const [trialDays] = useState(() => new WeekDays())
+  const [drop, setDrop] = useState<{ blockId: string; at: BlockDrop; durationMin: number; from: string; fromStart: number; copy: boolean; group: boolean } | null>(null)
   // D513: Ctrl held while a block is held – its drop is a copy (the cursor with „+”, the band at its hour).
   const [copying, setCopying] = useState(false)
   const copyingRef = useRef(false)
@@ -504,7 +505,7 @@ export function DayGrid({
       copyingRef.current = ev.ctrlKey
       placeGroup(plain, ev.ctrlKey)
       const band = shown(ev.ctrlKey)!
-      setDrop((was) => (was && sameDrop(was.at, band) && was.copy === ev.ctrlKey ? was : { blockId: h.id, at: band, durationMin: h.durationMin, from: h.date, copy: ev.ctrlKey, group: h.members != null }))
+      setDrop((was) => (was && sameDrop(was.at, band) && was.copy === ev.ctrlKey ? was : { blockId: h.id, at: band, durationMin: h.durationMin, from: h.date, fromStart: h.startMin, copy: ev.ctrlKey, group: h.members != null }))
     }
     const up = (ev: globalThis.PointerEvent) => {
       if (ev.pointerId !== h.pointer) return
@@ -537,7 +538,7 @@ export function DayGrid({
         // A copy takes no anchored block (T1756): the places of the group change with Ctrl.
         placeGroup(h.plain, ev.ctrlKey)
         const band = shown(ev.ctrlKey)
-        if (band) setDrop((was) => (was && sameDrop(was.at, band) && was.copy === ev.ctrlKey ? was : { blockId: h.id, at: band, durationMin: h.durationMin, from: h.date, copy: ev.ctrlKey, group: h.members != null }))
+        if (band) setDrop((was) => (was && sameDrop(was.at, band) && was.copy === ev.ctrlKey ? was : { blockId: h.id, at: band, durationMin: h.durationMin, from: h.date, fromStart: h.startMin, copy: ev.ctrlKey, group: h.members != null }))
         return
       }
       // Esc only when pressed: letting it go (keyup, heard for Ctrl) changes nothing. A group's (T1771, as T1764 on the axis): also before the
@@ -621,7 +622,9 @@ export function DayGrid({
             waiting={pick?.dates.includes(d.date) ? pick : null}
             grab={(b) => ({ down: grab(b, d.date, i), consumed: () => muted.current, dragging: (flight === b.id || flightKeys.has(blockKey(d.date, b.id))) && !copying })}
             drop={drop && drop.at.index === i ? { ...drop.at, durationMin: drop.durationMin } : null}
-            trial={drop && drop.at.index === i && !drop.group && !drop.at.denied && !drop.at.onto ? { id: drop.blockId, from: drop.from, to: d.date, startMin: drop.at.startMin, copy: drop.copy } : null}
+            // N19: only while the block is held (the drop lives on until the write is done – the day then has the change already) and only a drop that writes something.
+            trial={flight != null && drop && drop.at.index === i && !drop.group && !drop.at.denied && !drop.at.onto && !dropStays(drop.from, d.date, drop.fromStart, drop.at.startMin) ? { id: drop.blockId, from: drop.from, to: d.date, startMin: drop.at.startMin, copy: drop.copy } : null}
+            trialDays={rd.general.modules.energy ? trialDays : null}
             bands={bands.filter((x) => x.index === i)}
             tight={mode === 'week'}
             group={group}
@@ -733,6 +736,7 @@ function DayColumn({
   grab,
   drop,
   trial,
+  trialDays,
   bands,
   tight,
   group,
@@ -758,8 +762,10 @@ function DayColumn({
   waiting: NewPick | null
   grab: (b: HorizonBlock) => BlockGrab
   drop: (BlockDrop & { durationMin: number }) | null
-  /** N19: the block held over this column as the energy on trial sees it – the caption stands under its band (none: a group, a day gone by, a drop onto a block). */
+  /** N19: the block held over this column as the energy on trial sees it – the caption stands under its band (none: a group, a day gone by, a drop onto a block, one that writes nothing). */
   trial: WeekTrialDrop | null
+  /** N19: the grid's days counted for the energy on trial (the caption of a drop, the window of a tile's cost); null – the energy module is off: nothing is said of it. */
+  trialDays: WeekDays | null
   /** D531: where the other selected blocks of a group being dragged would land in this day. */
   bands: readonly GroupBand[]
   /** The cost on a tile without spaces („3·1·1·0” – the week, D501, D524). */
@@ -820,12 +826,12 @@ function DayColumn({
       <EnergyStrip date={day.date} track={day.energy} lo={lo} ppm={ppm} height={height} />
       <div className="absolute inset-y-0 right-0" style={{ left: stripped ? STRIP_WIDTH + 1 : 0 }} data-testid={`week-blocks-${day.date}`}>
         {lanes.map(({ item, lane, lanes: n }) => (
-          <BlockBox key={item.id} block={item} reserve={causes.get(item.id)} reserveAction={reserveAction} lifted={lifted} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} marked={group.isMarked(day.date, item.id)} onPick={(e) => group.mark(day.date, item.id, e)} onContext={(at) => group.context(day.date, item.id, at)} rename={renameOf(rename, day.date, item.id)} openWait={openWait} onCosts={(costs, ask) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs, { ask })} />
+          <BlockBox key={item.id} block={item} reserve={causes.get(item.id)} reserveAction={reserveAction} lifted={lifted} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} marked={group.isMarked(day.date, item.id)} onPick={(e) => group.mark(day.date, item.id, e)} onContext={(at) => group.context(day.date, item.id, at)} rename={renameOf(rename, day.date, item.id)} openWait={openWait} trial={trialDays ? weekCostTrial(trialDays, day.date, item.id) : undefined} onCosts={(costs, ask) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs, { ask })} />
         ))}
         {/* The place a new or a dragged block would take – where the blocks stand, right of the strip (T1288). */}
         {shown && <RangeBand range={shown} lo={lo} ppm={ppm} testId={held ? 'week-range' : 'week-range-waiting'} />}
         {drop && <DropBand range={{ startMin: drop.startMin, endMin: drop.startMin + drop.durationMin }} lo={lo} ppm={ppm} denied={drop.denied} note={drop.onto?.text} />}
-        {drop && trial && <WeekTrial drop={trial} top={(drop.startMin + drop.durationMin - lo) * ppm + 2} />}
+        {drop && trialDays && <WeekTrial want={trial} days={trialDays} top={(drop.startMin + drop.durationMin - lo) * ppm + 2} />}
         {bands.map((x) => (
           <DropBand key={x.key} range={{ startMin: x.startMin, endMin: x.startMin + x.durationMin }} lo={lo} ppm={ppm} denied={false} testId="week-group-drop" of={x.key} />
         ))}
@@ -868,7 +874,7 @@ function DropBand({ range, lo, ppm, denied, note, testId = 'week-drop', of }: { 
 }
 
 /** A block on the axis: its colour as on the day's axis; not begun on a day gone by – dimmed; taken off – dimmed too. A click opens its day (D366). */
-export function BlockBox({ block: b, reserve, reserveAction, lifted, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, marked = false, onPick, onContext, onCosts, rename, openWait }: { block: HorizonBlock; reserve?: ReserveCause; reserveAction?: (id: string, cause: ReserveCause, date: string) => ReactNode; lifted?: () => boolean; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; marked?: boolean; onPick?: (e: { ctrlKey: boolean; shiftKey: boolean }) => void; onContext?: (at: { x: number; y: number }) => void; onCosts?: (costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>; rename?: BlockRename; openWait?: OpenWait }) {
+export function BlockBox({ block: b, reserve, reserveAction, lifted, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, marked = false, onPick, onContext, onCosts, rename, openWait, trial }: { block: HorizonBlock; reserve?: ReserveCause; reserveAction?: (id: string, cause: ReserveCause, date: string) => ReactNode; lifted?: () => boolean; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; marked?: boolean; onPick?: (e: { ctrlKey: boolean; shiftKey: boolean }) => void; onContext?: (at: { x: number; y: number }) => void; onCosts?: (costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>; rename?: BlockRename; openWait?: OpenWait; trial?: CostTrial }) {
   const { top, height } = blockSpan(b, lo, ppm)
   // N20: the hint of a block that is a cause (its ring is in the tile's style).
   const reserveHint = useReserveHint(() => reserve != null)
@@ -882,7 +888,7 @@ export function BlockBox({ block: b, reserve, reserveAction, lifted, lo, ppm = W
   // D501: the cost in the tile's bottom right; a low tile has it at the end of the name's row, one beside another shows it only while the pointer is over it.
   const costAt = !b.cost ? null : lanes > 1 ? 'hover' : height >= 30 ? 'corner' : 'row'
   // D526: a tile beside another has its label without spaces („1·1·1·1”) also in „3 dni”, so most of its top row still drags the block.
-  const costLabel = (className: string) => b.cost && <TileCost cost={b.cost} id={`week:${date}:${b.id}`} testId={`week-block-${date}-${b.id}-cost`} tight={tight || costAt === 'hover'} className={className} place={costAt ?? undefined} trial={weekCostTrial(date, b.id)} onChange={onCosts} />
+  const costLabel = (className: string) => b.cost && <TileCost cost={b.cost} id={`week:${date}:${b.id}`} testId={`week-block-${date}-${b.id}-cost`} tight={tight || costAt === 'hover'} className={className} place={costAt ?? undefined} trial={trial} onChange={onCosts} />
   const title = `${name} · ${logicalClock(b.startMin)}–${logicalClock(b.endMin)} · ${blockStateText(b.state, b.outsidePlan)}${b.background ? ' · w tle' : ''}${attach ? ` · ${attachBadgeTitle(attach)}` : ''}`
   const nameContent = (
     <>

@@ -95,6 +95,27 @@ describe('N19 – `TrialRunner`: najnowsza zmiana wygrywa, nic w trakcie ruchu',
     expect(counted).toEqual([50, 40])
   })
 
+  it('dzień, który właśnie doszedł (był null) – próba liczona od razu (`onArrival`); bez tej opcji, i przy kolejnej zmianie, po opóźnieniu', () => {
+    const { counted, count } = fakeCount()
+    const r = new TrialRunner(TRIAL_DELAY_MS, count)
+    r.ask(null, null)
+    r.ask(fakeDay(), trialOf(50, []), true)
+    expect(counted).toEqual([50])
+    expect(r.snapshot()).toEqual({ ...lowest(50), fresh: true })
+    // The next change on that day waits for a rest as ever.
+    const day = fakeDay()
+    const r2 = new TrialRunner(TRIAL_DELAY_MS, count)
+    r2.ask(null, null)
+    r2.ask(day, trialOf(40, []))
+    expect(r2.snapshot()).toBeNull()
+    vi.advanceTimersByTime(TRIAL_DELAY_MS)
+    expect(r2.snapshot()?.after).toBe(40)
+    r.ask(r['day'], trialOf(30, []), true)
+    expect(counted).toEqual([50, 40])
+    vi.advanceTimersByTime(TRIAL_DELAY_MS)
+    expect(counted).toEqual([50, 40, 30])
+  })
+
   it('brak próby (Esc, upuszczenie, zamknięte okienko) – od razu nic, czekająca porzucona', () => {
     const { counted, count } = fakeCount()
     const r = new TrialRunner(TRIAL_DELAY_MS, count)

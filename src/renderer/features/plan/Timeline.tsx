@@ -496,6 +496,9 @@ export function Timeline({
   }, [waitingSeq])
   // Let go anywhere (the block drawn anew in another column loses the pointer): the drag ends without a move.
   const holding = drag != null && !drag.dropped
+  // Whether this axis has the energy on trial (the handler of Esc reads it – it is set up once for a hold).
+  const trialOn = useRef(false)
+  trialOn.current = energyTrial != null
   useEffect(() => {
     if (!holding) return
     const end = (e: PointerEvent) => {
@@ -511,10 +514,11 @@ export function Timeline({
     }
     // D531 (T1764): Esc while a group is held – moved or not yet past the 4 px – ends its gesture with nothing changed; it is the drag's alone
     // (heard first, in the capture phase): it never clears the selection under it, and the click after it is muted. N19 (T2581): the same for a block
-    // or an edge once it has moved (as in „Tydzień”) – the caption of the energy on trial goes with it, nothing is written.
+    // or an edge once it has moved (as in „Tydzień”), on the axis that says the energy on trial („Dziś”: `energyTrial`; „Szablony” – as before) – the caption
+    // goes with it, nothing is written.
     const escape = (e: KeyboardEvent) => {
       const d = dragRef.current
-      if (e.key !== 'Escape' || !d || d.dropped || !(d.group || d.moved)) return
+      if (e.key !== 'Escape' || !d || d.dropped || !(d.group || (d.moved && trialOn.current))) return
       e.preventDefault()
       e.stopPropagation()
       setDrag(null)
@@ -614,9 +618,12 @@ export function Timeline({
   // N19: the lowest energy of the day before the change the drag (or the edge) would write and with it – counted off the pointer's path (`useTrialLowest`);
   // once it is let go (or Esc) there is no trial: the caption goes at once.
   const trying = drag?.moved && !drag.dropped && energyTrial ? drag : null
+  // A drop that writes nothing (back at its own place, a group moved by no minutes, a drop onto a block of its own group) has no trial: no caption. A drop
+  // onto a block writes its place beside it (`alongside`) even where the block stands now – only the block's own group (`hint.same`) is nothing.
+  const stays = trying != null && dragShown != null && (trying.group ? trying.start === trying.from : trying.onto ? hint?.same === true : staysPut(dragShown, trying))
   const tried = useTrialLowest(
     energyTrial?.day ?? null,
-    trying && energyTrial
+    trying && energyTrial && !stays
       ? energyTrial.drag({ id: trying.id, edge: trying.edge, span: { startMin: trying.start, endMin: trying.end }, shown: { startMin: trying.from, endMin: trying.fromEnd }, copy: trying.copy, onto: trying.onto, group: trying.group, minutes: trying.start - trying.from })
       : null
   )
@@ -700,7 +707,7 @@ export function Timeline({
     const costAt = !i.cost ? null : !tiny && !narrow ? 'corner' : tiny && lane.lanes === 1 ? 'row' : 'hover'
     const costLabel = (className: string) =>
       i.cost && costAt && (
-        <TileCost cost={i.cost} id={`tile:${i.id}`} testId={`block-${i.id}-cost`} className={className} place={costAt} trial={energyTrial?.cost ? { useDay: () => energyTrial.day, change: (day, costs) => energyTrial.cost!(day, i.id, costs) } : undefined} onChange={onCosts ? (costs, ask) => onCosts(i.id, costs, ask) : undefined} />
+        <TileCost cost={i.cost} id={`tile:${i.id}`} testId={`block-${i.id}-cost`} className={className} place={costAt} trial={energyTrial?.cost ? { day: () => energyTrial.day, change: (day, costs) => energyTrial.cost!(day, i.id, costs) } : undefined} onChange={onCosts ? (costs, ask) => onCosts(i.id, costs, ask) : undefined} />
       )
     const menu = onContext ? menuBind((at) => onContext(i.id, at)) : undefined
     return (

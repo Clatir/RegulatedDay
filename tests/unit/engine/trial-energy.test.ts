@@ -3,7 +3,8 @@
  * an edge changes a length, or the window of a tile's cost is open – the same rule and the same numbers as the line after the change (D529,
  * `groupEnergy`), from now on today, from the day's first minute for a day to come (from the assumed check-in), nothing written.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import * as dayModule from '@shared/engine/day'
 import { computeDay } from '@shared/engine/day'
 import { computeEnergy, shownOf, toUnits } from '@shared/engine/energy'
 import { lowestEnergy } from '@shared/engine/energyOrder'
@@ -91,12 +92,12 @@ describe('N19 – próbne policzenie dnia: przeciągnięcie, krawędź, grupa', 
   it('krawędź trwającego bloku (`resizeTrial`, kliknięcie `resize` timera) – dłuższy niżej; bez zmiany – brak próby', () => {
     const s = scenario([flex('a', '08:00', 60, { categoryId: 'analiza', costs: HEAVY })]).checkin('07:00', ZERO).start('a', '08:00')
     const day = dayOf(s, '08:30')
-    const longer = resizeTrial(day, 'a', s.at('11:00'))
+    const longer = resizeTrial(day, 'a', s.at('11:00'), day.ctx.now)
     expect(longer?.events?.map((e) => e.k)).toEqual(['block.extend'])
     const t = trialLowest(day, longer!)!
     expect(t.after).toBeLessThan(t.before)
-    expect(resizeTrial(day, 'a', s.at('09:00'))).toBeNull()
-    expect(resizeTrial(day, 'nic', s.at('11:00'))).toBeNull()
+    expect(resizeTrial(day, 'a', s.at('09:00'), day.ctx.now)).toBeNull()
+    expect(resizeTrial(day, 'nic', s.at('11:00'), day.ctx.now)).toBeNull()
   })
 
   it('grupa (D531 `dragPreview`): dwa bloki przeciągnięte razem na popołudnie – plan podglądu daje after < before', () => {
@@ -124,7 +125,7 @@ describe('N19 – okienko kosztu przed zapisem (`costTrial`, D501)', () => {
   it('zaczęty i trwający: `block.cost` od teraz – minuty minione po staremu, prognoza niżej', () => {
     const s = scenario().checkin('07:00', ZERO).start('drogi', '08:00')
     const day = dayOf(s, '09:00')
-    const c = costTrial(day, 'drogi', { head: 12, emotions: 0, senses: 0, body: 0 })!
+    const c = costTrial(day, 'drogi', { head: 12, emotions: 0, senses: 0, body: 0 }, day.ctx.now)!
     expect(c.plan).toBeUndefined()
     expect(c.events?.map((e) => [e.k, (e as { at?: number }).at])).toEqual([['block.cost', day.ctx.now]])
     const t = trialLowest(day, c)!
@@ -134,11 +135,66 @@ describe('N19 – okienko kosztu przed zapisem (`costTrial`, D501)', () => {
     expect(computeEnergy(ctx, computeDay(ctx), {}).shown).toEqual(day.energy.shown)
   })
 
+  it('chwila próby to chwila liczenia (T2580): dzień policzony 5 min wcześniej (liczby całkowite nie zauważą 25 s) – before i after liczone w tej samej, późniejszej chwili', () => {
+    const s = scenario().checkin('07:00', ZERO).start('drogi', '08:00')
+    const old = dayOf(s, '09:00')
+    const at = old.ctx.now + 300_000
+    const fresh = dayOf(s, '09:00', { at })
+    const dear = { head: 15, emotions: 0, senses: 0, body: 0 }
+    // The old day tried at the later instant says what the day counted at that instant says (the change is laid, the two numbers counted, at `at`).
+    const late = trialLowest(old, costTrial(old, 'drogi', dear, at)!)!
+    expect(late).toEqual(trialLowest(fresh, costTrial(fresh, 'drogi', dear, at)!))
+    expect(costTrial(old, 'drogi', dear, at)?.at).toBe(at)
+    // At the instant the day was counted at, the same cost would have begun 5 min earlier: another number.
+    const early = trialLowest(old, costTrial(old, 'drogi', dear, old.ctx.now)!)!
+    expect(early.after).not.toBe(late.after)
+  })
+
+  it('„przed” w późniejszej chwili liczone raz na stan dnia i minutę: kolejna próba w tej samej minucie liczy już tylko „po”', () => {
+    const s = scenario().checkin('07:00', ZERO).start('drogi', '08:00')
+    const old = dayOf(s, '09:00')
+    const at = old.ctx.now + 120_000
+    const spy = vi.spyOn(dayModule, 'computeDay')
+    try {
+      trialLowest(old, costTrial(old, 'drogi', { head: 9, emotions: 0, senses: 0, body: 0 }, at)!)
+      const first = spy.mock.calls.length
+      // Before and after: two counts of the day.
+      expect(first).toBe(2)
+      const next = trialLowest(old, costTrial(old, 'drogi', { head: 12, emotions: 0, senses: 0, body: 0 }, at + 5_000)!)!
+      expect(spy.mock.calls.length - first).toBe(1)
+      // The same number „before” as the first trial said.
+      expect(next.before).toBe(trialLowest(old, costTrial(old, 'drogi', { head: 9, emotions: 0, senses: 0, body: 0 }, at)!)!.before)
+      // Another minute: counted again.
+      const before = spy.mock.calls.length
+      trialLowest(old, costTrial(old, 'drogi', { head: 9, emotions: 0, senses: 0, body: 0 }, at + 120_000)!)
+      expect(spy.mock.calls.length - before).toBe(2)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('dzień, który w chwili liczenia już minął (zegar okna przeszedł 04:00 po policzeniu dnia): bez próby', () => {
+    const s = scenario().checkin('07:00', ZERO)
+    const day = dayOf(s, '09:00')
+    expect(trialLowest(day, { plan: moved(day.ctx.plan, 'praca', '16:00') })).not.toBeNull()
+    // The same change counted a day later (the instant of the count – `at`): that day is history now.
+    expect(trialLowest(day, { plan: moved(day.ctx.plan, 'praca', '16:00'), at: day.ctx.now + 24 * 3600_000 })).toBeNull()
+  })
+
+  it('krawędź trwającego bloku też w chwili liczenia: zdarzenia i liczba w `at`', () => {
+    const s = scenario([flex('a', '08:00', 60, { categoryId: 'analiza', costs: HEAVY })]).checkin('07:00', ZERO).start('a', '08:00')
+    const old = dayOf(s, '08:30')
+    const at = old.ctx.now + 25_000
+    const c = resizeTrial(old, 'a', s.at('11:00'), at)!
+    expect(c.at).toBe(at)
+    expect(trialLowest(old, c)).toEqual(trialLowest(dayOf(s, '08:30', { at }), resizeTrial(dayOf(s, '08:30', { at }), 'a', s.at('11:00'), at)!))
+  })
+
   it('skończony blok i blok spoza dnia – brak próby (null)', () => {
     const s = scenario().checkin('07:00', ZERO).ran('drogi', '08:00', '09:00')
     const day = dayOf(s, '09:30')
-    expect(costTrial(day, 'drogi', HEAVY)).toBeNull()
-    expect(costTrial(day, 'nic', HEAVY)).toBeNull()
+    expect(costTrial(day, 'drogi', HEAVY, day.ctx.now)).toBeNull()
+    expect(costTrial(day, 'nic', HEAVY, day.ctx.now)).toBeNull()
   })
 })
 

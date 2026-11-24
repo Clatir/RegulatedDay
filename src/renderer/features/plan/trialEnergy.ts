@@ -62,8 +62,12 @@ export class TrialRunner {
 
   snapshot = (): TrialShown | null => this.shown
 
-  /** The newest trial on `day` (null – none: what was pending is dropped, nothing is shown). */
-  ask(day: TrialDay | null, trial: Trial | null): void {
+  /**
+   * The newest trial on `day` (null – none: what was pending is dropped, nothing is shown). `onArrival` – a trial that meets its first day (the day was
+   * null before: it has just been counted for this very rest of the pointer) is counted at once, without the delay of a newer change (`WeekTrial`).
+   */
+  ask(day: TrialDay | null, trial: Trial | null, onArrival = false): void {
+    const arrived = onArrival && this.day == null && day != null
     if (day !== this.day) {
       // Another count of the day (the clock, the data): what was counted on the old one says nothing of it – counted again.
       this.day = day
@@ -88,6 +92,11 @@ export class TrialRunner {
     }
     this.pending = trial
     if (this.timer != null) clearTimeout(this.timer)
+    if (arrived) {
+      this.timer = null
+      this.run()
+      return
+    }
     this.timer = setTimeout(() => this.run(), this.delayMs)
     this.publish()
   }
@@ -145,13 +154,13 @@ const sameLowest = (a: TrialLowest, b: TrialLowest): boolean => a.before === b.b
  * the day has no energy to say (a day gone by, the module off), or the first change is still being counted. `trial.key` decides what is the
  * same change: everything the change depends on must be in it (the block, the edge, the place – minutes on the grid –, Ctrl, the cost's values).
  */
-export function useTrialLowest(day: TrialDay | null, trial: Trial | null): TrialShown | null {
+export function useTrialLowest(day: TrialDay | null, trial: Trial | null, o: { onArrival?: boolean } = {}): TrialShown | null {
   const runner = useRef<TrialRunner | null>(null)
   runner.current ??= new TrialRunner()
   const r = runner.current
-  const shown = useSyncExternalStore(r.subscribe, r.snapshot)
+  const shown = useSyncExternalStore(r.subscribe, r.snapshot, r.snapshot)
   // Layout: a change counted before (back over the same place) is shown before the frame is painted.
-  useLayoutEffect(() => r.ask(day, trial), [r, day, trial?.key])
+  useLayoutEffect(() => r.ask(day, trial, o.onArrival), [r, day, trial?.key])
   useEffect(() => () => r.stop(), [r])
   return shown
 }

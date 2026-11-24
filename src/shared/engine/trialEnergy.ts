@@ -26,11 +26,14 @@ export interface TrialDay {
 
 /**
  * A change on trial: the day's plan after it (blocks moved, pushed apart, a new length, an own cost – absent: the plan stays) and the
- * events it would write (laid after the day's log by `simEvents` – a begun block's cost from now, the click `resize` of a running block).
+ * events it would write (laid after the day's log by `simEvents` – a begun block's cost from now, the click `resize` of a running block) at
+ * the instant `at` (ms; absent – the day's own `now`): the day is counted at that instant before the change and with it, so the two numbers
+ * are of one moment (T2580) – a day counted some seconds ago does not say „before” for an older instant than its change.
  */
 export interface TrialChange {
   plan?: readonly PlanBlock[]
   events?: readonly AnyEvent[]
+  at?: number
 }
 
 /** The lowest energy of a day: its number on the screen and the pool it is in (a tie – the first of głowa, emocje, bodźce, ciało). */
@@ -50,7 +53,7 @@ export interface TrialLowest {
 }
 
 /** Whether the day's energy is counted from the assumed check-in – `dayAxis`'s rule (today or a day to come without a check-in, the module on). */
-function isAssumed(day: TrialDay): boolean {
+export function isAssumed(day: TrialDay): boolean {
   return !day.energy.known && day.energy.enabled && day.ctx.date >= logicalDayOf(day.ctx.now)
 }
 
@@ -87,16 +90,33 @@ export function lowestBefore(day: TrialDay): Lowest | null {
   return low
 }
 
+/** The day counted again at the instant `at` (a later one than its own `now`): the lowest as it is then – the day's state and energy of that instant. */
+function lowestAt(day: TrialDay, at: number): Lowest | null {
+  if (at <= day.ctx.now) return lowestBefore(day)
+  // Once for a day and a minute (the day is counted by the minute: the instants of one minute – the counts of one rest of the pointer – say the same).
+  const minute = Math.floor(at / 60_000)
+  const known = atMemo.get(day.state)
+  if (known?.minute === minute) return known.low
+  const ctx: DayContext = { ...day.ctx, now: at }
+  const low = lowestOf(energyOf(ctx, computeDay(ctx), isAssumed(day), day.energy.enabled))
+  atMemo.set(day.state, { minute, low })
+  return low
+}
+const atMemo = new WeakMap<DayState, { minute: number; low: Lowest | null }>()
+
 /**
  * The lowest energy of the day before `change` and with it (N19). Null – nothing to say: a day gone by (history – no trial), the module off,
  * a day without a forecast of energy (gone by without a check-in). Pure – nothing is written; the day's state and its log stay as given.
  */
 export function trialLowest(day: TrialDay, change: TrialChange): TrialLowest | null {
-  if (day.ctx.date < logicalDayOf(day.ctx.now) || !day.energy.enabled) return null
-  const before = lowestBefore(day)
+  // A day gone by at the instant of the count (the clock of the window may have passed 04:00 since the day was counted) has no trial.
+  const now = Math.max(day.ctx.now, change.at ?? 0)
+  if (day.ctx.date < logicalDayOf(now) || !day.energy.enabled) return null
+  const before = lowestAt(day, now)
   if (!before) return null
   const ctx: DayContext = {
     ...day.ctx,
+    now,
     ...(change.plan ? { plan: change.plan } : {}),
     ...(change.events?.length ? { events: [...day.ctx.events, ...change.events] } : {})
   }
@@ -107,23 +127,21 @@ export function trialLowest(day: TrialDay, change: TrialChange): TrialLowest | n
 
 /**
  * The cost of block `id` changed to `costs` (null – „Jak podkategoria”, its base again) as its tile's window saves it (D501, `costSave.ts`),
- * on trial: a block begun and not ended – `block.cost` from now (the day's instant); one not begun – its own cost in the plan. Null – no
+ * on trial: a block begun and not ended – `block.cost` from now (`at`, the instant of the count – as `resizePreview` counts it); one not begun – its own cost in the plan. Null – no
  * trial: an ended block, one not in the plan nor begun.
  */
-export function costTrial(day: Pick<TrialDay, 'ctx' | 'state'>, id: string, costs: Costs | null): TrialChange | null {
+export function costTrial(day: Pick<TrialDay, 'ctx' | 'state'>, id: string, costs: Costs | null, at = Date.now()): TrialChange | null {
   const f = day.state.facts.blocks.get(id)
-  const at = day.ctx.now
-  if (f?.startedAt != null) return f.endedAt == null ? { events: simEvents(day.ctx, [{ k: 'block.cost', block: id, at, costs }], at) } : null
+  if (f?.startedAt != null) return f.endedAt == null ? { events: simEvents(day.ctx, [{ k: 'block.cost', block: id, at, costs }], at), at } : null
   const b = day.ctx.plan.find((x) => x.id === id)
   return b ? { plan: day.ctx.plan.map((x) => (x === b ? { ...b, costs } : x)) } : null
 }
 
 /**
  * The bottom edge of the running block `id` dragged to the instant `to` (`ResizePreview.to`), on trial: the events its click `resize` writes
- * (confirmed past the boundary – as „Potwierdź”), at the day's instant (`resizeClick`). Null – refused, or nothing changes.
+ * (confirmed past the boundary – as „Potwierdź”), at the instant of the count `at` (`resizeClick`, as `resizePreview`). Null – refused, or nothing changes.
  */
-export function resizeTrial(day: Pick<TrialDay, 'ctx' | 'state'>, id: string, to: number): TrialChange | null {
-  const at = day.ctx.now
+export function resizeTrial(day: Pick<TrialDay, 'ctx' | 'state'>, id: string, to: number, at = Date.now()): TrialChange | null {
   const { events } = resizeClick(day.ctx, day.state, id, to, at)
-  return events.length ? { events: simEvents(day.ctx, events, at) } : null
+  return events.length ? { events: simEvents(day.ctx, events, at), at } : null
 }

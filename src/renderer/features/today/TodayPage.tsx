@@ -510,7 +510,8 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
     }
     return null
   }
-  const energyTrial: TimelineTrial | undefined = pushes ? { day: model, drag: trialOfDrag, cost: (day, id, costs) => costTrial(day, id, costs) } : undefined
+  // The window of a tile's cost says the energy only with the module on (without it – no line, no place for it).
+  const energyTrial: TimelineTrial | undefined = pushes ? { day: model, drag: trialOfDrag, cost: rd.general.modules.energy ? (day, id, costs) => costTrial(day, id, costs) : undefined } : undefined
 
   /**
    * A new block: in the panel first, drawn dashed on the axis (D466); an hour long, or as long as the range dragged over the axis

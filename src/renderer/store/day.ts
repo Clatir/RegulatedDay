@@ -126,6 +126,21 @@ export function useDay(date: string): DayModel | null {
 }
 
 /**
+ * A day read (its files and logs) and counted now, as `useDay` has it – for what is not on the screen as a day (the energy on trial of a column of
+ * „Tydzień” – N19): one read and one count, only when asked. Null – its data cannot be read now.
+ */
+export async function readDay(date: string, at = Date.now()): Promise<DayModel | null> {
+  try {
+    const data = await window.rd.dayData(date)
+    if (!dayUsable(data)) return null
+    const { rd, templates, lectures, seriesPlans, routines, view } = useData.getState()
+    return countDay(date, data, { changes: rd.settings, templates, lectures, series: seriesPlans, routines }, at, rd.general.modules.energy, view?.calibration === true)
+  } catch {
+    return null
+  }
+}
+
+/**
  * The day from its data and the plan's inputs at `at` (also for previews: the wizard counts a day it has not written);
  * `calibration` – the calibration period (reactions of energy only inform).
  */
