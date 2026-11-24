@@ -48,7 +48,7 @@ import { freeHourStart, newBlockDay, NO_NEW_DAY_TEXT, dayWakeMin } from './weekN
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
 import { saveTileCosts, type CostAsk } from '../plan/costSave'
 import { renameDayBlock } from '../plan/nameSave'
-import { DOUBLE_CLICK_MS, onTileName, renameInfo, TileNameField, useTileRename, type RenameInfo, type TimelineRename } from '../plan/tileRename'
+import { onTileName, renameInfo, TileNameField, useOpenWait, useTileRename, type OpenWait, type RenameInfo, type TimelineRename } from '../plan/tileRename'
 import { copyDayBlock, moveWeekBlock } from './weekMove'
 import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, regenLine, WEEKDAY_FULL, type Tone } from './weekText'
 import { DENIED_TEXT, dropOn, dropStart, dropStays, sameDrop, weekOnto, type BlockDrop } from './weekViews'
@@ -246,6 +246,13 @@ export function DayGrid({
     },
     scope: `${mode}|${dates[0]}`
   })
+  // The one wait for a second click on a block's name (see `BlockBox`): ended by another week or view, by the block going away (undone, changed from outside), by F2, Esc and any press.
+  const openWait = useOpenWait()
+  const waitScope = `${mode}|${dates[0]}`
+  useEffect(() => openWait.cancel(), [waitScope])
+  useEffect(() => {
+    if (openWait.waiting != null && !byKey.has(openWait.waiting)) openWait.cancel()
+  }, [byKey, openWait.waiting])
   /** The rectangle a column has on the screen; null when it is not there. */
   const columnRect = (i: number): DOMRect | null => bodyRef.current?.querySelector(`[data-testid="week-col-${days[i]?.date}"]`)?.getBoundingClientRect() ?? null
   // The columns do not move while a drag goes on: their rectangles are read once, when the pointer first asks – with the
@@ -607,6 +614,7 @@ export function DayGrid({
             tight={mode === 'week'}
             group={group}
             rename={rename}
+            openWait={openWait}
           />
         ))}
         {pick && (
@@ -712,7 +720,8 @@ function DayColumn({
   bands,
   tight,
   group,
-  rename
+  rename,
+  openWait
 }: {
   day: HorizonDay
   index: number
@@ -738,6 +747,8 @@ function DayColumn({
   group: WeekGroup
   /** N9: the name of a block in place (the keys of its blocks are `blockKey(date, id)`). */
   rename: TimelineRename
+  /** N9: the grid's one wait for a second click on a name. */
+  openWait: OpenWait
 }) {
   const lanes = useMemo(() => laneLayout(day.blocks), [day.blocks])
   // D410: the attachments of each block (its own, the template's, the series') – 📎N on its tile.
@@ -781,7 +792,7 @@ function DayColumn({
       <EnergyStrip date={day.date} track={day.energy} lo={lo} ppm={ppm} height={height} />
       <div className="absolute inset-y-0 right-0" style={{ left: stripped ? STRIP_WIDTH + 1 : 0 }} data-testid={`week-blocks-${day.date}`}>
         {lanes.map(({ item, lane, lanes: n }) => (
-          <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} marked={group.isMarked(day.date, item.id)} onPick={(e) => group.mark(day.date, item.id, e)} onContext={(at) => group.context(day.date, item.id, at)} rename={renameOf(rename, day.date, item.id)} onCosts={(costs, ask) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs, { ask })} />
+          <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} marked={group.isMarked(day.date, item.id)} onPick={(e) => group.mark(day.date, item.id, e)} onContext={(at) => group.context(day.date, item.id, at)} rename={renameOf(rename, day.date, item.id)} openWait={openWait} onCosts={(costs, ask) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs, { ask })} />
         ))}
         {/* The place a new or a dragged block would take – where the blocks stand, right of the strip (T1288). */}
         {shown && <RangeBand range={shown} lo={lo} ppm={ppm} testId={held ? 'week-range' : 'week-range-waiting'} />}
@@ -828,7 +839,7 @@ function DropBand({ range, lo, ppm, denied, note, testId = 'week-drop', of }: { 
 }
 
 /** A block on the axis: its colour as on the day's axis; not begun on a day gone by – dimmed; taken off – dimmed too. A click opens its day (D366). */
-export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, marked = false, onPick, onContext, onCosts, rename }: { block: HorizonBlock; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; marked?: boolean; onPick?: (e: { ctrlKey: boolean; shiftKey: boolean }) => void; onContext?: (at: { x: number; y: number }) => void; onCosts?: (costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>; rename?: BlockRename }) {
+export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, marked = false, onPick, onContext, onCosts, rename, openWait }: { block: HorizonBlock; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; marked?: boolean; onPick?: (e: { ctrlKey: boolean; shiftKey: boolean }) => void; onContext?: (at: { x: number; y: number }) => void; onCosts?: (costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>; rename?: BlockRename; openWait?: OpenWait }) {
   const { top, height } = blockSpan(b, lo, ppm)
   const color = blockColor(b.categoryId, names)
   const dim = b.state === 'missed' || b.state === 'parked' || b.state === 'cancelled'
@@ -864,28 +875,19 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
     </>
   )
   // N9: a click on the name waits for a second one before the day opens (a double click renames – the first click would take you away); a click anywhere else, with
-  // Ctrl or Shift, or of the keyboard (no pointer) acts at once.
-  const opening = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // `data-open-wait` on the tile while the day waits for a second click (the tests wait for it to go instead of a fixed time).
-  const [waiting, setWaiting] = useState(false)
-  const stopOpening = () => {
-    if (opening.current) clearTimeout(opening.current)
-    opening.current = null
-    setWaiting(false)
-  }
-  useEffect(
-    () => () => {
-      if (opening.current) clearTimeout(opening.current)
-    },
-    []
-  )
-  // Whatever else the click's tile is taken for meanwhile – a press (a drag, a second click), a Ctrl / Shift click, F2 (the field opens) – ends the wait: the day never opens afterwards.
+  // Ctrl or Shift, or of the keyboard (no pointer) acts at once. The wait is the grid's one (`openWait`): any press or click on any tile ends it – a Ctrl / Shift click or a drag
+  // of another block too – and so do F2, Esc and another week; a block alone (tests) has a wait of its own.
+  const own = useOpenWait()
+  const wait = openWait ?? own
+  const key = blockKey(date, b.id)
+  const waiting = wait.waiting === key
+  // The field opens (F2): the wait ends – the day never opens afterwards.
   const fieldOpen = rename?.active === true
   useEffect(() => {
-    if (fieldOpen) stopOpening()
+    if (fieldOpen) wait.cancel()
   }, [fieldOpen])
   const open = () => {
-    stopOpening()
+    wait.cancel()
     // D462: the click selects the block – its day opens with it selected (as in „Agenda”); Del there removes it. A block outside the plan only opens the day.
     if (b.outsidePlan) openDay(date)
     else openPick({ page: 'today', day: date }, { kind: 'block', id: b.id, date })
@@ -895,28 +897,25 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
     <button
       type="button"
       onClick={(e) => {
-        stopOpening()
+        wait.cancel()
         if (grab?.consumed()) return
         // D527: Ctrl and Shift select the block – the day stays closed (the selection is of the columns).
         if (onPick && (e.ctrlKey || e.shiftKey)) return onPick(e)
         if (renamable && e.detail > 0 && onTileName(e, e.currentTarget)) {
-          if (e.detail === 1) {
-            opening.current = setTimeout(open, DOUBLE_CLICK_MS)
-            setWaiting(true)
-          }
+          if (e.detail === 1) wait.begin(key, open)
           return
         }
         open()
       }}
       onDoubleClick={(e) => {
         if (!rename || !renamable || e.ctrlKey || e.shiftKey || !onTileName(e, e.currentTarget)) return
-        stopOpening()
+        wait.cancel()
         rename.start()
       }}
       // D528: the right button and the menu key – the menu of the selection (this block is put into it first).
       {...(onContext ? menuBind(onContext) : {})}
       onPointerDown={(e) => {
-        stopOpening()
+        wait.cancel()
         grab?.down(e)
       }}
       {...NO_GRID}

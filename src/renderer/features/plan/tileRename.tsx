@@ -5,7 +5,7 @@
  * block of a series changes only this day (D430: a name changed in one day changes that day alone – no question of the scope). The field is the
  * tile's own: its keys stay in it (Esc closes only it), the mouse never reaches the tile or the axis under it.
  */
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { BLOCK_NAME_MAX } from '@shared/model/plan'
 import { cx } from '../../components/ui'
 import { isEditable } from '../../lib/deleteKey'
@@ -91,6 +91,56 @@ export const DOUBLE_CLICK_MS = 300
 
 /** What on a tile is its own control (the cost's label, a button, the handles of its edges): a click there is that control's, never the name's. */
 const OWN_CONTROL = 'button, a, input, textarea, select, [role="button"], [data-cost-of], [data-edge]'
+
+/**
+ * The one wait of a grid for a second click (`DOUBLE_CLICK_MS`) before the day of the block clicked opens: `waiting` – the key of the tile whose opening waits,
+ * `begin` starts it (a new one replaces the old), `cancel` ends it – any press anywhere (a window listener, only while waiting: the press of the first click comes
+ * before `begin`, so it never ends its own wait), a click on a tile, F2, Esc, another week or view, the tile or the grid going away (the presses, the keys and the
+ * unmount are the hook's own). The day never opens after a `cancel`.
+ */
+export interface OpenWait {
+  waiting: string | null
+  begin: (key: string, open: () => void) => void
+  cancel: () => void
+}
+export function useOpenWait(): OpenWait {
+  const [waiting, setWaiting] = useState<string | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancel = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+    setWaiting(null)
+  }, [])
+  const begin = useCallback((key: string, open: () => void) => {
+    if (timer.current) clearTimeout(timer.current)
+    setWaiting(key)
+    timer.current = setTimeout(() => {
+      timer.current = null
+      setWaiting(null)
+      open()
+    }, DOUBLE_CLICK_MS)
+  }, [])
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    []
+  )
+  const pending = waiting != null
+  useEffect(() => {
+    if (!pending) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'F2') cancel()
+    }
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('pointerdown', cancel, true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('pointerdown', cancel, true)
+    }
+  }, [pending, cancel])
+  return useMemo(() => ({ waiting, begin, cancel }), [waiting, begin, cancel])
+}
 
 /**
  * Whether a double click `e` on the tile `el` is one on its name (`[data-tile-name]`). The target decides when it is a part of the tile: the name, yes;
