@@ -89,7 +89,7 @@ import { DayNumbers, DaySummary } from './DayNumbers'
 import { BlockDayNotes } from './DayNotes'
 import { DayWarnings, dayWarningTexts } from './DayWarnings'
 import { CheapestSwapLine } from './CheapestSwap'
-import { RegenHereLine } from './RegenHere'
+import { RegenHereHint, RegenHereLine } from './RegenHere'
 import { useReserveKey } from './useProposal'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
@@ -136,6 +136,8 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
   const date = model.date
   const isToday = date === today
   const names: Names = useMemo(() => ({ rd, settings: model.state.settings, routines, requests }), [rd, model.state.settings, routines, requests])
+  // N3 by N20 (T2961, T2964): the day's key of the proposals once per count – the side panel and the hints of the axis share it.
+  const dayKey = useReserveKey(model, date < today)
   const axis = useMemo(() => dayAxis(model, names, isToday ? now : null, today), [model, names, isToday, now, today])
   // D410: the attachments of the day's blocks – the 📎 on a tile, a drop of files on it, the panel's section.
   const attachments = useData((s) => s.attachments)
@@ -771,6 +773,8 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
               // D501: the window of the cost on a tile – one path with „3 dni” and „Tydzień” (a block of a series not begun asks its scope as
               // the panel does, once a window; a begun block costs so from now on).
               energyTrial={energyTrial}
+              // N20's hint of the tile at the cause, N3's proposal in it (T2961): the same proposal and action as the side panel's line.
+              reserveAction={(id, cause) => <RegenHereHint model={model} names={names} past={date < today} dayKey={dayKey} id={id} cause={cause} />}
               onCosts={(id, costs, ask) => saveTileCosts({ date, blockId: id, names, ofSeries: plan.find((x) => x.id === id)?.origin === 'series' }, costs, { ask })}
               rename={rename}
               markers={axis.markers}

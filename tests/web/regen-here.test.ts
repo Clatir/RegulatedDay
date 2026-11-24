@@ -30,6 +30,8 @@ import { CATEGORY_COLORS, rdFrom } from '@shared/model/rd'
 import { useCalendarFilter } from '@renderer/features/calendars/calendarFilter'
 import { BlockDayNotes } from '@renderer/features/today/DayNotes'
 import { SidePanel } from '@renderer/features/today/TodayPage'
+import { RegenHereDayHint, RegenHereHint } from '@renderer/features/today/RegenHere'
+import { Timeline } from '@renderer/features/plan/Timeline'
 import { PLAN_CHANGED_TEXT, arrangeDayBlocks, cheapestSwapCached, countedPlan, planAfter, resetEnergyOrderCache, resetSwapCache, swapDayBlocks } from '@renderer/features/today/dayActions'
 import { REGEN_PAST_TEXT, regenDoneText, regenHereCached, regenHereKeyOf, regenLineText, regenMemory, regenSignature, resetRegenCache } from '@renderer/features/today/regenActions'
 import { useData } from '@renderer/store/data'
@@ -626,5 +628,91 @@ describe('countedPlan – jedna reguła zapisu na planie okna (T2927, T2929)', (
     const seen = fileOf([OWN, ...chain])
     expect(standing(seen, { seen })).toBe('stands')
     expect(standing(fileOf([OWN, { ...chain[0]!, startMin: lm('18:30') }, ...chain.slice(1)]), { seen })).toBe('changed')
+  })
+})
+
+/**
+ * N3 in N20's hint (T2960–T2965): the tile at the cause shows the same proposal as the side panel's line – only on the tile of the block the
+ * regeneration stands before, for its pool; a click there is the same save and toast, and the proposal done goes from both places.
+ */
+describe('„Wstaw regenerację tutaj” w podpowiedzi kafelka przyczyny (N20)', () => {
+  type Cause = { drops: Array<{ pool: Pool; from: number; to: number }> }
+  const tile = (id: string, startMin: number, reserve?: Cause) => ({ id, startMin, endMin: startMin + 60, title: id, marks: [], color: '#79AFAB', categoryId: 'inne', background: false, ...(reserve ? { reserve } : {}) })
+  const head: Cause = { drops: [{ pool: 'head', from: 21, to: 19 }] }
+  /** The pointer over a tile (React's `onMouseEnter` comes from `mouseover`). */
+  const over = (el: Element) => act(() => void el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body })))
+  /** The axis of „Dziś” as `TodayPage` gives it the slot: „Analiza” 14:00 and „Inne” 17:00 both causes (`cause` – of „Analiza”). */
+  const axis = (m: DayModel, cause: Cause = head) =>
+    createElement(Timeline, {
+      items: [tile('e', lm('14:00'), cause), tile('c', lm('17:00'), head)],
+      markers: [],
+      selected: null,
+      onSelect: () => undefined,
+      from: 360,
+      to: 1320,
+      reserveAction: (id: string, c: Cause) => createElement(RegenHereHint, { model: m, names: NAMES, past: false, id, cause: c })
+    })
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = () => undefined
+  })
+
+  it('kafelek bloku, przed którym staje regeneracja – przycisk z tym samym podpisem co linia; inny kafelek przyczyny – bez niego', async () => {
+    stub()
+    const m = model()
+    // The hint's proposal is counted only once the hint opens (its slot is drawn then).
+    await render(axis(m))
+    over(q('block-e')!)
+    await settle(m)
+    expect(q('regen-here-hint')!.closest('[role="tooltip"]')).toBe(q('reserve-cause-e'))
+    expect(q('regen-here-hint-text')!.textContent).toBe(LINE)
+    expect(q('regen-here-hint-apply')!.textContent).toBe('Wstaw regenerację tutaj')
+    expect((q('regen-here-hint-apply') as HTMLButtonElement).disabled).toBe(false)
+    over(q('block-c')!)
+    expect(q('reserve-cause-c')).not.toBeNull()
+    expect(q('regen-here-hint')).toBeNull()
+  })
+
+  it('przyczyna kafelka innej puli (bodźce) – bez przycisku: propozycja jest dla głowy', async () => {
+    stub()
+    const m = model()
+    await render(axis(m, { drops: [{ pool: 'senses', from: 21, to: 19 }] }))
+    over(q('block-e')!)
+    await settle(m)
+    expect(q('reserve-cause-e')).not.toBeNull()
+    expect(q('regen-here-hint')).toBeNull()
+  })
+
+  it('klik w podpowiedzi – ten sam zapis i dymek co linia; zrobiona propozycja znika z linii i z podpowiedzi', async () => {
+    const { sent } = stub()
+    const m = model()
+    await render(createElement('div', null, createElement(SidePanel, sideProps(m)), axis(m)), m)
+    expect(q('regen-here-text')!.textContent).toBe(LINE)
+    over(q('block-e')!)
+    await act(async () => void q('regen-here-hint-apply')!.click())
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    expect(fields(sent[0]![0]!)).toEqual(expect.arrayContaining([['blocks.#e.startMin', lm('14:00'), lm('14:15')]]))
+    await vi.waitFor(() => expect(texts()).toContain(DONE))
+    expect(q('regen-here')).toBeNull()
+    expect(q('regen-here-hint')).toBeNull()
+    // And the other way: a proposal done by the line is gone from the hint (one memory).
+    regenMemory.reset()
+    act(() => root!.unmount())
+    const again = model({ at: '07:35' })
+    stub()
+    await render(createElement('div', null, createElement(SidePanel, sideProps(again)), axis(again)), again)
+    over(q('block-e')!)
+    expect(q('regen-here-hint')).not.toBeNull()
+    await act(async () => void q('regen-here-apply')!.click())
+    await vi.waitFor(() => expect(q('regen-here-hint')).toBeNull())
+    // The hint itself stays open (its words) – only the proposal done is gone from it.
+    expect(q('reserve-cause-e')).not.toBeNull()
+  })
+
+  it('„Tydzień” i „3 dni” (T2963): w kolumnie dnia innego niż dziś – nic (dzień przyszły nie ma ostrzeżenia, miniony – historia)', async () => {
+    await render(createElement(RegenHereDayHint, { date: '2026-10-29', id: 'e', cause: head }))
+    expect(host!.innerHTML).toBe('')
+    act(() => root!.unmount())
+    await render(createElement(RegenHereDayHint, { date: '2026-10-27', id: 'e', cause: head }))
+    expect(host!.innerHTML).toBe('')
   })
 })

@@ -29,10 +29,18 @@ export function useProposal<T>(model: ProposalDay, key: string | null, memory: P
   return seen
 }
 
+/** The day's key by the day counted (the object of the model): the side panel and the axis' hints of one count share it (T2964). */
+const keys = new WeakMap<object, string | null>()
+
 /**
- * The day's key of the proposals by the warning (T2636, T2875): counted once per day counted – the panel passes it to both its lines
- * (the cheapest swap and the regeneration have the same key); null – a day gone by or no warning: nothing to count.
+ * The day's key of the proposals by the warning (T2636, T2875, T2964): counted once per day counted – for every place that shows them (the
+ * panel's two lines, the hints of the axis; the cheapest swap and the regeneration have the same key); null – a day gone by or no warning:
+ * nothing to count.
  */
 export function useReserveKey(model: ProposalDay, past: boolean): string | null {
-  return useMemo(() => (past ? null : cheapestSwapKeyOf(model)), [model, past])
+  return useMemo(() => {
+    if (past) return null
+    if (!keys.has(model)) keys.set(model, cheapestSwapKeyOf(model))
+    return keys.get(model) ?? null
+  }, [model, past])
 }

@@ -8,6 +8,7 @@ paths:
   - "src/renderer/features/today/useProposal.ts"
   - "src/renderer/features/today/regenActions.ts"
   - "src/renderer/features/today/dayActions.ts"
+  - "src/renderer/features/week/WeekPage.tsx"
   - "tests/unit/engine/cheapest-swap.test.ts"
   - "tests/unit/engine/regen-here.test.ts"
   - "tests/web/cheapest-swap.test.ts"
@@ -39,8 +40,12 @@ paths:
 
 ## Okno
 - Linie w `DayWarnings` (panel boczny i `BlockDayNotes`, nie pasek – D229; dzień miniony – nic): slot `swap` – `CheapestSwap.tsx` `CheapestSwapLine`, slot `regen`
-  – `RegenHere.tsx` `RegenHereLine`. Klucz dnia raz na model dla obu (`useReserveKey` → `dayKey`, `cheapestSwapKeyOf` = data | `energyOrderKey` z kosztami rutyn,
-  T2627, T2636, T2875); nazwy `nameById`.
+  – `RegenHere.tsx` `RegenHereLine`. Klucz dnia raz na model (`useReserveKey` – pamięć po obiekcie modelu, wspólna dla panelu i podpowiedzi osi → `dayKey`;
+  `cheapestSwapKeyOf` = data | `energyOrderKey` z kosztami rutyn; T2627, T2636, T2875, T2964); nazwy `nameById`.
+- Podpowiedź N20 (T2960–T2965): `RegenHere.tsx` – wspólny hook `useRegenHere` (ta sama pamięć, słowa, przycisk i `insertRegen` co linia); `RegenHereHint` w slocie
+  `reserveAction` – tylko kafelek `beforeId` i pula z `cause.drops`; „Dziś” – `Timeline` w `TodayPage` (`dayKey` z `DayView`); „Tydzień”/„3 dni” – `DayGrid`
+  `reserveAction` = `RegenHereDayHint` (`WeekPage`): tylko kolumna dnia bieżącego, model z `useDay(dziś)` dopiero przy otwarciu podpowiedzi; dzień przyszły
+  (krzywa z przyjętego check-inu, bez ostrzeżenia w `DayModel`) i miniony – nic. Zrobiona w jednym miejscu – znika z obu (pamięć). Testy w `tests/web/regen-here.test.ts`.
 - Pamięć (T2648): `proposalMemory.ts` `proposalMemory({ what, search, signature, holds, live? })` – ostatnia po kluczu i dacie; zrobione po dacie i treści, zbiór na
   dzień (druga nie odsłania pierwszej, `back` zdejmuje tylko swoją – T2878), `GONE_DAYS` = 14; `peek` (`fresh` / `due`; przed policzeniem nowego klucza – propozycja
   pokazana przez tę linię, póki `holds`, przycisk wyłączony, T2633, T2639; `live` fałsz – żadna linia jej nie pokazuje, T2925); `nudge` – linie patrzą od nowa;
