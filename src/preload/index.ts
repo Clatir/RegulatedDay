@@ -130,6 +130,7 @@ const api: RdApi = {
   quickAdd: (title) => ipcRenderer.invoke(CH.quickAdd, title),
   quickClose: () => ipcRenderer.send(CH.quickClose),
   quickToday: () => ipcRenderer.invoke(CH.quickToday),
+  quickCategories: () => ipcRenderer.invoke(CH.quickCategories),
   onQuickShown: (cb) => on(CH.onQuickShown, cb),
   quickShortcut: () => ipcRenderer.invoke(CH.quickShortcut),
   onQuickShortcut: (cb) => on(CH.onQuickShortcut, cb),

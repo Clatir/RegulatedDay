@@ -1121,14 +1121,16 @@ function registerIpc(): void {
   handle(CH.quickAdd, async (e, title: unknown) => {
     const r = await quickAdd(typeof title === 'string' ? title.slice(0, 1000) : '')
     if (r.ok && viewOf(e.sender) === 'quick') {
-      quick?.close('zapisano')
+      // D601: the queue asks about the day's file – the window stays and says it under the field (the bar says it too), never a silent success.
+      if (!r.asked) quick?.close('zapisano')
       // D470: the bar says where it went – the quick window is gone already.
-      void widget.quickSaid(r.title ?? '')
+      void widget.quickSaid(r.title ?? '', r)
     }
     return r
   })
   ipcMain.on(CH.quickClose, () => quick?.close('Esc'))
-  handle(CH.quickToday, () => needHub().quickToday())
+  handle(CH.quickToday, () => needHub().quickClock())
+  handle(CH.quickCategories, () => needHub().quickCategories())
   // The settings ask for its state (opened, T759): one Windows refused is tried again first.
   handle(CH.quickShortcut, () => quick?.retry() ?? { key: shortcutOf(prefs()), state: 'off' })
   handle(CH.casesRitual, (_e, day: unknown) => needHub().casesRitual(String(day)))

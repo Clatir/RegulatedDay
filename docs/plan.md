@@ -45,6 +45,16 @@ Jedno wydanie **1.38.0** na końcu (D572, jak D562).
 - **Koniec:** sześć plików strumieni ma „Strumień gotowy” → koordynator: `git merge origin/main`, `version` 1.38.0,
   jedna sekcja `CHANGELOG.md`, rejestry, `docs/odbior.md`, `docs/postep.md`, pełne testy, lokalny Setup.exe w Downloads,
   PR z pełnym CI, scalenie, wydanie, usunięcie drzew n-a1, n-a2, n-b1, n-b2, n-c, n-d.
+- **Jedno CI na końcu, każdy poprawia swoje (T2852, polecenie użytkownika 23.11):** żaden strumień nie otwiera PR ani nie
+  uruchamia CI. PR końcowy idzie z osobnej gałęzi `claude/1.38.0`, którą przesuwa tylko koordynator – wypchnięcia
+  strumieni do `claude/ciag-n` CI nie uruchamiają. Strumień po „Strumień gotowy” **nie usuwa crona i nie kończy pracy**:
+  wpisuje w swoim pliku nazwę sesji (`Sesja: regulatedday-xx`) i czeka na wynik CI. Czerwone CI → koordynator przypisuje
+  każdy padający test strumieniowi, którego zadanie go zmieniło (commity strumienia w `claude/ciag-n`, numer N w nazwie
+  testu albo pliku), zapisuje listę w `docs/ciag-n/CI.md` (wypchnięte do `claude/ciag-n`) i wysyła ją strumieniom
+  (SendMessage). Strumień poprawia w swoim drzewie (test, który pada, i poprawka), scala do `claude/ciag-n` jak zadanie
+  i odhacza swoją pozycję w `CI.md`. Gdy wszystkie pozycje są odhaczone, koordynator przesuwa `claude/1.38.0` – jedna nowa
+  runda CI dla wszystkich poprawek. Test bez właściciela (niestabilny, wspólny) poprawia koordynator. Po zielonym CI
+  i scaleniu koordynator pisze strumieniom „koniec” – dopiero wtedy usuwają swój cron.
 
 ### Strumień A – silnik dnia, timer, pasek pulpitu: A1 = N7, N17, N1 (9–13,5 h); A2 = N12, N2, N4 (7–10 h)
 

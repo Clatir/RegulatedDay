@@ -22,7 +22,7 @@ function VariantRow({ categoryId, rules, v }: { categoryId: string; rules: Categ
     <div className={cx('flex flex-wrap items-center gap-2 rounded border border-line px-2 py-1', v.archived && 'border-dashed')} data-testid="variant-row" data-variant={v.id}>
       <TextField value={v.name} onCommit={(name) => edit((now) => changeVariant(now, v.id, { name }))} required max={VARIANT_NAME_MAX} shellClassName="w-[200px]" aria-label="Nazwa wariantu" data-testid="variant-name" />
       <Toggle checked={own == null} onChange={(same) => edit((now) => changeVariant(now, v.id, { costs: same ? null : { ...rules.costs } }))} label="koszt jak podkategoria" data-testid="variant-costs-same" />
-      {own && <CostNumbers costs={own} named label={(pool) => `${v.name}: ${pool}`} onCommit={(p, value) => edit((now) => changeVariant(now, v.id, { costs: { ...(now.find((x) => x.id === v.id)?.costs ?? own), [p]: value } }))} />}
+      {own && <CostNumbers wheel="gesture" costs={own} named label={(pool) => `${v.name}: ${pool}`} onCommit={(p, value) => edit((now) => changeVariant(now, v.id, { costs: { ...(now.find((x) => x.id === v.id)?.costs ?? own), [p]: value } }))} />}
       <Choice
         value={v.place ?? VARIANT_PLACE_SAME}
         options={[...VARIANT_PLACE_OPTIONS]}

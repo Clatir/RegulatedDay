@@ -1,6 +1,7 @@
 /**
  * One pool's cost an hour typed in (D568): a whole number in `RANGES.cost` (−100…100), „−” / „-” both taken; a refused text says why
- * under the field and the saved value comes back (the common handling of `SettingNumber`). The windows of a tile's cost and of a group's
+ * under the field and the saved value comes back (the common handling of `SettingNumber`); the mouse wheel over it changes the number
+ * (N8: ±1, with Shift ±10 – `SettingNumber wheel`, as in `CostNumbers`; `wheel` says how it saves: `'step'` every turn at once – the group's window with its own state, `'gesture'` once per gesture – the tile's window, T2551). The windows of a tile's cost and of a group's
  * cost put it between their „−” and „+”.
  */
 import { RANGES } from '@shared/model/settings'
@@ -8,14 +9,14 @@ import { WIDE_COST_FROM, wideCostWarning } from '@shared/model/blockCosts'
 import type { Costs, Pool } from '@shared/model/categories'
 import { olderComputers } from '@shared/model/note'
 import { useData } from '../../store/data'
-import { SettingNumber } from '../settings/SettingNumber'
+import { SettingNumber, type WheelMode } from '../settings/SettingNumber'
 import { POOL_NAME } from './energyDraw'
 
 /** The field of a pool's cost: an integer in the schema's range. */
 export const COST_FIELD = { kind: 'integer', range: RANGES.cost } as const
 
-export function CostInput({ pool, value, onCommit, testId }: { pool: Pool; value: number; onCommit: (v: number) => void; testId: string }) {
-  return <SettingNumber field={{ ...COST_FIELD, label: `${POOL_NAME[pool]}: koszt na godzinę` }} value={value} onCommit={onCommit} className="w-[52px]" data-testid={testId} />
+export function CostInput({ pool, value, onCommit, testId, wheel }: { pool: Pool; value: number; onCommit: (v: number) => void; testId: string; wheel: WheelMode }) {
+  return <SettingNumber field={{ ...COST_FIELD, label: `${POOL_NAME[pool]}: koszt na godzinę` }} value={value} onCommit={onCommit} className="w-[52px]" wheel={wheel} data-testid={testId} />
 }
 
 /** The text of `WideCostWarning` for these costs (null – none): the computers of the folder's view. */

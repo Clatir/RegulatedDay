@@ -45,7 +45,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-11-23T10:30:00Z'))
   widgetAction = vi.fn<RdApi['widgetAction']>(() => Promise.resolve())
-  const api: Partial<RdApi> = { widgetAction, showMain: vi.fn(), barAction: vi.fn(() => Promise.resolve()), barClose: vi.fn(), barLayout: vi.fn(), panelTouch: () => undefined, barDrag: () => undefined, onBarDragOver: () => () => undefined, quickToday: () => Promise.resolve('2026-11-23') }
+  const api: Partial<RdApi> = { widgetAction, showMain: vi.fn(), barAction: vi.fn(() => Promise.resolve()), barClose: vi.fn(), barLayout: vi.fn(), panelTouch: () => undefined, barDrag: () => undefined, onBarDragOver: () => () => undefined, quickToday: () => Promise.resolve({ today: '2026-11-23', nowMin: null }) }
   ;(window as unknown as { rd: Partial<RdApi> }).rd = api
   if (!hadObserver)
     (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {

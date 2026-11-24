@@ -35,7 +35,7 @@ const recordsIn = (dir: string, folder: string): Json[] =>
         .filter((r): r is Json => r != null)
     : []
 const mondayOf = (date: string): string => addDays(date, -((new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7))
-const headingOf = (date: string): string => `${['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'][(new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7]} ${Number(date.slice(8, 10))}.${date.slice(5, 7)}`
+const headingOf = (date: string): string => `${['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'][(new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7]} ${date.slice(8, 10)}.${date.slice(5, 7)}` // as `dayHeading` (`plDayMonth`, zero-padded)
 const centreOf = async (page: Page, testId: string) => {
   const b = (await page.getByTestId(testId).boundingBox())!
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 }

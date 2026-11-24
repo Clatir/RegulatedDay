@@ -11,12 +11,16 @@ import { execFile } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { BarCostClick, BarCostResult } from '@shared/widget'
-import type { AddLinkResult, AttachPrepared, AttachResult, AttachmentOpen, CaseDays, CloseResult, GroupLogResult, GroupLogUndone, QuickAddResult, TemplateApplyResult, TemplateDoneAsk, TemplateUndoAsk, TemplateUndoJudged, TemplateUndoResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
+import type { QuickClock, AddLinkResult, AttachPrepared, AttachResult, AttachmentOpen, CaseDays, CloseResult, GroupLogResult, GroupLogUndone, QuickAddResult, TemplateApplyResult, TemplateDoneAsk, TemplateUndoAsk, TemplateUndoJudged, TemplateUndoResult, BackupRecord, CalibrationScreen, SeriesResult, ComputerRow, DataView, SearchCorpus, DayData, EditEntry, EditOutcome, EditQuestion, EventIn, FolderProbe, GameScreen, HistoryRecord, HistoryVersion, MovedTo, RawRecord, RequestCounters, RestoreOutcome, TimerIn, TimerResult, UnclosedDay, ZjazdPreview, ZjazdSaveResult, ZjazdSkipReason, ZjazdUndoDay } from '@shared/api'
 import type { RitualValue, RitualView } from '@shared/engine/ritual'
-import { blockFactsOf, type CasesRitual } from '@shared/engine/cases'
+import { blockFactsOf, casePlan, type CasesRitual } from '@shared/engine/cases'
 import { newId } from '@shared/model/ids'
 import { newTask } from '@shared/model/requests'
-import { parseQuickDates } from '@shared/quickDates'
+import { dayWord, parseQuickWords, type QuickCategory } from '@shared/quickDates'
+import { quickCategories } from '@shared/quickCategories'
+import { NOT_PLACED, notPlacedBefore, quickNowMin } from '@shared/quickSaid'
+import { logicalClock } from '@shared/format'
+import { settingsOn } from '@shared/model/settings'
 import type { CloseHow } from '@shared/model/events'
 import { deepEqual, diffRecords, recordEdit } from '@shared/data/merge'
 import { isRaw } from '@shared/data/dayEdits'
@@ -33,7 +37,7 @@ import type { GoalsView } from '@shared/engine/goals'
 import { DAYS_VIEW_MAX, type DaysView, type WeekView } from '@shared/engine/week'
 import type { MonthView } from '@shared/engine/calendarViews'
 import { goalsPatchFrom, isMonth } from '@shared/model/goals'
-import { keptOnRestore, rdFrom } from '@shared/model/rd'
+import { keptOnRestore, rdFrom, type RdFile } from '@shared/model/rd'
 import { requestCounters } from '@shared/engine/requests'
 import type { AnyEvent } from '@shared/model/events'
 import { logicalDayOf, placeLogical, weekStart } from '@shared/time/day'
@@ -1088,9 +1092,12 @@ export class DataHub {
 
   /**
    * The quick capture (D385, D402): a task of your own – only its title – into „Skrzynka”, from the window „Do skrzynki”
-   * and the bar's field; the words of dates at the title's end („!jutro”, „@pt”, „!20.11” – D409) set its due date and
-   * its date of doing and leave the title. Without an open folder, or without a title – not saved, with why; a folder
-   * away – it waits in the queue as every new record (saved).
+   * and the bar's field; the words at the title's end (`parseQuickWords`: „!jutro”, „@pt”, „!20.11” – D409; a length „1h30”,
+   * „#anal” – its subcategory, D600, D602) set its due date, its date of doing, its estimate and its subcategory and leave
+   * the title. „@jutro 15:00” (D601): the task is put on that day's axis at once, as „Zaplanuj” of one sprawa does (`casePlan`,
+   * nothing pushed apart) – a day gone by, a file of the day or the settings that cannot be read now: saved without a block,
+   * `notPlaced` says why. Without an open folder, or without a title – not saved, with why; a folder away – it waits in the
+   * queue as every new record (saved).
    */
   async quickAdd(title: unknown): Promise<QuickAddResult> {
     const f = this.service?.folder
@@ -1098,18 +1105,72 @@ export class DataHub {
     const now = f.clock.now()
     const id = newId()
     const today = logicalDayOf(now)
-    const q = parseQuickDates(typeof title === 'string' ? title : '', today)
-    const raw = newTask(id, now, today, { title: q.title, dueDate: q.dueDate, doDate: q.doDate })
+    const rd = await this.quickRd(f)
+    const q = parseQuickWords(typeof title === 'string' ? title : '', today, rd ? quickCategories(rd, today) : [], quickNowMin(today, now))
+    const raw = newTask(id, now, today, { title: q.title, dueDate: q.dueDate, doDate: q.doDate, estimateMin: q.estimateMin, categoryId: q.categoryId })
     if (!raw) return { ok: false, error: 'Wpisz, co zapisać.', id: null, title: null }
-    const out = await this.edit([recordEdit(paths.record('request', id), null, raw)!])
-    const ok = out.every((o) => o.status === 'applied' || o.status === 'waiting')
-    return { ok, error: ok ? null : 'Nie zapisano – spróbuj jeszcze raz.', id: ok ? id : null, title: ok ? String(raw.title) : null }
+    let entries: EditEntry[] | null = null
+    let placed: string | null = null
+    let notPlaced: string | null = null
+    if (q.startMin != null && q.doDate) {
+      const date = q.doDate
+      let file: RawRecord | null | undefined
+      notPlaced = notPlacedBefore(date, q.startMin, now) ?? (rd ? null : NOT_PLACED.settingsUnreadable)
+      if (!notPlaced) {
+        try {
+          file = (await f.recordView(paths.day(date))) ?? null
+        } catch {
+          notPlaced = NOT_PLACED.dayUnreadable
+        }
+      }
+      if (rd && file !== undefined && !notPlaced) {
+        const p = casePlan({ record: raw, date, startMin: q.startMin, files: { [date]: file }, rules: settingsOn(rd.settings, date).categories, at: now, begun: () => undefined })
+        const day = p && !('refused' in p) ? recordEdit(paths.day(date), file, p.days[date]!) : null
+        const rec = p && !('refused' in p) ? recordEdit(paths.record('request', id), null, p.record) : null
+        if (day && rec) {
+          // One edit: the day's file with its block, then the task „zaplanowane” in it – laid only after the day's file (T923).
+          entries = [day, { ...rec, after: [0] }]
+          placed = `${dayWord(date, today)} ${logicalClock(q.startMin)}`
+        } else notPlaced = NOT_PLACED.refused
+      }
+    }
+    const out = await this.edit(entries ?? [recordEdit(paths.record('request', id), null, raw)!])
+    // As the window's `outcomeFate`: written or waiting for the folder – saved; a question about a change on another computer – it waits for
+    // the answer (never „try again”: a second Enter would make a second sprawa); only a refusal or a broken file is no save.
+    const ok = out.every((o) => o.status === 'applied' || o.status === 'waiting' || o.status === 'conflict' || o.status === 'removedElsewhere' || o.status === 'changedElsewhere')
+    // Any entry put or waiting for the folder – the block stands; a question about one of them (the day's file, the sprawa) – nothing is „put” yet:
+    // the answer „ich wersja” takes the sprawa with its block (the record goes after the day's file), so it is said as waiting, never „Dodano na oś”.
+    const asked = ok && out.some((o) => o.status !== 'applied' && o.status !== 'waiting')
+    return { ok, error: ok ? null : 'Nie zapisano – spróbuj jeszcze raz.', id: ok ? id : null, title: ok ? String(raw.title) : null, ...(ok && placed && !asked ? { placed } : {}), ...(ok && asked ? { asked: true as const } : {}), ...(ok && notPlaced ? { notPlaced } : {}) }
+  }
+
+  /** The settings file as the quick capture reads it (the subcategories of „#…”, the rules of the day's block); null – not readable now. */
+  private async quickRd(f: DataFolder): Promise<RdFile | null> {
+    try {
+      return rdFrom(((await f.recordView(SETTINGS_FILE)) ?? undefined) as RawRecord | undefined)
+    } catch {
+      return null
+    }
+  }
+
+  /** The subcategories „#…” may name, in the order of the tree, as the settings of today have them (the preview under the field – D600). */
+  async quickCategories(): Promise<QuickCategory[]> {
+    const f = this.service?.folder
+    const rd = f ? await this.quickRd(f) : null
+    return rd ? quickCategories(rd, logicalDayOf(f ? f.clock.now() : Date.now())) : []
   }
 
   /** The logical day of the clock `quickAdd` saves with (D454: the preview of the words of dates counts from it, not from the window's clock). */
   quickToday(): string {
+    return this.quickClock().today
+  }
+
+  /** The day and the logical minute of that clock, taken at one moment – the preview counts both from it (T869, D604). */
+  quickClock(): QuickClock {
     const f = this.service?.folder
-    return logicalDayOf(f ? f.clock.now() : Date.now())
+    const at = f ? f.clock.now() : Date.now()
+    const today = logicalDayOf(at)
+    return { today, nowMin: quickNowMin(today, at) }
   }
 
   /** What a day's evening ritual says about „Sprawy” (D383, D384, D402). */

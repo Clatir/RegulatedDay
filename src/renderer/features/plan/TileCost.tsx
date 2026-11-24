@@ -312,7 +312,7 @@ export function TileCost({
                 <button type="button" className="btn px-2 py-0" disabled={shown.costs[p] <= COST_MIN} onClick={() => step(p, -1)} aria-label={`${POOL_NAME[p]}: mniej`} data-testid={`cost-pop-${p}-minus`}>
                   −
                 </button>
-                <CostInput pool={p} value={shown.costs[p]} onCommit={(v) => set(p, v)} testId={`cost-pop-${p}-value`} />
+                <CostInput pool={p} value={shown.costs[p]} onCommit={(v) => set(p, v)} testId={`cost-pop-${p}-value`} wheel="gesture" />
                 <button type="button" className="btn px-2 py-0" disabled={shown.costs[p] >= COST_MAX} onClick={() => step(p, 1)} aria-label={`${POOL_NAME[p]}: więcej`} data-testid={`cost-pop-${p}-plus`}>
                   +
                 </button>

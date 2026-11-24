@@ -13,6 +13,7 @@ import { installEscape } from '@renderer/lib/escape'
 import { useWidget } from '@renderer/store/widget'
 import { Bar } from '@renderer/widget/Bar'
 import { PanelApp } from '@renderer/widget/PanelApp'
+import { QuickApp } from '@renderer/widget/QuickApp'
 import { noFolderView, type WidgetView } from '@shared/widget'
 
 let uninstallEscape: () => void = () => undefined
@@ -28,7 +29,7 @@ const MAIN_DAY = '2030-05-06'
 let mainDay = MAIN_DAY
 beforeEach(() => {
   mainDay = MAIN_DAY
-  ;(window as unknown as { rd: Partial<RdApi> }).rd = { quickToday: () => Promise.resolve(mainDay) }
+  ;(window as unknown as { rd: Partial<RdApi> }).rd = { quickToday: () => Promise.resolve({ today: mainDay, nowMin: null }) }
 })
 
 let root: Root | null = null
@@ -176,7 +177,7 @@ describe('pole szybkiego zapisu: tekst tylko przez zmianę układu (T767)', () =
 describe('pole „+ Skrzynka” w panelu ikony przy „Odcinam się” (T771, T772)', () => {
   const hadObserver = 'ResizeObserver' in globalThis
   beforeEach(() => {
-    const rd: Partial<RdApi> = { quickToday: () => Promise.resolve(MAIN_DAY), onPanelTarget: () => () => undefined, panelTouch: () => undefined, panelClose: () => undefined, barLayout: () => undefined }
+    const rd: Partial<RdApi> = { quickToday: () => Promise.resolve({ today: MAIN_DAY, nowMin: null }), onPanelTarget: () => () => undefined, panelTouch: () => undefined, panelClose: () => undefined, barLayout: () => undefined }
     ;(window as unknown as { rd: Partial<RdApi> }).rd = rd
     if (!hadObserver)
       (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
@@ -230,5 +231,117 @@ describe('pole „+ Skrzynka” w panelu ikony przy „Odcinam się” (T771, T7
     await openWith('x')
     await act(async () => useWidget.setState({ view: { ...dayView(), hidden: true, stateLine: 'Odcinam się od 10:00' } }))
     expect(field()?.value).toBe('x')
+  })
+})
+
+describe('podgląd „#…”: lista podkategorii od otwarcia pola, nie od wpisania „#” (N10, D600)', () => {
+  const CATS = [
+    { id: 'inne', name: 'Inne obowiązki' },
+    { id: 'analiza', name: 'Analiza' }
+  ]
+  const typeText = (input: HTMLInputElement, text: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+  it('pole paska: lista pytana przy otwarciu (przed pierwszym znakiem), podgląd z nazwą od razu po wpisaniu „#anal”', async () => {
+    const quickCategories = vi.fn(() => Promise.resolve(CATS))
+    ;(window as unknown as { rd: Partial<RdApi> }).rd = { quickToday: () => Promise.resolve({ today: MAIN_DAY, nowMin: null }), quickCategories }
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(createElement(Bar, { view: dayView(), mode: 'main' })))
+    await act(async () => host!.querySelector<HTMLButtonElement>('[data-testid="bar-quick"]')!.click())
+    expect(quickCategories).toHaveBeenCalledTimes(1)
+    await typeText(host.querySelector<HTMLInputElement>('[data-testid="bar-quick-title"]')!, 'Raport @jutro 15:00 1h #anal')
+    expect(host.querySelector('[data-testid="bar-quick-preview"]')?.textContent).toBe('Wykonać: jutro 15:00 · 1 h · Analiza')
+    // A keystroke asks for the day only – the list is not asked again at every letter.
+    expect(quickCategories).toHaveBeenCalledTimes(1)
+  })
+
+  it('okienko „Do skrzynki”: lista pytana przy pokazaniu okienka (onQuickShown), nie dopiero po „#”', async () => {
+    const quickCategories = vi.fn(() => Promise.resolve(CATS))
+    let shown: () => void = () => undefined
+    ;(window as unknown as { rd: Partial<RdApi> }).rd = {
+      quickToday: () => Promise.resolve({ today: MAIN_DAY, nowMin: null }),
+      quickCategories,
+      quickClose: () => undefined,
+      onQuickShown: (cb) => {
+        shown = cb
+        return () => undefined
+      }
+    }
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(createElement(QuickApp)))
+    expect(quickCategories).toHaveBeenCalledTimes(1)
+    await act(async () => shown())
+    expect(quickCategories).toHaveBeenCalledTimes(2)
+    await typeText(host.querySelector<HTMLInputElement>('[data-testid="quick-title"]')!, 'Raport #zrod')
+    expect(host.querySelector('[data-testid="quick-preview"]')).toBeNull()
+    await typeText(host.querySelector<HTMLInputElement>('[data-testid="quick-title"]')!, 'Raport #anal')
+    expect(host.querySelector('[data-testid="quick-preview"]')?.textContent).toBe('Analiza')
+  })
+})
+
+describe('okienko „Do skrzynki”: zapis czeka na odpowiedź o zmianie z innego komputera (D601)', () => {
+  it('„asked” – okienko mówi to pod polem (spokojnie, nie błąd), pole puste; następny znak zdejmuje komunikat', async () => {
+    const quickAdd = vi.fn(() => Promise.resolve({ ok: true, error: null, id: 'x', title: 'Raport', asked: true as const }))
+    ;(window as unknown as { rd: Partial<RdApi> }).rd = { quickToday: () => Promise.resolve({ today: MAIN_DAY, nowMin: null }), quickCategories: () => Promise.resolve([]), quickClose: () => undefined, onQuickShown: () => () => undefined, quickAdd }
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(createElement(QuickApp)))
+    const input = host.querySelector<HTMLInputElement>('[data-testid="quick-title"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'Raport @jutro 15:00')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => void input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
+    expect(quickAdd).toHaveBeenCalledTimes(1)
+    expect(host.querySelector('[data-testid="quick-asked"]')?.textContent).toBe('Zapisano: Raport – czeka na odpowiedź o zmianie z innego komputera')
+    expect(host.querySelector('[data-testid="quick-error"]')).toBeNull()
+    expect(input.value).toBe('')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'x')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(host.querySelector('[data-testid="quick-asked"]')).toBeNull()
+  })
+})
+
+describe('podgląd „@HH:MM” liczy dzień i minutę z zegara procesu głównego, nie z okna (T869, D604)', () => {
+  const typeText = (input: HTMLInputElement, text: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+  it('pole paska: w nocy głównego procesu (minuta 1530) „@15:00” to jutro; bez znanej minuty – dziś', async () => {
+    for (const [nowMin, expected] of [[1530, 'Wykonać: jutro 15:00'], [null, 'Wykonać: dziś 15:00']] as const) {
+      ;(window as unknown as { rd: Partial<RdApi> }).rd = { quickToday: () => Promise.resolve({ today: MAIN_DAY, nowMin }), quickCategories: () => Promise.resolve([]) }
+      host = document.createElement('div')
+      document.body.append(host)
+      root = createRoot(host)
+      await act(async () => root!.render(createElement(Bar, { view: dayView(), mode: 'main' })))
+      await act(async () => host!.querySelector<HTMLButtonElement>('[data-testid="bar-quick"]')!.click())
+      await typeText(host.querySelector<HTMLInputElement>('[data-testid="bar-quick-title"]')!, 'Raport @15:00')
+      expect(host.querySelector('[data-testid="bar-quick-preview"]')?.textContent).toBe(expected)
+      act(() => root?.unmount())
+      host.remove()
+      root = host = null
+    }
+  })
+
+  it('okienko „Do skrzynki”: ta sama minuta głównego procesu', async () => {
+    ;(window as unknown as { rd: Partial<RdApi> }).rd = { quickToday: () => Promise.resolve({ today: MAIN_DAY, nowMin: 1530 }), quickCategories: () => Promise.resolve([]), quickClose: () => undefined, onQuickShown: () => () => undefined }
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () => root!.render(createElement(QuickApp)))
+    await typeText(host.querySelector<HTMLInputElement>('[data-testid="quick-title"]')!, 'Raport @15:00')
+    expect(host.querySelector('[data-testid="quick-preview"]')?.textContent).toBe('Wykonać: jutro 15:00')
   })
 })

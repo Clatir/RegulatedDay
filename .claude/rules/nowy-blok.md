@@ -6,6 +6,8 @@ paths:
   - "src/renderer/lib/outside.ts"
   - "src/renderer/features/plan/BlockEditor.tsx"
   - "src/renderer/features/plan/Timeline.tsx"
+  - "src/renderer/features/plan/tileRename.tsx"
+  - "src/renderer/features/plan/nameSave.ts"
   - "src/renderer/features/week/NewBlockPopover.tsx"
   - "src/renderer/features/templates/TemplatesPage.tsx"
   - "src/renderer/store/ui.ts"
@@ -14,6 +16,7 @@ paths:
   - "tests/web/block-end.test.ts"
   - "tests/web/draft-save.test.ts"
   - "tests/web/week-new-leave.test.ts"
+  - "tests/web/tile-rename.test.ts"
 ---
 
 # Nowy blok: zapis sam, szkic na osi, godzina końca (D461, D464, D466)
@@ -28,3 +31,7 @@ paths:
 
 ## „Szablony” (D366, D563 P2)
 - Klik w pustą oś szablonu (`Timeline.onCreate` → `saveChange(templateAdd(…), true)` w `TemplatesPage`) zapisuje blok od razu i otwiera panel; bez rozsunięcia innych mówi `undoToast` „Dodano blok · Cofnij” (10 s; `undoAddedBlock` w `templateActions.ts` = odwrotność dodania: szablon jak po dodaniu (`sameContentAs` – bez stempli `updatedAt`/`updatedBy`) → zapis stanu sprzed, inaczej blok po id z każdej wersji, która go ma, i każda taka wersja znika, gdy jest zbędna teraz (pusta bez niczego przed nią albo równa się obowiązującej przed nią – bloki, budżet, limit, `sessionsMoved`; ocena na szablonie jak teraz – dwa dodania, kopie wersji) i nie była zbędna w `made.before` (wersja pusta już przed dodaniem zostaje – szablon nie zostaje bez wersji); sygnatura `undoAddedBlock(templateId, blockId, made)` – nazwa wpisana w panelu zostaje, nie ma pytania; dymek tylko, gdy dodanie zmieniło szablon (`made`); komunikaty: brak bloku, nieczytelny rekord, odmowa; `asked` – cisza), z rozsunięciem – linia `template-pushed`. E2E `template-apply.spec.ts`.
+
+## Nazwa w miejscu (N9, T2552)
+- `plan/tileRename.tsx`: `useTileRename({ target, info, save, scope })` – F2 (bez modyfikatorów, nie w polu, nie przy oknie) przy dokładnie jednym zaznaczonym bloku (kilka albo żaden – nic) albo dwuklik w nazwę kafelka (`onTileName`, `[data-tile-name]`) stawia `TileNameField` na wierszu nazwy: Enter i utrata fokusu zapisują raz (`renamedTo` – przycięte do `BLOCK_NAME_MAX`, puste = `null`, bez zmiany = bez zapisu), Esc (`stopPropagation` – panel i zaznaczenie go nie słyszą) anuluje; zmiana `scope` (dzień, wersja, tydzień) albo zniknięcie bloku zamyka pole. `Timeline.rename` („Dziś”, „Szablony”) i `BlockBox.rename` („Tydzień”, „3 dni”, klucz `blockKey`); `info` null – blok bez pola (poza planem, nie własny w szablonie). Zapis tylko tego dnia, bez pytania o zakres serii: „Dziś” `patchDayBlock`, „Tydzień” `nameSave.ts` `renameDayBlock` (dzień czytany w turze, `patchedBlock`), „Szablony” `patchBlock(id, { name })`.
+- „Tydzień”: klik w nazwę otwiera dzień po `DOUBLE_CLICK_MS` (300 ms) – dopiero gdy drugi klik nie przyszedł; klik gdzie indziej na kafelku, z Ctrl/Shift albo z klawiatury – od razu. E2E `block-name.spec.ts`.
