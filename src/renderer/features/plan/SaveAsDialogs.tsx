@@ -73,21 +73,18 @@ export function SaveAsTemplateDialog({ model, open, today, view, onClose }: { mo
   const preview = useMemo(
     () =>
       model && pick && template
-        ? templateBlocksOf(pick.take, model.ctx.plan, { date: open.date, templateId: template.id, version: templateVersionOn(template, from), mode, newId: () => newId(10), wake: wakeFrameOf(model.snapshot, model.dayFile) })
+        ? templateBlocksOf(pick.take, model.ctx.plan, { date: open.date, templateId: template.id, version: templateVersionOn(template, from), mode, newId: () => newId(10), wake: wakeFrameOf(model.snapshot, model.dayFile, open.date, templates) })
         : null,
-    [model, pick, template, from, mode, open.date]
+    [model, pick, template, from, mode, open.date, templates]
   )
   const going = preview?.blocks.length ?? 0
-  // The day saved would take the template's copies of its blocks: the template makes it after the save (also one that becomes its template by it),
-  // and some block of the save is not one the day has from this template already (those it gives the day again in their place).
-  const twice = useMemo(
-    () =>
-      model && template && preview
-        ? bringsNewBlocks(preview.blocks, model.ctx.plan, open.date, template.id) &&
-          savedDayTwice(open.date, from, dayTemplateAfter(templates, savedTemplate(template, from, preview.blocks, mode), dayTypeNow(model), open.date), template.id)
-        : false,
-    [model, template, preview, templates, from, mode, open.date]
-  )
+  // The day saved would take the template's copies of its blocks: the template makes it after the save with the version the save wrote (also a day
+  // that becomes its by it), and some block of the save stays in the day as its own (its file's) – not the day's block of this template.
+  const twice = useMemo(() => {
+    if (!model || !template || !preview || !bringsNewBlocks(preview, model.dayFile, open.date, template.id)) return false
+    const next = savedTemplate(template, from, preview.blocks, mode)
+    return savedDayTwice(open.date, from, dayTemplateAfter(templates, next, dayTypeNow(model), open.date), next)
+  }, [model, template, preview, templates, from, mode, open.date])
   const save = () =>
     run(async () => {
       commitActiveField()

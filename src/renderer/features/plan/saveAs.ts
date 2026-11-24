@@ -126,7 +126,7 @@ export async function saveAsTemplate(args: TemplateSaveArgs): Promise<TemplateSa
     const pick = pickOf(day, a.ids)
     const version = templateVersionOn(t, a.from)
     const allIds = new Set(t.versions.flatMap((v) => v.blocks.map((b) => b.id)))
-    const tpl = templateBlocksOf(pick.take, day.ctx.plan, { date: a.date, templateId: a.templateId, version, mode: a.mode, newId: () => newId(10), taskTitle, wake: wakeFrameOf(day.snapshot, day.dayFile), allIds })
+    const tpl = templateBlocksOf(pick.take, day.ctx.plan, { date: a.date, templateId: a.templateId, version, mode: a.mode, newId: () => newId(10), taskTitle, wake: wakeFrameOf(day.snapshot, day.dayFile, a.date, useData.getState().templates), allIds })
     Object.assign(made, { name: t.name, skipped: [...pick.skipped, ...tpl.left], inTemplate: tpl.inTemplate, added: tpl.blocks.length })
     if (!tpl.blocks.length) return []
     const next = savedTemplate(t, a.from, tpl.blocks, a.mode)

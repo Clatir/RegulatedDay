@@ -96,11 +96,14 @@ linii – moduł Z1 (`src/shared/groupText.ts`); tu tylko dane.
   `zdjęty` – zaparkowany / odwołany bez startu); `templateBlocksOf(take, plan, { date, templateId, version, mode, newId, taskTitle })` – pola bloku przez `planBlock`
   (bez faktów, `task`, `requests`, `recorder`, historii; kroki `freshSteps`), blok tego szablonu (`isOfTemplate`) zachowuje id = `sourceId`, „Dołóż” – taki, który wersja ma, pomija
   (`inTemplate`), nowe id nigdy z `allIds` (wszystkie wersje); kotwica → id w wersji / `session:<id>` sesji wersji / godzina z planu (`plannedStartMin`); blok bez miejsca
-  i zakotwiczone do niego – `left` („bez godziny”, do punktu stałego; rutyna bierze je jako kroki na końcu); godziny szablonu – `wake` = `wakeFrameOf(snapshot, dayFile)`:
-  blok migawki bez nadpisania w pliku – `asMade` (własna godzina migawki, jak `templatePush.reshown`), inny – `unshiftedStart` (`dayWakeMin` − `templateWakeMin`; granica poranka
-  = `firstFixedStart` wersji po zapisie: zachowane bloki wersji + stałe zapisywane – nie wie o wykładach i odpowiedziach „nie” sesji przyszłych dni); `alongside` zawsze null.
-  `savedTemplate` = `withTemplateVersion` od `from` („Zastąp” zostawia `isSessionEntry`); `sameVersionBody` (bloki po id) – „bez zmian”. `saveAsFrom` (D616), `savedDayTwice`
-  z `dayTemplateAfter` (`templateFor` po zapisie) i `bringsNewBlocks` (nie same własne bloki szablonu dnia), `routineStepsOf` (1–240 min, ≤ 40).
+  i zakotwiczone do niego – `left` („bez godziny”, do punktu stałego; rutyna bierze je jako kroki na końcu); godziny szablonu – `wake` = `wakeFrameOf(snapshot, dayFile, date,
+  templates)`: blok szablonu migawki bez nadpisania w pliku – `asMade` = godzina z wersji, która zrobiła dzień (`templateFrom`, blok po `sourceId` – nie godzina migawki, którą
+  przesuwa `pushedBySeries`), tylko gdy granica poranka wersji po zapisie (godziny szablonu: zachowane bloki wersji + zapisywane stałe) = `madeBound` (pierwszy stały tamtej wersji),
+  inaczej odtworzenie dnia wygrywa; inny – `unshiftedStart` (`dayWakeMin` − `templateWakeMin`; granica jak ma ją dzień – wpis sesji po starcie bloku sesji dnia, jak `frameOf`;
+  nie wie o wykładach i odpowiedziach „nie” sesji przyszłych dni); `alongside` zawsze null. `savedTemplate` = `withTemplateVersion` od `from` („Zastąp” zostawia `isSessionEntry`);
+  `sameVersionBody` (bloki po id, kotwica do wpisu sesji jako `session:<id>`) – „bez zmian”. `saveAsFrom` (D616), `savedDayTwice(date, from, szablon dnia po zapisie, next)` – też
+  wersja obowiązująca w dniu = ta od `from`; z `dayTemplateAfter` i `bringsNewBlocks(save, dayFile)` (`TemplateSave.sources`: blok z pliku dnia, nie blok tego szablonu dnia);
+  `routineStepsOf` (1–240 min, ≤ 40).
 - Okno – `plan/saveAs.ts`: `saveAsTemplate` – `from` ≥ `firstFrom()` (jutro teraz), dzień czytany i liczony w turze (`countedDay`), jedna edycja szablonu przez `withAttachments`
   (`templateActions.ts`); „Zastąp”, które zdejmuje z wersji jakikolwiek blok (nie wpis sesji), przy `attachmentsUnread` – odmowa (T848); los `SaveFate` (`saved` / `unchanged` /
   `asked` – pytanie albo wynik nieznany po wysłaniu, `SendState` / `refused`; okna – szablonu i rutyny – zostają tylko przy `refused`); linia `showGroupLine(view)` tylko przy `saved`; „Cofnij” `undoTemplateSave` – rekord jak po zapisie → przed; inaczej tylko wersja `from`
