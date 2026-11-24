@@ -27,7 +27,9 @@ import {
   type CasePatch,
   type GoneOf
 } from '@shared/engine/cases'
-import { dayWord, parseQuickDates } from '@shared/quickDates'
+import { dayWord, parseQuickWords } from '@shared/quickDates'
+import { quickCategories } from '@shared/quickCategories'
+import { NOT_PLACED, notPlacedBefore, quickNowMin, quickSavedText } from '@shared/quickSaid'
 import { newId } from '@shared/model/ids'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
 import { newRequest, newTask, requestFrom, type CaseList, type NewTask, type RequestRecord } from '@shared/model/requests'
@@ -204,22 +206,48 @@ export async function change(make: (put: (rel: string, before: RawRecord | null,
 }
 
 /**
- * A new task (D384: title required; 30 min, „Inne” by default; „Skrzynka” unless said). The words of dates at the title's
- * end („!jutro”, „@pt” – D409, `parseQuickDates`; the field shows its `preview` before Enter) set the due date and the date
- * of doing and leave the title – a date given in `p` wins over its word.
+ * A new task (D384: title required; 30 min, „Inne” by default; „Skrzynka” unless said). The words at the title's end („!jutro”,
+ * „@pt” – D409; „1h30” – the estimate, „#anal” – the subcategory, D600, D602 – `parseQuickWords`; the field shows its `preview`
+ * before Enter) set the due date, the date of doing, the estimate and the subcategory and leave the title – a value given in `p`
+ * wins over its word. „@jutro 15:00” (D601): the task is put on that day's axis in the same edit (`casePlan`, as „Zaplanuj” of
+ * one sprawa, nothing pushed apart; one „Cofnij” takes both); a day gone by or a file of the day that cannot be read now – saved
+ * without a block, a toast says why (`notPlaced` of the result; the hour of today already gone – D603; a date of doing given in `p`).
  */
-export async function createTask(p: NewTask): Promise<CaseResult> {
+export async function createTask(p: NewTask): Promise<CaseResult & { notPlaced?: string }> {
   const id = newId()
   const at = Date.now()
-  const r = await change((put) => {
+  const note: { notPlaced?: string; title?: string } = {}
+  const r = await change(async (put) => {
+    delete note.notPlaced
     const today = logicalDayOf(at)
-    const q = parseQuickDates(p.title, today)
-    const raw = newTask(id, at, today, { ...p, title: q.title, dueDate: p.dueDate !== undefined ? p.dueDate : q.dueDate, doDate: p.doDate !== undefined ? p.doDate : q.doDate })
+    const rd = useData.getState().rd
+    const q = parseQuickWords(p.title, today, quickCategories(rd, today), quickNowMin(today, at))
+    // A date of doing given in `p` wins over its word; none (null, undefined) – the word's.
+    const task = { ...p, title: q.title, dueDate: p.dueDate !== undefined ? p.dueDate : q.dueDate, doDate: p.doDate ?? q.doDate, estimateMin: p.estimateMin !== undefined ? p.estimateMin : q.estimateMin, categoryId: p.categoryId !== undefined ? p.categoryId : q.categoryId }
+    const raw = newTask(id, at, today, task)
     if (!raw) return 'Zadanie potrzebuje tytułu.'
+    if (q.startMin != null && q.doDate) {
+      // The hour belongs to the date of its word – another date given in `p` takes the place away with it, and the toast says so (D601); the same
+      // date (or none) – the block stands as always.
+      const date = q.doDate
+      const gone = p.doDate != null && p.doDate !== date ? NOT_PLACED.dayGivenApart : notPlacedBefore(date, q.startMin, at)
+      const r0 = requestFrom(raw)
+      // The day of the axis cannot be read now (a failing call too) – nothing is read that the new sprawa has no part in: it has no old block.
+      const read = !gone && r0 ? await readPlanDays([r0], date).catch(() => null) : null
+      const planned = read && r0 ? casePlan({ record: raw, date, startMin: q.startMin, files: read.days, rules: settingsOn(rd.settings, date).categories, at, begun: read.begunOf }) : null
+      if (planned && !('refused' in planned)) {
+        put(paths.day(date), read!.days[date] ?? null, planned.days[date]!)
+        put(relOf(id), null, planned.record, paths.day(date))
+        return null
+      }
+      note.notPlaced = gone ?? (!r0 || read ? NOT_PLACED.refused : NOT_PLACED.dayUnreadable)
+      note.title = String(raw.title)
+    }
     put(relOf(id), null, raw)
     return null
   })
-  return { ...r, id: r.saved ? id : null }
+  if (r.saved && note.notPlaced) toast(quickSavedText(note.title ?? '', { notPlaced: note.notPlaced }), 'info', 6000)
+  return { ...r, id: r.saved ? id : null, ...(r.saved && note.notPlaced ? { notPlaced: note.notPlaced } : {}) }
 }
 
 /** A new request (a person, an estimate, a note – as before; „Skrzynka”). */

@@ -11,6 +11,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { dayFileFrom } from '../../src/shared/model/plan'
 import { addDays } from '../../src/shared/time/zone'
 import { dataOpen, launch, viewPage, withMainLog } from './app'
 
@@ -150,6 +151,34 @@ test('szybki zapis z „!jutro” (D409): podgląd „Termin: jutro” pod polem
         ['Odebrać paczkę', false],
         ['Zapłacić rachunek', true]
       ])
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('szybki zapis z długością, godziną i podkategorią (N10, D600–D602): podgląd mówi wszystko, blok stoi na osi jutra', async () => {
+  const { app, page, userData, errors } = await launch({ data: true })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('bar-main')).toBeVisible({ timeout: 30_000 })
+      await dataOpen(page)
+      const today = await page.evaluate(() => window.rd.dataView().then((v) => v.today))
+      const tomorrow = addDays(today, 1)
+      await showAsShortcut(app)
+      const q = await quickPage(app)
+      await q.getByTestId('quick-title').fill('Raport @jutro 15:00 1h #anal')
+      await expect(q.getByTestId('quick-preview')).toHaveText('Wykonać: jutro 15:00 · 1 h · Analiza')
+      await q.getByTestId('quick-title').press('Enter')
+      await expect.poll(() => tasks(app)).toEqual([expect.objectContaining({ title: 'Raport', estimateMin: 60, categoryId: 'analiza', doDate: tomorrow, day: tomorrow, block: expect.any(String) })])
+      const [task] = await tasks(app)
+      await expect
+        .poll(async () => {
+          const raw = (await page.evaluate((d) => window.rd.dayFiles([d]), tomorrow))[tomorrow]
+          return raw ? dayFileFrom(raw, tomorrow).blocks.map((b) => ({ id: b.id, categoryId: b.categoryId, startMin: b.startMin, durationMin: b.durationMin })) : []
+        })
+        .toEqual([{ id: task!.block, categoryId: 'analiza', startMin: 900, durationMin: 60 }])
     })
     expect(errors).toEqual([])
   } finally {

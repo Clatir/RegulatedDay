@@ -12,6 +12,7 @@ import type { MonthView } from './engine/calendarViews'
 import type { GoalsPatch } from './model/goals'
 import type { RitualValue, RitualView } from './engine/ritual'
 import type { CasesRitual } from './engine/cases'
+import type { QuickCategory } from './quickDates'
 import type { ResultCode } from './engine/timer'
 import type { GroupSkip } from './engine/groupEdit'
 import type { DayRun, DoneSkipWhy } from './engine/templateApply'
@@ -129,6 +130,7 @@ export const CH = {
   quickAdd: 'rd:quickAdd',
   quickClose: 'rd:quickClose',
   quickToday: 'rd:quickToday',
+  quickCategories: 'rd:quickCategories',
   onQuickShown: 'rd:onQuickShown',
   quickShortcut: 'rd:quickShortcut',
   onQuickShortcut: 'rd:onQuickShortcut',
@@ -158,6 +160,22 @@ export interface QuickAddResult {
   error: string | null
   id: string | null
   title: string | null
+  /** D601: put on the axis at once – „jutro 15:00” (its day and hour); absent – not asked for or not put. */
+  placed?: string
+  /** D601: the queue asks about the day's file (a change on another computer) – saved, the block waits for the answer (never „placed”). */
+  asked?: true
+  /** D601: „@jutro 15:00” asked for, but the block was not put (saved in „Skrzynka” with its date) – why („ten dzień już minął”). */
+  notPlaced?: string
+}
+
+/**
+ * The clock the quick capture saves with (D454, T869, D604) as the main process has it: the logical day and the logical minute now (null – not
+ * known). The preview under the field counts from both, never from the window's own `Date.now()` – the day goes over at 04:00 and the night after
+ * the date (00:00–03:59) counts for a bare „@15:00”.
+ */
+export interface QuickClock {
+  today: string
+  nowMin: number | null
 }
 
 /**
@@ -1072,7 +1090,9 @@ export interface RdApi {
   /** The window „Do skrzynki” closes (Esc, after Enter saved). */
   quickClose(): void
   /** The logical day by the main process's clock – the one the quick capture saves with; the preview of its words counts from it (D454). */
-  quickToday(): Promise<string>
+  quickToday(): Promise<QuickClock>
+  /** The subcategories „#…” of the quick capture may name, in the order of the tree of „Kategorie” (D600) – the preview names the one chosen. */
+  quickCategories(): Promise<QuickCategory[]>
   /** The window „Do skrzynki” was shown by the shortcut: its field takes the keys. */
   onQuickShown(cb: () => void): () => void
   /** The global shortcut of the quick capture on this computer, for the settings (D402: „Skrót zajęty przez inny program”). */

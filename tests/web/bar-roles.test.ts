@@ -63,7 +63,7 @@ beforeEach(() => {
   }
   const api: Partial<RdApi> = {
     ...rd,
-    quickToday: () => Promise.resolve('2026-11-21'),
+    quickToday: () => Promise.resolve({ today: '2026-11-21', nowMin: null }),
     onPanelTarget: (cb) => ((target = cb), () => undefined),
     panelTouch: () => undefined,
     barDrag: () => undefined,

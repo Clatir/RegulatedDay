@@ -21,7 +21,7 @@ afterAll(() => uninstallEscape())
 const widgetAction = vi.fn((_a: string, _arg?: string) => Promise.resolve())
 beforeEach(() => {
   widgetAction.mockClear()
-  ;(window as unknown as { rd: Partial<RdApi> }).rd = { widgetAction: widgetAction as unknown as RdApi['widgetAction'], quickToday: () => Promise.resolve('2026-11-18') }
+  ;(window as unknown as { rd: Partial<RdApi> }).rd = { widgetAction: widgetAction as unknown as RdApi['widgetAction'], quickToday: () => Promise.resolve({ today: '2026-11-18', nowMin: null }) }
 })
 
 let root: Root | null = null
