@@ -61,7 +61,7 @@ paths:
   „Najtańsza zamiana” (N22, T2624–T2626): `CheapestSwap.tsx` `CheapestSwapLine` – slot `swap` w `DayWarnings` (panel boczny i `BlockDayNotes`,
   nie pasek – D229; dzień miniony – nic), `cheapestSwapCached` (najpierw `reserveWarned`, potem klucz `data|energyOrderKey`; `resetSwapCache`
   w testach), nazwy `nameById`; „Zamień” = `swapDayBlocks` (`saveStarts` – ta sama droga co `arrangeDayBlocks`, bez `planArranged`) →
-  `undoEditToast` „Zamieniono: A ↔ B · Cofnij” (`editStands`; zmienione w międzyczasie – `PLAN_CHANGED_TEXT`). Testy `tests/web/cheapest-swap.test.ts`.
+  `undoEditToast` „Zamieniono: A ↔ B · Cofnij” (`editStands`; zmienione w międzyczasie – `PLAN_CHANGED_TEXT`; ukryte kalendarze – `swapToastText`: para „(1 ukryty)”, inne przesunięte – `pushedText` bez pary, `openId` panelu bloku, T2630, T2637); `already` – `swapGone(klucz)` w module (wszystkie panele, `resetSwapCache`, T2628, T2634). `energyOrderKey` ma koszty rutyn (`ctx.routineCosts`, T2627). Klucz raz na model (`cheapestSwapKeyOf`, T2636); render bierze tylko `cheapestSwapPeek(m, klucz)` (`fresh` / `due`; przed policzeniem nowego klucza – ostatnia zamiana tego dnia, „Zamień” wyłączony, T2633), szukanie w `useEffect` + `setTimeout(0)` (T2632, T2635). Testy `tests/web/cheapest-swap.test.ts`.
   Pobudka dnia (`TodayPage`, `CalendarPage`) = `setDayWake`: zapis pobudki i jednorazowe przesunięcie własnych bloków
   elastycznych dnia przed pierwszym stałym (`wakeChange`/`wakeShifted`, D334) – liczone z migawki dnia silnika i planu pokazywanego
   (`WakeDay`: w „Dziś” z `model`, dla dziś w Kalendarzu `wakeDayOf`; zaczęte zostają), jeden „Cofnij” (pobudka i bloki tylko, gdy

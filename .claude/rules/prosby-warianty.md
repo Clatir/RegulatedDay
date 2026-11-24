@@ -45,8 +45,8 @@ D247, D263, D296, T202, T372. Decyzje T478–T481, T502, T503. Elementy w pasku 
   Wspólny rdzeń: `orderSearch` (przerwy, `scorer(gap).lay(order)` – ułożenie i szacunek raz na ułożenie, `judge` – przeliczenie z warunkami D378).
 - „Najtańsza zamiana” (N22, D598, T2621–T2623) – `cheapestSwap(ctx, state, energy)` → `{ a, b, before, after, changes }` albo null: tylko przy
   ostrzeżeniu rezerwy (`reserveWarned` – `forecast.reserveAt`, nie `ENERGY_ORDER_BELOW`), dzień miniony (`now ≥ grid.length`) – null; każda zamiana
-  dwóch miejsc jednej przerwy (`startsFor` jak J5 – bloki między nimi idą za nią), szacunek → najwyżej `SWAP_COUNTS` = 3 przeliczeń, próg
-  `ENERGY_ORDER_GAIN`; remis najniższej energii – wcześniejsza przerwa, wcześniejszy pierwszy, wcześniejszy drugi. Testy `cheapest-swap.test.ts`.
+  dwóch miejsc jednej przerwy (`startsFor` jak J5 – od pierwszego z dwóch do końca przerwy bloki stają jeden za drugim, T2631), szacunek → najwyżej `SWAP_COUNTS` = 3 przeliczeń, próg
+  `ENERGY_ORDER_GAIN`; remis najniższej energii na ekranie (`shownOf`, T2629) – wcześniejsza przerwa, wcześniejszy pierwszy, wcześniejszy drugi. Testy `cheapest-swap.test.ts`.
 - `facts.ts`: `resumedWith` (wznowienie zapisane z końcem prośby), cięcie przebiegów przez `request.start.splits`.
 - Kliknięcia próśb idą drogą timera: `folder.timerClick`; „Koniec” – do dnia, w którym prośba trwa (także sprzed 04:00).
 

@@ -169,6 +169,25 @@ describe('„Najtańsza zamiana” (N22)', () => {
     expect(cheapestSwap(d.ctx, d.state, d.energy)).toEqual(d.swap)
   })
 
+  it('T2629: remis na ekranie (liczby całe) – wcześniejszy drugi blok, choć dalsza zamiana daje o ułamek więcej', () => {
+    // From 05:00: a quiet rest 06:00, „Inne” 45 min, „Analiza” 1,5 h, the class 09:15–20:45. Both swaps of the rest show 9 → 14:
+    // with „Inne” 13,5 (shown 14), with „Analiza” 14,25 (shown 14) – the screen cannot tell them apart, the earlier one wins.
+    const d = day(
+      [
+        block({ id: 'p', cat: 'regeneracja', variant: 'cisza', at: '06:00', min: 60 }),
+        block({ id: 'q', cat: 'inne', at: '07:00', min: 45 }),
+        block({ id: 's', cat: 'analiza', at: '07:45', min: 90 }),
+        block({ id: 'w', cat: 'zajecia-zdalne', at: '09:15', min: 690, fixed: true })
+      ],
+      { wake: '05:00', checkin: '05:30', now: '05:45' }
+    )
+    const pq = starts(['q', '06:00'], ['p', '06:45'])
+    const ps = starts(['s', '06:00'], ['q', '07:30'], ['p', '08:15'])
+    expect(lowestWith(d, ps)).toBeGreaterThan(lowestWith(d, pq))
+    expect(shownOf(lowestWith(d, ps))).toBe(shownOf(lowestWith(d, pq)))
+    expect(d.swap).toEqual({ a: 'p', b: 'q', before: 9, after: 14, changes: pq })
+  })
+
   it(`dzień liczony ponownie najwyżej SWAP_COUNTS (${SWAP_COUNTS}) razy`, () => {
     const d = day(dipDay())
     const counted = vi.mocked(computeDay)

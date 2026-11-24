@@ -464,18 +464,22 @@ export interface CheapestSwap {
   /** The lowest energy of the day before and with the swap (whole points, as shown). */
   before: number
   after: number
-  /** The new planned starts: the two blocks and those between them a swap of different lengths moves (`start` only). */
+  /**
+   * The new planned starts (`start` only): every block of the gap from `a` to the gap's end that changes its place – the two, and
+   * after a swap of different lengths those after `a` laid out anew (T610, T2631).
+   */
   changes: VariantChange[]
 }
 
 /**
  * The cheapest swap (N22, D598, T2621–T2623): for a day whose forecast of energy reaches the reserve (the warning, not
  * `ENERGY_ORDER_BELOW`), one proposal – two flexible blocks of one gap between fixed blocks change places (the order of
- * „Ułóż pod energię” with only those two swapped, laid out by the forecast: blocks between them of a swap of different
- * lengths follow, T610) – the one that raises the lowest energy of the day most, by `ENERGY_ORDER_GAIN` at least, under the
+ * „Ułóż pod energię” with only those two swapped, laid out by the forecast: from `a` on, the blocks of the gap follow one
+ * another, T610) – the one that raises the lowest energy of the day most, by `ENERGY_ORDER_GAIN` at least, under the
  * rules of „Ułóż” (the blocks that may move, the day counted again, D378). Every swap of every gap is laid out and ranked by
- * the estimate; the `SWAP_COUNTS` best are counted again. Of equal lowest energy: the earlier gap, then the earlier first
- * block, then the earlier second. Null: a day gone by, no warning, or no swap that raises it enough. `limits` – tests.
+ * the estimate; the `SWAP_COUNTS` best are counted again. Of equal lowest energy as shown (whole points, T2629): the earlier
+ * gap, then the earlier first block, then the earlier second. Null: a day gone by, no warning, or no swap that raises it
+ * enough. `limits` – tests.
  */
 export function cheapestSwap(ctx: DayContext, state: DayState, energy: EnergyState | null, limits: { counts?: number } = {}): CheapestSwap | null {
   const countsMax = limits.counts ?? SWAP_COUNTS
@@ -495,20 +499,21 @@ export function cheapestSwap(ctx: DayContext, state: DayState, energy: EnergySta
         if (laid && laid.score > sc.base) swaps.push({ pick: { gap, ...laid, base: sc.base }, i, j })
       }
   }
-  // The earlier gap, then the earlier first block, then the earlier second (T2622).
+  // The earlier gap, then the earlier first block, then the earlier second (T2622) – among swaps the screen shows as equal (T2629).
   const earlier = (x: Swap, y: Swap) => x.pick.gap.index - y.pick.gap.index || x.i - y.i || x.j - y.j
   swaps.sort((x, y) => y.pick.score - y.pick.base - (x.pick.score - x.pick.base) || earlier(x, y))
-  let best: { swap: Swap; low: number; changes: VariantChange[] } | null = null
+  let best: { swap: Swap; shown: number; changes: VariantChange[] } | null = null
   for (const swap of swaps) {
     if (search.counts() >= countsMax) break
     const j = search.judge([swap.pick])
     if (!j || shownOf(j.low) - shownOf(search.low0) < ENERGY_ORDER_GAIN) continue
-    if (!best || j.low > best.low || (j.low === best.low && earlier(swap, best.swap) < 0)) best = { swap, low: j.low, changes: j.changes }
+    const shown = shownOf(j.low)
+    if (!best || shown > best.shown || (shown === best.shown && earlier(swap, best.swap) < 0)) best = { swap, shown, changes: j.changes }
   }
   if (!best) return null
   const { gap, i, j } = { gap: best.swap.pick.gap, i: best.swap.i, j: best.swap.j }
   const id = (k: number) => gap.items[gap.slots[k]!]!.block.id
-  return { a: id(i), b: id(j), before: shownOf(search.low0), after: shownOf(best.low), changes: best.changes }
+  return { a: id(i), b: id(j), before: shownOf(search.low0), after: best.shown, changes: best.changes }
 }
 
 /** The label of „Ułóż pod energię” from its lowest energy before and with it (the one place it is said). */

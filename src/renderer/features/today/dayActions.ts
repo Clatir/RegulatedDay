@@ -191,8 +191,8 @@ type EnergyOrderDay = { ctx: DayContext; state: DayState; energy: EnergyState; d
 export const ENERGY_ORDER_HOLD_MIN = 5
 
 /**
- * What „Ułóż pod energię” depends on in the day counted at a minute (T616): the plan and the snapshot, the wake of the day
- * and of the next one and the bedtime's forecast (where the lowest energy is looked for), the log, the energy module and
+ * What „Ułóż pod energię” depends on in the day counted at a minute (T616): the plan and the snapshot, the routines' costs (D512,
+ * T2627), the wake of the day and of the next one and the bedtime's forecast (where the lowest energy is looked for), the log, the energy module and
  * the calibration, the lowest energy from now, the answer „Zostaw”, where the forecast places the blocks (a running one by
  * its end – its start is now) and the clock in steps of `ENERGY_ORDER_HOLD_MIN` (the lowest from now moves with the time).
  * The window's count every 30 s changes it at most every 5 min, a block due now (placed at now) – each minute.
@@ -203,6 +203,8 @@ export function energyOrderKey(m: EnergyOrderDay): string {
   return [
     JSON.stringify(m.ctx.plan),
     JSON.stringify(m.ctx.snapshot),
+    // The costs of the routines (D512): a cost changed in „Rutyny” changes the blocks' costs, not the plan nor the log.
+    JSON.stringify(m.ctx.routineCosts ?? null),
     m.ctx.wakeMin,
     m.ctx.nextWakeMin,
     m.state.bedtime.forecast,
@@ -311,38 +313,86 @@ export const swappedText = (a: string, b: string): string => `Zamieniono: ${a} �
 /**
  * „Zamień” of the cheapest swap (N22, D598, T2625): its new starts as one edit of the day's file, the way of „Ułóż” (`saveStarts`) –
  * but no line in the bar (D229: the bar stays as it is): the window says „Zamieniono: A ↔ B” for 10 s with „Cofnij” (the edit taken
- * back while the file stands as it left it, `undoEditToast`; a block changed since – it stays, and the toast says so).
+ * back while the file stands as it left it, `undoEditToast`; a block changed since – it stays, and the toast says so) – with the
+ * blocks of an unchecked calendar it moves said (`swapToastText`, D428, T2630, T2637); `pair` – the two blocks swapped (`a`, `b`),
+ * `openId` – the block whose panel is open (shown in spite of its calendar, D427).
  */
-export async function swapDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], text: string): Promise<{ out: EditOutcome[] | null; already: boolean }> {
+export async function swapDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], pair: readonly [string, string], text: string, openId: string | null = null): Promise<{ out: EditOutcome[] | null; already: boolean }> {
   const { out, sent } = await saveStarts(date, seen, starts)
   if (sent.already) return { out, already: true }
-  if (isSaved(out) && sent.entry) undoEditToast(date, sent.entry, sent.after, text)
+  if (isSaved(out) && sent.entry) undoEditToast(date, sent.entry, sent.after, swapToastText(text, starts, pair, openId))
   return { out, already: false }
+}
+
+/**
+ * The toast of „Zamień” with what an unchecked calendar hides among the blocks it moves (D428, T2637), as the window's other lines
+ * say it: one of the pair hidden – at the pair, „Zamieniono: A ↔ B (1 ukryty)”; hidden among the other blocks it moves (those after
+ * `a` laid out anew, T2631) – „· Przesunięto 2 bloki (w tym 1 ukryty)”, counting only those other blocks. Nothing hidden – the words.
+ */
+export function swapToastText(text: string, starts: readonly PushedStart[], pair: readonly [string, string], openId: string | null = null): string {
+  const inPair = starts.filter((p) => pair.includes(p.block.id)).map((p) => p.block)
+  const others = starts.filter((p) => !pair.includes(p.block.id)).map((p) => p.block)
+  const pairHidden = hiddenBlocksAmong(inPair, openId)
+  const othersHidden = hiddenBlocksAmong(others, openId)
+  const atPair = pairHidden ? ` (${countLabel(pairHidden, 'ukryty', 'ukryte', 'ukrytych')})` : ''
+  return `${text}${atPair}${othersHidden ? ` · ${pushedText(others.length, othersHidden)}` : ''}`
 }
 
 /** What the cheapest swap is counted on: the day as counted (`DayModel`). */
 type SwapDay = EnergyOrderDay & { date: string }
 
-/** The last cheapest swap counted (T2624): by the day's key – as „Ułóż pod energię” (T616) and its date. */
-let lastSwap: { key: string; value: CheapestSwap | null } | null = null
+/** The last cheapest swap counted (T2624): by the day's key – as „Ułóż pod energię” (T616) – and its date (T2633). */
+let lastSwap: { key: string; date: string; value: CheapestSwap | null } | null = null
+/** The key „Zamień” found the plan already so on (T2628, T2634): one for the window – every line of that day hides to its change. */
+let goneKey: string | null = null
 
 /**
- * The cheapest swap of a day (N22) counted again only when the day changes (`energyOrderKey` and the date, T616): the search runs in
- * the window's thread – not for a count of the day that only moved the clock within its step. Null – none (the engine says why).
+ * What the cheapest swap of a day depends on (T2624, T2636): its date and what „Ułóż pod energię” depends on (`energyOrderKey`);
+ * null – no warning of energy at the reserve, nothing to count (the side panel renders at every count of the day). Once per day
+ * counted – the window passes it on to `cheapestSwapPeek` and `cheapestSwapCached`.
  */
-export function cheapestSwapCached(m: SwapDay): CheapestSwap | null {
-  // No warning of energy at the reserve – no line, and no key to count (the side panel renders at every count of the day).
-  if (!reserveWarned(m.energy)) return null
-  const key = `${m.date}|${energyOrderKey(m)}`
+export const cheapestSwapKeyOf = (m: SwapDay): string | null => (reserveWarned(m.energy) ? `${m.date}|${energyOrderKey(m)}` : null)
+
+/**
+ * The cheapest swap of a day (N22) counted again only when the day changes (`cheapestSwapKeyOf`, T616): the search runs in the
+ * window's thread – not for a count of the day that only moved the clock within its step. Null – none (the engine says why).
+ */
+export function cheapestSwapCached(m: SwapDay, key: string | null = cheapestSwapKeyOf(m)): CheapestSwap | null {
+  if (key == null) return null
   if (lastSwap && lastSwap.key === key) return lastSwap.value
   const value = cheapestSwap(m.ctx, m.state, m.energy)
-  lastSwap = { key, value }
+  lastSwap = { key, date: m.date, value }
   return value
 }
 
-/** The memory of `cheapestSwapCached` emptied (tests: one file's day never answers for another's). */
+/** What the line of the cheapest swap shows without the search (T2632, T2633): `fresh` – counted for this key, `due` – to count. */
+export interface SwapSeen {
+  swap: CheapestSwap | null
+  fresh: boolean
+  due: boolean
+}
+
+/**
+ * The cheapest swap as far as it is known without the search (T2632): counted for the day's key – that one; not yet – the last one
+ * counted for the same day, not fresh (T2633: the line stays while the new key is counted, „Zamień” waits), another day's – none;
+ * a key „Zamień” found already so (`goneKey`) – none (T2634). `key` null – nothing (no warning).
+ */
+export function cheapestSwapPeek(m: SwapDay, key: string | null): SwapSeen {
+  if (key == null) return { swap: null, fresh: false, due: false }
+  if (lastSwap && lastSwap.key === key) return { swap: key === goneKey ? null : lastSwap.value, fresh: true, due: false }
+  const held = lastSwap && lastSwap.date === m.date && lastSwap.key !== goneKey ? lastSwap.value : null
+  return { swap: held, fresh: false, due: true }
+}
+
+/** „Zamień” found the plan already so (T2628, T2634): the line of the day hides – in every panel – until its key changes. */
+export function swapGone(key: string): void {
+  goneKey = key
+}
+
+/** The memory of `cheapestSwapCached` and of `swapGone` emptied (tests: one file's day never answers for another's). */
 export function resetSwapCache(): void {
   lastSwap = null
+  goneKey = null
 }
 
 /**

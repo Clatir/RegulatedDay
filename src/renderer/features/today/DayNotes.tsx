@@ -11,11 +11,12 @@ import { CheapestSwapLine } from './CheapestSwap'
 import { dayWarningTexts, DayWarnings } from './DayWarnings'
 import { RoutinesWaiting } from './RoutineCard'
 
-export function BlockDayNotes({ model, names, today, onShow }: { model: DayModel; names: Names; today: string; onShow: () => void }) {
+/** `openId` – the block whose panel this is (shown in spite of an unchecked calendar, D427). */
+export function BlockDayNotes({ model, names, today, onShow, openId = null }: { model: DayModel; names: Names; today: string; onShow: () => void; openId?: string | null }) {
   const routines = useData((s) => s.routines)
   return (
     <>
-      <DayWarnings warnings={dayWarningTexts(model, model.date < today)} swap={<CheapestSwapLine model={model} names={names} past={model.date < today} />} />
+      <DayWarnings warnings={dayWarningTexts(model, model.date < today)} swap={<CheapestSwapLine model={model} names={names} past={model.date < today} openId={openId} />} />
       {model.date === today && <RoutinesWaiting due={routinesDue(model.ctx, model.state, routines, model.dayFile)} model={model} names={names} onShow={onShow} />}
     </>
   )
