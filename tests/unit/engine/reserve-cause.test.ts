@@ -1,8 +1,12 @@
 /**
- * N20 (T2560–T2570): the block at whose time a pool first goes below the reserve – from the same curve and numbers as the strip.
+ * N20 (T2560–T2573): the block at whose time a pool first goes below the reserve – from the same curve and numbers as the strip.
  * The day of the plan's example: the head goes below the reserve in the block of 14:00 – only that block has the cause; no descent – none.
  */
 import { describe, expect, it } from 'vitest'
+import { computeDay } from '@shared/engine/day'
+import { computeEnergy } from '@shared/engine/energy'
+import { energyTrack } from '@shared/engine/energyTrack'
+import { block, Scenario } from './dsl'
 import { firstDescents, reserveCauses, type CauseBlock } from '@shared/engine/reserveCause'
 import { stripRuns } from '@shared/engine/energyCurve'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
@@ -172,5 +176,91 @@ describe('reserveCauses (N20)', () => {
     expect([...reserveCauses(t, [layer]).keys()]).toEqual(['layer'])
     const before: CauseBlock = { id: 'A', startMin: h(12), endMin: h(13) }
     expect([...reserveCauses(t, [layer, before, first]).keys()]).toEqual(['A'])
+  })
+})
+
+describe('przyczyna z miejsca, w którym blok biegnie w prognozie (T2571)', () => {
+  /** The day to come: an elastic block of 13:00–14:30 heavy on the head and a fixed session of 14:00–17:00 – the forecast runs the session first and the block after it. */
+  function day() {
+    const heavy = { ...block({ id: 'heavy', cat: 'inne', at: '13:00', min: 90, origin: 'user' }), costs: { head: 60, emotions: 0, senses: 0, body: 0 } }
+    const ny = block({ id: 'ny', cat: 'sesje', at: '14:00', min: 180, fixed: true })
+    const s = new Scenario({ date: '2026-11-25', plan: [heavy, ny], settings: { transitionBufferMin: 0 } })
+    s.checkin('07:30', { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] })
+    const ctx = s.contextAt(s.at('08:00'))
+    const state = computeDay(ctx)
+    const track = energyTrack('2026-11-25', state.grid, computeEnergy(ctx, state, { moduleOn: true }))!
+    // The tiles stand at the plan's hours (a day to come – the axis does not move them).
+    const tiles: CauseBlock[] = [{ id: 'heavy', startMin: h(13), endMin: h(14, 30) }, { id: 'ny', startMin: h(14), endMin: h(17) }]
+    return { track, tiles }
+  }
+
+  it('blok pod stałą sesją biegnie po niej: zejście w tym czasie – obwódka na kafelku bloku (miejsce planu), z miejscem z prognozy w liczbach', () => {
+    const { track, tiles } = day()
+    expect(track.runs!.map((r) => [r.id, r.startMin, r.endMin, r.forecast])).toEqual([['ny', h(14), h(17), true], ['heavy', h(17), h(18, 30), true]])
+    const causes = reserveCauses(track, tiles)
+    expect([...causes.keys()]).toEqual(['heavy'])
+    const drop = causes.get('heavy')!.drops[0]!
+    expect(drop.pool).toBe('head')
+    expect(drop.to).toBeLessThan(20)
+    expect(drop.runs).toEqual({ startMin: h(17), endMin: h(18, 30), forecast: true })
+  })
+
+  it('bez miejsc z prognozy (tor bez `runs`) liczą się godziny planu – zejście wypada w przerwie za sesją i nie ma właściciela', () => {
+    const { track, tiles } = day()
+    const { runs: _runs, ...plain } = track
+    expect(reserveCauses(plain, tiles).size).toBe(0)
+  })
+
+  it('blok, który biegnie tam, gdzie kafelek – bez dopisku o miejscu', () => {
+    const t = track({ head: [[h(13), 60], [h(14, 20), 10]] })
+    const causes = reserveCauses({ ...t, runs: [{ id: 'b', startMin: h(14), endMin: h(15, 30), background: false, forecast: true }] }, blocks)
+    expect(causes.get('b')!.drops[0]!.runs).toBeUndefined()
+  })
+})
+
+describe('biegi bloku złączone i miejsce tylko, gdy bieg nie nachodzi na kafelek (T2572, T2573)', () => {
+  const run = (id: string, from: number, to: number, forecast: boolean, background = false) => ({ id, startMin: from, endMin: to, background, forecast })
+  /** The head: 50 at 13:00, 35 at 13:40, 19 at 14:00 (the first minute under 20 is 14:00 – the state holds the minute before) and on; minute by minute. */
+  function head(): EnergyTrack {
+    const samples: EnergyTrack['samples'] = []
+    for (let m = h(12, 30); m <= h(16); m++) {
+      const v = m <= h(13, 40) ? 50 - (15 / 40) * Math.max(0, m - h(13)) : m < h(14) ? 35 - (16 / 19) * (m - h(13, 40)) : 19
+      samples.push({ at: m, head: v, emotions: 90, senses: 90, body: 90 })
+    }
+    return { samples, reserve: 20 }
+  }
+
+  it('blok zaczęty 13:00, teraz 13:40: bieg z logu i ciąg dalszy z prognozy to jeden – „od” to poziom na starcie bloku, nie na „teraz”; to samo przy innym „teraz”', () => {
+    const tile: CauseBlock = { id: 'A', startMin: h(13), endMin: h(14) }
+    for (const now of [h(13, 20), h(13, 40), h(13, 50)]) {
+      const t = { ...head(), runs: [run('A', h(13), now, false), run('A', now, h(14), true)] }
+      const drop = reserveCauses(t, [tile]).get('A')!.drops[0]!
+      expect(drop).toEqual({ pool: 'head', from: 50, to: 19 })
+    }
+  })
+
+  it('remis: stały od 12:00 i blok od 13:00 – po „teraz” wygrywa później zaczęty, nie ten, którego bieg przecięło „teraz” (id stałego mniejsze)', () => {
+    const tiles: CauseBlock[] = [{ id: 'A', startMin: h(12), endMin: h(15) }, { id: 'Z', startMin: h(13), endMin: h(15) }]
+    const t = { ...head(), runs: [run('A', h(12), h(13, 40), false), run('A', h(13, 40), h(15), true), run('Z', h(13), h(13, 40), false), run('Z', h(13, 40), h(15), true)] }
+    expect([...reserveCauses(t, tiles).keys()]).toEqual(['Z'])
+  })
+
+  it('bieg nachodzący na kafelek – bez miejsca (bufor 5 min, krótsza sesja, przycięcie do końca dnia)', () => {
+    const tile: CauseBlock = { id: 'A', startMin: h(13), endMin: h(14, 30) }
+    const drop = (r: ReturnType<typeof run>) => reserveCauses({ ...head(), runs: [r] }, [tile]).get('A')!.drops[0]!
+    expect(drop(run('A', h(13, 5), h(14, 5), true)).runs).toBeUndefined()
+    expect(drop(run('A', h(13), h(14, 10), true)).runs).toBeUndefined()
+    expect(drop(run('A', h(13), h(14, 30), false)).runs).toBeUndefined()
+    expect(drop(run('A', h(13, 40), h(14, 40), true)).runs).toBeUndefined()
+  })
+
+  it('bieg poza kafelkiem: zamiana (log 10:00–10:20, kafelek 15:00) – miejsce z logu; prognoza po sesji – miejsce z prognozy', () => {
+    const early = (r: ReturnType<typeof run>, tile: CauseBlock) => {
+      const samples: EnergyTrack['samples'] = []
+      for (let m = h(9, 30); m <= h(18); m++) samples.push({ at: m, head: m < r.endMin ? 60 - (45 / (r.endMin - r.startMin)) * Math.max(0, m - r.startMin) : 15, emotions: 90, senses: 90, body: 90 })
+      return reserveCauses({ samples, reserve: 20, runs: [r] }, [tile]).get(tile.id)!.drops[0]!
+    }
+    expect(early(run('A', h(10), h(10, 20), false), { id: 'A', startMin: h(15), endMin: h(16) }).runs).toEqual({ startMin: h(10), endMin: h(10, 20), forecast: false })
+    expect(early(run('A', h(17), h(18), true), { id: 'A', startMin: h(13), endMin: h(14) }).runs).toEqual({ startMin: h(17), endMin: h(18), forecast: true })
   })
 })

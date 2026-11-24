@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * N20 (T2560–T2570): the tile of the block at whose time a pool first goes below the reserve has a ring in the pool's colour and the hint
+ * N20 (T2560–T2573): the tile of the block at whose time a pool first goes below the reserve has a ring in the pool's colour and the hint
  * „Tu głowa schodzi poniżej rezerwy (28 → 19)” – on the axis of „Dziś” (`dayAxis` + `Timeline`) and in the columns of „3 dni” and „Tydzień”
  * (`DayGrid`). Only that tile; a day without a descent – none. The hint has a slot for an action (N3).
  */
@@ -313,6 +313,13 @@ describe('Timeline – podpowiedź i miejsce na akcję', () => {
     expect(reserveCauseText({ drops: [{ pool: 'head', from: 28, to: 19 }] })).toBe('Tu głowa schodzi poniżej rezerwy (28 → 19)')
     expect(reserveCauseText({ drops: [{ pool: 'body', from: 30, to: 10 }] })).toBe('Tu ciało schodzi poniżej rezerwy (30 → 10)')
     expect(reserveCauseText({ drops: [{ pool: 'senses', from: 30, to: 10 }] })).toBe('Tu bodźce schodzą poniżej rezerwy (30 → 10)')
+    // T2571: the forecast runs the block elsewhere than its tile stands.
+    expect(reserveCauseText({ drops: [{ pool: 'head', from: 28, to: 19, runs: { startMin: h(17), endMin: h(18, 30), forecast: true } }] })).toBe('Tu głowa schodzi poniżej rezerwy (28 → 19) · w prognozie 17:00–18:30')
+    // T2573: a run of the log away from the tile (a swap that began the block at another hour); two pools of one run – the place once, at the end.
+    expect(reserveCauseText({ drops: [{ pool: 'head', from: 28, to: 19, runs: { startMin: h(10), endMin: h(10, 20), forecast: false } }] })).toBe('Tu głowa schodzi poniżej rezerwy (28 → 19) · biegł 10:00–10:20')
+    const run = { startMin: h(17), endMin: h(18, 30), forecast: true }
+    expect(reserveCauseText({ drops: [{ pool: 'head', from: 28, to: 19, runs: run }, { pool: 'senses', from: 35, to: 29, runs: run }] })).toBe('Tu głowa schodzi poniżej rezerwy (28 → 19) · bodźce schodzą poniżej rezerwy (35 → 29) · w prognozie 17:00–18:30')
+    expect(reserveCauseText({ drops: [{ pool: 'head', from: 28, to: 19, runs: run }, { pool: 'senses', from: 35, to: 29 }] })).toBe('Tu głowa schodzi poniżej rezerwy (28 → 19) · w prognozie 17:00–18:30 · bodźce schodzą poniżej rezerwy (35 → 29)')
   })
 })
 
@@ -416,6 +423,22 @@ describe('„Tydzień” i „3 dni” – DayGrid', () => {
       expect(q('reserve-cause-b')).not.toBeNull()
     })
   }
+
+  it('blok biegnie w prognozie później niż stoi jego kafelek (pod stałą sesją): obwódka na kafelku z planowanym miejscem, podpowiedź mówi, gdzie biegnie; bez miejsc z prognozy zejście wypada w przerwie', async () => {
+    const d1 = '2026-11-19'
+    const late = track([[h(16), 60], [h(17), 30], [h(17, 30), 10]])
+    const forecast = { ...late, runs: [{ id: 'h2', startMin: h(17), endMin: h(18, 30), background: false, forecast: true }] }
+    const list = (energy: EnergyTrack) => [day(d1, [hb('a', h(9), h(10)), hb('h2', h(13), h(14, 30))], energy)]
+    await mount(grid(list(forecast), WEEK_PPM))
+    expect(q(`week-block-${d1}-h2`)!.getAttribute('data-reserve-cause')).toBe('head')
+    expect(q(`week-block-${d1}-a`)!.getAttribute('data-reserve-cause')).toBeNull()
+    over(q(`week-block-${d1}-h2`)!)
+    expect(q('reserve-cause-text')!.textContent).toMatch(/^Tu głowa schodzi poniżej rezerwy \(\d+ → \d+\) · w prognozie 17:00–18:30$/)
+    act(() => root?.unmount())
+    host?.remove()
+    await mount(grid(list(late), WEEK_PPM))
+    expect(host!.querySelector('[data-reserve-cause]')).toBeNull()
+  })
 
   it('blok odwołany nie jest przyczyną; dzień bez krzywej – żadnej obwódki', async () => {
     const d1 = '2026-11-19'

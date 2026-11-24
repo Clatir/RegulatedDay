@@ -1,5 +1,5 @@
 /**
- * The cause of a pool going below the reserve on a tile (N20, T2560–T2570): the ring in the pool's colour (`ReserveRing`) and the hint
+ * The cause of a pool going below the reserve on a tile (N20, T2560–T2573): the ring in the pool's colour (`ReserveRing`) and the hint
  * under the pointer „Tu głowa schodzi poniżej rezerwy (28 → 19)” – one for the axis of „Dziś” and the columns of „3 dni” and „Tydzień”.
  * The hint is `ReserveCauseHint`: a small window over the page (a portal) that stays while the pointer or the focus is on the tile or in the
  * window, with a slot for an action – `children` (N3: „Wstaw regenerację tutaj” stands there). What counts and where is `@shared/engine/reserveCause`.
@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { ReserveCause } from '@shared/engine/reserveCause'
+import { logicalClock } from '@shared/format'
 import { POOL_COLOR, POOL_NAME } from './energyDraw'
 
 /**
@@ -18,10 +19,13 @@ export function ReserveRing({ cause }: { cause: ReserveCause | undefined }) {
   return <span aria-hidden className="pointer-events-none absolute inset-0 z-10 rounded-[3px]" style={{ boxShadow: `inset 0 0 0 2px ${POOL_COLOR[cause.drops[0]!.pool]}` }} data-testid="reserve-ring" />
 }
 
-/** The words of the hint (T2565): „Tu głowa schodzi poniżej rezerwy (28 → 19)”; two pools – the second after „·” („bodźce schodzą poniżej rezerwy (35 → 29)”). */
+/** The words of the hint (T2565): „Tu głowa schodzi poniżej rezerwy (28 → 19)”; two pools – the second after „·”; a run away from the tile (T2573) – „ · w prognozie 17:00–18:30” (the forecast's) or „ · biegł 10:00–10:20” (the log's) at the end („bodźce schodzą poniżej rezerwy (35 → 29)”). */
 export function reserveCauseText(cause: ReserveCause): string {
-  const parts = cause.drops.map((d) => `${POOL_NAME[d.pool]} ${d.pool === 'emotions' || d.pool === 'senses' ? 'schodzą' : 'schodzi'} poniżej rezerwy (${d.from} → ${d.to})`)
-  return `Tu ${parts.join(' · ')}`
+  const where = cause.drops.map((d) => (d.runs ? `${d.runs.forecast ? 'w prognozie' : 'biegł'} ${logicalClock(d.runs.startMin)}–${logicalClock(d.runs.endMin)}` : null))
+  // The same place for every pool – said once, at the end (T2573); else beside each.
+  const once = where[0] != null && where.every((w) => w === where[0])
+  const parts = cause.drops.map((d, i) => `${POOL_NAME[d.pool]} ${d.pool === 'emotions' || d.pool === 'senses' ? 'schodzą' : 'schodzi'} poniżej rezerwy (${d.from} → ${d.to})${!once && where[i] ? ` · ${where[i]}` : ''}`)
+  return `Tu ${parts.join(' · ')}${once ? ` · ${where[0]}` : ''}`
 }
 
 /** Where the hint stands: the rectangle of the tile it is about. */
