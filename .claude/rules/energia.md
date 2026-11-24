@@ -6,6 +6,15 @@ paths:
   - "tests/unit/engine/model-energii.test.ts"
   - "tests/unit/engine/reserve.test.ts"
   - "tests/unit/engine/body-energy.test.ts"
+  - "src/shared/engine/trialEnergy.ts"
+  - "src/renderer/features/plan/trialEnergy.ts"
+  - "tests/unit/engine/trial-energy.test.ts"
+  - "tests/web/trial-energy.test.ts"
+  - "src/renderer/features/plan/TrialCaption.tsx"
+  - "src/renderer/features/week/WeekTrial.tsx"
+  - "tests/web/energy-live.test.ts"
+  - "tests/web/energy-live-week.test.ts"
+  - "tests/e2e/energy-live.spec.ts"
 ---
 
 # Energia (E2)
@@ -28,6 +37,22 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
 - `engine/energyCurve.ts` (T1280, T1281, T2607) – wygładzona krzywa toru (`poolCurve` – każda pula ze swoich próbek, `curveAt`, `valuesAt`,
   `energySpan`), `stripState`, `eachStripMinute` – jedno przejście po minutach paska: `stripRuns` (pasek kolumny) i `dayEnergy` (kropka
   miesiąca – najciemniejsza minuta paska, pamięć po obiekcie toru); okno bierze je przez `plan/energyDraw.ts` (re-eksport).
+- `engine/trialEnergy.ts` (N19, T2574–T2580) – energia na żywo: `trialLowest(dzień, { plan?, events? })` → `{ before, after, pool, beforePool, assumed }` –
+  najniższa energia jak linia po zmianie (D529 `groupEnergy`, D369 `lowestEnergy`: od teraz do `bedtime.forecast`, dzień przyszły od 04:00, `shownOf`),
+  dzień po zmianie liczony od nowa (`computeDay` + `computeEnergy`), bez check-inu (przyszły, dziś przed nim) – z przyjętego (`assumedCheckin`); null – dzień
+  miniony, moduł wyłączony; `before` raz na `DayState` (`lowestBefore`). Zmiany: `costTrial` (okienko kosztu: zaczęty – `block.cost` od teraz, niezaczęty – `costs`
+  w planie), `resizeTrial` (krawędź trwającego – `resizeClick`), plan grupy – `DragPreview.plan`, plan przeciągnięcia „Dziś” – `planAfter` (`dayPush.ts`).
+  Okno: `plan/trialEnergy.ts` `useTrialLowest(dzień, { key, change })` (`TrialRunner`: liczy tylko najnowszą zmianę po `TRIAL_DELAY_MS` bez nowszej, pamięć po kluczu
+  na dzień, `fresh` false – poprzedni wynik w czasie liczenia; brak próby – od razu null); `changeTrial` – `DayChange` jako próba. Próba ~3–4 ms na dniu z 15 blokami.
+- Podpis w oknie (N19, D593, D594, T2581–T2585): `plan/TrialCaption.tsx` – `trialText` „najniższa energia 52 → 44 (G)” (litera puli po zmianie, „ · przyjęte” gdy `assumed`, null przy `after === before`),
+  `TrialCaption` (`energy-trial`, `data-before|after|pool|fresh`; `fresh` false – `text-muted`). „Dziś”: `Timeline.energyTrial` (`TimelineTrial`: `day` = `model`, `drag(TrialDrag)` → `Trial`, `cost(dzień, id, koszty)`) –
+  `Timeline` woła `useTrialLowest` tylko w trakcie ruchu (`drag.moved` i nie `dropped`); `TodayPage.trialOfDrag` buduje tę samą zmianę, którą rysuje podgląd i zapisuje puszczenie (`dragChange` / `copyPreview` / `ontoChange`
+  przez `changeTrial`, grupa – `dragPreview().plan`, krawędź trwającego – `resizeTrial` z `previewOf().to`); klucz = id, krawędź, start–koniec, początek chwytu, Ctrl, przy grupie id członków. Miejsce: przy ciele i grupie
+  `energy-trial-box` pod dolną krawędzią miejsca bloku (`dragShown`), przy krawędzi – druga linia w `edge-hint`. Esc odwołuje każde przeciągnięcie po ruszeniu (jak w „Tygodniu”, T2581; wcześniej tylko grupę) – nic się nie zapisuje,
+  podpis znika z `drag = null`. Okienko kosztu: `TileCost.trial` (`CostTrial`: `useDay` – hak wołany tylko przy otwartym oknie, `change(dzień, koszty)`; „Dziś” – `costTrial`) – `CostEnergy` w oknie (`cost-pop-energy`) liczy
+  pokazaną liczbę nad zapisaną (kliknięcia czekające na zapis i liczba z kółka – `SettingNumber.onShown` → `turn`); równa zapisanej – bez próby. Okno zapisuje każde kliknięcie od razu, więc podpis stoi do echa zapisu (potem zmiana jest już w `before`).
+  „Tydzień” i „3 dni”: `week/WeekTrial.tsx` – pod pasmem `week-drop` kolumny docelowej (`week-energy-trial`), dzień policzony w oknie (`useDay`, tylko dla trzymanego bloku), w obrębie dnia `dragChange` / `copyPreview`, na inny dzień
+  `movedBlock` + `addChange`; mówi o dniu docelowym (źródła nie liczy); bez podpisu: grupa, upuszczenie na blok (D492), dzień minął. Testy: `tests/web/energy-live*.test.ts`, E2E `energy-live.spec.ts`.
 - Zdarzenia `energy.*` w `model/events.ts`; `DayState.rest` i `settingsAtMinute` z `engine/day.ts`;
   `DataFolder.energyState` i zapis `energy.reserve` w zadaniach prowadzącego (`main/data/folder.ts`).
 

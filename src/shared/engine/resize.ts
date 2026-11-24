@@ -15,7 +15,7 @@ import { ownHourBlock } from './blocks'
 import { computeDay, type DayContext, type DayState } from './day'
 import { atOf, idxOfLogical } from './grid'
 import { simEvents } from './sim'
-import { timerAction, timerNow, type ActionCost, type TimerBlock } from './timer'
+import { timerAction, timerNow, type ActionCost, type TimerBlock, type TimerDraft } from './timer'
 
 /** The bottom edge of a running block that can be dragged now (logical minutes). */
 export interface RunningEdge {
@@ -87,6 +87,23 @@ export function runningEdges(state: DayState, at: number): Map<string, RunningEd
 }
 
 /**
+ * The click `resize` of the running block `id` to the instant `to` at `at`, never written: its cost past the boundary (null – none), why it
+ * is refused (null – it is not) and the events it writes – confirmed when it asks to confirm (as „Potwierdź” would), none when refused. One
+ * rule for the preview's warnings (`resizePreview`) and the energy on trial (`trialEnergy.ts` `resizeTrial`, N19).
+ */
+export function resizeClick(ctx: DayContext, state: DayState, id: string, to: number, at: number): { cost: ActionCost | null; refused: string | null; events: TimerDraft[] } {
+  const r = timerAction(ctx, state, { a: 'resize', block: id, to }, at)
+  const cost = r.ok ? null : r.confirm
+  const refused = r.ok || cost ? null : r.why
+  let events = r.ok ? r.events : []
+  if (cost) {
+    const confirmed = timerAction(ctx, state, { a: 'resize', block: id, to, confirm: true }, at)
+    events = confirmed.ok ? confirmed.events : []
+  }
+  return { cost, refused, events }
+}
+
+/**
  * The edge of the running block `id` dragged to the logical minute `endLm` at `at` (ms): null – it has no edge. Its cost
  * and refusal are those of the click itself (`timerAction` with `resize`, never written); its warnings – one count of the
  * day with the change (call it when the end on the grid changes, not on every move).
@@ -100,14 +117,7 @@ export function resizePreview(ctx: DayContext, state: DayState, id: string, endL
   const end = Math.min(Math.max(earliest, idxOfLogical(g, snapped)), latest)
   const to = atOf(g, end)
   const minutes = end - tb.plannedEnd
-  const r = timerAction(ctx, state, { a: 'resize', block: id, to }, at)
-  const cost = r.ok ? null : r.confirm
-  const refused = r.ok || cost ? null : r.why
-  let events = r.ok ? r.events : []
-  if (cost) {
-    const confirmed = timerAction(ctx, state, { a: 'resize', block: id, to, confirm: true }, at)
-    events = confirmed.ok ? confirmed.events : []
-  }
+  const { cost, refused, events } = resizeClick(ctx, state, id, to, at)
   let warnings: string[] = []
   if (events.length) {
     const after = computeDay({ ...ctx, now: Math.max(ctx.now, at), events: [...ctx.events, ...simEvents(ctx, events, at)] })

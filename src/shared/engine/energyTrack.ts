@@ -59,8 +59,8 @@ export function energyTrack(date: string, grid: Grid, e: EnergyState): EnergyTra
 /** The answers of the assumed check-in of a day to come (T903): „nie” to every question – each pool at 100. */
 export const ASSUMED_CHECKIN: Record<Pool, [Answer, Answer]> = { head: [0, 0], emotions: [0, 0], senses: [0, 0], body: [0, 0] }
 
-/** The assumed check-in as an event of the day, at its first minute (energy only – the day's engine never reads it). */
-function assumedCheckin(ctx: DayContext, grid: Grid): AnyEvent {
+/** The assumed check-in as an event of the day, at its first minute (energy only – the day's engine never reads it; also the trial of `trialEnergy.ts`). */
+export function assumedCheckin(ctx: DayContext, grid: Grid): AnyEvent {
   const at = grid.start
   return { id: `assumed:${ctx.date}`, c: '', n: 0, t: at, l: at, v: 0, day: ctx.date, dom: 'energy', k: 'energy.checkin', at, answers: ASSUMED_CHECKIN } as AnyEvent
 }

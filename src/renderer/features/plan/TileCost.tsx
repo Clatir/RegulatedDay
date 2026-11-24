@@ -12,6 +12,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
+import type { TrialChange, TrialDay } from '@shared/engine/trialEnergy'
 import { COST_MAX, COST_MIN, costNumber, costSet, costStep, costsText, resetLabel, sameCosts, type TileCost as TileCostInfo } from '@shared/model/blockCosts'
 import { POOLS as POOL_ORDER, type Costs, type Pool } from '@shared/model/categories'
 import { cx } from '../../components/ui'
@@ -24,6 +25,8 @@ import { CostInput, useWideCostWarning } from './CostInput'
 import type { CostAsk } from './costSave'
 import { COST_SCALE_TEXT, POOL_COLOR, POOL_NAME } from './energyDraw'
 import { NO_GRID } from './gridDrag'
+import { TrialCaption, trialText } from './TrialCaption'
+import { useTrialLowest } from './trialEnergy'
 
 /** What the window shows: four costs and whether they are the block's own. */
 interface Shown {
@@ -31,6 +34,34 @@ interface Shown {
   own: boolean
 }
 const sameShown = (a: Shown, b: Shown): boolean => a.own === b.own && sameCosts(a.costs, b.costs)
+/**
+ * The energy on trial of a tile's window (N19): `useDay` – the day counted with its energy (a hook, called only while the window is open: „Dziś” has
+ * its day at hand, a column of „Tydzień” counts its own; null – nothing to say) and `change` – what the tile's cost `costs` (null – „Jak podkategoria”)
+ * would write on that day (`costTrial`).
+ */
+export interface CostTrial {
+  useDay: () => TrialDay | null
+  change: (day: TrialDay, costs: Costs | null) => TrialChange | null
+}
+
+/** The line of the window with the lowest energy before and with the cost it shows (`costs`; undefined – it shows what is saved: nothing to try). Said to `onText` whether it has words. */
+function CostEnergy({ trial, id, costs, onText }: { trial: CostTrial; id: string; costs: Costs | null | undefined; onText: (has: boolean) => void }) {
+  const day = trial.useDay()
+  const key = costs === undefined ? null : `cost|${id}|${costs ? POOL_ORDER.map((p) => costs[p]).join(',') : 'base'}`
+  const energy = useTrialLowest(day, key && day ? { key, change: () => trial.change(day, costs ?? null) } : null)
+  const has = trialText(energy) != null
+  useLayoutEffect(() => {
+    onText(has)
+    return () => onText(false)
+  }, [has])
+  if (!has) return null
+  return (
+    <p role="note" className="text-[11px] leading-snug" data-testid="cost-pop-energy">
+      <TrialCaption shown={energy} />
+    </p>
+  )
+}
+
 /** A click of the window: a step of a pool, or „Jak podkategoria” / „Jak wariant”; `ask` – the memory of the window it was made in. */
 type Op = ({ k: 'step'; pool: Pool; by: 1 | -1 } | { k: 'set'; pool: Pool; value: number } | { k: 'reset' }) & { ask: CostAsk }
 
@@ -79,6 +110,7 @@ export function TileCost({
   tight = false,
   className,
   place: at,
+  trial,
   onChange
 }: {
   cost: TileCostInfo
@@ -91,6 +123,8 @@ export function TileCost({
   className?: string
   /** Where the tile put it: in the corner, at the end of the name's row, or shown only while the pointer is over the tile. */
   place?: 'corner' | 'row' | 'hover'
+  /** N19: the lowest energy before and with the cost the window shows but has not saved yet (left out – the window says nothing of energy). */
+  trial?: CostTrial
   /**
    * The block's own cost, or null – the category's again; `ask` – the memory of this open window (the scope of a series picked by its
    * first change). Left out: no window (the label only says).
@@ -118,6 +152,16 @@ export function TileCost({
   const running = useRef(false)
   const ask = useRef<CostAsk>({ scope: null })
   const [shown, setShown] = useState<Shown>(() => saved(cost))
+  // N19: the numbers the wheel turned in the window and has not sent yet (`SettingNumber onShown`) – over what the window shows, they are the intent too.
+  const [turn, setTurn] = useState<Partial<Record<Pool, number>>>({})
+  const turned = (pool: Pool) => (n: number | null) =>
+    setTurn((t) => {
+      if ((t[pool] ?? null) === n) return t
+      const next = { ...t }
+      if (n == null) delete next[pool]
+      else next[pool] = n
+      return next
+    })
   // The warning about an older computer under the numbers (D568, T2440) – shown or not, also when the folder's computers change.
   const warned = useWideCostWarning([shown.costs])
   const apply = (v: Shown, op: Op): Shown =>
@@ -161,6 +205,14 @@ export function TileCost({
     setHidden(aside)
   }, [asked, held])
   useEscapeLayer(open, close)
+  // N19: the cost the window shows and the tile has not saved (a click on its way to the save, a number the wheel turned, typed and not left):
+  // the lowest energy with it – counted off the clicks (`useTrialLowest`), nothing written; the window shut or nothing differs – no trial.
+  const intent: Shown = { costs: { ...shown.costs, ...turn }, own: shown.own || Object.keys(turn).length > 0 }
+  const tried = !sameShown(intent, saved(cost)) ? (intent.own ? intent.costs : null) : undefined
+  const [energyLine, setEnergyLine] = useState(false)
+  useEffect(() => {
+    if (!open) setTurn((t) => (Object.keys(t).length ? {} : t))
+  }, [open])
   useOutsidePointer(open && !hidden, `[data-cost-of="${id}"]`, close)
   useEffect(() => {
     if (!open) return
@@ -189,7 +241,7 @@ export function TileCost({
     if (!place || !h) return
     const next = popPlace(place.anchor, { width: window.innerWidth, height: window.innerHeight }, h)
     if (next.left !== place.left || next.top !== place.top) setPlace({ ...place, ...next })
-  }, [place?.anchor, warned != null])
+  }, [place?.anchor, warned != null, energyLine])
   // The tile became one that may not be changed (it ended, its day went by): its window goes.
   useLayoutEffect(() => {
     if (!editable) setPlace(null)
@@ -312,12 +364,14 @@ export function TileCost({
                 <button type="button" className="btn px-2 py-0" disabled={shown.costs[p] <= COST_MIN} onClick={() => step(p, -1)} aria-label={`${POOL_NAME[p]}: mniej`} data-testid={`cost-pop-${p}-minus`}>
                   −
                 </button>
-                <CostInput pool={p} value={shown.costs[p]} onCommit={(v) => set(p, v)} testId={`cost-pop-${p}-value`} wheel="gesture" />
+                <CostInput pool={p} value={shown.costs[p]} onCommit={(v) => set(p, v)} onShown={turned(p)} testId={`cost-pop-${p}-value`} wheel="gesture" />
                 <button type="button" className="btn px-2 py-0" disabled={shown.costs[p] >= COST_MAX} onClick={() => step(p, 1)} aria-label={`${POOL_NAME[p]}: więcej`} data-testid={`cost-pop-${p}-plus`}>
                   +
                 </button>
               </div>
             ))}
+            {/* N19: what these numbers do to the lowest energy of the day, before they are saved. */}
+            {trial && <CostEnergy trial={trial} id={id} costs={tried} onText={setEnergyLine} />}
             {warned && (
               <p role="note" className="text-[11px] leading-snug text-lamp" data-testid="cost-pop-old">
                 {warned}

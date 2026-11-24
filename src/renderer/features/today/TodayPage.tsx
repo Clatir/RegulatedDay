@@ -58,7 +58,9 @@ import { judgeBlocks } from '../plan/groupRun'
 import { rememberNewBlockCategory } from '../plan/lastCategory'
 import { edgeSummary, resizeAnswer, resizeAsked, resizeToSend } from '../plan/edgeEdit'
 import { resizePreview, runningEdges, type ResizePreview } from '@shared/engine/resize'
-import { Timeline, type BlockSpan, type DragEdge, type EdgeLimits } from '../plan/Timeline'
+import { Timeline, type BlockSpan, type DragEdge, type EdgeLimits, type TimelineTrial, type TrialDrag } from '../plan/Timeline'
+import { changeTrial, type Trial } from '../plan/trialEnergy'
+import { costTrial, resizeTrial } from '@shared/engine/trialEnergy'
 import { useAxisOpening, type PlacedDay } from './axisOpening'
 import { EnergyLegendHelp, LANES_WIDTH } from '../plan/EnergyLanes'
 import { hasEnergy } from '../plan/energyDraw'
@@ -482,6 +484,33 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
     const i = axis.items.find((x) => x.id === id)
     return i ? { startMin: i.startMin, endMin: i.endMin } : null
   }
+  /**
+   * N19: the lowest energy before and with the change a drag in progress would write – the same change the preview draws and the drop saves (the
+   * plan after `dragChange` / `parallelChange` / `copyChange`, a group's `dragPreview`, the events of a running block's edge), counted on trial
+   * off the pointer's path (`useTrialLowest`); a day gone by is history – nothing to say. The key holds all the change depends on.
+   */
+  const trialOfDrag = (d: TrialDrag): Trial | null => {
+    const at = `${d.id}|${d.edge ?? ''}|${d.span.startMin}|${d.span.endMin}|${d.shown.startMin}|${d.shown.endMin}|${d.copy}`
+    if (d.group) {
+      const ids = group.sel.selected
+      const via = isToday ? 'forecast' : 'plan'
+      return { key: `g|${d.id}|${d.minutes}|${d.copy}|${ids.join(',')}`, change: () => { const plan = dragPreview(model, ids, d.minutes, today, { copy: d.copy, axis: via })?.plan; return plan ? { plan } : null } }
+    }
+    if (d.onto) {
+      const target = d.onto
+      return { key: `o|${d.id}|${target}`, change: () => { const c = ontoChange(d.id, target); return c && c !== 'same' ? changeTrial(model, c) : null } }
+    }
+    const item = axis.items.find((i) => i.id === d.id)
+    if (item?.movable) {
+      return { key: `m|${at}`, change: () => { const c = d.copy ? copyChange(d.id, d.span.startMin) : movableChange(d.id, d.span, d.edge, d.shown); return c ? changeTrial(model, c) : null } }
+    }
+    // A running block's bottom edge: the events the timer's resize writes (confirmed past the boundary, as „Potwierdź”).
+    if (item?.resize === 'end' && d.edge === 'end') {
+      return { key: `r|${d.id}|${d.span.endMin}`, change: () => { const p = previewOf(d.id, d.span.endMin); return p ? resizeTrial(model, d.id, p.to) : null } }
+    }
+    return null
+  }
+  const energyTrial: TimelineTrial | undefined = pushes ? { day: model, drag: trialOfDrag, cost: (day, id, costs) => costTrial(day, id, costs) } : undefined
 
   /**
    * A new block: in the panel first, drawn dashed on the axis (D466); an hour long, or as long as the range dragged over the axis
@@ -715,6 +744,7 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
               }}
               // D501: the window of the cost on a tile – one path with „3 dni” and „Tydzień” (a block of a series not begun asks its scope as
               // the panel does, once a window; a begun block costs so from now on).
+              energyTrial={energyTrial}
               onCosts={(id, costs, ask) => saveTileCosts({ date, blockId: id, names, ofSeries: plan.find((x) => x.id === id)?.origin === 'series' }, costs, { ask })}
               rename={rename}
               markers={axis.markers}

@@ -38,6 +38,15 @@ export function changedPlan(plan: readonly PlanBlock[], c: Pick<DayChange, 'bloc
 }
 
 /**
+ * The plan as the day has it after the change is written: its block, the others of its group, and the blocks it pushes apart at their new
+ * starts (`withPushed`) – one plan for the preview of the axis (`pushedSpans`, `parallelHint`) and the energy on trial (N19, `plan/trialEnergy.ts`).
+ */
+export function planAfter(plan: readonly PlanBlock[], c: Pick<DayChange, 'block' | 'others' | 'pushed'>): PlanBlock[] {
+  const starts = new Map(c.pushed.map((p) => [p.id, p.startMin]))
+  return changedPlan(plan, c).map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b))
+}
+
+/**
  * The block `id` of the plan dragged to `span` – by its body (`edge` null: its start, D305) or an edge (D365, as the field
  * „Długość” saves it), grabbed at `shown` – and what it pushes apart on a day to come (`pushes`). The bottom edge pushes
  * from where the block stands on the axis, the rest from its new start. Null: no block of the plan.
@@ -119,9 +128,7 @@ export function parallelChange(
 export function parallelHint(day: { ctx: DayContext; state: DayState }, c: ParallelChange | 'same' | null, shown: BlockSpan | null, axis: 'forecast' | 'plan'): ParallelHint | null {
   if (c === 'same') return shown ? { text: PARALLEL_SAME_TEXT, span: shown, pushed: null, same: true } : null
   if (!c) return null
-  const starts = new Map(c.pushed.map((p) => [p.id, p.startMin]))
-  const plan = changedPlan(day.ctx.plan, c).map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b))
-  const moves = new Map(axisMoves(day.ctx, day.state, plan, axis))
+  const moves = new Map(axisMoves(day.ctx, day.state, planAfter(day.ctx.plan, c), axis))
   const start = c.block.startMin ?? shown?.startMin ?? 0
   const span = moves.get(c.block.id) ?? { startMin: start, endMin: start + c.block.durationMin }
   moves.delete(c.block.id)
@@ -158,9 +165,7 @@ export function addChange(day: { ctx: DayContext; state: DayState }, block: Plan
  */
 export function pushedSpans(day: { ctx: DayContext; state: DayState }, c: DayChange | null, axis: 'forecast' | 'plan'): ReadonlyMap<string, BlockSpan> | null {
   if (!c?.pushed.length) return null
-  const starts = new Map(c.pushed.map((p) => [p.id, p.startMin]))
-  const plan = changedPlan(day.ctx.plan, c).map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b))
-  const moves = axisMoves(day.ctx, day.state, plan, axis)
+  const moves = axisMoves(day.ctx, day.state, planAfter(day.ctx.plan, c), axis)
   moves.delete(c.block.id)
   return moves.size ? moves : null
 }
