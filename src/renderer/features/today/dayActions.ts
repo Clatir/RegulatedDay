@@ -23,7 +23,7 @@ import { createDay } from '@shared/engine/createDay'
 import { copiedDay, moveBetweenDays, stayRuleOf, wakeChange } from '@shared/engine/planEdit'
 import type { DayContext, DayState } from '@shared/engine/day'
 import type { EnergyState } from '@shared/engine/energy'
-import { energyOrderVariant, lowestEnergy } from '@shared/engine/energyOrder'
+import { cheapestSwap, energyOrderVariant, lowestEnergy, reserveWarned, type CheapestSwap } from '@shared/engine/energyOrder'
 import type { Variant } from '@shared/engine/variants'
 import { nameById, type Names } from '@shared/blockName'
 import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
@@ -270,20 +270,8 @@ export function variantStarts(plan: readonly PlanBlock[], v: Pick<Variant, 'chan
  * a variant picked in the bar, D313): its „Cofnij” takes this one edit back.
  */
 export async function arrangeDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], label: string): Promise<{ out: EditOutcome[] | null; already: boolean }> {
-  const sent: { made: boolean; entry: EditEntry | null; after: RawRecord | null } = { made: false, entry: null, after: null }
-  const out = await trySaveWith(async () => {
-    const before = (await dayFilesNow([date], () => seen))[date] ?? null
-    const after = withPushed(dayRaw(before, date), date, (r) => r, starts)
-    sent.made = true
-    sent.entry = editOf(paths.day(date), before, after)
-    sent.after = sent.entry?.create ? after : null
-    return [sent.entry]
-  })
-  // The file in its turn already so (another computer, an earlier click): nothing written – the note (D379, T622).
-  if (sent.made && !sent.entry) {
-    toast(PLAN_ALREADY_TEXT, 'info')
-    return { out, already: true }
-  }
+  const { out, sent } = await saveStarts(date, seen, starts)
+  if (sent.already) return { out, already: true }
   if (isSaved(out) && sent.entry) {
     try {
       await window.rd.planArranged(date, label, sent.entry, sent.after)
@@ -292,6 +280,69 @@ export async function arrangeDayBlocks(date: string, seen: RawRecord | null, sta
     }
   }
   return { out, already: false }
+}
+
+/**
+ * New starts of blocks as one edit of the day's file, in its turn, each over the block as the file holds it then („Ułóż”, „Zamień”).
+ * `sent.already` – the file in its turn already so (another computer, an earlier click): nothing written, the note said (D379, T622);
+ * `sent.entry` – the edit sent, `sent.after` – the file it made when it had none.
+ */
+async function saveStarts(date: string, seen: RawRecord | null, starts: readonly PushedStart[]): Promise<{ out: EditOutcome[] | null; sent: { already: boolean; entry: EditEntry | null; after: RawRecord | null } }> {
+  const sent: { made: boolean; already: boolean; entry: EditEntry | null; after: RawRecord | null } = { made: false, already: false, entry: null, after: null }
+  const out = await trySaveWith(async () => {
+    const before = (await dayFilesNow([date], () => seen))[date] ?? null
+    const after = withPushed(dayRaw(before, date), date, (r) => r, starts)
+    sent.made = true
+    sent.entry = editOf(paths.day(date), before, after)
+    sent.after = sent.entry?.create ? after : null
+    return [sent.entry]
+  })
+  if (sent.made && !sent.entry) {
+    sent.already = true
+    toast(PLAN_ALREADY_TEXT, 'info')
+  }
+  return { out, sent }
+}
+
+/** The words of „Najtańsza zamiana” (N22, T2624): the line by the warning of energy and the toast after „Zamień”. */
+export const swapLineText = (a: string, b: string, s: Pick<CheapestSwap, 'before' | 'after'>): string => `Najtańsza zamiana: ${a} ↔ ${b} – najniższa energia dnia ${s.before} → ${s.after}`
+export const swappedText = (a: string, b: string): string => `Zamieniono: ${a} ↔ ${b}`
+
+/**
+ * „Zamień” of the cheapest swap (N22, D598, T2625): its new starts as one edit of the day's file, the way of „Ułóż” (`saveStarts`) –
+ * but no line in the bar (D229: the bar stays as it is): the window says „Zamieniono: A ↔ B” for 10 s with „Cofnij” (the edit taken
+ * back while the file stands as it left it, `undoEditToast`; a block changed since – it stays, and the toast says so).
+ */
+export async function swapDayBlocks(date: string, seen: RawRecord | null, starts: readonly PushedStart[], text: string): Promise<{ out: EditOutcome[] | null; already: boolean }> {
+  const { out, sent } = await saveStarts(date, seen, starts)
+  if (sent.already) return { out, already: true }
+  if (isSaved(out) && sent.entry) undoEditToast(date, sent.entry, sent.after, text)
+  return { out, already: false }
+}
+
+/** What the cheapest swap is counted on: the day as counted (`DayModel`). */
+type SwapDay = EnergyOrderDay & { date: string }
+
+/** The last cheapest swap counted (T2624): by the day's key – as „Ułóż pod energię” (T616) and its date. */
+let lastSwap: { key: string; value: CheapestSwap | null } | null = null
+
+/**
+ * The cheapest swap of a day (N22) counted again only when the day changes (`energyOrderKey` and the date, T616): the search runs in
+ * the window's thread – not for a count of the day that only moved the clock within its step. Null – none (the engine says why).
+ */
+export function cheapestSwapCached(m: SwapDay): CheapestSwap | null {
+  // No warning of energy at the reserve – no line, and no key to count (the side panel renders at every count of the day).
+  if (!reserveWarned(m.energy)) return null
+  const key = `${m.date}|${energyOrderKey(m)}`
+  if (lastSwap && lastSwap.key === key) return lastSwap.value
+  const value = cheapestSwap(m.ctx, m.state, m.energy)
+  lastSwap = { key, value }
+  return value
+}
+
+/** The memory of `cheapestSwapCached` emptied (tests: one file's day never answers for another's). */
+export function resetSwapCache(): void {
+  lastSwap = null
 }
 
 /**

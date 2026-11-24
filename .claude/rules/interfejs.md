@@ -58,6 +58,10 @@ paths:
   null po „Zostaw” – `asked.energyOrder` w pliku dnia, `leaveEnergyOrder` przez `saveDay`, jak inne pytania planu porannego),
   „Ułóż” = `arrangeDayBlocks` (`variantStarts` → `withPushed`, jeden wpis `trySaveWith`; po `isSaved` – `window.rd.planArranged`,
   linia paska „Przestawiono: … · Cofnij”); tylko dziś (`MorningPlan` stoi tylko w dniu bieżącym).
+  „Najtańsza zamiana” (N22, T2624–T2626): `CheapestSwap.tsx` `CheapestSwapLine` – slot `swap` w `DayWarnings` (panel boczny i `BlockDayNotes`,
+  nie pasek – D229; dzień miniony – nic), `cheapestSwapCached` (najpierw `reserveWarned`, potem klucz `data|energyOrderKey`; `resetSwapCache`
+  w testach), nazwy `nameById`; „Zamień” = `swapDayBlocks` (`saveStarts` – ta sama droga co `arrangeDayBlocks`, bez `planArranged`) →
+  `undoEditToast` „Zamieniono: A ↔ B · Cofnij” (`editStands`; zmienione w międzyczasie – `PLAN_CHANGED_TEXT`). Testy `tests/web/cheapest-swap.test.ts`.
   Pobudka dnia (`TodayPage`, `CalendarPage`) = `setDayWake`: zapis pobudki i jednorazowe przesunięcie własnych bloków
   elastycznych dnia przed pierwszym stałym (`wakeChange`/`wakeShifted`, D334) – liczone z migawki dnia silnika i planu pokazywanego
   (`WakeDay`: w „Dziś” z `model`, dla dziś w Kalendarzu `wakeDayOf`; zaczęte zostają), jeden „Cofnij” (pobudka i bloki tylko, gdy

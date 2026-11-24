@@ -17,6 +17,9 @@
  * together (`ORDER_COUNTS` counts at most, D340): the variant is the count with the higher lowest energy that raises it by
  * `ENERGY_ORDER_GAIN` at least (as shown, whole) and neither adds an extension nor takes the end of work past the approved
  * boundary – before the approval, past the day's maximum (D378).
+ *
+ * „Najtańsza zamiana” (N22, D598, T2621–T2623) – `cheapestSwap` – shares the search (`orderSearch`): for a day whose
+ * forecast of energy reaches the reserve, the one swap of two blocks of a gap that raises the lowest energy most.
  */
 import { logicalClock } from '../format'
 import { blockCosts } from '../model/blockCosts'
@@ -46,6 +49,8 @@ export const ORDER_TOP = 2
  * gain first – and the last count for the best order of each gap that raised the lowest energy, together.
  */
 export const ORDER_COUNTS = 4
+/** The days (and their energy) the cheapest swap counts again at most (N22, T2621): the swaps the estimate ranks best. */
+export const SWAP_COUNTS = 3
 
 /** The id of the variant (the bar's action `pick|energyOrder`). */
 export const ENERGY_ORDER_ID = 'energyOrder'
@@ -96,16 +101,59 @@ export function lowestEnergy(e: EnergyState | null): number | null {
   return Math.min(...POOLS.map((p) => toUnits(e.forecast!.min[p])))
 }
 
+/** The day's forecast of energy reaches the reserve: the warning „prognoza energii na poziomie rezerwy” (`EnergyState.warnings`). */
+export function reserveWarned(e: EnergyState | null): boolean {
+  return !!e?.enabled && e.forecast != null && POOLS.some((p) => e.forecast!.reserveAt[p] != null)
+}
+
+/** An order of a gap as the forecast lays it out and its estimate (T609). */
+interface Laid {
+  starts: Map<string, number>
+  placed: Map<string, Placed>
+  score: number
+}
+
+/** The estimate of one gap: of the gap as it is (`base`) and of an order of its slots (`lay`). */
+interface GapScorer {
+  base: number
+  /**
+   * The order (slot k gets the block of slot order[k]) laid out and estimated: `score` – the estimate (the gap's own for the
+   * order as it is; null – the order does not fit), `laid` – the layout, only the first time the search meets it and when
+   * it fits (each layout once, T609).
+   */
+  lay(order: readonly number[]): { score: number | null; laid: Laid | null }
+}
+
+/** Orders of some gaps counted again: the changes of starts, the lowest energy (units), the effect, the forecast with them. */
+interface Counted {
+  changes: VariantChange[]
+  low: number
+  effect: Variant['effect']
+  shown: Map<string, Placed>
+}
+
 /**
- * The variant „Ułóż pod energię” for today's plan (null: the energy is unknown or off, no gap has two blocks that may
- * move, or no order raises the lowest energy clearly). `names` – the blocks' names for the list of changes; `limits` –
- * `ORDER_TOP` and `ORDER_COUNTS` other than the rules' (tests).
+ * What a search of orders of the day knows (T608–T620) – one for „Ułóż pod energię” and the cheapest swap (N22, T2621): the
+ * lowest energy now, the forecast as it is, the gaps, the estimate of each gap and the day counted again with orders of gaps.
  */
-export function energyOrderVariant(ctx: DayContext, state: DayState, energy: EnergyState | null, names: (b: BlockInfo) => string, limits: { top?: number; counts?: number } = {}): Variant | null {
-  const topMax = limits.top ?? ORDER_TOP
-  const countsMax = limits.counts ?? ORDER_COUNTS
+interface OrderSearch {
+  low0: number
+  identity: Placed[]
+  idById: Map<string, Placed>
+  gaps: Gap[]
+  /** The estimate of a gap; null – the gap has no room from its first slot to its end before the bedtime's forecast. */
+  scorer(gap: Gap): GapScorer | null
+  /** Orders of some gaps together, counted again: null when they do not stand as laid out or break a rule (D378). */
+  judge(t: readonly GapPick[]): Counted | null
+  /** The days counted again so far. */
+  counts(): number
+  lm(idx: number): number
+}
+
+/** The search of orders of the day (null: the energy is unknown or off, or no gap has two blocks that may move). */
+function orderSearch(ctx: DayContext, state: DayState, energy: EnergyState): OrderSearch | null {
   const low0 = lowestEnergy(energy)
-  if (low0 == null || !energy || shownOf(low0) >= ENERGY_ORDER_BELOW) return null
+  if (low0 == null) return null
   const g = state.grid
   const now = state.now
   const until = Math.min(g.length, Math.max(now, state.bedtime.forecast))
@@ -240,17 +288,13 @@ export function energyOrderVariant(ctx: DayContext, state: DayState, energy: Ene
     return map
   }
 
-  /**
-   * The best orders of a gap by the estimate – `ORDER_TOP` at most, each better than the gap as it is, the best first (of
-   * equal ones the one that moves fewer blocks, then the first in the order of the search).
-   */
-  const pickGap = (gap: Gap): GapPick[] => {
+  const scorer = (gap: Gap): GapScorer | null => {
     // From where the first slot may start (T613): the end of the blocks before it in the gap – a block of the same
     // category as the one before needs no buffer and starts there, before the slot's start as it is.
     const first = gap.slots[0]!
     const r0 = first > 0 ? Math.max(...gap.items.slice(0, first).map((it) => it.to)) : gap.items[first]!.from
     const r1 = Math.min(gap.upper, until)
-    if (r1 <= r0) return []
+    if (r1 <= r0) return null
     // The state there before the switch of a block that starts at that minute as it is (the series has it in that minute).
     const opening = gap.items.find((it, i) => it.from === r0 && gap.slots.includes(i))
     const ch0 = opening ? charge(opening.block, gap.before?.block.categoryId ?? null) : pools(() => 0)
@@ -264,24 +308,85 @@ export function energyOrderVariant(ctx: DayContext, state: DayState, energy: Ene
       return Math.min(...POOLS.map((p) => clamp(Math.min(lowBefore[p], lowWithin[p] + s.low[p] - base.low[p], lowAfter[p] + s.end[p] - base.end[p]))))
     }
     const baseScore = scoreOf(idById)
+    // Each layout once (the swaps come back to orders met before): its score by its starts.
+    const met = new Map<string, number | null>()
+    return {
+      base: baseScore,
+      lay(order) {
+        const starts = startsFor(gap, order)
+        if (!starts.size) return { score: baseScore, laid: null }
+        const key = [...starts].map(([id, s]) => `${id}@${s}`).join(',')
+        if (met.has(key)) return { score: met.get(key)!, laid: null }
+        const placed = layout(starts, [gap])
+        const score = placed ? scoreOf(placed) : null
+        met.set(key, score)
+        return { score, laid: placed && score != null ? { starts, placed, score } : null }
+      }
+    }
+  }
+
+  const before = judgeDay(ctx, state, []).effect
+  const planned = new Map(ctx.plan.map((b) => [b.id, b.startMin]))
+  const opts = { moduleOn: energy.enabled, calibration: !energy.variants }
+  let counts = 0
+  const judge = (t: readonly GapPick[]): Counted | null => {
+    const starts = new Map(t.flatMap((x) => [...x.starts]))
+    const placed = t.length === 1 ? t[0]!.placed : layout(starts, t.map((x) => x.gap))
+    if (!placed) return null
+    const changes: VariantChange[] = [...starts]
+      .filter(([id, s]) => planned.get(id) !== lm(s))
+      .sort((a, b) => a[1] - b[1])
+      .map(([block, s]) => ({ k: 'start', block, startMin: lm(s) }))
+    if (!changes.length) return null
+    counts++
+    const judged = judgeDay(ctx, state, changes)
+    // The day counted again keeps every block that stays where it was (as the layout said).
+    const counted = new Map(judged.after.forecast.map((p) => [p.block.id, p]))
+    if (identity.some((p) => !starts.has(p.block.id) && (counted.get(p.block.id)?.from !== p.from || counted.get(p.block.id)?.to !== p.to))) return null
+    // Before the boundary is approved the end of work may pass its proposal, within the day's maximum – or no later than it
+    // was, when it was past it already (D378, T617); once approved, never an extension the plan did not have, nor the end of
+    // work past the boundary it kept.
+    if (state.boundary.approved == null) {
+      const end = judged.after.lastWorkForecast
+      if (end != null && end > Math.max(state.boundary.max, state.lastWorkForecast ?? Number.NEGATIVE_INFINITY)) return null
+    } else if (judged.effect.extensionMin > before.extensionMin || (before.withinBoundary && !judged.effect.withinBoundary)) return null
+    const low = lowestEnergy(computeEnergy({ ...ctx, plan: planWith(ctx, changes) }, judged.after, opts))
+    return low == null ? null : { changes, low, effect: judged.effect, shown: counted }
+  }
+  return { low0, identity, idById, gaps, scorer, judge, counts: () => counts, lm }
+}
+
+/**
+ * The variant „Ułóż pod energię” for today's plan (null: the energy is unknown or off, no gap has two blocks that may
+ * move, or no order raises the lowest energy clearly). `names` – the blocks' names for the list of changes; `limits` –
+ * `ORDER_TOP` and `ORDER_COUNTS` other than the rules' (tests).
+ */
+export function energyOrderVariant(ctx: DayContext, state: DayState, energy: EnergyState | null, names: (b: BlockInfo) => string, limits: { top?: number; counts?: number } = {}): Variant | null {
+  const topMax = limits.top ?? ORDER_TOP
+  const countsMax = limits.counts ?? ORDER_COUNTS
+  const lowest = lowestEnergy(energy)
+  if (lowest == null || !energy || shownOf(lowest) >= ENERGY_ORDER_BELOW) return null
+  const search = orderSearch(ctx, state, energy)
+  if (!search) return null
+  const { low0, identity, idById, lm } = search
+
+  /**
+   * The best orders of a gap by the estimate – `ORDER_TOP` at most, each better than the gap as it is, the best first (of
+   * equal ones the one that moves fewer blocks, then the first in the order of the search).
+   */
+  const pickGap = (gap: Gap): GapPick[] => {
+    const sc = search.scorer(gap)
+    if (!sc) return []
+    const baseScore = sc.base
     const n = gap.slots.length
     const moved = (starts: ReadonlyMap<string, number>) => [...starts].filter(([id, s]) => idById.get(id)!.from !== s).length
     // The best orders so far, the best first (each with how many blocks it moves and when the search met it).
     const top: Array<GapPick & { moved: number; seen: number }> = []
     let seen = 0
-    // Each layout once (the swaps come back to orders met before): its score by its starts.
-    const met = new Map<string, number | null>()
     const consider = (order: readonly number[]): number | null => {
-      const starts = startsFor(gap, order)
-      if (!starts.size) return baseScore
-      const key = [...starts].map(([id, s]) => `${id}@${s}`).join(',')
-      if (met.has(key)) return met.get(key)!
-      const placed = layout(starts, [gap])
-      const score = placed ? scoreOf(placed) : null
-      met.set(key, score)
-      if (!placed || score == null || score <= baseScore) return score
-      const pick = { gap, starts, placed, score, base: baseScore, moved: moved(starts), seen: seen++ }
-      top.push(pick)
+      const { score, laid } = sc.lay(order)
+      if (!laid || laid.score <= baseScore) return score
+      top.push({ gap, ...laid, base: baseScore, moved: moved(laid.starts), seen: seen++ })
       top.sort((a, b) => b.score - a.score || a.moved - b.moved || a.seen - b.seen)
       if (top.length > topMax) top.pop()
       return score
@@ -313,42 +418,12 @@ export function energyOrderVariant(ctx: DayContext, state: DayState, energy: Ene
 
   // The orders of every gap the estimate finds better, the greatest estimated gain first (the earlier gap, then the
   // gap's own ranking, among equal ones): each judged by counting the day and its energy again (T609).
-  const ranked = gaps
+  const ranked = search.gaps
     .flatMap((gap) => pickGap(gap).map((pick, rank) => ({ pick, rank })))
     .sort((a, b) => b.pick.score - b.pick.base - (a.pick.score - a.pick.base) || a.pick.gap.index - b.pick.gap.index || a.rank - b.rank)
     .map((x) => x.pick)
   if (!ranked.length) return null
 
-  const before = judgeDay(ctx, state, []).effect
-  const planned = new Map(ctx.plan.map((b) => [b.id, b.startMin]))
-  const opts = { moduleOn: energy.enabled, calibration: !energy.variants }
-  type Counted = { changes: VariantChange[]; low: number; effect: Variant['effect']; shown: Map<string, Placed> }
-  let counts = 0
-  /** The orders of some gaps together, counted again: null when they do not stand as laid out or break a rule above. */
-  const judge = (t: readonly GapPick[]): Counted | null => {
-    const starts = new Map(t.flatMap((x) => [...x.starts]))
-    const placed = t.length === 1 ? t[0]!.placed : layout(starts, t.map((x) => x.gap))
-    if (!placed) return null
-    const changes: VariantChange[] = [...starts]
-      .filter(([id, s]) => planned.get(id) !== lm(s))
-      .sort((a, b) => a[1] - b[1])
-      .map(([block, s]) => ({ k: 'start', block, startMin: lm(s) }))
-    if (!changes.length) return null
-    counts++
-    const judged = judgeDay(ctx, state, changes)
-    // The day counted again keeps every block that stays where it was (as the layout said).
-    const counted = new Map(judged.after.forecast.map((p) => [p.block.id, p]))
-    if (identity.some((p) => !starts.has(p.block.id) && (counted.get(p.block.id)?.from !== p.from || counted.get(p.block.id)?.to !== p.to))) return null
-    // Before the boundary is approved the end of work may pass its proposal, within the day's maximum – or no later than it
-    // was, when it was past it already (D378, T617); once approved, never an extension the plan did not have, nor the end of
-    // work past the boundary it kept.
-    if (state.boundary.approved == null) {
-      const end = judged.after.lastWorkForecast
-      if (end != null && end > Math.max(state.boundary.max, state.lastWorkForecast ?? Number.NEGATIVE_INFINITY)) return null
-    } else if (judged.effect.extensionMin > before.extensionMin || (before.withinBoundary && !judged.effect.withinBoundary)) return null
-    const low = lowestEnergy(computeEnergy({ ...ctx, plan: planWith(ctx, changes) }, judged.after, opts))
-    return low == null ? null : { changes, low, effect: judged.effect, shown: counted }
-  }
   // The higher lowest energy wins; among equal ones the one with fewer changes, then the one judged first (a holder: the
   // closure sets it).
   const best: { j: Counted | null } = { j: null }
@@ -361,13 +436,13 @@ export function energyOrderVariant(ctx: DayContext, state: DayState, energy: Ene
   const together = new Set(ranked.map((x) => x.gap.index)).size > 1
   const bestOf = new Map<number, { pick: GapPick; low: number }>()
   for (const pick of ranked) {
-    if (counts >= countsMax - (together ? 1 : 0)) break
-    const j = judge([pick])
+    if (search.counts() >= countsMax - (together ? 1 : 0)) break
+    const j = search.judge([pick])
     keep(j)
     const was = bestOf.get(pick.gap.index)
     if (j && j.low > low0 && (!was || j.low > was.low)) bestOf.set(pick.gap.index, { pick, low: j.low })
   }
-  if (bestOf.size > 1 && counts < countsMax) keep(judge([...bestOf.values()].sort((a, b) => a.pick.gap.index - b.pick.gap.index).map((x) => x.pick)))
+  if (bestOf.size > 1 && search.counts() < countsMax) keep(search.judge([...bestOf.values()].sort((a, b) => a.pick.gap.index - b.pick.gap.index).map((x) => x.pick)))
   const found = best.j
   if (!found) return null
   // The changes of order as the day counted with them shows its blocks: each one that moves, by its new place.
@@ -379,6 +454,61 @@ export function energyOrderVariant(ctx: DayContext, state: DayState, energy: Ene
   const energyNow = { before: shownOf(low0), after: shownOf(found.low) }
   // It mends no cause of the marker (D379): picking it never closes them.
   return { id: ENERGY_ORDER_ID, label: energyOrderLabel(energyNow), changes: found.changes, effect: found.effect, details, energy: energyNow, mends: false }
+}
+
+/** The cheapest swap (N22): two flexible blocks of one gap that change places, and the lowest energy of the day before and with it. */
+export interface CheapestSwap {
+  /** The blocks (ids): `a` – the earlier of the two in the forecast now, `b` – the later. */
+  a: string
+  b: string
+  /** The lowest energy of the day before and with the swap (whole points, as shown). */
+  before: number
+  after: number
+  /** The new planned starts: the two blocks and those between them a swap of different lengths moves (`start` only). */
+  changes: VariantChange[]
+}
+
+/**
+ * The cheapest swap (N22, D598, T2621–T2623): for a day whose forecast of energy reaches the reserve (the warning, not
+ * `ENERGY_ORDER_BELOW`), one proposal – two flexible blocks of one gap between fixed blocks change places (the order of
+ * „Ułóż pod energię” with only those two swapped, laid out by the forecast: blocks between them of a swap of different
+ * lengths follow, T610) – the one that raises the lowest energy of the day most, by `ENERGY_ORDER_GAIN` at least, under the
+ * rules of „Ułóż” (the blocks that may move, the day counted again, D378). Every swap of every gap is laid out and ranked by
+ * the estimate; the `SWAP_COUNTS` best are counted again. Of equal lowest energy: the earlier gap, then the earlier first
+ * block, then the earlier second. Null: a day gone by, no warning, or no swap that raises it enough. `limits` – tests.
+ */
+export function cheapestSwap(ctx: DayContext, state: DayState, energy: EnergyState | null, limits: { counts?: number } = {}): CheapestSwap | null {
+  const countsMax = limits.counts ?? SWAP_COUNTS
+  // A day gone by (now past its last minute) has nothing left to swap.
+  if (!energy || state.now >= state.grid.length || !reserveWarned(energy)) return null
+  const search = orderSearch(ctx, state, energy)
+  if (!search) return null
+  type Swap = { pick: GapPick; i: number; j: number }
+  const swaps: Swap[] = []
+  for (const gap of search.gaps) {
+    const sc = search.scorer(gap)
+    if (!sc) continue
+    const n = gap.slots.length
+    for (let i = 0; i < n; i++)
+      for (let j = i + 1; j < n; j++) {
+        const { laid } = sc.lay(Array.from({ length: n }, (_, k) => (k === i ? j : k === j ? i : k)))
+        if (laid && laid.score > sc.base) swaps.push({ pick: { gap, ...laid, base: sc.base }, i, j })
+      }
+  }
+  // The earlier gap, then the earlier first block, then the earlier second (T2622).
+  const earlier = (x: Swap, y: Swap) => x.pick.gap.index - y.pick.gap.index || x.i - y.i || x.j - y.j
+  swaps.sort((x, y) => y.pick.score - y.pick.base - (x.pick.score - x.pick.base) || earlier(x, y))
+  let best: { swap: Swap; low: number; changes: VariantChange[] } | null = null
+  for (const swap of swaps) {
+    if (search.counts() >= countsMax) break
+    const j = search.judge([swap.pick])
+    if (!j || shownOf(j.low) - shownOf(search.low0) < ENERGY_ORDER_GAIN) continue
+    if (!best || j.low > best.low || (j.low === best.low && earlier(swap, best.swap) < 0)) best = { swap, low: j.low, changes: j.changes }
+  }
+  if (!best) return null
+  const { gap, i, j } = { gap: best.swap.pick.gap, i: best.swap.i, j: best.swap.j }
+  const id = (k: number) => gap.items[gap.slots[k]!]!.block.id
+  return { a: id(i), b: id(j), before: shownOf(search.low0), after: shownOf(best.low), changes: best.changes }
 }
 
 /** The label of „Ułóż pod energię” from its lowest energy before and with it (the one place it is said). */

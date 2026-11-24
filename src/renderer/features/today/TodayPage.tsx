@@ -84,6 +84,7 @@ import { DayMenu } from './DayMenu'
 import { DayNumbers, DaySummary } from './DayNumbers'
 import { BlockDayNotes } from './DayNotes'
 import { DayWarnings, dayWarningTexts } from './DayWarnings'
+import { CheapestSwapLine } from './CheapestSwap'
 import { ExchangeDialog } from './ExchangeDialog'
 import { LateWakeCard } from './LateWakeCard'
 import { MorningPlan } from './MorningPlan'
@@ -916,7 +917,7 @@ export function SidePanel({ model, names, routines, past, onSelect, onMove, case
       {routines && <RoutineCards model={model} names={names} />}
       {cases}
       <DayNumbers model={model} />
-      <DayWarnings warnings={dayWarningTexts(model, past)} />
+      <DayWarnings warnings={dayWarningTexts(model, past)} swap={<CheapestSwapLine model={model} names={names} past={past} />} />
       {parked.length > 0 && (
         <div className="flex flex-col gap-1.5">
           <h4 className="text-[12px] text-muted">Zaparkowane</h4>

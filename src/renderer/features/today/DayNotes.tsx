@@ -7,6 +7,7 @@ import { routinesDue } from '@shared/engine/routineCheck'
 import { useData } from '../../store/data'
 import type { DayModel } from '../../store/day'
 import type { Names } from '../plan/blockView'
+import { CheapestSwapLine } from './CheapestSwap'
 import { dayWarningTexts, DayWarnings } from './DayWarnings'
 import { RoutinesWaiting } from './RoutineCard'
 
@@ -14,7 +15,7 @@ export function BlockDayNotes({ model, names, today, onShow }: { model: DayModel
   const routines = useData((s) => s.routines)
   return (
     <>
-      <DayWarnings warnings={dayWarningTexts(model, model.date < today)} />
+      <DayWarnings warnings={dayWarningTexts(model, model.date < today)} swap={<CheapestSwapLine model={model} names={names} past={model.date < today} />} />
       {model.date === today && <RoutinesWaiting due={routinesDue(model.ctx, model.state, routines, model.dayFile)} model={model} names={names} onShow={onShow} />}
     </>
   )
