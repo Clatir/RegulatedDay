@@ -72,7 +72,7 @@ paths:
   (T517), toast „Cofnij” = `zjazdyUndo` (sobota zjazdu o nic nie pyta – analizy tygodniowej nie ma, D467); w tożsamości testowej
   plik z `RD_E2E_PDF` zamiast dialogu), `templates/`, `requests/`, `routines/`, `history/`,
   `settings/` (`SharedSettings`, `CategoriesSection`, `LecturesSection`, `settingsStore` – od jutra / dziś / daty). Strona ze spisem (UX14) – `ustawienia.md`.
-- `week/` – „Tydzień” (D356, D360): reguły w `widoki.md` (sekcja „Strona „Tydzień””).
+- `week/` – „Tydzień” (D356, D360): reguły w `tydzien.md`.
 - `allday/` – wydarzenia całodniowe i wielodniowe (D405, D406): pas, karta, linie „Cofnij”; reguły w `allday.md`.
 - `stats/` (E12, D358, 1.3.0) – `StatsPage` (okres 4 tygodnie / 3 miesiące / od początku; cztery sekcje, każda z wykresem SVG i tabelą),
   `Charts` (ręczne słupki i słupki ułożone, bez zależności), `statsView` (skale, miejsca słupków, teksty – testy `tests/web/stats-view.test.ts`).
