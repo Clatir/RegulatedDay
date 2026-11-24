@@ -8,7 +8,7 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
-import { launch, viewPage, withMainLog } from './app'
+import { launch, openBlock, viewPage, withMainLog } from './app'
 import { seedAwake } from './seedAwake'
 
 test('kroki (D440, D474): ptaszek na pasku pulpitu i w pasku okna odhacza krok i pokazuje następny, ostatni kończy blok – „Skończono · Cofnij”', async () => {
@@ -25,7 +25,7 @@ test('kroki (D440, D474): ptaszek na pasku pulpitu i w pasku okna odhacza krok i
       await expect(page.getByTestId('block-late')).toBeVisible({ timeout: 30_000 })
       // No step line before the block runs.
       await expect(page.getByTestId('bar-step')).toHaveCount(0)
-      await page.getByTestId('block-late').click()
+      await openBlock(page.getByTestId('block-late'))
       await page.getByTestId('block-timer-start').click()
       await expect(page.getByTestId('bar-step-text')).toHaveText('Napisać testy · krok 1/2', { timeout: 15_000 })
       const bar = await viewPage(app, 'bar')
