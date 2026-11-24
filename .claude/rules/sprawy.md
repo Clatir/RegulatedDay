@@ -109,6 +109,7 @@ paths:
   za plikiem dnia – T923), oryginał nietknięty; kopia bloku zadania/próśb na osi – nowe sprawy w tej samej edycji (`blockCopy`).
 - Pamięć i szkice (UX6, D563 P5, B5): „Pomiń” pierwszego check-inu (od UX13 także w logu dnia – `skipCheckinDay`, `checkinSkipId`, „Cofnij” = `unmark`) i jego niezapisane odpowiedzi żyją w `useUi` na dzień (`checkinSkipped`, `checkinAnswers`
   – `skipCheckin`, `setCheckinAnswers`; `checkinLogic.ts`: `checkinOpen`, `checkinAnswersOf`): zmiana ekranu ich nie gubi, inny dzień zaczyna od zer, zapis czyści odpowiedzi.
+  Odpowiedź `null` = jeszcze nie Twoja (krótka noc D571 – `energia.md`).
   Niezapisana reguła: pole „Powtarzaj” zamykane przyciskiem z kompletną regułą różną od zapisanej (`repeatChanged`, bez `draftProblem`) pyta „Zapisać zmianę powtarzania?
   · Zapisz · Odrzuć” (`features/series/UnsavedRuleDialog.tsx`, `Dialog` aplikacji; forma wystawia `RuleGuard { unsaved, save }` przez ref, wiersz trzyma okno w `data-row-form`,
   żeby klik w nie nie zaznaczał wiersza); Esc zostaje. To samo dla serii w „Szablonach”: `SeriesEditor` wystawia `RuleGuard` (reguła kompletna i inna niż zapisana), `TemplatesPage`
