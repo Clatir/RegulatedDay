@@ -10,7 +10,7 @@
  * `parallelPreview` – „Równolegle z …”). Ctrl held when it is let go (D513, `onCopy`): the block stays, its copy stands there – the
  * cursor has „+” and a dashed tile shows the copy while Ctrl is held. A block of a selection of two and more (D531, `groupDrag`) drags the
  * whole group: every selected block moves by the same difference, each drawn at its new place dashed round while it is held, Esc ends it with
- * nothing changed; with Ctrl – the group's copy.
+ * nothing changed; with Ctrl – the group's copy. A double click on a tile's name puts a field over it (N9, `rename`, `tileRename.tsx`).
  */
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
@@ -38,6 +38,7 @@ import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
 import { inParallelZone, tileAt, tileLanes } from './parallelDrag'
 import type { CostAsk } from './costSave'
 import { costRoom, TileCost } from './TileCost'
+import { onTileName, TileNameField, type TimelineRename } from './tileRename'
 import { COPY_SPAN_ID } from '../today/dayPush'
 
 export interface TimelineItem {
@@ -302,6 +303,7 @@ export function Timeline({
   attached,
   onAttachDrop,
   onCosts,
+  rename,
   ghost,
   draft,
   from,
@@ -387,6 +389,11 @@ export function Timeline({
   onAttachDrop?: (id: string, dt: DataTransfer) => void
   /** The block's own cost set in the window of its tile (D501), or null – the category's again; left out – the cost is only told. */
   onCosts?: (id: string, costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>
+  /**
+   * The name changed in place (N9, `useTileRename`): a double click on a tile's name starts it, the field stands over the tile's name row while
+   * `rename.active` is the tile's id. Left out – a tile's name is only told (the wizard's axis).
+   */
+  rename?: TimelineRename
   /** The span a sprawa dragged from outside the axis would take (D384) – drawn as a band while it is held; null – none. */
   ghost?: BlockSpan | null
   /** The new block not saved yet (D466): a dashed tile with its hours; null – none. The axis widens to hold it. */
@@ -671,7 +678,15 @@ export function Timeline({
           const from = pressed.current
           pressed.current = null
           if (from && e.detail > 0 && Math.hypot(e.clientX - from.x, e.clientY - from.y) >= DRAG_FROM_PX) return
+          // N9: the second click of a double click on the name only renames (its first click opened the block already).
+          if (e.detail >= 2 && !e.ctrlKey && !e.shiftKey && rename?.info(i.id) && onTileName(e, e.currentTarget)) return
           onSelect(i.id, { ctrl: e.ctrlKey, shift: e.shiftKey })
+        }}
+        // N9: a double click on the name – the name in place (`rename`); anywhere else on the tile nothing.
+        onDoubleClick={(e) => {
+          if (e.ctrlKey || e.shiftKey || !rename?.info(i.id) || !onTileName(e, e.currentTarget)) return
+          e.stopPropagation()
+          rename.start(i.id)
         }}
         // D528: the right button and the menu key open the menu of the selection (the screen puts this block into it first).
         {...(onContext ? menuBind((at) => onContext(i.id, at)) : {})}
@@ -815,7 +830,7 @@ export function Timeline({
         {endEdge && <span data-edge="end" data-testid={`block-${i.id}-edge-end`} className={cx('absolute inset-x-0 bottom-0 z-30 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
         <div className={cx('flex min-w-0 items-baseline gap-1.5', tiny ? 'text-[11px]' : 'pt-0.5 text-[12px]')}>
           {!narrow && <span className="num shrink-0 text-[11px] text-muted">{logicalClock(start)}</span>}
-          <span className="truncate text-fg">
+          <span className="truncate text-fg" data-tile-name="">
             {i.finished && (
               <span className="text-muted" aria-label="ukończony" data-testid="block-finished">
                 ✓{' '}
@@ -859,6 +874,29 @@ export function Timeline({
     )
   }
 
+  /** N9: the field of the name in place over the name row of the tile being renamed (where the tile is drawn now; the tile under it is never reached by its mouse). */
+  const nameField = (): ReactNode => {
+    const i = rename?.active != null ? items.find((x) => x.id === rename.active) : undefined
+    const info = i && rename ? rename.info(i.id) : null
+    if (!i || !info) return null
+    const { start, end } = spanOf(i)
+    const lane = draggedLane(i.id) ?? lanes.get(i.id) ?? { lane: 0, lanes: 1 }
+    return (
+      <TileNameField
+        key={`name-${i.id}`}
+        text={info.text}
+        hint={info.hint}
+        style={{
+          top: y(start),
+          height: Math.min(Math.max(MIN_H, (end - start) * PPM - 1), 24),
+          left: `calc(${(lane.lane / lane.lanes) * 100}% + ${lane.lane ? 1 : 0}px)`,
+          width: `calc(${100 / lane.lanes}% - ${lane.lanes > 1 ? 2 : 0}px)`
+        }}
+        onDone={(text) => rename!.finish(i.id, text)}
+      />
+    )
+  }
+
   return (
     <div className={cx('flex select-none', copying && '[&_*]:cursor-copy!')} data-testid={rest['data-testid'] ?? 'timeline'} data-axis="true" data-copying={copying ? 'true' : undefined}>
       {/* Hours. */}
@@ -885,6 +923,7 @@ export function Timeline({
         ))}
         <div className="absolute inset-y-0 right-1.5 left-1.5">
           {items.map((i) => box(i))}
+          {nameField()}
           {copying && !drag.group && dragShown && copyGhost(items.find((x) => x.id === drag.id), dragShown)}
           {groupCopies && [...groupCopies].map(([of, at]) => copyGhost(items.find((x) => x.id === of), at))}
           {draft && (

@@ -41,6 +41,7 @@ import { TemplateDaysButton } from './ApplyTemplate'
 import { BlockEditor } from '../plan/BlockEditor'
 import { menuCtxOf } from '../plan/groupMenu'
 import { useAxisGroup } from '../plan/useAxisGroup'
+import { renameInfo, useTileRename } from '../plan/tileRename'
 import { judgeBlocks } from '../plan/groupRun'
 import { blockName, type Names } from '../plan/blockView'
 import { dayAxis } from '../plan/dayItems'
@@ -362,6 +363,17 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
     const state: SendState = { afterSend: false }
     return tryUpdateRecord(rel, changed((t) => withVersion(t, (v) => ({ blocks: v.blocks.map((x) => (x.id === id ? { ...x, ...patch } : x)) }))), state).then((out) => storedAnswer(out, state))
   }
+  // N9: F2 on the one selected block or a double click on a tile's name – its name in place, the same save as the panel's „Nazwa” (the version from the date shown); only the template's own blocks.
+  const rename = useTileRename({
+    target: () => (group.sel.count === 1 ? (group.sel.selected[0] ?? null) : null),
+    info: (id) => {
+      const b = version.blocks.find((x) => x.id === id)
+      // Only a block the axis draws (the version's own blocks are all drawn unless the day cannot show them).
+      return renameInfo(b, items.some((i) => i.id === id), () => blockName({ ...b!, name: null }, names))
+    },
+    save: (id, name) => patchBlock(id, { name }),
+    scope: `${template.id}|${from}`
+  })
 
   const copy = async () => {
     // As a new template: its id is never smaller than an older one's, so the copy never takes its days quietly (D563 P3).
@@ -498,6 +510,7 @@ function Editor({ template, today, openBlock, onBlockOpened, onCopied, onRemoved
             }}
             // D512: the window of a tile's cost – the template block's own cost, in the version from the date shown (no series).
             onCosts={(id, costs) => patchBlock(id, { costs })}
+            rename={rename}
             onMove={(id, startMin) => {
               // D305: the template's block with its own start, moved in steps of 5 min (in the template's hours); D367: with
               // the blocks it pushes apart.

@@ -47,6 +47,8 @@ import { NewBlockPopover } from './NewBlockPopover'
 import { freeHourStart, newBlockDay, NO_NEW_DAY_TEXT, dayWakeMin } from './weekNew'
 import { axisHeight, axisRange, axisY, blockSpan, columnAt, dayIndexes, hourMarks, laneLayout, NEW_BLOCK_WIDTH, popoverPlace, sameDrag, WEEK_PPM } from './weekLayout'
 import { saveTileCosts, type CostAsk } from '../plan/costSave'
+import { renameDayBlock } from '../plan/nameSave'
+import { DOUBLE_CLICK_MS, onTileName, renameInfo, TileNameField, useTileRename, type RenameInfo, type TimelineRename } from '../plan/tileRename'
 import { copyDayBlock, moveWeekBlock } from './weekMove'
 import { blockDashed, blockRinged, blockStateText, boundaryLine, columnLabel, dayHeading, regenLine, WEEKDAY_FULL, type Tone } from './weekText'
 import { DENIED_TEXT, dropOn, dropStart, dropStays, sameDrop, weekOnto, type BlockDrop } from './weekViews'
@@ -229,6 +231,21 @@ export function DayGrid({
   // D527, D528: the selection of many blocks over the days (Ctrl+click, Shift+click, Shift+arrows, Ctrl+A, Esc, the menu of the right button); Del asks once for all.
   const group = useWeekGroup({ days, scope: `${mode}|${dates[0]}`, today, energy: rd.general.modules.energy, namesOf })
   useDeleteSelected(group.removeTarget)
+  // N9: F2 on the one selected block (Ctrl+click) or a double click on a block's name – its name in place; the key of a block is `blockKey(date, id)`.
+  const byKey = useMemo(() => new Map(days.flatMap((d) => d.blocks.map((b): [string, HorizonBlock] => [blockKey(d.date, b.id), b]))), [days])
+  const rename = useTileRename({
+    target: () => (group.sel.count === 1 ? (group.sel.selected[0] ?? null) : null),
+    info: (key) => {
+      const b = byKey.get(key)
+      // A block begun outside the plan has no plan block to carry a name.
+      return renameInfo(b?.named, b != null && !b.outsidePlan, () => blockName({ ...b!.named, name: null }, namesOf(parseBlockKey(key).date)))
+    },
+    save: (key, name) => {
+      const { date, id } = parseBlockKey(key)
+      return renameDayBlock(date, id, name)
+    },
+    scope: `${mode}|${dates[0]}`
+  })
   /** The rectangle a column has on the screen; null when it is not there. */
   const columnRect = (i: number): DOMRect | null => bodyRef.current?.querySelector(`[data-testid="week-col-${days[i]?.date}"]`)?.getBoundingClientRect() ?? null
   // The columns do not move while a drag goes on: their rectangles are read once, when the pointer first asks – with the
@@ -589,6 +606,7 @@ export function DayGrid({
             bands={bands.filter((x) => x.index === i)}
             tight={mode === 'week'}
             group={group}
+            rename={rename}
           />
         ))}
         {pick && (
@@ -693,7 +711,8 @@ function DayColumn({
   drop,
   bands,
   tight,
-  group
+  group,
+  rename
 }: {
   day: HorizonDay
   index: number
@@ -717,6 +736,8 @@ function DayColumn({
   tight: boolean
   /** The selection of many blocks (D527): the ring, Ctrl / Shift on a block, the menu. */
   group: WeekGroup
+  /** N9: the name of a block in place (the keys of its blocks are `blockKey(date, id)`). */
+  rename: TimelineRename
 }) {
   const lanes = useMemo(() => laneLayout(day.blocks), [day.blocks])
   // D410: the attachments of each block (its own, the template's, the series') – 📎N on its tile.
@@ -760,7 +781,7 @@ function DayColumn({
       <EnergyStrip date={day.date} track={day.energy} lo={lo} ppm={ppm} height={height} />
       <div className="absolute inset-y-0 right-0" style={{ left: stripped ? STRIP_WIDTH + 1 : 0 }} data-testid={`week-blocks-${day.date}`}>
         {lanes.map(({ item, lane, lanes: n }) => (
-          <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} marked={group.isMarked(day.date, item.id)} onPick={(e) => group.mark(day.date, item.id, e)} onContext={(at) => group.context(day.date, item.id, at)} onCosts={(costs, ask) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs, { ask })} />
+          <BlockBox key={item.id} block={item} lo={lo} ppm={ppm} lane={lane} lanes={n} names={names} brightness={brightness} date={day.date} attach={attachCount(item)} grab={item.movable ? grab(item) : undefined} tight={tight} marked={group.isMarked(day.date, item.id)} onPick={(e) => group.mark(day.date, item.id, e)} onContext={(at) => group.context(day.date, item.id, at)} rename={renameOf(rename, day.date, item.id)} onCosts={(costs, ask) => saveTileCosts({ date: day.date, blockId: item.id, names, ofSeries: item.named.origin === 'series' }, costs, { ask })} />
         ))}
         {/* The place a new or a dragged block would take – where the blocks stand, right of the strip (T1288). */}
         {shown && <RangeBand range={shown} lo={lo} ppm={ppm} testId={held ? 'week-range' : 'week-range-waiting'} />}
@@ -771,6 +792,18 @@ function DayColumn({
       </div>
     </div>
   )
+}
+
+/** N9: what a block's tile of the columns has of the name in place – `rename` of `useTileRename` for that one block; `info` null – its name cannot be changed. */
+export interface BlockRename {
+  info: RenameInfo | null
+  active: boolean
+  start: () => void
+  finish: (text: string | null) => void
+}
+function renameOf(r: TimelineRename, date: string, id: string): BlockRename {
+  const key = blockKey(date, id)
+  return { info: r.info(key), active: r.active === key, start: () => r.start(key), finish: (text) => r.finish(key, text) }
 }
 
 /** The place a block being dragged would take (D417): its hours; over a day gone by – refused, said in words. */
@@ -795,7 +828,7 @@ function DropBand({ range, lo, ppm, denied, note, testId = 'week-drop', of }: { 
 }
 
 /** A block on the axis: its colour as on the day's axis; not begun on a day gone by – dimmed; taken off – dimmed too. A click opens its day (D366). */
-export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, marked = false, onPick, onContext, onCosts }: { block: HorizonBlock; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; marked?: boolean; onPick?: (e: { ctrlKey: boolean; shiftKey: boolean }) => void; onContext?: (at: { x: number; y: number }) => void; onCosts?: (costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer> }) {
+export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, brightness, date, attach, grab, tight = false, marked = false, onPick, onContext, onCosts, rename }: { block: HorizonBlock; lo: number; ppm?: number; lane: number; lanes: number; names: Names; brightness: number; date: string; attach: number; grab?: BlockGrab; tight?: boolean; marked?: boolean; onPick?: (e: { ctrlKey: boolean; shiftKey: boolean }) => void; onContext?: (at: { x: number; y: number }) => void; onCosts?: (costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>; rename?: BlockRename }) {
   const { top, height } = blockSpan(b, lo, ppm)
   const color = blockColor(b.categoryId, names)
   const dim = b.state === 'missed' || b.state === 'parked' || b.state === 'cancelled'
@@ -830,20 +863,62 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
       )}
     </>
   )
-  return (
+  // N9: a click on the name waits for a second one before the day opens (a double click renames – the first click would take you away); a click anywhere else, with
+  // Ctrl or Shift, or of the keyboard (no pointer) acts at once.
+  const opening = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // `data-open-wait` on the tile while the day waits for a second click (the tests wait for it to go instead of a fixed time).
+  const [waiting, setWaiting] = useState(false)
+  const stopOpening = () => {
+    if (opening.current) clearTimeout(opening.current)
+    opening.current = null
+    setWaiting(false)
+  }
+  useEffect(
+    () => () => {
+      if (opening.current) clearTimeout(opening.current)
+    },
+    []
+  )
+  // Whatever else the click's tile is taken for meanwhile – a press (a drag, a second click), a Ctrl / Shift click, F2 (the field opens) – ends the wait: the day never opens afterwards.
+  const fieldOpen = rename?.active === true
+  useEffect(() => {
+    if (fieldOpen) stopOpening()
+  }, [fieldOpen])
+  const open = () => {
+    stopOpening()
+    // D462: the click selects the block – its day opens with it selected (as in „Agenda”); Del there removes it. A block outside the plan only opens the day.
+    if (b.outsidePlan) openDay(date)
+    else openPick({ page: 'today', day: date }, { kind: 'block', id: b.id, date })
+  }
+  const renamable = rename?.info != null
+  const tile = (
     <button
       type="button"
       onClick={(e) => {
+        stopOpening()
         if (grab?.consumed()) return
         // D527: Ctrl and Shift select the block – the day stays closed (the selection is of the columns).
         if (onPick && (e.ctrlKey || e.shiftKey)) return onPick(e)
-        // D462: the click selects the block – its day opens with it selected (as in „Agenda”); Del there removes it. A block outside the plan only opens the day.
-        if (b.outsidePlan) openDay(date)
-        else openPick({ page: 'today', day: date }, { kind: 'block', id: b.id, date })
+        if (renamable && e.detail > 0 && onTileName(e, e.currentTarget)) {
+          if (e.detail === 1) {
+            opening.current = setTimeout(open, DOUBLE_CLICK_MS)
+            setWaiting(true)
+          }
+          return
+        }
+        open()
+      }}
+      onDoubleClick={(e) => {
+        if (!rename || !renamable || e.ctrlKey || e.shiftKey || !onTileName(e, e.currentTarget)) return
+        stopOpening()
+        rename.start()
       }}
       // D528: the right button and the menu key – the menu of the selection (this block is put into it first).
       {...(onContext ? menuBind(onContext) : {})}
-      onPointerDown={grab?.down}
+      onPointerDown={(e) => {
+        stopOpening()
+        grab?.down(e)
+      }}
       {...NO_GRID}
       title={title}
       data-testid={`week-block-${date}-${b.id}`}
@@ -852,6 +927,7 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
       data-state={b.state}
       data-outside={b.outsidePlan ? 'true' : undefined}
       data-marked={marked ? 'true' : undefined}
+      data-open-wait={waiting ? 'true' : undefined}
       data-movable={grab ? 'true' : undefined}
       className={cx('group absolute overflow-hidden rounded-[3px] border-l-[3px] px-1 text-left text-[11px] leading-tight', grab ? 'cursor-grab' : 'cursor-pointer', grab?.dragging && 'opacity-40', blockRinged(b.state) && 'ring-1 ring-lamp', marked && 'ring-2 ring-lamp', blockDashed(b.state) && 'border-dashed', b.state === 'cancelled' && 'line-through')}
       // Dimmed by its fill and edge, never its text (as on the day's axis, A8-05).
@@ -866,11 +942,15 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
     >
       {costAt === 'row' ? (
         <span className="flex items-baseline gap-1 pt-px text-fg">
-          <span className="min-w-0 flex-1 truncate">{nameContent}</span>
+          <span className="min-w-0 flex-1 truncate" data-tile-name="">
+            {nameContent}
+          </span>
           {costLabel('shrink-0')}
         </span>
       ) : (
-        <span className="block truncate pt-px text-fg">{nameContent}</span>
+        <span className="block truncate pt-px text-fg" data-tile-name="">
+          {nameContent}
+        </span>
       )}
       {height >= 30 && (
         <span className="num block truncate text-muted" style={costAt === 'corner' && b.cost ? { paddingRight: costRoom(tight, b.cost.costs) } : undefined} data-testid={`week-hours-${date}-${b.id}`}>
@@ -886,5 +966,20 @@ export function BlockBox({ block: b, lo, ppm = WEEK_PPM, lane, lanes, names, bri
       {costAt === 'corner' && costLabel('absolute right-px bottom-px z-20')}
       {costAt === 'hover' && costLabel('absolute top-px right-px z-20 hidden group-hover:inline-block')}
     </button>
+  )
+  // N9: the name in place – a field over the tile's name row, in the tile's lane. Always a fragment: the tile's button is never mounted anew when the field comes or goes.
+  return (
+    <>
+      {tile}
+      {rename?.active && rename.info && (
+        <TileNameField
+          text={rename.info.text}
+          hint={rename.info.hint}
+          compact
+          style={{ top, height: Math.min(height, 22), left: `calc(${(lane / lanes) * 100}% + 1px)`, width: `calc(${100 / lanes}% - 2px)` }}
+          onDone={rename.finish}
+        />
+      )}
+    </>
   )
 }
