@@ -73,9 +73,9 @@ paths:
   to ona sama. `onPointerEnter` w React to `pointerover` (w testach).
 
 ## Linia zmian grupowych (`store/groupLine.ts`, `components/GroupLine.tsx`, T1541)
-- W oknie, **nie w pasku pulpitu** (`widget.ts` i pasek nietknięte): osobna linia na widok (`today`, `template`, `week`, `cases`, `calendar`),
+- W oknie, **nie w pasku pulpitu** (`widget.ts` i pasek nietknięte): osobna linia na widok (`today`, `template`, `week`, `cases`, `calendar`, `settings` – „Kategorie”: zaznaczanie drzewa D608 i „Przelicz koszty ×N”, reguły `kategorie.md`),
   `UNDO_LINE_MS` od zmiany (liczy store, nie ekran; timer = `until` − teraz), następna zmiana widoku ją zastępuje, przeżywa zmianę strony (jak `weekPush`).
-- `undoGroupLine`: cofanie raz (flaga `undoing` w stanie linii), po nim linia znika, o ile jej nie zastąpiono; w trakcie cofania linia nie znika
+- `retextGroupLine(view, undo, tekst)` – nowe słowa linii tej zmiany (cofnięta w części, T2720). `undoGroupLine`: cofanie raz (flaga `undoing` w stanie linii), po nim linia znika, o ile jej nie zastąpiono; w trakcie cofania linia nie znika
   (mimo upływu czasu); zwrócony napis → `toast` (D313); wyjątek – linia zostaje (do końca terminu albo nowe 15 min) i `UNDO_FAILED_TEXT`.
   Tylko tekst linii ma `role="status"` – „Cofnij” liczy się jako klik poza dla menu i okienek (`outside.ts` pomija `[role=status]`). Zmiana grupowa pisze jeden zapis na plik dnia, a cofnięcie przywraca tylko zmienione pola
   – to robi ekran (Z2–Z6), nie podstawa.

@@ -119,6 +119,8 @@ export interface RdFile {
   forgotten: Record<string, { lastPresence: number | null; at: number }>
   /** The goals of months (D356, `model/goals.ts`): by 'RRRR-MM'; a month without an entry has none. */
   goals: Record<string, MonthGoals>
+  /** „×” of the line „Uzupełnij ciało” in „Kategorie” (D623): hidden for good, on every computer; absent in the file = shown. */
+  bodyFillHidden: boolean
 }
 
 /** The key of a proposal of the review: its kind, category and variant – the same when counted again on the changed values. */
@@ -149,6 +151,8 @@ export function earlierOnce(path: readonly unknown[], a: unknown, b: unknown): s
 export function keptOnRestore(now: Record<string, unknown>, older: Record<string, unknown>): Record<string, unknown> {
   const out = { ...older }
   for (const k of WRITE_ONCE_FIELDS) if (now[k] !== undefined) out[k] = now[k]
+  // „×” of „Uzupełnij ciało” (D623) is for good: an older rd.json does not bring the line back.
+  if (now.bodyFillHidden === true) out.bodyFillHidden = true
   if (now.calibrationReview !== undefined) {
     const a = calibrationReviewFrom(now.calibrationReview)
     const b = calibrationReviewFrom(older.calibrationReview)
@@ -241,7 +245,8 @@ export function rdFrom(v: unknown): RdFile {
     gameFrom: isIsoDate(r.gameFrom) ? r.gameFrom : null,
     calibrationReview: calibrationReviewFrom(r.calibrationReview),
     forgotten: forgottenFrom(r.forgotten),
-    goals: goalsFrom(r.goals)
+    goals: goalsFrom(r.goals),
+    bodyFillHidden: r.bodyFillHidden === true
   }
 }
 

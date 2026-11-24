@@ -10,7 +10,7 @@ import { Checkin } from '@renderer/features/today/MorningPlan'
 import { checkinOpen } from '@renderer/features/today/checkinLogic'
 import { logEvents } from '@renderer/store/data'
 import type { DayModel } from '@renderer/store/day'
-import { skipCheckin, useUi } from '@renderer/store/ui'
+import { setCheckinSaved, skipCheckin, useUi } from '@renderer/store/ui'
 import { skipCheckinDay } from '@renderer/features/today/dayActions'
 import { checkinSkipId } from '@shared/engine/reminders'
 import type { RdApi, TimerIn, TimerResult } from '@shared/api'
@@ -24,7 +24,7 @@ beforeAll(() => {
 })
 beforeEach(() => {
   vi.mocked(logEvents).mockClear().mockResolvedValue(true)
-  useUi.setState({ checkinAnswers: null, checkinSkipped: null })
+  useUi.setState({ checkinAnswers: null, checkinSaved: null, checkinSkipped: null })
 })
 afterEach(() => {
   act(() => root?.unmount())
@@ -110,6 +110,8 @@ describe('check-in przy zmianie ekranu (B5, D563)', () => {
     await pick(0, 'tak')
     await act(async () => q('checkin-save')!.click())
     expect(useUi.getState().checkinAnswers).toBeNull()
+    // The day has its check-in (the morning plan clears what it saved, T2526): a check-in shown again later starts clean.
+    setCheckinSaved('2026-11-18', null)
     await leaveAndBack()
     expect(picked()).toEqual(Array(8).fill('nie'))
   })
@@ -203,8 +205,19 @@ describe('check-in przy zmianie ekranu (B5, D563)', () => {
       expect((q('checkin-skip') as HTMLButtonElement).disabled).toBe(true)
       await act(async () => q('checkin-skip')!.click())
       expect(clicks).toEqual([])
-      await act(async () => saved(true))
+      // A save refused: the form is yours again (a save made freezes it until the check-in goes – `short-night.test.ts`).
+      await act(async () => saved(false))
       expect((q('checkin-skip') as HTMLButtonElement).disabled).toBe(false)
+    })
+
+    it('po udanym „Zapisz” (zanim check-in zniknie) „Pomiń”, „Zapisz” i „Zapisz i włącz „mniej pytań”” są nieczynne', async () => {
+      await show()
+      await pick(2, 'tak')
+      await act(async () => q('checkin-save')!.click())
+      expect(logEvents).toHaveBeenCalledTimes(1)
+      for (const id of ['checkin-save', 'checkin-save-fewer', 'checkin-skip']) expect((q(id) as HTMLButtonElement).disabled).toBe(true)
+      await act(async () => q('checkin-skip')!.click())
+      expect(clicks).toEqual([])
     })
   })
 })
