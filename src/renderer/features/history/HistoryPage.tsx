@@ -245,8 +245,8 @@ function Versions({ r }: { r: HistoryRecord }) {
                   {changes.map((c) => (
                     <li key={c.path.join('.')} className="grid grid-cols-[minmax(0,1.2fr)_1fr_1fr] gap-2">
                       <span className="text-muted">{fieldText(r.rel ?? '', c.path, names, [c.before, c.after])}</span>
-                      <span>teraz: {valueText(keyOf(c.path), c.before, names)}</span>
-                      <span>w tej wersji: {valueText(keyOf(c.path), c.after, names)}</span>
+                      <span>teraz: {valueText(keyOf(c.path), c.before, names, c.path)}</span>
+                      <span>w tej wersji: {valueText(keyOf(c.path), c.after, names, c.path)}</span>
                     </li>
                   ))}
                 </ul>

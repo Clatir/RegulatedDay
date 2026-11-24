@@ -9,11 +9,12 @@ import type { RawRecord } from '@shared/api'
 import { isRaw } from '@shared/data/dayEdits'
 import { sameContentAs } from '@shared/data/merge'
 import { classify, paths } from '@shared/data/paths'
-import { casePlan, listOf } from '@shared/engine/cases'
+import { casePlan, listOf, scheduledOf } from '@shared/engine/cases'
 import { categoryStep, doneStep, estimateRefusal, estimateStep, movedStep, restoredStep, revertedRaw, SKIP, type GroupSkip, type GroupStep } from '@shared/engine/casesGroup'
 import { copiedCase } from '@shared/engine/copy'
 import { newId } from '@shared/model/ids'
-import type { PlanBlock } from '@shared/model/plan'
+import type { CategoryRules } from '@shared/model/categories'
+import { dayFileFrom, type PlanBlock } from '@shared/model/plan'
 import { requestFrom, type CaseList, type RequestRecord } from '@shared/model/requests'
 import { settingsOn } from '@shared/model/settings'
 import { logicalDayOf } from '@shared/time/day'
@@ -121,7 +122,16 @@ export async function removeCases(ids: readonly string[]): Promise<GroupResult> 
 export interface GroupPlanResult extends GroupResult {
   blocks: Array<{ id: string; block: PlanBlock }>
   moved: number
+  /** With `fit` (D624): the sprawy that fit in no gap of the day, in their order; otherwise none. */
+  notFit: string[]
 }
+
+/**
+ * Where „Rozłóż w luki” (D624) puts the sprawy, asked in the turn of the write: on the day's file as just read (`file`), for the sprawy
+ * still to plan (not done, not planned – in their order), with the categories the write uses – the block of each one that stands (by the
+ * sprawa's id; the very block tried on the day, written as it is) and those that fit nowhere; null – the day cannot be counted now.
+ */
+export type CaseFit = (file: RawRecord | null, records: readonly RequestRecord[], rules: Readonly<Record<string, CategoryRules>>, at: number) => Promise<{ blocks: ReadonlyMap<string, PlanBlock>; notFit: readonly string[] } | null>
 
 /**
  * The sprawy `ids` put on the axis of `date`, one after another from `startMin` – the first there, each next right after the end of
@@ -132,19 +142,25 @@ export interface GroupPlanResult extends GroupResult {
  * new blocks (`planGroupOnAxis`). A done one is left out as „zrobiona” (D72); `copy` (Ctrl, D513) plans a new sprawa of the same content
  * for each (`copiedCase`) and leaves the originals as they are (nothing is left out then). What is left out is decided before any day is
  * read – the days are read only for the sprawy to plan; a day not readable now, or the log of an old block not read in full – nothing
- * written (`DAY_UNREADABLE`). „Cofnij” – `undoGroup(result.undo)` takes all the blocks and the copies away.
+ * written (`DAY_UNREADABLE`). „Cofnij” – `undoGroup(result.undo)` takes all the blocks and the copies away. `fit` (D624, „Rozłóż w
+ * luki”, `startMin` not used): a sprawa not on „Dziś” any more is left out as „nie na Dziś”; one „zaplanowane” by its record and the days
+ * read now – or whose day (or its log) cannot be read now – as „już zaplanowana”: its block is never moved, and the others are still
+ * planned; the others go where `fit` puts them on the day just read, each in the block it gives; the ones it does not place are `notFit`
+ * (nothing written for them).
  */
-export async function planCases(ids: readonly string[], date: string, startMin: number, o: { push?: CasePush; seen?: (date: string) => RawRecord | null | undefined; copy?: boolean } = {}): Promise<GroupPlanResult> {
+export async function planCases(ids: readonly string[], date: string, startMin: number, o: { push?: CasePush; seen?: (date: string) => RawRecord | null | undefined; copy?: boolean; fit?: CaseFit } = {}): Promise<GroupPlanResult> {
   const unique = [...new Set(ids)]
   // D513: the new sprawy's ids are made before the turn – a turn that runs again makes the same ones.
   const copyIds = new Map(unique.map((id) => [id, newId()] as const))
   let skipped: GroupSkip[] = []
   let blocks: Array<{ id: string; block: PlanBlock }> = []
   let moved = 0
+  let notFit: string[] = []
   const r = await change(async (put) => {
     skipped = []
     blocks = []
     moved = 0
+    notFit = []
     const at = Date.now()
     const today = logicalDayOf(at)
     const subjects: Array<{ id: string; original: RawRecord; before: RawRecord; record: RequestRecord; copyId: string | null }> = []
@@ -155,29 +171,50 @@ export async function planCases(ids: readonly string[], date: string, startMin: 
       const record = before ? requestFrom(before) : null
       if (!original || !before || !record) skipped.push({ id, reason: SKIP.gone })
       else if (!copyId && listOf(record, today) === 'done') skipped.push({ id, reason: SKIP.done })
+      else if (o.fit && listOf(record, today) !== 'today') skipped.push({ id, reason: SKIP.notToday })
       else subjects.push({ id, original, before, record, copyId })
     }
     if (!subjects.length) return null
+    // With `fit` a sprawa's day that cannot be read now leaves that sprawa out (planned there, perhaps), not the whole change.
     const read = await readPlanDays(
       subjects.map((s) => s.record),
       date,
-      o.seen
+      o.seen,
+      o.fit != null
     )
     if (!read) return DAY_UNREADABLE
     const { days, begunOf } = read
     const rules = settingsOn(useData.getState().rd.settings, date).categories
+    let todo = subjects
+    let fitted: ReadonlyMap<string, PlanBlock> | null = null
+    if (o.fit) {
+      const fileOf = (d: string) => (d in days ? dayFileFrom(days[d] ?? null, d) : undefined)
+      const open = subjects.filter((s) => {
+        if (!scheduledOf(s.record, fileOf, read.goneOf)) return true
+        skipped.push({ id: s.id, reason: SKIP.planned })
+        return false
+      })
+      const fit = open.length ? await o.fit(days[date] ?? null, open.map((s) => s.record), rules, at) : { blocks: new Map<string, PlanBlock>(), notFit: [] }
+      if (!fit) return DAY_UNREADABLE
+      notFit = [...fit.notFit]
+      fitted = fit.blocks
+      todo = open.filter((s) => fit.blocks.has(s.id))
+    }
     // Now – in the turn of the write; each sprawa after the one before it: the files after it are the next one's.
     const files: Record<string, RawRecord | null> = { ...days }
     const touched = new Set<string>()
     const made: Array<{ s: (typeof subjects)[number]; record: RawRecord }> = []
     let from = startMin
-    for (const s of subjects) {
-      const p = casePlan({ record: s.before, date, startMin: from, files, rules, at, begun: begunOf })
+    for (const s of todo) {
+      const given = fitted?.get(s.id)
+      const p = casePlan({ record: s.before, date, startMin: given?.startMin ?? from, files, rules, at, begun: begunOf, ...(given ? { block: given } : {}) })
       if (!p) {
         skipped.push({ id: s.id, reason: SKIP.gone })
         continue
       }
-      // Its old block today or later, its log not known: whether it began is not known – no write (T774).
+      // Its old block today or later, its log not known: whether it began is not known – no write (T774). With `fit` not reached: a sprawa
+      // planned there is left out before (`scheduledOf` with the logs' `goneOf`), and a block gone by a log is known by the same log that says
+      // whether it began.
       if ('refused' in p) return DAY_UNREADABLE
       for (const [d, after] of Object.entries(p.days)) {
         files[d] = after
@@ -204,7 +241,7 @@ export async function planCases(ids: readonly string[], date: string, startMin: 
     return null
   })
   const out = resultOf(r, blocks.length, skipped)
-  return { ...out, blocks: r.saved ? blocks : [], moved: r.saved ? moved : 0 }
+  return { ...out, blocks: r.saved ? blocks : [], moved: r.saved ? moved : 0, notFit: r.saved ? notFit : [] }
 }
 
 /** What „Cofnij” of a group change did: how many sprawy went back, and how many stayed because they changed since (D529, D313). */

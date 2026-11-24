@@ -894,6 +894,8 @@ function DayView({ model, today, placed }: { model: DayModel; today: string; pla
             names={names}
             computers={view.computers}
             onChange={(patch) => changeBlock(block, patch, draft != null)}
+            // N6 (T2933): a block begun (running, paused, over) has no hint of its length from the history.
+            begun={started}
             // D3, D8, D563 P10: what the side panel says of the day stands in the panel of the block, which replaces it – the warnings and a routine waiting.
             dayNotes={<BlockDayNotes model={model} names={names} today={today} onShow={closePanel} openId={block.id} />}
             // „Zamknij” leaves a new block – saved as it stands, a bare click of the axis untouched thrown away (D461, T1045); Esc

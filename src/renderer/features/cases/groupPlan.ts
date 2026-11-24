@@ -91,9 +91,10 @@ export interface EnergyChange {
 /**
  * The lowest energy of `model`'s day before and after its file became `after` (D529: „najniższa energia 52 → 44”): both counted now from the
  * same data (the plan's inputs of the window, the same instant); null – the day has no forecast of energy (not today, the module off, the day not
- * known) or the file did not change.
+ * known) or the file did not change. `before` – the file the change was made on when it is not the one the window shows (D624: read in the turn
+ * of the write); left out – `model`'s.
  */
-export function lowestEnergyChange(model: DayModel, after: RawRecord | null | undefined, at = Date.now()): EnergyChange | null {
+export function lowestEnergyChange(model: DayModel, after: RawRecord | null | undefined, at = Date.now(), before?: RawRecord | null): EnergyChange | null {
   if (after === undefined) return null
   const { rd, templates, lectures, seriesPlans, routines, view } = useData.getState()
   const inputs = { changes: rd.settings, templates, lectures, series: seriesPlans, routines }
@@ -102,7 +103,7 @@ export function lowestEnergyChange(model: DayModel, after: RawRecord | null | un
     const units = lowestEnergy(e)
     return units == null ? null : shownOf(units)
   }
-  const from = lowest(model.data.dayFile)
+  const from = lowest(before === undefined ? model.data.dayFile : before)
   const to = lowest(after)
   return from != null && to != null ? { from, to } : null
 }

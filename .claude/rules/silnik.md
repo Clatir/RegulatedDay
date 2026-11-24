@@ -71,6 +71,7 @@ i przekroczenie**`, `**Czas wolny, regeneracja i projekty**`, `**Przykład (dzie
   `minutes` = tyle, ile `closeGap` przesunie (bufor zostaje). `closeGap` – lustro `pushApart`: elastyczne od luki do pierwszego
   stałego/czekającego, każdy o `tryMin` wcześniej, nie przed teraz ani przed blokiem, który zostaje; zapis = prognoza.
   `freedByEdit` – pola `plan.freed` (usunięcie: suma długości z zakotwiczonymi). Testy: `gaps.test.ts`.
+- `engine/gapFill.ts` (D624, „Rozłóż w luki” – reguły w nagłówku pliku i `sprawy.md`): `fillGaps`, `dayGaps`, `gapBounds`, `fillDayGaps`. Testy `gap-fill.test.ts`.
 - `engine/day.ts` – `computeDay`: granica, koniec pracy, klasyfikacja minut, budżet, regeneracja, minimum, pora snu,
   twardy koniec, pula, regeneracja każdej minuty (`rest`, dla energii); `newSegments` (odcinki do zapisu przez
   prowadzącego); `settingsAtMinute`. Energia (E2) – osobne reguły `energia.md`.

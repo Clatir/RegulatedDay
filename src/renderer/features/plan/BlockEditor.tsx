@@ -18,22 +18,28 @@
  * that cannot change), a routine's always; a subcategory and a variant only once they are there today (T1330: one of a later date is not
  * offered – the window shows and saves the settings of now). The window is the thing's it was opened for: a change of the block's choice
  * while it is open (another computer) closes it (T1332).
+ * N6 (D625): under „Długość” – „zwykle trwa 45 min · Przyjmij” when the blocks of its subcategory finished in 90 days ran otherwise
+ * (`useDurationHint`); „Przyjmij” is the change of the field. Also in „Szablony” and a series – the same panel.
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { durationLabel, logicalClock } from '@shared/format'
 import { groupOfCategory } from '@shared/model/categoryTree'
-import { BLOCK_NAME_MAX, type PlanBlock } from '@shared/model/plan'
+import { BLOCK_NAME_MAX, isSessionEntry, type PlanBlock } from '@shared/model/plan'
+import { isBuffer } from '@shared/engine/decompress'
 import { routineMinutes, type Routine } from '@shared/model/routines'
 import type { SessionDef } from '@shared/model/settings'
 import { SESSION_ANCHOR } from '@shared/engine/createDay'
 import { olderComputers } from '@shared/model/note'
 import { ownerToAdd, type BlockPlace } from '@shared/model/attachment'
 import { forecastEndText } from '@shared/blockEnd'
+import { blockSamples } from '@shared/durationHint'
 import { Choice, DurationField, EndField, TextField, TimeField } from '../../components/fields'
 import { HistoryButton } from '../../components/HistoryButton'
 import { cx, Field, Segmented, SIDE_PANEL_WIDTH } from '../../components/ui'
 import { useEscapeLayer } from '../../lib/escape'
 import { useData, type SaveAnswer } from '../../store/data'
+import { useDurationHint } from '../../store/durationHistory'
+import { DurationHintLine } from './DurationHint'
 import { useAttachDrop } from '../attachments/attachDrop'
 import { AttachmentsSection } from '../attachments/AttachmentsSection'
 import { blockHistoryRel } from '../history/historyTarget'
@@ -77,7 +83,8 @@ export function BlockEditor({
   onEscape,
   day,
   dayNotes,
-  historyOf
+  historyOf,
+  begun
 }: {
   block: PlanBlock
   plan: readonly PlanBlock[]
@@ -130,6 +137,8 @@ export function BlockEditor({
   dayNotes?: ReactNode
   /** The file of the record „Historia” opens when the place does not say it (a series: the part edited – `series/<id>.json`, UX18); a day's block has its day's plan. */
   historyOf?: string
+  /** The block has begun (a day's panel: running, paused or over) – its length is a measure now, no hint from the history (T2933). */
+  begun?: boolean
 }) {
   useEscapeLayer(true, onEscape ?? onClose)
   const owner = place ? ownerToAdd(block, place) : null
@@ -177,6 +186,11 @@ export function BlockEditor({
   const stopEditing = () => setEditing(null)
   // D480: the routine and its length – its steps are never copied (the block shows the routine's while it has none of its own).
   const pickRoutine = (r: Routine | undefined) => void set({ routine: r ? r.id : null, ...(r && routineMinutes(r) > 0 ? { durationMin: routineMinutes(r) } : {}) })
+  // N6 (D625): „zwykle trwa … · Przyjmij” – not in a panel that cannot change, nor for a block of a day gone by (T2912: its length is history
+  // too), nor one begun, a buffer of decompression (its length is the settings') or one whose length its schedule gives – a session, a
+  // lecture, a class of a „zjazd”, a session's entry of a template (T2933).
+  const scheduled = isBuffer(block) || block.origin === 'session' || block.origin === 'lecture' || block.origin === 'zjazd' || isSessionEntry(block)
+  const durationHint = useDurationHint((h) => blockSamples(h, block.categoryId), block.durationMin, !readOnly && newDated && !begun && !scheduled)
   return (
     <aside className={cx('flex shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-panel p-3', SIDE_PANEL_WIDTH)} data-testid="block-editor" {...drop.bind}>
       <div className="flex items-center gap-2">
@@ -267,6 +281,8 @@ export function BlockEditor({
       </Field>
       <Field label="Długość" labelWidth={92} hint={routine ? `Rutyna: ${durationLabel(routineMinutes(routine))} (zwykła), ${durationLabel(routineMinutes(routine, 'worse'))} (na gorsze dni).` : undefined}>
         <DurationField value={block.durationMin} onCommit={(durationMin) => set({ durationMin })} commitSame={commitSame} aria-label="Długość" errorPlacement="below" data-testid="block-duration" />
+        {/* N6 (D625): how long the blocks of its subcategory really ran – „Przyjmij” is the change of the field. */}
+        {durationHint && <DurationHintLine hint={durationHint} onAccept={(durationMin) => void set({ durationMin })} className="mt-1" />}
       </Field>
       <Field label="Rodzaj" labelWidth={92} hint={block.fixed ? 'Stały: zaczyna się o swojej godzinie.' : 'Elastyczny: idzie za końcem poprzedniego bloku, nie wcześniej niż o swojej godzinie.'}>
         <Segmented

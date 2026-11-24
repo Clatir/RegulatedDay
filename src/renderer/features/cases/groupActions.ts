@@ -22,19 +22,21 @@ export const CASE_VERB = { moved: 'Przeniesiono', changed: 'Zmieniono', done: 'Z
 /** The text of the line after a group change: how many it took and, once each, why the others were left out. */
 export const casesLineText = (verb: string, r: Pick<GroupResult, 'changed' | 'skipped'>, energy?: EnergyChange | null): string => groupLineText({ verb, n: r.changed, kind: 'case', skipped: r.skipped.map((s) => s.reason), energy })
 
+/** The „Cofnij” of a line of a group change of sprawy (also „Rozłóż w luki”, D624): `undoGroup` of the change's files, its message what it left as it is. */
+export const casesUndo =
+  (undo: GroupResult['undo']) =>
+  async (): Promise<string | undefined> => {
+    const back = await undoGroup(undo)
+    return back.kept > 0 ? keptText(back.kept, 'case') : undefined
+  }
+
 /**
  * The line of `view` for a change that was saved (a refusal said itself with a toast, no line): its text and its „Cofnij” – `undoGroup` of the
- * change's files; what it left as it is, because it changed since, is the message of the undo (D313).
+ * change's files (`casesUndo`); what it left as it is, because it changed since, is the message of the undo (D313).
  */
 export function showCasesLine(view: GroupView, verb: string, r: Pick<GroupResult, 'saved' | 'changed' | 'skipped' | 'undo'>, energy?: EnergyChange | null): void {
   if (!r.saved) return
-  showGroupLine(view, {
-    text: casesLineText(verb, r, energy),
-    undo: async () => {
-      const back = await undoGroup(r.undo)
-      return back.kept > 0 ? keptText(back.kept, 'case') : undefined
-    }
-  })
+  showGroupLine(view, { text: casesLineText(verb, r, energy), undo: casesUndo(r.undo) })
 }
 
 /** What the menu does: each callback is a change of the selected sprawy (the screen runs it and shows its line). */

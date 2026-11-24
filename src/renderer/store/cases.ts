@@ -436,12 +436,16 @@ export interface CasePushed {
  * The files of the days a planning of `rs` on `date` reads, with the logs' `begunOf` (T769): the day of the axis (the window's
  * `seen` when it cannot be read now) and each sprawa's day of before, followed through `movedTo` to where its block stands
  * (`caseDayToRead`). Null – a day it needs cannot be read now: nothing is written (`DAY_UNREADABLE`, never a second block in silence).
- * One read for `planCase` and for a group (`planCases`).
+ * One read for `planCase` and for a group (`planCases`); `goneOf` – the blocks gone in the logs read (`scheduledOf`, D624). `lenient` (D624,
+ * „Rozłóż w luki”): a sprawa's day that cannot be read now is left out of `days` (the sprawa reads as planned there), the read goes on.
  */
-export async function readPlanDays(rs: readonly RequestRecord[], date: string, seen?: (date: string) => RawRecord | null | undefined): Promise<{ days: Record<string, RawRecord | null>; begunOf: (date: string, block: string) => boolean | undefined } | null> {
+export async function readPlanDays(rs: readonly RequestRecord[], date: string, seen?: (date: string) => RawRecord | null | undefined, lenient = false): Promise<{ days: Record<string, RawRecord | null>; begunOf: (date: string, block: string) => boolean | undefined; goneOf: GoneOf } | null> {
   const read = await window.rd.caseDays([...new Set([date, ...rs.flatMap((r) => (r.day && r.day !== date ? [r.day] : []))])])
   const days: Record<string, RawRecord | null> = { ...read.files }
   const begunIn: Record<string, string[]> = { ...read.begun }
+  const goneIn: Record<string, string[]> = { ...read.gone }
+  // `lenient`: the days that cannot be read now, asked once for all the sprawy.
+  const unread = new Set<string>()
   if (!(date in days)) {
     const known = seen?.(date)
     if (known === undefined) return null
@@ -449,15 +453,22 @@ export async function readPlanDays(rs: readonly RequestRecord[], date: string, s
   }
   for (const r of rs) {
     for (let more = caseDayToRead(r, days); more && !(more in days); more = caseDayToRead(r, days)) {
+      if (unread.has(more)) break
       const next = await window.rd.caseDays([more])
       // The day its old block stands on cannot be read now: it could stay beside the new one – nothing written (T769).
-      if (!(more in next.files)) return null
+      if (!(more in next.files)) {
+        if (!lenient) return null
+        unread.add(more)
+        break
+      }
       days[more] = next.files[more] ?? null
       const begunHere = next.begun[more]
       if (begunHere) begunIn[more] = begunHere
+      const goneHere = next.gone[more]
+      if (goneHere) goneIn[more] = goneHere
     }
   }
-  return { days, begunOf: (d, b) => (begunIn[d] ? begunIn[d].includes(b) : undefined) }
+  return { days, begunOf: (d, b) => (begunIn[d] ? begunIn[d].includes(b) : undefined), goneOf: (d) => (goneIn[d] ? new Set(goneIn[d]) : undefined) }
 }
 
 /**

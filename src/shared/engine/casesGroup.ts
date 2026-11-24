@@ -30,6 +30,10 @@ export const SKIP = {
   same: 'bez zmiany',
   /** „Zrobione” of one already done. */
   done: 'zrobiona',
+  /** „Rozłóż w luki” (D624) of one planned meanwhile: its block is never moved. */
+  planned: 'już zaplanowana',
+  /** „Rozłóż w luki” (D624) of one taken off „Dziś” meanwhile. */
+  notToday: 'nie na Dziś',
   /** „Przywróć” of one not done. */
   notDone: 'niezrobiona',
   /** The step of one sprawa was refused (a task without a title): left out, the others are written (D72). */

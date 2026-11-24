@@ -42,6 +42,8 @@ import { caseTitle, isMorningChosen, morningChosen, morningDeadlines, morningPri
 import { rememberCasesView, rememberMatrixFilter } from '../cases/casesView'
 import { queueRowText } from '../cases/casesUi'
 import { DueMark } from '../cases/DueMark'
+import { GapFillButton } from '../cases/GapFillButton'
+import { gapCases } from '../cases/gapFill'
 import { navigate, setCheckinAnswers, setCheckinSaved, toast, useUi } from '../../store/ui'
 import { blockName, type Names } from '../plan/blockView'
 import { answerSeries } from '../series/seriesActions'
@@ -288,6 +290,8 @@ function Plan({ model, names, busy: approving }: { model: DayModel; names: Names
   const offered = useMemo(() => morningCases(caseItems), [caseItems])
   const queued = requestsOn ? offered.requests : []
   const dayTasks = offered.tasks
+  // D624: what „Rozłóż w luki” takes – the sprawy of „Dziś” without a block (a part of what the step offers).
+  const gapItems = useMemo(() => gapCases(caseItems, requestsOn), [caseItems, requestsOn])
   // D408: the tasks of „Dziś” are chosen at once, the requests are not – `toggled` is what you changed against that.
   // D409: the card „Terminy” – the sprawy past their date and due within the threshold (`general.deadlineDays`) that have no block today;
   // „Na Dziś” moves one to the list „Dziś” (then the step above offers it), „Pomiń” leaves it out to the day's end (the day's `asked`).
@@ -440,9 +444,13 @@ function Plan({ model, names, busy: approving }: { model: DayModel; names: Names
               </label>
             )
           })}
-          <button type="button" className="btn self-start" disabled={!(chosen.requests.length + chosen.tasks.length) || busy} onClick={() => void addChosen()} data-testid="queue-add">
-            Dodaj do planu
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className="btn" disabled={!(chosen.requests.length + chosen.tasks.length) || busy} onClick={() => void addChosen()} data-testid="queue-add">
+              Dodaj do planu
+            </button>
+            {/* D624: every sprawa of „Dziś” without a block, in the list's order, into today's gaps – the choice above does not matter. */}
+            <GapFillButton model={model} items={gapItems} busy={[busy, run]} />
+          </div>
           {note && (
             <span className="text-[12px] text-rose" role="status" data-testid="queue-note">
               {note}
