@@ -51,6 +51,8 @@ export interface ProposalMemory<T> {
   back(date: string, signature: string): void
   /** `f` told whenever a proposal is done or comes back (the lines look again at what they show); the way back – the unsubscription. */
   onDone(f: () => void): () => void
+  /** The lines told to look again at what they show (a proposal found past by the clock at a click, T2925). */
+  nudge(): void
   /** The memory emptied (tests: one file's day never answers for another's). */
   reset(): void
 }
@@ -59,7 +61,14 @@ export interface ProposalMemory<T> {
  * A memory of one kind of proposal: `search` – the engine's (null – none); `signature` – its words, by what it does (T2643);
  * `holds` – it still stands in the day's plan (its blocks are there, T2639); `what` – its name in the console (T2641).
  */
-export function proposalMemory<T>(o: { what: string; search: (m: ProposalDay) => T | null; signature: (x: T) => string; holds: (m: ProposalDay, x: T) => boolean }): ProposalMemory<T> {
+export function proposalMemory<T>(o: {
+  what: string
+  search: (m: ProposalDay) => T | null
+  signature: (x: T) => string
+  holds: (m: ProposalDay, x: T) => boolean
+  /** The proposal still to come by the live clock (T2925): one past – shown by no line, fresh or held, until its key is counted again. */
+  live?: (m: ProposalDay, x: T) => boolean
+}): ProposalMemory<T> {
   let last: { key: string; date: string; value: T | null } | null = null
   // The words of the proposals done, by date (the last `GONE_DAYS` days marked; a day marked again goes last).
   const gone = new Map<string, Set<string>>()
@@ -83,7 +92,7 @@ export function proposalMemory<T>(o: { what: string; search: (m: ProposalDay) =>
     peek(m, key, shownKey = null) {
       if (key == null) return { value: null, fresh: false, due: false }
       const done = gone.get(m.date)
-      const open = (x: T | null | undefined): T | null => (x != null && !done?.has(o.signature(x)) ? x : null)
+      const open = (x: T | null | undefined): T | null => (x != null && !done?.has(o.signature(x)) && (o.live?.(m, x) ?? true) ? x : null)
       if (last && last.key === key) return { value: open(last.value), fresh: true, due: false }
       const held = open(last?.value)
       return { value: held && last!.key === shownKey && last!.date === m.date && o.holds(m, held) ? held : null, fresh: false, due: true }
@@ -99,6 +108,9 @@ export function proposalMemory<T>(o: { what: string; search: (m: ProposalDay) =>
       const day = gone.get(date)
       if (!day?.delete(signature)) return
       if (!day.size) gone.delete(date)
+      tell()
+    },
+    nudge() {
       tell()
     },
     onDone(f) {

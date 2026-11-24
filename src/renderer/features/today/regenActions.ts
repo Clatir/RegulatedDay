@@ -52,16 +52,21 @@ export const regenOptionsOf = (m: Pick<ProposalDay, 'ctx' | 'state' | 'dayFile'>
   replan: (base, taken) => replanned(m.ctx, base, changes, goneWith(m, taken))
 })
 
+/** The proposal's start is past by the live clock (`now` – tests): the window has not counted it again since (T2879, T2925). */
+const pastStart = (m: Pick<ProposalDay, 'state'>, r: Pick<RegenHere, 'startMin'>, now = Date.now()): boolean => idxOfLogical(m.state.grid, r.startMin) <= idxOf(m.state.grid, now)
+
 /**
  * The memory of „Wstaw regenerację tutaj” (`proposalMemory`): each search gives its block an id of its own, written with it (T2872:
  * equal starts are ordered by the ids – the plan written is the one counted). Held while a new key is counted only with its block in
- * the plan and its start still to come (T2873).
+ * the plan and its start still to come (T2873); a start past by the live clock – shown by no line (T2925).
  */
 export const regenMemory = proposalMemory<RegenHere>({
   what: 'Wstaw regenerację tutaj',
   search: (m) => regenHere(m.ctx, m.state, m.energy, regenOptionsOf(m)),
   signature: regenSignature,
-  holds: (m, r) => m.ctx.plan.some((b) => b.id === r.beforeId) && idxOfLogical(m.state.grid, r.startMin) > m.state.now
+  holds: (m, r) => m.ctx.plan.some((b) => b.id === r.beforeId) && idxOfLogical(m.state.grid, r.startMin) > m.state.now,
+  // T2925: a start past by the live clock (the window not counted again since) – no line shows it, nor its button.
+  live: (m, r) => !pastStart(m, r)
 })
 
 /**
@@ -107,13 +112,15 @@ export type RegenDay = Pick<DayModel, 'date' | 'ctx' | 'state' | 'dayFile' | 'da
  * counted; its category's rules in the day), the buffer of decompression it stands on cancelled (D582, `withTaken`) and the starts of
  * the blocks it pushes – with those the buffers laid again push (D583, `withBufferPushes`, T2877) – as one edit of the day's file in its
  * turn (`pushDayBlocks`, as „Dodaj” with rozsuwanie), each over the block as the file holds it then. Only while the plan it was counted on
- * stands in the file (`countedPlanStands`: every pushed block where the seen file had it or already where this puts it, the block it
- * stands before unchanged, no block new in the file across what it puts – the same proposal clicked on another computer, T2870, T2878);
- * not – nothing written, „Plan zmienił się…”. A start past by the clock (T2879) – nothing written, `REGEN_PAST_TEXT`. The proposal is done
- * before the save starts (no line shows it meanwhile, T2643) and back when nothing is saved or its „Cofnij” takes it back. Saved – the
- * window says „Wstawiono regenerację: … · przesunięto N bloków” for 10 s with „Cofnij” (the edit taken back while the file stands as it
- * left it, `undoEditToast`: the block goes, the pushed blocks and the buffer come back); the bar gets only the marker's trigger (`line`
- * false – one „Cofnij”). `way` – the way's name in the toast; `now` – the clock (tests). Today and days to come; nothing is blocked (D72).
+ * stands in the file (`countedPlanStands`: every pushed block where the window's plan had it or already where this puts it, the block it
+ * stands before unchanged, every block on those places still there, nothing new on them – the same proposal clicked on another computer,
+ * T2870, T2878, T2920–T2924) and the buffer it takes is still one not begun of the plan (T2926); not – nothing written, „Plan zmienił
+ * się…”. A start past by the clock (T2879) – nothing written, `REGEN_PAST_TEXT`, the line gone until the day is counted again (T2925).
+ * The proposal is done before the save starts (no line shows it meanwhile, T2643) and back when nothing is saved or its „Cofnij” takes it
+ * back. Saved – the window says „Wstawiono regenerację: … · przesunięto N bloków” for 10 s with „Cofnij” (the edit taken back while the
+ * file stands as it left it, `undoEditToast`: the block goes, the pushed blocks and the buffer come back); the bar gets only the marker's
+ * trigger (`line` false – one „Cofnij”). `way` – the way's name in the toast; `now` – the clock (tests). Today and days to come; nothing
+ * is blocked (D72).
  */
 export async function insertRegen(
   m: RegenDay,
@@ -123,8 +130,10 @@ export async function insertRegen(
   const { date, ctx } = m
   const plan = ctx.plan
   const block = newUserBlock(REGEN_CATEGORY, r.startMin, r.durationMin, ctx.snapshot.settings.categories[REGEN_CATEGORY], { id: r.id, variantId: r.variantId })
-  if (idxOfLogical(m.state.grid, r.startMin) <= idxOf(m.state.grid, o.now ?? Date.now())) {
+  if (pastStart(m, r, o.now)) {
     toast(REGEN_PAST_TEXT, 'info')
+    // The lines look again: the live clock hides it (T2925).
+    regenMemory.nudge()
     return { out: null, saved: false, id: block.id }
   }
   const signature = regenSignature(r)
@@ -132,14 +141,22 @@ export async function insertRegen(
   const c: DayChange = { was: null, block, patch: block, others: [], pushed: r.pushed, takes: r.takes }
   const pushed = pushedStarts(plan, { pushed: withBufferPushes(m, c, o.changes ?? changesNow(), m.dayFile) })
   const before = plan.find((b) => b.id === r.beforeId)
+  // The buffer it takes (T2926): still one of the plan, not begun, neither cancelled nor written to the file as yours since.
+  const takenStands = (file: DayFile) =>
+    !r.takes || (plan.some((b) => b.id === r.takes!.id) && m.state.facts.blocks.get(r.takes.id)?.startedAt == null && !file.cancelled.includes(r.takes.id) && !file.blocks.some((b) => b.id === r.takes!.id))
   // Counted on a plan without the block (neither the window's nor the file's – a second click), with every pushed block and the block
   // it stands before in it, nothing new in the file where it stands.
-  const stands = (raw: RawRecord) =>
-    before != null &&
-    r.pushed.every((p) => plan.some((b) => b.id === p.id)) &&
-    !plan.some((b) => b.id === r.id) &&
-    !dayFileFrom(raw, date).blocks.some((b) => b.id === r.id) &&
-    countedPlanStands(raw, date, m.data.dayFile, pushed, [before], [{ startMin: r.startMin, endMin: r.startMin + r.durationMin }])
+  const stands = (raw: RawRecord) => {
+    const file = dayFileFrom(raw, date)
+    return (
+      before != null &&
+      r.pushed.every((p) => plan.some((b) => b.id === p.id)) &&
+      !plan.some((b) => b.id === r.id) &&
+      !file.blocks.some((b) => b.id === r.id) &&
+      takenStands(file) &&
+      countedPlanStands(raw, date, { seen: m.data.dayFile, ctx, starts: pushed, kept: [before], spans: [{ startMin: r.startMin, endMin: r.startMin + r.durationMin }] })
+    )
+  }
   const sent: { entry: EditEntry | null; made: RawRecord | null; changed?: boolean } = { entry: null, made: null }
   const out = await pushDayBlocks(date, m.data.dayFile, (raw) => withTaken(putBlock(raw, block), r.takes), pushed, sent, false, stands)
   const saved = isSaved(out) && sent.entry != null

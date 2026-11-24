@@ -64,9 +64,9 @@ export interface RegenHere {
 /**
  * What the caller adds to the count (T2877): `id` – the id of the block it writes (T2872); `taken` – the buffer of decompression the block
  * stands on (D582, `bufferTakenBy` of the window; it is gone from the plan counted and from the file written); `replan` – the plan of the
- * file after the change (its own starts, without the buffers – `ctx.basePlan`) with the buffers laid again (`replanned`, D583: the buffers
- * move the blocks after them as the next count of the day will), with the buffer taken gone. Without them the plan counted is the
- * window's (`ctx.plan`) with the block and the pushed starts.
+ * file after the change (its own starts, without the buffers – `ctx.basePlan ?? ctx.plan`, also a day with none laid now, T2922) with the
+ * buffers laid again (`replanned`, D583: the buffers move the blocks after them as the next count of the day will), with the buffer taken
+ * gone. Without `replan` the plan counted is the window's (`ctx.plan`) with the block and the pushed starts.
  */
 export interface RegenOptions {
   id?: string
@@ -166,7 +166,7 @@ function tryDescent(
   const starts = new Map(pushed.map((p) => [p.id, p.startMin]))
   const moved = (list: readonly PlanBlock[]) => list.map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b))
   // The day as the next count after the write has it (T2877): the file's plan with the change and the buffers laid again.
-  const counted = { ...ctx, plan: ctx.basePlan && opts.replan ? [...opts.replan(moved(without(ctx.basePlan)), takes)] : moved(plan) }
+  const counted = { ...ctx, plan: opts.replan ? [...opts.replan(moved(without(ctx.basePlan ?? ctx.plan)), takes)] : moved(plan) }
   // The one count of the day again (and of its energy) for this descent.
   const day = computeDay(counted)
   const placed = day.forecast.find((p) => p.block.id === block.id)

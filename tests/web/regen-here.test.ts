@@ -29,7 +29,7 @@ import { CATEGORY_COLORS, rdFrom } from '@shared/model/rd'
 import { useCalendarFilter } from '@renderer/features/calendars/calendarFilter'
 import { BlockDayNotes } from '@renderer/features/today/DayNotes'
 import { SidePanel } from '@renderer/features/today/TodayPage'
-import { PLAN_CHANGED_TEXT, arrangeDayBlocks, cheapestSwapCached, resetEnergyOrderCache, resetSwapCache, swapDayBlocks } from '@renderer/features/today/dayActions'
+import { PLAN_CHANGED_TEXT, arrangeDayBlocks, cheapestSwapCached, countedPlanStands, resetEnergyOrderCache, resetSwapCache, swapDayBlocks, type CountedOn } from '@renderer/features/today/dayActions'
 import { REGEN_PAST_TEXT, regenDoneText, regenHereCached, regenHereKeyOf, regenLineText, regenMemory, regenSignature, resetRegenCache } from '@renderer/features/today/regenActions'
 import { useData } from '@renderer/store/data'
 import type { DayModel } from '@renderer/store/day'
@@ -429,6 +429,8 @@ describe('„Wstaw regenerację tutaj” w oknie (N3)', () => {
     await act(async () => void q('regen-here-apply')!.click())
     await vi.waitFor(() => expect(texts()).toContain(REGEN_PAST_TEXT))
     expect(sent).toEqual([])
+    // T2925: no line with a live button stays – the proposal past by the clock is shown by no line until the day is counted again.
+    await vi.waitFor(() => expect(q('regen-here')).toBeNull())
   })
 })
 
@@ -498,6 +500,24 @@ describe('„Wstaw regenerację tutaj”, „Zamień”, „Ułóż” przy bufo
     expect(shownOf(toUnits(after.energy.forecast!.min.head))).toBe(r.after)
   })
 
+  it('T2926: bufor, który regeneracja zabiera, zmieniony w międzyczasie przez Ciebie (zapisany w pliku) – nic nie zapisane', async () => {
+    const plan = [
+      block({ id: 'x', cat: 'analiza', at: '07:30', min: 240, origin: 'user' }),
+      block({ id: 'd', cat: 'analiza', at: '11:50', min: 300, fixed: true, origin: 'user' }),
+      block({ id: 'c', cat: 'inne', at: '16:50', min: 60, origin: 'user' })
+    ]
+    const m = bufModel(plan)
+    const buffer = m.ctx.plan.find((b) => isBuffer(b) && b.sourceId === 'x')!
+    // The buffer written to the file whole (D582: changed by you – yours, no buffer any more).
+    const file = { ...m.data.dayFile!, blocks: [...(m.data.dayFile!.blocks as unknown[]), blockJson({ ...buffer, durationMin: 15 })] }
+    const { sent } = stub(file, SAT)
+    await side(m)
+    expect(regenHereCached(m)!.takes?.id).toBe(buffer.id)
+    await act(async () => void q('regen-here-apply')!.click())
+    await vi.waitFor(() => expect(texts()).toContain(PLAN_CHANGED_TEXT))
+    expect(sent.flat().filter((e) => e.edits.length > 0)).toEqual([])
+  })
+
   /** A block of „Analiza” 06:45 with its buffer: the nap and „Inne” after it stand 10 min later on the plan than in the file. */
   const SWAP_PLAN = [
     block({ id: 'x', cat: 'analiza', at: '06:45', min: 60, origin: 'user' }),
@@ -537,5 +557,57 @@ describe('„Wstaw regenerację tutaj”, „Zamień”, „Ułóż” przy bufo
     expect(sent).toHaveLength(1)
     expect(bar).toHaveBeenCalledTimes(1)
     expect(texts()).not.toContain(PLAN_CHANGED_TEXT)
+  })
+})
+
+/** The guard of a save counted on the window's plan (`countedPlanStands`) alone: the day of `PLAN`, „Analiza” 14:00 moved to 14:15. */
+describe('countedPlanStands – plan, na którym liczono zmianę (T2920–T2924)', () => {
+  type Ctx = NonNullable<CountedOn['ctx']>
+  const ctxOf = (plan: PlanBlock[], snapshot: PlanBlock[] = []): Ctx => ({ plan, snapshot: { blocks: snapshot } }) as unknown as Ctx
+  const byId = (plan: PlanBlock[], id: string) => plan.find((b) => b.id === id)!
+  const fileOf = (blocks: PlanBlock[], extra: Record<string, unknown> = {}): RawRecord => ({ schema: 1, date: DATE, blocks: blocks.map((b) => blockJson(b)), ...extra })
+  const moveE = (plan: PlanBlock[]) => [{ block: byId(plan, 'e'), startMin: lm('14:15') }]
+  const stands = (now: RawRecord, c: Partial<CountedOn> & { ctx: Ctx }) => countedPlanStands(now, DATE, { seen: FILE, starts: moveE(c.ctx.plan as PlanBlock[]), ...c })
+
+  it('T2920: blok szablonu zapisany do pliku przez inne „Ułóż” (był w planie okna) nie jest „nowy” – zmiana już zrobiona stoi', () => {
+    // „Analiza” and a meal 14:30 of the template (neither in the seen file): another computer's „Ułóż” wrote „Analiza” at 14:15 and the
+    // meal where it was (it lays every block of the gap) – both in the window's plan, the meal on „Analiza”'s place and not moved here.
+    const tE = { ...byId(PLAN, 'e'), origin: 'template' as const }
+    const meal = block({ id: 'q', cat: 'posilek', at: '14:30', min: 30 })
+    const plan = [...PLAN.map((b) => (b.id === 'e' ? tE : b)), meal]
+    const seen = fileOf(PLAN.filter((b) => b.id !== 'e'))
+    const now = fileOf([...PLAN.filter((b) => b.id !== 'e'), { ...tE, startMin: lm('14:15') }, meal])
+    expect(countedPlanStands(now, DATE, { seen, ctx: ctxOf(plan, [tE, meal]), starts: moveE(plan) })).toBe(true)
+  })
+
+
+  it('T2921: blok przywrócony od tego czasu (cofnięte odwołanie) na przesuwanym miejscu – zmiana', () => {
+    // A meal of the template 14:30, cancelled when the change was counted: not in the plan.
+    const meal = block({ id: 'q', cat: 'posilek', at: '14:30', min: 30 })
+    const seen = { ...FILE, cancelled: { q: true } }
+    expect(countedPlanStands(FILE, DATE, { seen, ctx: ctxOf(PLAN, [meal]), starts: moveE(PLAN) })).toBe(false)
+    // Still cancelled – it stands.
+    expect(countedPlanStands(seen, DATE, { seen, ctx: ctxOf(PLAN, [meal]), starts: moveE(PLAN) })).toBe(true)
+  })
+
+  it('T2923: każde miejsce osobno – nowy blok między dwoma odległymi przesunięciami nie przeszkadza; w tle – nic; zakotwiczony – na końcu kotwicy', () => {
+    const plan = PLAN
+    // „Analiza” 07:30 → 07:45 and „Inne” 17:00 → 17:15 (a buffer's far push): a new block at 12:00 is on neither.
+    const starts = [{ block: byId(plan, 'a'), startMin: lm('07:45') }, { block: byId(plan, 'c'), startMin: lm('17:15') }]
+    const added = (b: PlanBlock) => fileOf([...PLAN, b])
+    expect(countedPlanStands(added(block({ id: 'n', cat: 'inne', at: '12:00', min: 30, origin: 'user' })), DATE, { seen: FILE, ctx: ctxOf(plan), starts })).toBe(true)
+    // In the background, on „Analiza” 14:00 moved – it takes no place of the foreground.
+    expect(stands(added({ ...block({ id: 'n', cat: 'inne', at: '14:30', min: 30, origin: 'user' }), background: true }), { ctx: ctxOf(plan) })).toBe(true)
+    // Anchored to the meal (ends 14:00): it stands 14:00–14:30, on „Analiza”'s place.
+    expect(stands(added({ ...block({ id: 'n', cat: 'inne', after: 'p', min: 30, origin: 'user' }) }), { ctx: ctxOf(plan) })).toBe(false)
+    expect(stands(added(block({ id: 'n', cat: 'inne', at: '14:30', min: 30, origin: 'user' })), { ctx: ctxOf(plan) })).toBe(false)
+  })
+
+  it('T2924: blok planu okna na przesuwanym miejscu usunięty z pliku od tego czasu – zmiana; odwołany – też', () => {
+    // „Inne” 17:00 stands on „Analiza”'s new place (14:15–17:15).
+    expect(stands(fileOf(PLAN.filter((b) => b.id !== 'c')), { ctx: ctxOf(PLAN) })).toBe(false)
+    expect(stands(fileOf(PLAN, { cancelled: { c: true } }), { ctx: ctxOf(PLAN) })).toBe(false)
+    // A block elsewhere gone – it stands.
+    expect(stands(fileOf(PLAN.filter((b) => b.id !== 'w')), { ctx: ctxOf(PLAN) })).toBe(true)
   })
 })

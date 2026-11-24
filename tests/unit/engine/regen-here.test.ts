@@ -177,6 +177,17 @@ describe('„Wstaw regenerację tutaj” (N3)', () => {
     expect(counted.mock.calls.length).toBeLessThanOrEqual(REGEN_COUNTS)
   })
 
+  it('T2922: `replan` liczy dzień także bez `basePlan` (dekompresja włączona, dziś bez buforów) – plan pliku z blokiem i przesunięciami', () => {
+    const d = day(workDay())
+    expect(d.ctx.basePlan).toBeUndefined()
+    const replan = vi.fn((base: readonly PlanBlock[]) => base)
+    const r = regenHere(d.ctx, d.state, d.energy, { replan })
+    expect(replan).toHaveBeenCalled()
+    const base = replan.mock.calls.at(-1)![0]
+    expect(base.find((b) => b.id === REGEN_HERE_ID)?.startMin).toBe(r!.startMin)
+    expect(base.find((b) => b.id === 'e')?.startMin).toBe(lm('14:15'))
+  })
+
   it('dzień liczony ponownie raz (jedno przeliczenie dnia i energii)', () => {
     const d = day(workDay())
     const counted = vi.mocked(computeDay)

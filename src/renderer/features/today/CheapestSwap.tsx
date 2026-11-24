@@ -32,7 +32,7 @@ export function CheapestSwapLine({ model, names, past, openId = null, dayKey }: 
   const a = nameById(swap.a, naming, names)
   const b = nameById(swap.b, naming, names)
   // The swap is done before its save starts and back when it fails (`swapDayBlocks`): the line goes at the click.
-  const apply = () => run(() => swapDayBlocks(model.date, model.data.dayFile, variantStarts(model.ctx.plan, swap), swap, swappedText(a, b), openId))
+  const apply = () => run(() => swapDayBlocks(model.date, model.data.dayFile, variantStarts(model.ctx.plan, swap), swap, swappedText(a, b), openId, model.ctx))
   return (
     <li className="flex flex-wrap items-center gap-2" data-testid="cheapest-swap">
       <span className="min-w-0 flex-1" data-testid="cheapest-swap-text">

@@ -31,9 +31,9 @@ paths:
 - Miejsce: `pushable` i niezaczęty – regeneracja na jego `from` (`pushApart` z `atMin` = jego `from` – należny też idzie za nią), inny – kończy się na jego starcie;
   start przed końcem bieżącego kroku 5 min (klucz okna, T2873) albo blok zaczęty – ten koniec, najpóźniej w minucie zejścia. Wariant `suggestRegen` (jak komunikat
   1.27), `REGEN_HERE_MIN` = 15, `regenWayName`.
-- `RegenOptions` (T2872, T2877): `id` bloku od wołającego (remis startów idzie po id – liczone = zapisane); `taken` – bufor dekompresji pod blokiem (okno:
-  `bufferTakenBy`, D582 – znika z liczonego planu); `replan` – plan pliku po zmianie (`ctx.basePlan` + blok + `pushed`, bez zabranego) z buforami ułożonymi od
-  nowa (`replanned`, D583). Bez nich – `ctx.plan` z blokiem i startami.
+- `RegenOptions` (T2872, T2877, T2922): `id` bloku od wołającego (remis startów idzie po id – liczone = zapisane); `taken` – bufor dekompresji pod blokiem
+  (okno: `bufferTakenBy`, D582 – znika z liczonego planu); `replan` – plan pliku po zmianie (`ctx.basePlan ?? ctx.plan` + blok + `pushed`, bez zabranego) z
+  buforami ułożonymi od nowa (`replanned`, D583) – także dzień bez buforów teraz. Bez `replan` – `ctx.plan` z blokiem i startami.
 - Ocena: `computeDay` + `computeEnergy`; regeneracja na swoim starcie (D340), `after > before`, inna pula niżej na ekranie tylko poza strefą „uwaga”
   (`shadeOf(onScreen(…), reserve)` = ok – rezerwa + `WATCH_ABOVE_RESERVE`, T2876) i żadna nowa na rezerwie (T2874); bez warunków granicy D378 (jak rozsuwanie).
 
@@ -41,19 +41,24 @@ paths:
 - Linie w `DayWarnings` (panel boczny i `BlockDayNotes`, nie pasek – D229; dzień miniony – nic): slot `swap` – `CheapestSwap.tsx` `CheapestSwapLine`, slot `regen`
   – `RegenHere.tsx` `RegenHereLine`. Klucz dnia raz na model dla obu (`useReserveKey` → `dayKey`, `cheapestSwapKeyOf` = data | `energyOrderKey` z kosztami rutyn,
   T2627, T2636, T2875); nazwy `nameById`.
-- Pamięć (T2648): `proposalMemory.ts` `proposalMemory({ what, search, signature, holds })` – ostatnia po kluczu i dacie; zrobione po dacie i treści, zbiór na dzień
-  (druga nie odsłania pierwszej, `back` zdejmuje tylko swoją – T2878), `GONE_DAYS` = 14; `peek` (`fresh` / `due`; przed policzeniem nowego klucza – propozycja
-  pokazana przez tę linię, póki `holds`, przycisk wyłączony, T2633, T2639); wyjątek szukania – `console.warn`, null dla klucza (T2641). `useProposal.ts` – hook linii
-  (`useEffect` + `setTimeout(0)`, `shownKey`, słuchanie zrobionych; T2632, T2635). `swapMemory` (`dayActions.ts`, dawne `cheapestSwap*` / `swapGone` / `swapBack`
-  to jej nakładki; `swapSignature` – a, b, nowe starty) i `regenMemory` (`regenActions.ts`; `regenSignature` – pula, blok, sposób; `regenOptionsOf` – `newId()`
-  raz na szukanie, `bufferTakenBy`, `replanned` z `rd.settings`; `holds` – blok w planie i start po teraz).
-- Zapis na planie okna – w turze zapisu `countedPlanStands(plik, data, widziany, starty, kept, spans)` (T2870, T2877, T2878): przestawiany blok na starcie z pliku,
-  który okno widziało (nie z `ctx.plan` po buforach), albo już na nowym; `kept` bez zmiany miejsca; blok widzianego pliku zniknięty / odwołany / przeniesiony –
-  zmiana; nowy blok w pliku w przedziale zmiany (ta sama propozycja z innego komputera) – zmiana. Nie stoi – nic, `PLAN_CHANGED_TEXT`, linia wraca.
+- Pamięć (T2648): `proposalMemory.ts` `proposalMemory({ what, search, signature, holds, live? })` – ostatnia po kluczu i dacie; zrobione po dacie i treści, zbiór na
+  dzień (druga nie odsłania pierwszej, `back` zdejmuje tylko swoją – T2878), `GONE_DAYS` = 14; `peek` (`fresh` / `due`; przed policzeniem nowego klucza – propozycja
+  pokazana przez tę linię, póki `holds`, przycisk wyłączony, T2633, T2639; `live` fałsz – żadna linia jej nie pokazuje, T2925); `nudge` – linie patrzą od nowa;
+  wyjątek szukania – `console.warn`, null dla klucza (T2641). `useProposal.ts` – hook linii (`useEffect` + `setTimeout(0)`, `shownKey`, słuchanie zrobionych;
+  T2632, T2635). `swapMemory` (`dayActions.ts`, dawne `cheapestSwap*` / `swapGone` / `swapBack` to jej nakładki; `swapSignature` – a, b, nowe starty) i
+  `regenMemory` (`regenActions.ts`; `regenSignature` – pula, blok, sposób; `regenOptionsOf` – `newId()` raz na szukanie, `bufferTakenBy`, `replanned` z
+  `rd.settings`; `holds` – blok w planie i start po teraz; `live` – start po żywym zegarze, `pastStart`).
+- Zapis na planie okna – w turze zapisu `countedPlanStands(plik, data, { seen, ctx?, starts, kept?, spans? })` (T2870, T2877, T2878, T2920–T2924; `saveStarts`,
+  `arrangeDayBlocks` i `swapDayBlocks` biorą `ctx` modelu): przestawiany blok tam, gdzie miał go plan okna (`ctx.basePlan ?? ctx.plan`, start z pliku – nie po
+  buforach), albo już na nowym; `kept` bez zmiany miejsca; każde miejsce zmiany osobno (stare i nowe każdego bloku + `spans`) – blok planu okna na nim usunięty /
+  odwołany / przeniesiony – zmiana; blok, którego plan okna nie miał (nowy w pliku albo przywrócony – cofnięte odwołanie), na nim w pierwszym planie – zmiana
+  (zakotwiczony – na końcu kotwicy; blok szablonu zapisany do pliku przez inne „Ułóż” nie jest nowy). Bez `ctx` – plan to bloki widzianego pliku. Nie stoi – nic,
+  `PLAN_CHANGED_TEXT`, linia wraca.
 - „Zamień” = `swapDayBlocks` (`saveStarts` – ta sama droga co `arrangeDayBlocks`, bez `planArranged`): `swapGone` przed zapisem, `undoEditToast` „Zamieniono: A ↔ B ·
   Cofnij” (`swapToastText`: ukryty z pary „(1 ukryty)”, inne przesunięte – `pushedText` bez pary, `openId`; T2630, T2637), `swapBack` przy nieudanym i po „Cofnij”.
-- „Wstaw regenerację tutaj” = `insertRegen(dzień, propozycja, { way, openId, changes?, now? })`: start ≤ teraz na zegarze – nic, `REGEN_PAST_TEXT` (T2879);
-  `regenMemory.done` przed zapisem; blok `newUserBlock` z `r.id`, `withTaken(…, r.takes)` (D582) i `withBufferPushes` (D583) przez `pushDayBlocks(…, sent, false,
-  stands)` – jeden wpis, `planPushed(…, false)` (sam wyzwalacz znacznika); `undoEditToast` „Wstawiono regenerację: … · Cofnij” (`regenToastText`, D428),
-  `onUndone`/nic nie zapisane → `back`. N20: `descentPlace` + `regenHereCached(dzień)` + `insertRegen(…)`.
+- „Wstaw regenerację tutaj” = `insertRegen(dzień, propozycja, { way, openId, changes?, now? })`: start ≤ teraz na zegarze – nic, `REGEN_PAST_TEXT`, `nudge` (T2879,
+  T2925); `regenMemory.done` przed zapisem; blok `newUserBlock` z `r.id`, `withTaken(…, r.takes)` (D582) i `withBufferPushes` (D583) przez `pushDayBlocks(…, sent,
+  false, stands)` – jeden wpis, `planPushed(…, false)` (sam wyzwalacz znacznika); `stands`: `countedPlanStands` z `kept` = blok „przed” i `spans` = regeneracja,
+  bufor `r.takes` nadal w planie, niezaczęty (fakty modelu), nieodwołany i niezapisany w pliku (T2926); `undoEditToast` „Wstawiono regenerację: … · Cofnij”
+  (`regenToastText`, D428), `onUndone`/nic nie zapisane → `back`. N20: `descentPlace` + `regenHereCached(dzień)` + `insertRegen(…)`.
 - Testy czekają na policzenie obu linii warunkiem (`settle`), bez stałych opóźnień; web regen – zegar kliknięcia `vi.useFakeTimers({ toFake: ['Date'] })`.
