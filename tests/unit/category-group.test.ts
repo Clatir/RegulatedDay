@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_CATEGORIES, costsOf } from '@shared/model/categories'
 import {
   categoryKey,
+  bodyMissing,
+  bodyMissingText,
   commonPools,
   treeCount,
   treeGroupStep,
@@ -14,6 +16,7 @@ import {
   treeItemOf,
   treeKeptText,
   treeLineText,
+  treeNothingText,
   treeOrder,
   treeValues,
   variantKey,
@@ -237,5 +240,142 @@ describe('słowa', () => {
     expect(treeCount([k(categoryKey('a'))])).toBe('1 podkategorię')
     expect(treeCount([k(categoryKey('a')), k(categoryKey('b')), k(variantKey('a', 'x'))])).toBe('2 podkategorie i 1 wariant')
     expect(treeCount([k(variantKey('a', 'x')), k(variantKey('a', 'y')), k(variantKey('a', 'z')), k(variantKey('a', 'w')), k(variantKey('a', 'v'))])).toBe('5 wariantów')
+  })
+})
+
+describe('„Uzupełnij ciało” (D623, N14)', () => {
+  const ZERO = { head: 1, emotions: 1, senses: 1, body: 0 }
+  /** A subcategory of yours as the settings write it (the first change, long ago) with its name in rd.json. */
+  const mine = (id: string, extra: Record<string, unknown> = {}) => ({ id: `add-${id}`, from: '2026-01-01', at: null, made: 1, patch: { categories: { [id]: { cls: 'work', kind: 'other', place: 'computer', costs: ZERO, ...extra } } } })
+  /** Your subcategories: `a`, `b` (body 3), `c` (archived), `d` with four variants, `e` (with body 0 and a variant of yours under a starting one: regeneracja). */
+  function start(): Raw {
+    const regen = { id: 'add-regen', from: '2026-01-01', at: null, made: 2, patch: { categories: { regeneracja: { variants: [...DEFAULT_CATEGORIES.find((c) => c.id === 'regeneracja')!.variants, { id: 'moj', name: 'Mój sposób', costs: ZERO }] } } } }
+    return {
+      schema: 1,
+      settings: [
+        mine('a'),
+        mine('b', { costs: { ...ZERO, body: 3 } }),
+        mine('c'),
+        mine('d', {
+          variants: [
+            { id: 'd0', name: 'Własny zero', costs: ZERO },
+            { id: 'd1', name: 'Jak podkategoria' },
+            { id: 'd3', name: 'Własny trzy', costs: { ...ZERO, body: 3 } },
+            { id: 'dz', name: 'Zarchiwizowany', costs: ZERO, archived: true }
+          ]
+        }),
+        regen
+      ],
+      categories: { a: { name: 'Alfa', group: WORK_GROUP }, b: { name: 'Beta', group: WORK_GROUP }, c: { name: 'Gamma', group: WORK_GROUP, archived: true }, d: { name: 'Delta', group: WORK_GROUP } }
+    }
+  }
+  const missing = (raw: Raw, date = TOMORROW) => {
+    const rd = rdFrom(raw)
+    const s = settingsOn(rd.settings, date)
+    return bodyMissing(categoryTree(rd, s.categories), s, rd)
+  }
+
+  it('lista: własna podkategoria i wariant z własnym kosztem o ciele 0; jak podkategoria, zarchiwizowane i startowe (też z ciałem 0) – pominięte', () => {
+    const list = missing(start())
+    expect(list.map((x) => x.key).sort()).toEqual([categoryKey('a'), categoryKey('d'), variantKey('d', 'd0'), variantKey('regeneracja', 'moj')].sort())
+    // Not: `b` (body 3), `c` (archived), `analiza` (starting, 0 is its value), `przerwa-od-ekranu` (starting variant), `d1` (follows `d`), `d3`, `dz`.
+    expect(list.find((x) => x.key === categoryKey('a'))).toMatchObject({ name: 'Alfa', costs: ZERO })
+    expect(list.find((x) => x.key === variantKey('d', 'd0'))!.name).toBe('Delta › Własny zero')
+  })
+
+  it('kolejność jak w drzewie (`treeOrder`); zero pozycji – pusta lista; ciało z daty paska', () => {
+    const raw = start()
+    const rd = rdFrom(raw)
+    const s = settingsOn(rd.settings, TOMORROW)
+    const order = treeOrder(categoryTree(rd, s.categories), s.categories, 'all', false)
+    const keys = missing(raw).map((x) => x.key)
+    expect(keys).toEqual(order.filter((k) => keys.includes(k)))
+    // A subcategory whose body is filled from tomorrow is still on the list at the settings of today (the bar's date is what counts).
+    const filled = written(raw, { categories: { a: { costs: { body: 2 } } } })
+    expect(missing(filled, TOMORROW).map((x) => x.key)).not.toContain(categoryKey('a'))
+    expect(missing(filled, TODAY).map((x) => x.key)).toContain(categoryKey('a'))
+    expect(missing({ schema: 1 })).toEqual([])
+  })
+
+  it('słowa linii: „6 podkategorii ma ciało 0”, „2 podkategorie mają…”, „1 wariant ma…”, mieszane – „mają”', () => {
+    const k = (key: string) => ({ item: treeItemOf(key)! })
+    const cats = (n: number) => Array.from({ length: n }, (_, i) => k(categoryKey(`c${i}`)))
+    expect(bodyMissingText(cats(6))).toBe('6 podkategorii ma ciało 0')
+    expect(bodyMissingText(cats(2))).toBe('2 podkategorie mają ciało 0')
+    expect(bodyMissingText(cats(1))).toBe('1 podkategoria ma ciało 0')
+    expect(bodyMissingText([k(variantKey('a', 'x'))])).toBe('1 wariant ma ciało 0')
+    expect(bodyMissingText([...cats(1), k(variantKey('a', 'x'))])).toBe('1 podkategoria i 1 wariant mają ciało 0')
+  })
+
+  it('3 pozycje naraz, każda z własną wartością: jeden wpis ustawień od jutra, dziś bez zmiany, linia „Uzupełniono ciało: 2 podkategorie i 1 wariant”', () => {
+    const keys = [categoryKey('a'), categoryKey('d'), variantKey('d', 'd0')]
+    const { step, raw } = apply(start(), keys, { kind: 'costsEach', values: { [keys[0]!]: { body: 1 }, [keys[1]!]: { body: 2 }, [keys[2]!]: { body: 3 } } })
+    expect(step.changes).toHaveLength(3)
+    expect((raw.settings as unknown[]).length).toBe(start().settings ? (start().settings as unknown[]).length + 1 : 0)
+    const s = on(raw, TOMORROW)
+    expect(s.categories.a!.costs).toEqual({ ...ZERO, body: 1 })
+    expect(s.categories.d!.costs).toEqual({ ...ZERO, body: 2 })
+    expect(costsOf(s.categories.d!, 'd0')).toEqual({ ...ZERO, body: 3 })
+    // The variant that follows its subcategory stays so; the other variants stay as they were.
+    expect(s.categories.d!.variants.find((v) => v.id === 'd1')!.costs).toBeUndefined()
+    expect(s.categories.d!.variants.find((v) => v.id === 'd3')!.costs).toEqual({ ...ZERO, body: 3 })
+    expect(on(raw, TODAY).categories.a!.costs.body).toBe(0)
+    expect(step.changes.map((c) => c.pools)).toEqual([['body'], ['body'], ['body']])
+    expect(treeLineText('costsEach', step.changes, step.skipped)).toBe('Uzupełniono ciało: 2 podkategorie i 1 wariant')
+    expect(treeLineText('costsEach', step.changes.slice(2), [])).toBe('Uzupełniono ciało: 1 wariant')
+  })
+
+  it('„Cofnij” przywraca ciało 0 tylko tam, gdzie stoi jak po zmianie', () => {
+    const keys = [categoryKey('a'), categoryKey('d')]
+    const { step, raw } = apply(start(), keys, { kind: 'costsEach', values: { [keys[0]!]: { body: 1 }, [keys[1]!]: { body: 2 } } })
+    const since = written(raw, { categories: { a: { costs: { body: 5 } } } })
+    const u = treeGroupUndo(since, step.changes, FROM, TODAY)
+    expect(u.kept.map((c) => c.key)).toEqual([categoryKey('a')])
+    const back = written(u.raw, u.patch)
+    expect(on(back, TOMORROW).categories.d!.costs.body).toBe(0)
+    expect(on(back, TOMORROW).categories.a!.costs.body).toBe(5)
+  })
+
+  it('klucz bez wartości – bez zmiany (same); pozycja z ciałem już ustawionym – pominięta z powodem', () => {
+    const { step } = apply(start(), [categoryKey('b'), categoryKey('a')], { kind: 'costsEach', values: { [categoryKey('b')]: { body: 3 } } })
+    expect(step.changes).toHaveLength(0)
+    expect(step.same).toBe(1)
+    expect(step.skipped).toEqual(['ciało już ustawione'])
+    expect(step.patch).toBeNull()
+  })
+})
+
+describe('„Uzupełnij ciało” – runda 1 przeglądu (T2727–T2731)', () => {
+  const ZERO = { head: 1, emotions: 1, senses: 1, body: 0 }
+  const added = (id: string, extra: Record<string, unknown> = {}) => ({ id: `add-${id}`, from: '2026-01-01', at: null, made: 1, patch: { categories: { [id]: { cls: 'work', kind: 'other', place: 'computer', costs: ZERO, ...extra } } } })
+
+  it('okno otwarte, a pozycja dostała ciało w międzyczasie (inny komputer): zapis jej nie nadpisuje, pomija z powodem; reszta idzie', () => {
+    const start: Raw = {
+      schema: 1,
+      settings: [
+        added('a', { costs: { ...ZERO, body: 4 } }),
+        added('b'),
+        added('d', { variants: [{ id: 'v0', name: 'Własny', costs: { ...ZERO, body: 2 } }, { id: 'v1', name: 'Jak podkategoria' }, { id: 'v2', name: 'Pusty', costs: ZERO }] })
+      ],
+      categories: { a: { name: 'A', group: WORK_GROUP }, b: { name: 'B', group: WORK_GROUP }, d: { name: 'D', group: WORK_GROUP } }
+    }
+    const keys = [categoryKey('a'), categoryKey('b'), variantKey('d', 'v0'), variantKey('d', 'v1'), variantKey('d', 'v2')]
+    const { step, raw } = apply(start, keys, { kind: 'costsEach', values: Object.fromEntries(keys.map((k, i) => [k, { body: i + 1 }])) })
+    expect(step.changes.map((c) => c.key)).toEqual([categoryKey('b'), variantKey('d', 'v2')])
+    expect(step.skipped).toEqual(['ciało już ustawione', 'ciało już ustawione', 'ciało już ustawione'])
+    const s = on(raw, TOMORROW)
+    expect(s.categories.a!.costs.body).toBe(4)
+    expect(s.categories.b!.costs.body).toBe(2)
+    expect(costsOf(s.categories.d!, 'v0').body).toBe(2)
+    // „jak podkategoria” stays so (it follows the subcategory, which got no cost).
+    expect(s.categories.d!.variants.find((v) => v.id === 'v1')!.costs).toBeUndefined()
+    expect(costsOf(s.categories.d!, 'v2').body).toBe(5)
+    expect(treeLineText('costsEach', step.changes, step.skipped)).toBe('Uzupełniono ciało: 1 podkategoria i 1 wariant · pominięto 3: ciało już ustawione')
+  })
+
+  it('same pominięte – „Nic się nie zmienia” bez słowa „zaznaczone”', () => {
+    expect(treeNothingText([], 'costsEach')).toBe('Nic się nie zmienia – te pozycje mają już ciało.')
+    expect(treeNothingText(['ciało już ustawione'], 'costsEach')).toBe('Nic się nie zmienia – pominięto 1: ciało już ustawione.')
+    expect(treeNothingText([])).toBe('Nic się nie zmienia – zaznaczone już tak mają.')
   })
 })

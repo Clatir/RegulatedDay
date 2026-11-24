@@ -7,6 +7,8 @@ paths:
   - "src/renderer/features/settings/CategoryRow.tsx"
   - "src/renderer/features/settings/VariantRows.tsx"
   - "src/renderer/features/settings/GroupRemoveDialog.tsx"
+  - "src/renderer/features/settings/BodyFill.tsx"
+  - "src/shared/model/categoryGroup.ts"
   - "src/renderer/features/plan/NewThingDialogs.tsx"
   - "tests/unit/category-tree.test.ts"
   - "tests/web/category-tree-save.test.ts"
@@ -92,3 +94,4 @@ drzewa; „kategoria” drzewa to grupa (`CategoryGroup`, `categoryGroups`).
   „Zmień N ▾” – `keep` menu i przełączanie (drugi klik zamyka, `aria-expanded`, T2709) tylko dla menu paska (`from: 'bar' | 'row'`; przy menu
   wiersza klik otwiera menu paska, T2716). Okno „Koszt…”: „Zapisz” zawsze aktywne, najpierw `commitActiveField` (`flushSync`), nic nieruszone albo pula wrócona do wspólnej wartości – zamyka (T2711, T2721).
   Wiersz wariantu ma własne tło `bg-panel` (T2715). Wiersze jak w „Sprawach”: bez roli, `tabIndex −1`.
+- „Uzupełnij ciało” (D623, N14, T2722–T2726): `BodyFill.tsx` – linia nad drzewem (`bodyMissingText`) i okno; lista `bodyMissing(tree, s, rd)` w `model/categoryGroup.ts` = własne (nie `isStartingCategory` / `isStartingVariant` – D523: zero startowych to wartość) niezarchiwizowane podkategorie z ciałem 0 i warianty z własnym kosztem o ciele 0, kolejność `treeOrder`, ustawienia daty paska, drzewo zawsze bez archiwum (nie zależy od „Pokaż archiwum”). Zapis – ta sama droga co „Koszt…”: `changeTreeGroup(keys, { kind: 'costsEach', values })` (wartości pul osobno na klucz; zapisane tylko ruszone pule, jedna zmiana ustawień od daty paska, linia `settings` „Uzupełniono ciało: …” i „Cofnij” jak każda zmiana grupowa); okno trzyma pozycje z chwili otwarcia, „Zapisz” zatwierdza wpisywane pole, odmowa pola – okno zostaje. Zapis tylko uzupełnia (T2727): podkategoria z ciałem ≠ 0 i wariant bez własnego kosztu albo z ciałem ≠ 0 – `TREE_SKIP.bodyFilled`, `treeNothingText(skipped, kind)` bez słowa „zaznaczone”. „×” = `rd.json` `bodyFillHidden: true` (`RdFile.bodyFillHidden`, pole najwyższego poziomu, bez daty; `saveTree` + `undoTree` z dymka). `keptOnRestore` zachowuje flagę (T2731). Testy: `tests/unit/category-group.test.ts`, `tests/web/category-group.test.ts`, `tests/fs/restore.test.ts`, E2E `category-tree.spec.ts`.

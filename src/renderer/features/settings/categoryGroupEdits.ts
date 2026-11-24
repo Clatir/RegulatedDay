@@ -36,7 +36,7 @@ function todayNow(): string {
 }
 
 /** Whether the change may write the dated settings (a cost, a place, a variant's archive) – only then „od dziś” needs today's type. */
-const datedAction = (a: TreeAction, keys: readonly string[]): boolean => a.kind === 'costs' || a.kind === 'place' || (a.kind === 'remove' && keys.some((k) => treeItemOf(k)?.kind === 'variant'))
+const datedAction = (a: TreeAction, keys: readonly string[]): boolean => a.kind === 'costs' || a.kind === 'costsEach' || a.kind === 'place' || (a.kind === 'remove' && keys.some((k) => treeItemOf(k)?.kind === 'variant'))
 
 /** „Od dziś” with today unreadable: what of a change was saved and what not (T2714) – never a guessed type of the day (A7-09). */
 export const TREE_TODAY_PART_TEXT = 'Nie da się teraz odczytać dzisiejszego dnia – zapisano tylko to, co działa od razu; koszty, miejsca i warianty od dziś nie zostały zapisane. Spróbuj za chwilę albo wybierz „od jutra”.'
@@ -122,7 +122,7 @@ export async function changeTreeGroup(keys: readonly string[], a: TreeAction, f?
   }
   if (!r.entry || !changes.length) {
     if (held) toast(TODAY_UNREAD_TEXT, 'error', 8000)
-    else toast(treeNothingText(skipped), 'info')
+    else toast(treeNothingText(skipped, a.kind), 'info')
     return null
   }
   // The part held back is said whatever became of the rest (T2718).

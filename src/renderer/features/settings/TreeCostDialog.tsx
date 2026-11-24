@@ -18,9 +18,9 @@ import { COST_FIELD, WideCostWarning } from '../plan/CostInput'
 import { POOL_COLOR, POOL_NAME } from '../plan/energyDraw'
 import { useWheelValue } from './SettingNumber'
 
-/** A pool's field: the number all have, or empty with „—” (they differ); the wheel – every turn at once (a form, T2551), from the first one's value when empty. */
-function PoolField({ pool, value, start, onCommit }: { pool: Pool; value: number | null; start: number; onCommit: (v: number) => void }) {
-  const field = { ...COST_FIELD, label: `${POOL_NAME[pool]}: koszt na godzinę` }
+/** A pool's field (also the field C of „Uzupełnij ciało”, D623: `label`, `testId`): the number all have, or empty with „—” (they differ); the wheel – every turn at once (a form, T2551), from the first one's value when empty. */
+export function PoolField({ pool, value, start, onCommit, label, testId }: { pool: Pool; value: number | null; start: number; onCommit: (v: number) => void; label?: string; testId?: string }) {
+  const field = { ...COST_FIELD, label: label ?? `${POOL_NAME[pool]}: koszt na godzinę` }
   const commit = (v: number) => checkField(field, v).ok && onCommit(v)
   const turned = useWheelValue(value ?? start, field.range, commit, 'step')
   return (
@@ -33,7 +33,7 @@ function PoolField({ pool, value, start, onCommit }: { pool: Pool; value: number
       placeholder="—"
       shellClassName="w-[52px]"
       aria-label={field.label}
-      data-testid={`tree-cost-${pool}-value`}
+      data-testid={testId ?? `tree-cost-${pool}-value`}
     />
   )
 }

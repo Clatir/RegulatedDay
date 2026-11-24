@@ -20,6 +20,7 @@ import { useBusy } from '../../lib/busy'
 import { takeFoundPick, takePick, toast, undoToast, useUi } from '../../store/ui'
 import { GroupLine } from '../../components/GroupLine'
 import { COST_SCALE_COMMAND, GROUP_PICK } from '../search/records'
+import { BodyFill } from './BodyFill'
 import { CategoryRow } from './CategoryRow'
 import { WideCostWarning } from '../plan/CostInput'
 import { CostScaleDialog } from './CostScaleDialog'
@@ -158,6 +159,8 @@ export function CategoriesSection() {
       </p>
       {/* D568 (T2440): a cost past ±5 here while a computer of an older version is in the folder – it may write the default over it. */}
       <WideCostWarning costs={Object.values(s.categories).flatMap((c) => [c.costs, ...c.variants.flatMap((v) => (v.costs ? [v.costs] : []))])} testId="settings-categories-old" />
+      {/* D623: „6 podkategorii ma ciało 0 · Uzupełnij · ×” – the gaps of the body cost of what you added. */}
+      <BodyFill s={s} rd={rd} />
       {/* „Zaznaczone: 6 · Zmień 6 ▾” over the tree (D608); the line of a change stays where the section's line always was (T2710). */}
       {select.bar}
       {tree.map(({ group: g, categories: groupIds }) => (

@@ -16,8 +16,8 @@
 import { deepEqual, diffRecords, setAt, valueAt, type FieldChange } from '../data/merge'
 import { countLabel, plural } from '../format'
 import { sameCosts } from './blockCosts'
-import { POOLS, type CategoryRules, type Costs, type Place, type Pool, type Variant } from './categories'
-import { archiveVariant, changeVariant, setCategoryGroupRaw, type TreeGroup, type VariantEntry } from './categoryTree'
+import { isStartingCategory, isStartingVariant, POOLS, type CategoryRules, type Costs, type Place, type Pool, type Variant } from './categories'
+import { archiveVariant, changeVariant, setCategoryGroupRaw, type TreeGroup, type TreeSource, type VariantEntry } from './categoryTree'
 import { rdFrom } from './rd'
 import { isPlain, settingsOn, type RulesSettings } from './settings'
 import { isPlannedChange, withoutPlannedCategory } from './settingsWithdraw'
@@ -67,6 +67,37 @@ export function treeValues(s: RulesSettings, item: TreeItem): { costs: Costs; pl
   return v ? { costs: v.costs ?? rules.costs, place: v.place ?? rules.place } : null
 }
 
+/** An element of the list „Uzupełnij ciało”: its key and item, its name for the window (a variant: „Podkategoria › Wariant”) and its cost now. */
+export interface BodyGap {
+  key: string
+  item: TreeItem
+  name: string
+  costs: Costs
+}
+
+/**
+ * What „Uzupełnij ciało” offers (D623, N14), in the order of the tree: the subcategories of yours (not archived – the tree has none of those) whose body cost
+ * is 0 in the settings `s` (of the bar's date) and the variants of yours with a cost of their own and the body 0 in it. A variant „jak podkategoria”
+ * follows its subcategory; an archived one is out of the tree; the starting subcategories and variants are left out – D523 gave each its body
+ * cost, a 0 there is a value (the ones you added start with 0 – those are the gaps).
+ */
+export function bodyMissing(tree: readonly TreeGroup[], s: RulesSettings, src: Pick<TreeSource, 'categories'>): BodyGap[] {
+  const out: BodyGap[] = []
+  for (const key of treeOrder(tree, s.categories, 'all', false)) {
+    const item = treeItemOf(key)
+    const rules = item ? s.categories[item.category] : undefined
+    if (!item || !rules) continue
+    const name = src.categories[item.category]?.name ?? ''
+    if (item.kind === 'category') {
+      if (!isStartingCategory(item.category) && rules.costs.body === 0) out.push({ key, item, name, costs: rules.costs })
+      continue
+    }
+    const v = rules.variants.find((x) => x.id === item.variant)
+    if (v?.costs && v.costs.body === 0 && !isStartingVariant(item.category, item.variant)) out.push({ key, item, name: `${name} › ${v.name}`, costs: v.costs })
+  }
+  return out
+}
+
 /** The value of each pool all of `list` share – a ✓ of the window „Koszt…”; a pool where they differ (or none) is null – „—” (D609). */
 export function commonPools(list: readonly Costs[]): Record<Pool, number | null> {
   const out = {} as Record<Pool, number | null>
@@ -74,8 +105,19 @@ export function commonPools(list: readonly Costs[]): Record<Pool, number | null>
   return out
 }
 
-/** What a menu of the selection does (D609). `costs` – only the pools touched in the window. */
-export type TreeAction = { kind: 'costs'; costs: Partial<Costs> } | { kind: 'place'; place: Place } | { kind: 'move'; group: string } | { kind: 'remove' }
+/**
+ * What a menu of the selection does (D609). `costs` – only the pools touched in the window, the same for every element. `costsEach` – „Uzupełnij
+ * ciało” (D623): the pools to set each element's own (by its key; an element with none is left), written in the same one change.
+ */
+export type TreeAction =
+  | { kind: 'costs'; costs: Partial<Costs> }
+  | { kind: 'costsEach'; values: Readonly<Record<string, Partial<Costs>>> }
+  | { kind: 'place'; place: Place }
+  | { kind: 'move'; group: string }
+  | { kind: 'remove' }
+
+/** The pools a partial cost sets. */
+const poolsIn = (costs: Partial<Costs>): Pool[] => POOLS.filter((p) => costs[p] !== undefined)
 
 /**
  * One change made: of what (`key`, `item`), which field, before and after. `dated` – a field of the dated settings (a cost, a place, a
@@ -102,7 +144,8 @@ export interface TreeChange {
 export const TREE_SKIP = {
   variantStays: 'warianty zostają przy swojej podkategorii',
   archived: 'już w archiwum',
-  gone: 'nie ma od tej daty'
+  gone: 'nie ma od tej daty',
+  bodyFilled: 'ciało już ustawione'
 } as const
 
 /** What a change comes to: rd.json without the dated change, the patch of it (null – none), what changed, what was left (a reason each), how many were already so. */
@@ -215,7 +258,9 @@ export function treeGroupStep(raw: Raw, keys: readonly string[], a: TreeAction, 
   const lists = new Lists(s)
   const fields = new Map<string, Record<string, unknown>>()
   const field = (id: string) => fields.get(id) ?? (fields.set(id, {}), fields.get(id)!)
-  const touchedPools = a.kind === 'costs' ? POOLS.filter((p) => a.costs[p] !== undefined) : []
+  // The pools a cost action sets for an element: the one list of `costs`, the element's own of `costsEach` (null – it has none: left as it is).
+  const costsFor = (key: string): Partial<Costs> | null => (a.kind === 'costs' ? a.costs : a.kind === 'costsEach' ? (a.values[key] ?? null) : null)
+  const costing = a.kind === 'costs' || a.kind === 'costsEach'
   for (const { key, item } of items) {
     if (goneWhole.has(item.category)) continue
     const rules = s.categories[item.category]
@@ -225,16 +270,19 @@ export function treeGroupStep(raw: Raw, keys: readonly string[], a: TreeAction, 
         skipped.push(TREE_SKIP.gone)
         continue
       }
-      if (a.kind === 'costs') {
-        const next = { ...rules.costs, ...a.costs }
-        if (sameCosts(next, rules.costs)) same++
+      if (costing) {
+        const cs = costsFor(key)
+        const next = { ...rules.costs, ...cs }
+        // „Uzupełnij ciało” fills gaps only: a body set meanwhile (the window was open, another computer) is never written over (D623).
+        if (a.kind === 'costsEach' && rules.costs.body !== 0) skipped.push(TREE_SKIP.bodyFilled)
+        else if (!cs || sameCosts(next, rules.costs)) same++
         else {
           // Only the pools touched (as a field of the row writes one): a pool changed meanwhile from another date stays (T2704).
-          field(item.category).costs = { ...a.costs }
-          changes.push({ key, item, field: 'costs', dated: true, before: { ...rules.costs }, after: next, pools: touchedPools })
+          field(item.category).costs = { ...cs }
+          changes.push({ key, item, field: 'costs', dated: true, before: { ...rules.costs }, after: next, pools: poolsIn(cs) })
         }
-      } else if (rules.place === a.place) same++
-      else {
+      } else if (a.kind === 'place' && rules.place === a.place) same++
+      else if (a.kind === 'place') {
         field(item.category).place = a.place
         changes.push({ key, item, field: 'place', dated: true, before: rules.place, after: a.place })
       }
@@ -252,15 +300,19 @@ export function treeGroupStep(raw: Raw, keys: readonly string[], a: TreeAction, 
       else same++
       continue
     }
-    if (a.kind === 'costs') {
+    if (costing) {
+      const cs = costsFor(key)
       const mine = own(list, item.variant, 'costs')
-      const next = { ...(mine ?? rules.costs), ...a.costs }
-      // Without its own cost it gets one (D609) – even with the numbers of its subcategory: it no longer follows it.
-      if (mine && sameCosts(mine, next)) same++
-      else if (lists.set(item.category, changeVariant(list, item.variant, { costs: next }))) changes.push({ key, item, field: 'costs', dated: true, before: mine ? { ...mine } : null, after: next, pools: touchedPools })
+      const next = { ...(mine ?? rules.costs), ...cs }
+      // Without its own cost it gets one (D609) – even with the numbers of its subcategory: it no longer follows it. „Uzupełnij ciało” only fills the
+      // own cost with the body 0 (one that follows its subcategory now, or has a body, is left – D623).
+      if (a.kind === 'costsEach' && (!mine || mine.body !== 0)) skipped.push(TREE_SKIP.bodyFilled)
+      else if (!cs || (mine && sameCosts(mine, next))) same++
+      else if (lists.set(item.category, changeVariant(list, item.variant, { costs: next }))) changes.push({ key, item, field: 'costs', dated: true, before: mine ? { ...mine } : null, after: next, pools: poolsIn(cs) })
       else same++
       continue
     }
+    if (a.kind !== 'place') continue
     const mine = own(list, item.variant, 'place')
     if (mine === a.place) same++
     else if (lists.set(item.category, changeVariant(list, item.variant, { place: a.place }))) changes.push({ key, item, field: 'place', dated: true, before: mine, after: a.place })
@@ -363,20 +415,33 @@ export function treeTitleCount(items: ReadonlyArray<{ item: TreeItem }>): string
 }
 
 /** The verb of the line of an action. */
-export const TREE_VERB: Record<TreeAction['kind'], string> = { costs: 'Zmieniono', place: 'Zmieniono', move: 'Przeniesiono', remove: 'Usunięto' }
+export const TREE_VERB: Record<TreeAction['kind'], string> = { costs: 'Zmieniono', costsEach: 'Uzupełniono ciało:', place: 'Zmieniono', move: 'Przeniesiono', remove: 'Usunięto' }
 
 /** „pominięto 2: już w archiwum” – each reason once, in order (as the lines of the other selections). */
 const skippedPart = (reasons: readonly string[]): string | null => (reasons.length ? `pominięto ${reasons.length}: ${[...new Set(reasons)].join(', ')}` : null)
 
 /** The line after a change: „Zmieniono 6 podkategorii”, „Przeniesiono 4 podkategorie · pominięto 2: warianty zostają przy swojej podkategorii”. */
 export function treeLineText(a: TreeAction['kind'], changes: readonly TreeChange[], skipped: readonly string[]): string {
-  return [`${TREE_VERB[a]} ${treeCount(changes)}`, skippedPart(skipped)].filter((x): x is string => x != null).join(' · ')
+  // „Uzupełniono ciało: 3 podkategorie” – after the colon the nominative (`treeTitleCount`).
+  return [`${TREE_VERB[a]} ${a === 'costsEach' ? treeTitleCount(changes) : treeCount(changes)}`, skippedPart(skipped)].filter((x): x is string => x != null).join(' · ')
 }
 
 /** A change that changed nothing: „Nic się nie zmienia” (and what it left out, D72). */
-export function treeNothingText(skipped: readonly string[]): string {
+export function treeNothingText(skipped: readonly string[], kind?: TreeAction['kind']): string {
   const part = skippedPart(skipped)
-  return part ? `Nic się nie zmienia – ${part}.` : 'Nic się nie zmienia – zaznaczone już tak mają.'
+  // „Uzupełnij ciało” has no selection: its words never say „zaznaczone”.
+  return part ? `Nic się nie zmienia – ${part}.` : kind === 'costsEach' ? 'Nic się nie zmienia – te pozycje mają już ciało.' : 'Nic się nie zmienia – zaznaczone już tak mają.'
+}
+
+/**
+ * The line above the tree (D623): „6 podkategorii ma ciało 0”, „2 podkategorie mają ciało 0”, „1 podkategoria i 1 wariant mają ciało 0” (the nominative of
+ * `treeTitleCount`; the verb by the count when only one kind, the plural when both).
+ */
+export function bodyMissingText(items: ReadonlyArray<{ item: TreeItem }>): string {
+  const cats = items.filter((x) => x.item.kind === 'category').length
+  const mixed = cats > 0 && cats < items.length
+  const verb = mixed ? 'mają' : plural(items.length, 'ma', 'mają', 'ma')
+  return `${treeTitleCount(items)} ${verb} ciało 0`
 }
 
 /** What „Cofnij” says of those that stayed (changed since, D567 p.4): „Cofnięto · 2 zostały, bo się zmieniły”; none went back – „Nic nie cofnięto – …”. */

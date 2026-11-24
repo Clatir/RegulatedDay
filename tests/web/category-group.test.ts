@@ -591,3 +591,189 @@ describe('runda 3 przeglądu', () => {
     expect(q('tree-menu-place-away')).toBeNull()
   })
 })
+
+describe('„Uzupełnij ciało” (D623, N14)', () => {
+  const ZERO = { head: 1, emotions: 1, senses: 1, body: 0 }
+  /** Your subcategories `moja1`, `moja2`, `moja3` with no body cost (what you add starts with 0, D523) and a name each in rd.json. */
+  const own = (ids: string[]) => ({
+    schema: 1,
+    settings: ids.map((id, i) => ({ id: `add-${id}`, from: '2026-01-01', at: null, made: i + 1, patch: { categories: { [id]: { cls: 'work', kind: 'other', place: 'computer', costs: ZERO } } } })),
+    categories: Object.fromEntries(ids.map((id, i) => [id, { name: `Moja ${i + 1}`, group: 'g-praca' }]))
+  })
+  const seed = (extra: Record<string, unknown> = {}, ids = ['moja1', 'moja2', 'moja3']) => {
+    fake.file = { ...own(ids), ...extra }
+    useData.setState({ rd: rdFrom(fake.file) })
+  }
+  const bodyOf = (id: string, date = TOMORROW) => settingsFrom(date).categories[id]!.costs.body
+  const typeInto = (input: HTMLInputElement, text: string) =>
+    act(async () => {
+      input.focus()
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+  const names = () => [...document.querySelectorAll('[data-testid="body-fill-row"]')].map((r) => r.querySelector('span')!.textContent)
+
+  it('gołe dane bez własnych podkategorii (startowe mają swoje ciało, D523) – linii nie ma', async () => {
+    await show()
+    expect(q('body-fill-line')).toBeNull()
+  })
+
+  it('linia z liczbą; „Uzupełnij” → 1, 2, 3 w trzech polach → „Zapisz”: jeden zapis, od jutra, dziś bez zmiany, linia znika; „Cofnij” – wraca', async () => {
+    seed()
+    await show()
+    expect(q('body-fill-text')!.textContent).toBe('3 podkategorie mają ciało 0')
+    await press(q('body-fill-open')!)
+    expect(names()).toEqual(['Moja 1', 'Moja 2', 'Moja 3'])
+    // G · E · B shown (read only), the field C starts from 0.
+    expect(document.querySelector('[data-testid="body-fill-others"]')!.textContent).toBe('G 1E 1B 1')
+    expect(q<HTMLInputElement>('body-fill-value-0')!.value).toBe('0')
+    await press(q('body-fill-plus-0')!)
+    await press(q('body-fill-plus-1')!)
+    await press(q('body-fill-plus-1')!)
+    // The third typed without Enter: „Zapisz” takes it too.
+    await typeInto(q<HTMLInputElement>('body-fill-value-2')!, '3')
+    await press(q('body-fill-apply')!)
+    await settle()
+    expect(q('body-fill')).toBeNull()
+    expect(fake.sent).toBe(1)
+    expect([bodyOf('moja1'), bodyOf('moja2'), bodyOf('moja3')]).toEqual([1, 2, 3])
+    expect([bodyOf('moja1', TODAY), bodyOf('moja2', TODAY), bodyOf('moja3', TODAY)]).toEqual([0, 0, 0])
+    expect(q('body-fill-line')).toBeNull()
+    expect(line()?.text).toBe('Uzupełniono ciało: 3 podkategorie')
+    await press(q('group-line-settings-undo')!)
+    await settle()
+    expect([bodyOf('moja1'), bodyOf('moja2'), bodyOf('moja3')]).toEqual([0, 0, 0])
+    expect(q('body-fill-text')!.textContent).toBe('3 podkategorie mają ciało 0')
+  })
+
+  it('pozycje zostawione na 0 zostają nietknięte; same zera – „Zapisz” zamyka bez zapisu; Anuluj – nic', async () => {
+    seed()
+    await show()
+    await press(q('body-fill-open')!)
+    await press(q('body-fill-apply')!)
+    await settle()
+    expect(q('body-fill')).toBeNull()
+    expect(fake.sent).toBe(0)
+    await press(q('body-fill-open')!)
+    await press(q('body-fill-plus-1')!)
+    await press(q('body-fill-cancel')!)
+    expect(q('body-fill')).toBeNull()
+    expect(fake.sent).toBe(0)
+    await press(q('body-fill-open')!)
+    await press(q('body-fill-plus-1')!)
+    await press(q('body-fill-apply')!)
+    await settle()
+    expect([bodyOf('moja1'), bodyOf('moja2'), bodyOf('moja3')]).toEqual([0, 1, 0])
+    expect(q('body-fill-text')!.textContent).toBe('2 podkategorie mają ciało 0')
+    expect(line()?.text).toBe('Uzupełniono ciało: 1 podkategoria')
+  })
+
+  it('pole poza zakresem (101) – odmowa, okno zostaje, nic nie zapisane', async () => {
+    seed()
+    await show()
+    await press(q('body-fill-open')!)
+    await typeInto(q<HTMLInputElement>('body-fill-value-0')!, '101')
+    await press(q('body-fill-apply')!)
+    await settle()
+    expect(q('body-fill')).not.toBeNull()
+    expect(fake.sent).toBe(0)
+  })
+
+  it('„×” chowa linię i zapisuje w rd.json (`bodyFillHidden`); nowe luki jej nie wracają, nowy odczyt (inny komputer) też nie; „Cofnij” w dymku przywraca', async () => {
+    seed()
+    await show()
+    await press(q('body-fill-hide')!)
+    await settle()
+    expect(fake.file.bodyFillHidden).toBe(true)
+    expect(q('body-fill-line')).toBeNull()
+    const undo = useUi.getState().toasts.at(-1)!
+    expect(undo.text).toContain('Schowano')
+    // A new subcategory with no body cost since: still hidden („na zawsze”).
+    fake.file = { ...own(['moja1', 'moja2', 'moja3', 'moja4']), bodyFillHidden: true }
+    await act(async () => useData.setState({ rd: rdFrom(fake.file) }))
+    expect(q('body-fill-line')).toBeNull()
+    await act(async () => undo.action!.run())
+    await settle()
+    expect(fake.file.bodyFillHidden).toBeUndefined()
+    expect(q('body-fill-text')!.textContent).toBe('4 podkategorie mają ciało 0')
+  })
+
+  it('wariant własny z ciałem 0 na liście („Moja 1 › Wariant”), „jak podkategoria” i zarchiwizowana podkategoria – nie; po uzupełnieniu znikają', async () => {
+    const base = own(['moja1', 'moja2'])
+    seed({
+      settings: [...base.settings, { id: 'vars', from: '2026-01-02', at: null, made: 9, patch: { categories: { moja1: { variants: [{ id: 'w', name: 'Wariant', costs: ZERO }, { id: 'jak', name: 'Jak podkategoria' }] } } } }],
+      categories: { ...base.categories, moja2: { name: 'Moja 2', group: 'g-praca', archived: true } }
+    }, ['moja1', 'moja2'])
+    await show()
+    expect(q('body-fill-text')!.textContent).toBe('1 podkategoria i 1 wariant mają ciało 0')
+    await press(q('body-fill-open')!)
+    expect(names()).toEqual(['Moja 1', 'Moja 1 › Wariant'])
+    await press(q('body-fill-plus-0')!)
+    await press(q('body-fill-plus-1')!)
+    await press(q('body-fill-plus-1')!)
+    await press(q('body-fill-apply')!)
+    await settle()
+    expect(bodyOf('moja1')).toBe(1)
+    const variants = settingsFrom(TOMORROW).categories.moja1!.variants
+    expect(variants.find((v) => v.id === 'w')!.costs!.body).toBe(2)
+    expect(variants.find((v) => v.id === 'jak')!.costs).toBeUndefined()
+    expect(q('body-fill-line')).toBeNull()
+    expect(line()?.text).toBe('Uzupełniono ciało: 1 podkategoria i 1 wariant')
+  })
+})
+
+describe('„Uzupełnij ciało” – runda 1 przeglądu (T2727–T2731)', () => {
+  const costs = { head: -2, emotions: 1, senses: 1, body: 0 }
+  const seed = (c = costs) => {
+    fake.file = {
+      schema: 1,
+      settings: [{ id: 'add-moja1', from: '2026-01-01', at: null, made: 1, patch: { categories: { moja1: { cls: 'work', kind: 'other', place: 'computer', costs: c } } } }],
+      categories: { moja1: { name: 'Moja 1', group: 'g-praca' } }
+    }
+    useData.setState({ rd: rdFrom(fake.file) })
+  }
+
+  it('liczby G · E · B z minusem typograficznym (U+2212, `formatNumber`); pole ciała ma etykietę inną niż w drzewie', async () => {
+    seed()
+    await show()
+    await press(q('body-fill-open')!)
+    expect(q('body-fill-others')!.textContent).toBe('G −2E 1B 1')
+    expect(q('body-fill-value-0')!.getAttribute('aria-label')).toBe('Moja 1: ciało (uzupełnij)')
+    // The row of the tree under the window keeps its own: `Moja 1: ciało` is one field.
+    expect(document.querySelectorAll('[aria-label="Moja 1: ciało"]')).toHaveLength(1)
+  })
+
+  it('dwa kliknięcia [+] w jednym zdarzeniu liczą od aktualnej wartości (nie od narysowanej): 2, nie 1; [−] tak samo', async () => {
+    seed()
+    await show()
+    await press(q('body-fill-open')!)
+    await act(async () => {
+      q('body-fill-plus-0')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      q('body-fill-plus-0')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+    expect(q<HTMLInputElement>('body-fill-value-0')!.value).toBe('2')
+    await act(async () => {
+      q('body-fill-minus-0')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      q('body-fill-minus-0')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      q('body-fill-minus-0')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+    expect(q<HTMLInputElement>('body-fill-value-0')!.value).toBe('-1')
+  })
+
+  it('ciało ustawione w międzyczasie (okno otwarte, zmiana z innego komputera): „Zapisz” go nie nadpisuje, dymek mówi, że pominięto', async () => {
+    seed()
+    await show()
+    await press(q('body-fill-open')!)
+    await press(q('body-fill-plus-0')!)
+    // Another computer set the body from tomorrow while the window was open.
+    const list = fake.file.settings as unknown[]
+    fake.file = { ...fake.file, settings: [...list, { id: 'other', from: TOMORROW, at: null, made: Date.now() + 1, patch: { categories: { moja1: { costs: { body: 7 } } } } }] }
+    await act(async () => useData.setState({ rd: rdFrom(fake.file) }))
+    await press(q('body-fill-apply')!)
+    await settle()
+    expect(settingsFrom(TOMORROW).categories.moja1!.costs.body).toBe(7)
+    expect(fake.sent).toBe(0)
+    expect(lastToast()?.text).toBe('Nic się nie zmienia – pominięto 1: ciało już ustawione.')
+    expect(line()).toBeUndefined()
+  })
+})
