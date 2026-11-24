@@ -42,6 +42,7 @@ import {
   type RemovalUndo
 } from '@shared/engine/groupEdit'
 import { stayRuleOf } from '@shared/engine/planEdit'
+import { shiftedRestDay, type RestOver } from '@shared/engine/shiftRest'
 import type { AnyEvent } from '@shared/model/events'
 import { simEvents } from '@shared/engine/sim'
 import { attachmentUndoOf, ownAttachmentIds, removalEdits, restoreEdits, type AttachmentUndo } from '@shared/model/attachment'
@@ -90,6 +91,8 @@ export interface GroupDone {
   stayed?: Stayed[]
   waitingDays?: number
   refusedDays?: number
+  /** „Przesuń resztę dnia o” (N17): what it pushed past on each day written (D72 – a warning, the change is written). */
+  over?: RestOver[]
   undo: ((at?: number) => Promise<GroupUndone>) | null
 }
 
@@ -241,6 +244,10 @@ interface EditPart {
   undo: FieldsUndo[]
   begun: BegunCost[]
   pushed: number
+  /** How many blocks today's bar hears were pushed (the marker of variants, D367): the push apart's, or every block the rest of the day moved. */
+  told: number
+  /** What the rest of the day pushed past (N17). */
+  over: RestOver | null
   /** What the energy is counted from once the day is known to have changed. */
   day: DayModel
   plan: PlanBlock[]
@@ -251,12 +258,13 @@ interface EditPart {
 }
 
 /**
- * The fields of the blocks (a subcategory and variant, a variant, the cost, a routine) or „Przesuń o” ±N min – each day's file changed once, the
- * push apart in it (a day to come, D367). A begun block's cost is the day's `block.cost` from now on (D501) – an event of its log, not of its
- * file: written after the files whatever became of them. What a day changed counts by what of it was written: its file (the blocks, those that
- * went with them), the events of its begun blocks.
+ * The fields of the blocks (a subcategory and variant, a variant, the cost, a routine), „Przesuń o” ±N min or „Przesuń resztę dnia o” ±N min (N17:
+ * each day from its earliest selected block – `shiftedRestDay`, counted by the blocks it moved) – each day's file changed once, the push apart in it
+ * (a day to come, D367). A begun block's cost is the day's `block.cost` from now on (D501) – an event of its log, not of its file: written after the
+ * files whatever became of them. What a day changed counts by what of it was written: its file (the blocks, those that went with them), the events
+ * of its begun blocks.
  */
-async function editDays(days: readonly DayIds[], a: FieldAction | Extract<GroupAction, { k: 'shift' }>, at: number): Promise<GroupDone> {
+async function editDays(days: readonly DayIds[], a: FieldAction | Extract<GroupAction, { k: 'shift' | 'shiftRest' }>, at: number): Promise<GroupDone> {
   const today = logicalDayOf(at)
   const costs = a.k === 'cost' ? a.costs : null
   const state: SendState = { afterSend: false }
@@ -269,7 +277,15 @@ async function editDays(days: readonly DayIds[], a: FieldAction | Extract<GroupA
     parts = days.map(({ date, ids }): EditPart => {
       const { file, day } = read.days.get(date)!
       const judged = judgeGroup(day, ids, a, today)
-      const c = a.k === 'shift' ? { ...shiftedDay(day, file, judged.take, a.minutes, today, onUnsettled), begun: [] as BegunCost[] } : fieldDay(day, file, judged.take, a)
+      // The rest of the day: the selected blocks say where it starts, what it moved is what changed (every one written, none pushed besides);
+      // the buffers of decompression laid again with your settings' changes (D583, T2493).
+      const rest = a.k === 'shiftRest' ? shiftedRestDay(day, file, ids, a.minutes, today, onUnsettled, useData.getState().rd.settings) : null
+      const c =
+        a.k === 'shiftRest'
+          ? { ...rest!, begun: [] as BegunCost[] }
+          : a.k === 'shift'
+            ? { ...shiftedDay(day, file, judged.take, a.minutes, today, onUnsettled), begun: [] as BegunCost[] }
+            : fieldDay(day, file, judged.take, a)
       // D368: a block shortened today (a routine's length) frees its end – the bar may ask about the gap.
       const byId = new Map(day.ctx.plan.map((b) => [b.id, b]))
       const freed =
@@ -282,20 +298,23 @@ async function editDays(days: readonly DayIds[], a: FieldAction | Extract<GroupA
           : []
       return {
         date,
-        take: judged.take.length,
-        along: judged.along.length,
+        take: rest ? rest.moved.length : judged.take.length,
+        along: rest ? 0 : judged.along.length,
         skipped: judged.skipped,
         same: judged.same.length,
-        entry: dayEntry(date, file, c.raw),
+        // The rest of the day that moved nothing writes nothing (no block of a template brought into the file, no group left, T2492).
+        entry: rest && !rest.moved.length ? null : dayEntry(date, file, c.raw),
         after: c.raw,
         undo: fieldsUndoOf(file, c.raw, date, day.ctx.plan),
         begun: c.begun,
-        pushed: c.pushed.length,
+        pushed: rest ? 0 : c.pushed.length,
+        told: rest ? rest.moved.length : c.pushed.length,
+        over: rest?.over ?? null,
         day,
         plan: c.plan,
         events: c.begun.length ? simEvents(day.ctx, c.begun.map((b) => ({ k: 'block.cost', block: b.id, at, costs })), at) : [],
         freed,
-        series: seriesIdsOf(day.ctx.plan, [...judged.take, ...judged.along], date)
+        series: seriesIdsOf(day.ctx.plan, rest ? rest.moved : [...judged.take, ...judged.along], date)
       }
     })
     return parts.map((p) => p.entry)
@@ -323,9 +342,11 @@ async function editDays(days: readonly DayIds[], a: FieldAction | Extract<GroupA
   for (const w of written) {
     if (!w.file) continue
     void tellFreedAll(w.p.date, w.p.freed)
-    await tellBar(w.p.date, today, w.p.pushed, w.p.entry, w.p.entry?.create ? w.p.after : null)
+    await tellBar(w.p.date, today, w.p.told, w.p.entry, w.p.entry?.create ? w.p.after : null)
   }
   const done: GroupDone = { status: 'saved', changed: sum(written, (w) => w.changed), skipped, same, seriesOnly: sum(written, (w) => w.series), pushed: sum(written, (w) => (w.file ? w.p.pushed : 0)), ...asked, undo: null }
+  const over = written.flatMap((w) => (w.file && w.p.over ? [w.p.over] : []))
+  if (over.length) done.over = over
   const lit = litDay(
     written.map((w) => ({ date: w.p.date, w })),
     today

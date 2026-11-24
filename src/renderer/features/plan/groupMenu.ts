@@ -30,6 +30,8 @@ export type GroupAction =
   | { kind: 'routine'; routine: string | null; minutes: number | null }
   /** Every block by this many minutes: negative – earlier. */
   | { kind: 'shift'; minutes: number }
+  /** „Przesuń resztę dnia o…” (N17, D584): the flexible blocks from the earliest selected one on, by this many minutes (negative – earlier). */
+  | { kind: 'shiftRest'; minutes: number }
   /** To another day, every block keeps its hour (D367 pushes apart there). */
   | { kind: 'moveTo'; date: string }
   | { kind: 'cancel' }
@@ -63,6 +65,10 @@ export interface MenuBlock {
   movable: boolean
   /** A block of another day than today (the columns of „Tydzień”): „Odwołaj” and „Zaparkuj” are today's actions (the timer's). */
   notToday?: boolean
+  /** A block of a day gone by (the columns of „Tydzień”): the rest of its day is history – „Przesuń resztę dnia o…” leaves it. */
+  pastDay?: boolean
+  /** Its day has no flexible block to move from the earliest selected one on (the columns, T2494 – no engine's verdict there). */
+  restNone?: boolean
 }
 
 /**
@@ -120,6 +126,8 @@ const NONE_OPEN = 'Żaden z wybranych bloków nie jest do zrobienia (zaczęte, m
 const NOT_TODAY = 'Odwołać i zaparkować można tylko dzisiejsze bloki'
 const COSTS_UNKNOWN = 'Koszt zmienisz w „Tygodniu”, „3 dniach” albo w „Dziś”'
 const ROUTINE_ONLY = 'Rutynę wybierzesz tylko blokom podkategorii z rodzaju „rutyna”'
+const NONE_REST = 'Po tych blokach nie ma bloków elastycznych do przesunięcia (stałe, chronione, zaczęte, sesje i wykłady zostają)'
+const ALL_PAST_DAYS = 'Wszystkie wybrane bloki są z minionych dni'
 
 /** The words of a menu's entry none of the blocks takes, by the one reason they all have (`SkipWhy` of the engine). */
 const WHY_TEXT: Readonly<Record<string, string>> = {
@@ -160,8 +168,9 @@ const checked = (values: boolean[]): { check?: 'all' | 'some' } => {
 /**
  * The entries of „Zmień N bloków” (D528) for the `blocks` selected: „Podkategoria” and „Wariant” (✓ for the value all of them have, „—” for some;
  * the variants of the one subcategory the blocks share), „Koszt…”, „Rutyna” (for the blocks of the kind „rutyna”), „Przesuń o…” (later / earlier
- * by 5, 15, 30, 60 min or a number of the hand), „Przenieś na dzień…”, „Odwołaj”, „Zaparkuj”, „Zapisz jako szablon…” and „Zapisz jako rutynę…”
- * (N15 – where the screen gives `on.saveAs`), „Usuń” – a template has no cancelling, parking nor move to a day. Nothing is forbidden (D72): the blocks a change does not concern are left by it and counted in the line.
+ * by 5, 15, 30, 60 min or a number of the hand), „Przesuń resztę dnia o…” (N17 – the same steps for the flexible blocks from the earliest selected one
+ * on), „Przenieś na dzień…”, „Odwołaj”, „Zaparkuj”, „Zapisz jako szablon…” and „Zapisz jako rutynę…”
+ * (N15 – where the screen gives `on.saveAs`), „Usuń” – a template has no rest of the day, cancelling, parking nor move to a day. Nothing is forbidden (D72): the blocks a change does not concern are left by it and counted in the line.
  */
 export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockMenuOn): MenuEntry[] {
   const categories = [...new Set(blocks.map((b) => b.categoryId))]
@@ -179,12 +188,24 @@ export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockM
   const fieldWhy = verdictWhy(v?.fields)
   const costWhy = ctx.costsKnown === false ? COSTS_UNKNOWN : verdictWhy(v?.cost)
   const routineWhy = verdictWhy(v?.routine)
+  // The rest of the day (N17): any selected block says where it starts – only a day gone by, or no flexible block after them, leaves nothing.
+  const restWhy = v
+    ? v.rest && v.rest.take === 0
+      ? v.rest.skipped.includes('miniony')
+        ? ALL_PAST
+        : NONE_REST
+      : undefined
+    : blocks.length && blocks.every((b) => b.pastDay)
+      ? ALL_PAST_DAYS
+      : blocks.length && blocks.every((b) => b.pastDay || b.restNone)
+        ? NONE_REST
+        : undefined
 
-  const shiftBy = (sign: 1 | -1, name: string, testId: string): MenuEntry => ({
+  const shiftBy = (kind: 'shift' | 'shiftRest', sign: 1 | -1, name: string, testId: string): MenuEntry => ({
     label: name,
     testId,
     submenu: [
-      ...SHIFT_STEPS.map((m): MenuEntry => ({ label: `${m} min`, onPick: () => on.action({ kind: 'shift', minutes: sign * m }), testId: `${testId}-${m}` })),
+      ...SHIFT_STEPS.map((m): MenuEntry => ({ label: `${m} min`, onPick: () => on.action({ kind, minutes: sign * m }), testId: `${testId}-${m}` })),
       {
         kind: 'field',
         label: 'Własna liczba minut',
@@ -192,7 +213,7 @@ export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockM
         onSubmit: (text) => {
           const p = parseDuration(text)
           if (!p.ok) return p.message
-          on.action({ kind: 'shift', minutes: sign * p.value })
+          on.action({ kind, minutes: sign * p.value })
         },
         testId: `${testId}-own`
       }
@@ -242,10 +263,14 @@ export function blockMenu(blocks: readonly MenuBlock[], ctx: MenuCtx, on: BlockM
     { kind: 'separator' },
     moveWhy
       ? { label: 'Przesuń o…', disabled: moveWhy, testId: 'block-menu-shift' }
-      : { label: 'Przesuń o…', testId: 'block-menu-shift', submenu: [shiftBy(1, 'Później o…', 'block-menu-later'), shiftBy(-1, 'Wcześniej o…', 'block-menu-earlier')] }
+      : { label: 'Przesuń o…', testId: 'block-menu-shift', submenu: [shiftBy('shift', 1, 'Później o…', 'block-menu-later'), shiftBy('shift', -1, 'Wcześniej o…', 'block-menu-earlier')] }
   ]
-  if (!ctx.template) {
+  // D584: the rest of a day is for „Dziś”, „Tydzień” and „3 dni” – not a template nor „Agenda” and the month (no axis of the day; they count no costs – `costsKnown`).
+  if (!ctx.template && ctx.costsKnown !== false) {
     entries.push(
+      restWhy
+        ? { label: 'Przesuń resztę dnia o…', disabled: restWhy, testId: 'block-menu-rest' }
+        : { label: 'Przesuń resztę dnia o…', testId: 'block-menu-rest', submenu: [shiftBy('shiftRest', 1, 'Później o…', 'block-menu-rest-later'), shiftBy('shiftRest', -1, 'Wcześniej o…', 'block-menu-rest-earlier')] },
       moveWhy ? { label: 'Przenieś na dzień…', disabled: moveWhy, testId: 'block-menu-moveto' } : { label: 'Przenieś na dzień…', onPick: on.moveTo, testId: 'block-menu-moveto' },
       dayWhy ? { label: 'Odwołaj', disabled: dayWhy, testId: 'block-menu-cancel' } : { label: 'Odwołaj', onPick: () => on.action({ kind: 'cancel' }), testId: 'block-menu-cancel' },
       dayWhy ? { label: 'Zaparkuj', disabled: dayWhy, testId: 'block-menu-park' } : { label: 'Zaparkuj', onPick: () => on.action({ kind: 'park' }), testId: 'block-menu-park' }

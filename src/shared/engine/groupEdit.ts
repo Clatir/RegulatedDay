@@ -25,7 +25,7 @@ import { computeEnergy, shownOf, type EnergyOptions } from './energy'
 import { lowestEnergy } from './energyOrder'
 import { groupOf, groupRootOf, placePatch, plannedStart, type BlockPatch } from './parallel'
 import { leavesByCancel, moveBetweenDays, moveGroup, moveRoots, stayRuleOf, type StayRule } from './planEdit'
-import { ownMinuteIdx, pushApart, withBlock, type PushedBlock, type PushHold } from './pushApart'
+import { ownMinuteIdx, pushable, pushApart, withBlock, type PushedBlock, type PushHold } from './pushApart'
 import { simEvents } from './sim'
 import { ALREADY_OVER, timerAction, type ActionResult, type TimerDraft } from './timer'
 
@@ -36,6 +36,8 @@ export type GroupAction =
   | { k: 'cost'; costs: Costs | null }
   | { k: 'routine'; routine: string | null; minutes: number }
   | { k: 'shift'; minutes: number }
+  /** „Przesuń resztę dnia o…” (N17, D584): the rest of the day from the earliest selected block – `restOf`, `shiftRest.ts`. */
+  | { k: 'shiftRest'; minutes: number }
   | { k: 'moveTo'; date: string }
   | { k: 'cancel' }
   | { k: 'park' }
@@ -249,6 +251,79 @@ function plannedStartOf(plan: ReadonlyMap<string, PlanBlock>, id: string): numbe
   return b ? plannedStart(b, plan) : null
 }
 
+/**
+ * „Przesuń resztę dnia o…” (N17, D584): where the rest of the day starts (`atMin` – the earliest of the selected blocks on the axis, `axisStart`:
+ * a block of any kind, a begun or a fixed one only says where; one begun outside the plan – where the day shows it, else where it began) and the
+ * blocks it moves (`take`, in the order of the axis): those the push apart moves (`pushable`, D367 – flexible, of their own hour, in the
+ * foreground, not protected nor begun) from there on – today where the forecast shows them, a day to come by their planned starts (its axis is
+ * the plan, T2491) – past fixed blocks too, each with the blocks beside it that may move by themselves (a group goes whole; one begun, parked or
+ * cancelled beside it stays, T2468). A day gone by – none (its history stays).
+ */
+export interface RestPick {
+  /** The earliest selected block's `axisStart` (null – none on the axis). */
+  atMin: number | null
+  /** Where the rest starts on the day's grid: that block's index on the axis (today the forecast's, a 25-hour day's doubled hour as it is). */
+  atIdx: number | null
+  take: string[]
+}
+
+function restIn(l: Lookup, ids: readonly string[], today: string): RestPick {
+  const { day } = l
+  const none: RestPick = { atMin: null, atIdx: null, take: [] }
+  if (day.ctx.date < today) return none
+  const g = day.state.grid
+  const isToday = day.ctx.date === today
+  let atMin: number | null = null
+  let atIdx: number | null = null
+  for (const id of ids) {
+    let k: number | null = null
+    let s: number | null = null
+    const begunAt = day.state.facts.blocks.get(id)?.startedAt ?? null
+    if (l.plan.has(id) && !(isToday && !l.placed.has(id) && begunAt != null)) {
+      s = axisStart(l, id, today)
+      const placed = isToday ? l.placed.get(id) : undefined
+      k = placed ? placed.from : s == null ? null : idxOfLogical(g, s)
+    } else {
+      // A block begun outside the plan, or one of the plan that ran already (no longer in the forecast): where the day shows it (running –
+      // now), else where it began.
+      k = l.placed.get(id)?.from ?? begunAt
+      s = k == null ? null : logicalMinuteOf(g.date, atOf(g, ownMinuteIdx(g, k)))
+    }
+    if (k == null || s == null) continue
+    if (atIdx == null || k < atIdx) {
+      atIdx = k
+      atMin = s
+    }
+  }
+  if (atIdx == null) return none
+  const at = atIdx
+  // Where a block stands for „after”: today on the forecast's axis, a day to come by its plan (as its axis draws it).
+  const placeOf = (id: string): number | null => {
+    if (isToday) return l.placed.get(id)?.from ?? null
+    const p = plannedStartOf(l.plan, id)
+    return p == null ? null : idxOfLogical(g, p)
+  }
+  const heads = day.state.blocks.flatMap((b) => {
+    const k = pushable(b, day.state.facts) ? placeOf(b.id) : null
+    return k != null && k >= at ? [{ b, k }] : []
+  })
+  heads.sort((p, q) => p.k - q.k || (l.placed.get(p.b.id)?.from ?? 0) - (l.placed.get(q.b.id)?.from ?? 0) || (p.b.id < q.b.id ? -1 : 1))
+  const take: string[] = []
+  const seen = new Set<string>()
+  for (const { b } of heads) {
+    for (const id of groupOf(day.ctx.plan, b.id)) {
+      // The blocks beside it go with it – but one begun, parked or cancelled stays where it is (the rule of „Przesuń o” for each).
+      if (seen.has(id) || (id !== b.id && placeWhy(l, id, today) != null)) continue
+      seen.add(id)
+      take.push(id)
+    }
+  }
+  return { atMin, atIdx, take }
+}
+
+/** `restIn` for one day (a lookup of its own). */
+export const restOf = (day: GroupDay, ids: readonly string[], today: string): RestPick => restIn(lookupOf(day), ids, today)
+
 /** The selected block whose anchor chain reaches a block in `moving` (it follows its anchor, D424). */
 export function followsMoving(plan: ReadonlyMap<string, PlanBlock>, id: string, moving: ReadonlySet<string>): boolean {
   let a = plan.get(id)?.anchor ?? null
@@ -300,6 +375,13 @@ export function judgeGroup(day: GroupDay, ids: readonly string[], a: GroupAction
   const wanted = new Set(ids)
   const l = lookupOf(day)
   const plan = l.plan
+  if (a.k === 'shiftRest') {
+    // The selected blocks only say where the rest starts (D584) – also one begun outside the plan: it takes the flexible ones from there on,
+    // a day gone by none.
+    if (date < today) out.skipped.push(...ids.map((id): GroupSkip => ({ id, why: 'miniony' })))
+    else out.take.push(...restIn(l, ids, today).take)
+    return out
+  }
   for (const id of wanted) if (!plan.has(id)) out.skipped.push({ id, why: 'nie ma' })
   const picked = ctx.plan.filter((b) => wanted.has(b.id))
   const skip = (b: PlanBlock, why: SkipWhy) => out.skipped.push({ id: b.id, why })
@@ -369,8 +451,11 @@ function dayActionWhy(day: GroupDay, id: string, today: string): SkipWhy | null 
   return date < today ? 'miniony' : date > today ? 'nie dziś' : f?.startedAt != null ? 'zaczęty' : f?.parkedAt != null || f?.cancelledAt != null ? 'zdjęty' : null
 }
 
-/** The rules of the menu's entries (D528): the fields of the panel, the tile's cost, the routine, a new place (a shift, a move), the day's actions. */
-export type MenuRule = 'fields' | 'cost' | 'routine' | 'place' | 'day'
+/**
+ * The rules of the menu's entries (D528): the fields of the panel, the tile's cost, the routine, a new place (a shift, a move), the day's actions,
+ * the rest of the day („Przesuń resztę dnia o…”, N17).
+ */
+export type MenuRule = 'fields' | 'cost' | 'routine' | 'place' | 'day' | 'rest'
 
 /** How many of the selected blocks a rule takes, and the reason of each one it leaves out. */
 export interface RuleVerdict {
@@ -410,7 +495,11 @@ export function ruleVerdicts(day: GroupDay, ids: readonly string[], today: strin
       return w === 'zakotwiczony' && followsMoving(l.plan, b.id, moving) ? null : w
     })
   }
-  if (o.dayActions !== false) out.day = verdict((b) => dayActionWhy(day, b.id, today))
+  if (o.dayActions !== false) {
+    out.day = verdict((b) => dayActionWhy(day, b.id, today))
+    // The rest of the day (N17): how many blocks it moves from the selected ones on – a day gone by: each of them „miniony”.
+    out.rest = day.ctx.date < today ? { take: 0, skipped: ids.map((): SkipWhy => 'miniony') } : { take: restIn(l, ids, today).take.length, skipped: [] }
+  }
   return out
 }
 

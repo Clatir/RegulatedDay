@@ -72,8 +72,12 @@ export type TimerAction =
   /** A block outside the plan from now („Pracuję” – 30 min of „Inne obowiązki”, a break of the bar, a block begun by hand). */
   | { a: 'startNew'; block: string; categoryId: string; durationMin: number; variantId?: string | null; confirm?: boolean }
   | { a: 'pause' }
-  | { a: 'next'; done?: boolean; confirm?: boolean }
-  | { a: 'extend'; block?: string; minutes: number; confirm?: boolean }
+  /**
+   * `shown` (D621): the block the bar showed in front at the click (null – none) – another one in front now (the chain moved on,
+   * `deskChain`) refuses it (`code: 'moved'`); left out – as before (the window, an older caller).
+   */
+  | { a: 'next'; done?: boolean; confirm?: boolean; shown?: string | null }
+  | { a: 'extend'; block?: string; minutes: number; confirm?: boolean; shown?: string | null }
   /**
    * The end of a running block of its own hour dragged on the axis to `to` (ms, D365): later – „Przedłuż” by the difference
    * (its cost and second click); earlier – `block.shorten`, never before now; the end it has – nothing.
@@ -134,13 +138,14 @@ export interface ActionCost {
  * Why a click found nothing to do, for a caller that must tell it from another refusal (D336) – never read from the text; the
  * ends of a list of steps say these by no word (D474, D328 – `quietRefusal`, T1109); `answered` – a `mark` given before (the morning's
  * „Pomiń” on another computer, UX13); `clickGone`: the bar's click cannot be taken back any more (`clickUndoEvents` – frozen, gone,
- * undone, not a click's, depended on; D564 P18).
+ * undone, not a click's, depended on; D564 P18); `moved`: the bar showed another block in front than the one there now (D621 – the bar says
+ * „już biegnie: <nazwa>”).
  */
-export type ResultCode = 'alreadyOver' | 'notBegun' | 'notRunning' | 'routineSaved' | 'noRoutine' | 'answered' | 'clickGone'
+export type ResultCode = 'alreadyOver' | 'notBegun' | 'notRunning' | 'routineSaved' | 'noRoutine' | 'answered' | 'clickGone' | 'moved'
 
 export type ActionResult =
   | { ok: true; events: TimerDraft[]; confirm: ActionCost | null }
-  | { ok: false; why: string; confirm: ActionCost | null; code?: ResultCode }
+  | { ok: false; why: string; confirm: ActionCost | null; code?: ResultCode; front?: string }
 
 /** Fixed by the plan (a session too): never paused, ends by its plan. */
 const isFixedLike = (b: BlockInfo) => b.fixed || b.rules.kind === 'session'
@@ -468,6 +473,28 @@ export function awayStartUndoable(state: DayState, a: AutoAction): boolean {
   return untouched(state, a.block)
 }
 
+/** The rule of a block at the computer ended at its planned end with the next one begun at once („jednym ciągiem”, D570, D620). */
+export const DESK_CHAIN_RULE = 'deskChain'
+
+/**
+ * The pair a chain at the computer wrote (rule `deskChain`, T2498): the end of the block in front and the start of the next one, the same
+ * instant. `null`: no part of one. `alive`: while the next one runs as it began (`untouched` – one run, no click on it since: a pause,
+ * „Przedłuż”, a request or another start closes its run) and the ended one still ends there – a „Cofnij” of either takes both back (the
+ * ended block runs on, the next one never began); afterwards both rows are information.
+ */
+export function deskChainPair(state: DayState, a: AutoAction): { ids: string[]; alive: boolean } | null {
+  if (a.rule !== DESK_CHAIN_RULE || (a.k !== 'block.end' && a.k !== 'block.start')) return null
+  // One chain a minute at most (a block lasts at least its minute): the other half is the one of the same minute.
+  const other = state.facts.autos.find((x) => x.rule === DESK_CHAIN_RULE && x.at === a.at && x.k === (a.k === 'block.end' ? 'block.start' : 'block.end'))
+  const end = a.k === 'block.end' ? a : other
+  const start = a.k === 'block.start' ? a : other
+  if (!end || !start || !end.block || !start.block) return { ids: [a.id], alive: false }
+  const next = state.facts.blocks.get(start.block)
+  const ended = state.facts.blocks.get(end.block)
+  const alive = !!next && next.endedAt == null && untouched(state, start.block) && ended?.endId === end.id
+  return { ids: [end.id, start.id], alive }
+}
+
 /**
  * The block of a parallel group that takes the foreground when nothing else is in front (D493, T1191): of the blocks running
  * in the background as blocks of a group (begun with `group`, not planned in the background), the one whose last run began
@@ -608,6 +635,14 @@ function begunSinceEnd(state: DayState, f: { id: string; endOrder: EventOrder | 
   const later = (o: EventOrder) => compareOrder(o, end) > 0
   return [...state.facts.blocks.values()].some((x) => x.id !== f.id && x.runs.some((r) => later(r.begun))) || state.facts.requests.some((r) => later(r.begun)) || state.facts.disconnect.some((d) => later(d.begun))
 }
+/** The refusal of a click of the bar made on a block no longer in front (D621, `code: 'moved'`; the bar says which block runs). */
+export const MOVED_ON = 'w międzyczasie zaczął się inny blok'
+/** That refusal, with the block in front it saw (T2862: the bar names it, not the day it counts meanwhile). */
+const movedOn = (t: TimerNow): ActionResult => ({ ok: false, why: MOVED_ON, confirm: null, code: 'moved', ...(t.fg ? { front: t.fg.info.id } : {}) })
+/** The refusal of a click of the bar on a block paused elsewhere meanwhile (T2869, `code: 'moved'` without `front`). */
+export const SHOWN_PAUSED = 'ten blok jest teraz zapauzowany'
+/** The refusal of „Cofnij” of a chain at the computer whose next block changed since (T2498). */
+export const DESK_CHAIN_GONE = 'tego już nie cofniesz – następny blok zmienił się po starcie'
 /** The refusal of a click on a block that is over (with the code `alreadyOver`: „Usuń” then only takes it out of the plan). */
 export const ALREADY_OVER = 'ten blok już się skończył'
 /** … and one whose start was taken back meanwhile (`notBegun`: it leaves the plan as one that never began). */
@@ -756,7 +791,13 @@ function startEvents(ctx: DayContext, state: DayState, t: TimerNow, info: BlockI
     out.push({ k: 'block.resume', block: info.id, at, confirmUntil })
     if ((f.runs.at(-1)?.bg ?? false) && !toBg) out.push({ k: 'block.fg', block: info.id, at, bg: false })
   }
-  else out.push({ k: 'block.start', block: info.id, at, bg: toBg, planned: startPlanned(info, ctx.plan), confirmUntil, how: 'click', ...(clickedGroup != null ? { group: clickedGroup } : {}) })
+  else {
+    // A buffer of decompression begins as long as the forecast has it (D403: counted again after its block's „Przedłuż”, cut to its room).
+    // One you changed – as you set it (D582, T2477).
+    const buffer = info.decompress?.cost != null ? state.forecast.find((p) => p.block.id === info.id) : undefined
+    const planned = { ...startPlanned(info, ctx.plan), ...(buffer ? { durationMin: buffer.to - buffer.from } : {}) }
+    out.push({ k: 'block.start', block: info.id, at, bg: toBg, planned, confirmUntil, how: 'click', ...(clickedGroup != null ? { group: clickedGroup } : {}) })
+  }
   // D493: the rest of its group begins with it, behind; a resumed block of a running group needs none.
   if (clickedGroup != null && !sameGroup) out.push(...groupStarts(ctx, state, info.id, at, 'click', confirmed))
   return out
@@ -851,6 +892,13 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
       return yes([{ k: 'block.pause', block: fg.info.id, at }])
     }
     case 'next': {
+      // Another block in front than the bar showed (D621) – refused; nothing in front (the shown one ended elsewhere) – „Dalej” begins the
+      // next one as it would after that end (T2869).
+      if (act.shown !== undefined && (t.fg?.info.id ?? null) !== act.shown) {
+        if (t.fg) return movedOn(t)
+        // … only after its end: the shown one paused elsewhere (or never begun) – refused (T2869).
+        if (act.shown != null && state.facts.blocks.get(act.shown)?.endedAt == null) return no(SHOWN_PAUSED, null, 'moved')
+      }
       const events: TimerDraft[] = []
       const fg = t.fg
       // „Dalej” (D484, T1121): done explicitly – unless as not done.
@@ -868,6 +916,9 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
     }
     case 'extend': {
       if (!(act.minutes > 0 && act.minutes <= MAX_BLOCK_MIN)) return no('długość przedłużenia')
+      // The shown block in front is no longer there (D621, T2869): another one – refused as moved on; none – that one is over.
+      if (!act.block && act.shown !== undefined && (t.fg?.info.id ?? null) !== act.shown)
+        return t.fg ? movedOn(t) : act.shown != null && state.facts.blocks.get(act.shown)?.endedAt == null ? no(SHOWN_PAUSED, null, 'moved') : no(ALREADY_OVER, null, 'alreadyOver')
       const target = act.block ? [t.fg, ...t.bg].find((x) => x?.info.id === act.block) ?? null : t.fg
       const ended = act.block ? state.facts.blocks.get(act.block) : null
       if (!target) {
@@ -984,6 +1035,12 @@ export function timerAction(ctx: DayContext, state: DayState, act: TimerAction, 
         const chained = awayEndUndo(ctx, state, activity ?? activityOf(ctx.events, state.grid.start, at), a, (idx) => settingsAtMinute(ctx.snapshot, state.facts, idx).settings.awayChain)
         if (chained == null) return no('tego już nie cofniesz – po tym końcu kolejny blok zmienił się albo biegło coś innego')
         pair = [...pair, ...chained]
+      }
+      // A chain at the computer (T2498): the end and the next start go back together while the next one runs as it began.
+      const desk = deskChainPair(state, a)
+      if (desk) {
+        if (!desk.alive) return no(DESK_CHAIN_GONE)
+        pair = state.facts.autos.filter((x) => desk.ids.includes(x.id) && x.id !== a.id)
       }
       // A fixed start's pause and that start go back together, either way, while the fixed block runs and the flexible one
       // stands in that pause (the flexible block goes on as before, the fixed one stays unstarted – it can be started by
@@ -1136,7 +1193,8 @@ export function workEndParking(state: DayState, ending: string | null, at: numbe
       continue
     }
     if (b.fixed || b.waits || b.rules.afterWorkAsProject || !scope.open(b)) continue
-    const anchoredToEnding = ending != null && b.anchor === ending
+    // A buffer of decompression of the ending block is no work: it begins after the end of work (D581, T2462).
+    const anchoredToEnding = ending != null && b.anchor === ending && !b.decompress
     if ((isBoundaryWork(b) && scope.before(b)) || anchoredToEnding) out.push({ k: 'block.park', block: b.id, at, rule: 'workEnd', autoRule: 'workEnd' })
   }
   return out

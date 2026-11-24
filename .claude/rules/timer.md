@@ -77,6 +77,22 @@ paths:
   z przodu – także przy sprawdzaniu końców); powrót – `liveReturn` (pomija tylko Twoje cofnięcia, `userUndone`); koniec znów ważny po
   sprawdzeniu – nowy id (`autoEndIds`, `freshEnd`). Ustawienie z chwili startu bloku (`chainOn`), start po końcu ciągu – `chainKnownAt`
   (2 min bez użycia), Twoje „Cofnij” – `chainTakenBack` (T1968–T1971).
+- Przy komputerze jednym ciągiem (D570, D620, D621, T2495–T2499, T2860, T2861): `deskChainOf` w `auto.ts` (reguła `DESK_CHAIN_RULE`
+  `deskChain` z `timer.ts`) – zdarzenia „Dalej” (`timerAction` `next`, koniec `fin` z `rule: 'deskChain'`, start `how: 'auto'`) w chwili
+  `endsAtOf` (z sekundami; termin w `nextDeadline(state, nowMs)`), id z bloku i tej chwili; warunki: ustawienie `deskChain` z minuty końca,
+  `idleMinAt < AWAY_GAP_MIN`, „Dalej?” niezobaczone, `hold` (czekające „Przedłuż” paska – `folder.holdDeskChain`), bez Twojego „Cofnij”
+  (`deskTakenBack`), nie ostatnia praca, `t.next` elastyczny przy komputerze z planu niezaczęty bez grupy, start ≤ koniec + 5 min, bez kosztu,
+  bez bufora kotwicy i bez okna sesji / wykładu / zjazdu / dojazdu / stałego w [koniec, +5 min]; tylko do `DESK_HOLD_MS` po końcu (T2863). W
+  `autoActions` przed nieobecnościami, ale po zapisie nieobecności należnych przed końcem (T2866) i nie po starcie z przodu / pauzie bloku w tym
+  przejściu (T2864); `questionsOf` wstrzymuje „Dalej?” tyle samo. „Cofnij” – `deskChainPair` (oba, `alive` póki następny `untouched`). Sprawdzanie
+  T465 (T2865): `gap.open` drugiego komputera może przyjść po jego `alive` – brak wejścia w 2 min przed końcem cofa obie połówki, póki `alive`.
+  Kliknięcie paska `next` / `extend` z `shown` – inny blok z przodu: `MOVED_ON`, `code: 'moved'`, `front` (blok z przodu); nic z przodu (T2869) –
+  `next` zaczyna następny, `extend` – `ALREADY_OVER` (`alreadyOver`), ale tylko po `endedAt` pokazanego; zapauzowany – `SHOWN_PAUSED` (`moved`).
+- Bufor dekompresji (D403, D581, T2456, T2462): `decompressStarts` w `auto.ts` – po końcu źródła (= `anchor` bufora; „Koniec pracy” go nie parkuje – `workEndParking`), gdy nic nie biegnie z przodu, nie w „Odcinam się”
+  ani przy prośbie, a prognoza daje mu miejsce teraz: `block.start` (`autoRule: 'decompress'`, `at` = koniec źródła albo koniec sesji/zajęć po nim,
+  `planned.durationMin` z prognozy, `planned.decompress`; id z końca źródła – „Cofnij” nie wraca); koniec po długości (`decompress`, `fin`) –
+  bez `firstUse`, nieobecności i pytań („Dalej?” go nie ma – miejsce „away”); „Dalej” na źródle startuje go (`nextBlock`, długość z prognozy),
+  „Dalej” na nim kończy wcześniej. Pasek: `soundOk` false (bez dźwięku 5 i 0), bez linii kotwicy „Zacznij · Zaparkuj”, `autoText`.
 - Grupa równoległa (D476, D493, D494, D499, T1190–T1199): `block.start.group` (`BlockFact.group`) – start grupy
   `groupStarts` (`groupOf` z `parallel.ts`, 1.23-A), z przodu `groupFront` (to samo w `energy.ts`), `front` (pasek „+K w
   tle”), `groupStart`/`groupPlan` w `auto.ts`; blok spoza grupy (także stały sam, „Odcinam się”) pauzuje całą grupę, „Dalej” w

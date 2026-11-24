@@ -42,8 +42,15 @@ const F_FORECAST = 4096
 const F_EXPLAIN = 8192 // time to explain (answered or not): the energy does not change in it
 const F_TENT_REST = 16384 // time to explain after a work block without an answer: rest for the hard end and the pool (D262)
 const F_FREE_REST = 32768 // a break of 10–30 min inside the time to explain after a project: rest (D281)
+// A buffer of decompression (D386, T2452): a regeneration (F_REGEN) for everything but the minimum and the reward; for the gap of
+// 30 min between blocks no block (the gap is counted through it, its own minutes are no regeneration).
+const F_DECOMP = 65536
 /** The flags that tell whether the day went as its forecast said. */
-const SAME_MASK = 0xffff & ~F_FORECAST
+const SAME_MASK = (F_DECOMP * 2 - 1) & ~F_FORECAST
+/** The flags of a minute that hold more than a buffer of decompression (work, life, a project, a request, „Odcinam się”). */
+const F_NOT_ONLY_BUFFER = F_END | F_EXT | F_BUDGET | F_PROJECT | F_LIFE | F_REQUEST | F_DISC
+/** A minute of a buffer of decompression and nothing else that counts (T2452). */
+const onlyBuffer = (f: number): boolean => (f & F_DECOMP) !== 0 && (f & F_NOT_ONLY_BUFFER) === 0
 
 /** What a minute of regeneration is (DayState.rest): a regeneration block, „Odcinam się”, time without a block; 0 none. */
 export const REST_BLOCK = 1
@@ -62,8 +69,13 @@ export function settingsAtMinute(snapshot: DaySnapshot, facts: DayFacts, k: numb
 export interface DayContext {
   date: string
   snapshot: DaySnapshot
-  /** The plan: the snapshot with your edits (dayPlan). */
+  /** The plan: the snapshot with your edits (dayPlan) – and the buffers of decompression the day has (`planWithBuffers`, T2450). */
   plan: readonly PlanBlock[]
+  /**
+   * The plan of the day's file without the buffers of decompression (`dayPlan`; T2457) – only when the buffers changed the plan: an
+   * edit counts its change on it and lays the buffers again (`planWithBuffers`). None – `plan` is it.
+   */
+  basePlan?: readonly PlanBlock[]
   /** Today's wake time and tomorrow's (for the bedtime), logical minutes. */
   wakeMin: number
   nextWakeMin: number
@@ -260,7 +272,7 @@ function blockFlags(b: BlockInfo, asProject: boolean): number {
     return F_BLOCK | F_BUDGET | F_END | (b.lectureOrCommute ? 0 : F_EXT)
   }
   if (b.isProject) return F_BLOCK | F_PROJECT
-  if (b.isRegen) return F_BLOCK | F_REGEN
+  if (b.isRegen) return F_BLOCK | F_REGEN | (b.decompress ? F_DECOMP : 0)
   return F_BLOCK | F_LIFE
 }
 
@@ -276,7 +288,7 @@ interface Span {
  * counts only while nothing runs in the foreground (D191, D202: rest begun during a session is rest; another block
  * begun during it counts once, as that block); other work in the background breaks a regeneration block.
  */
-function paint(flags: Uint16Array, from: number, to: number, spans: readonly Span[], projects: ReadonlySet<string>, extra = 0): void {
+function paint(flags: Uint32Array, from: number, to: number, spans: readonly Span[], projects: ReadonlySet<string>, extra = 0): void {
   const fg = new Uint8Array(Math.max(0, to - from))
   for (const s of spans) {
     if (s.bg) continue
@@ -331,7 +343,7 @@ function actualSpans(c: Ctx, facts: DayFacts, until: number): Span[] {
 }
 
 /** Requests and „Odcinam się” of the facts, cut at `until`. */
-function paintRequests(c: Ctx, flags: Uint16Array, facts: DayFacts, until: number): void {
+function paintRequests(c: Ctx, flags: Uint32Array, facts: DayFacts, until: number): void {
   for (const r of facts.requests) {
     const to = Math.min(r.to === OPEN ? until : r.to, until, c.cap)
     for (let k = Math.max(0, r.from); k < to; k++) flags[k]! |= F_REQUEST | F_BLOCK
@@ -348,7 +360,7 @@ function paintRequests(c: Ctx, flags: Uint16Array, facts: DayFacts, until: numbe
  * run („praca”, „projekt”, up to „… do”) or as time without a block („odpoczynek”); the energy never changes in it.
  * Breaks of 10–30 min inside it after a project are rest (D281).
  */
-function paintExplain(c: Ctx, arr: Uint16Array, plain: Uint16Array, x: Explain, now: number, answered: boolean): void {
+function paintExplain(c: Ctx, arr: Uint32Array, plain: Uint32Array, x: Explain, now: number, answered: boolean): void {
   const to = Math.min(x.to, now, c.cap)
   const info = c.byId.get(x.block)
   const a = answered ? x.answer : null
@@ -364,12 +376,12 @@ function paintExplain(c: Ctx, arr: Uint16Array, plain: Uint16Array, x: Explain, 
 }
 
 /** Every time to explain, with the answers given before `answeredBefore` (index). */
-function paintExplains(c: Ctx, arr: Uint16Array, plain: Uint16Array, list: readonly Explain[], now: number, answeredBefore: number): void {
+function paintExplains(c: Ctx, arr: Uint32Array, plain: Uint32Array, list: readonly Explain[], now: number, answeredBefore: number): void {
   for (const x of list) paintExplain(c, arr, plain, x, now, x.answer != null && x.answer.at < answeredBefore)
 }
 
 /** Minutes confirmed in advance, while a work block runs in them. */
-function paintUpfront(c: Ctx, flags: Uint16Array, facts: DayFacts, spans: readonly Span[], from: number, to: number): void {
+function paintUpfront(c: Ctx, flags: Uint32Array, facts: DayFacts, spans: readonly Span[], from: number, to: number): void {
   for (const b of c.blocks) {
     if (!b.isWork) continue
     const wins = confirmWindows(c, b, facts)
@@ -409,7 +421,7 @@ function expiredWaitEnd(c: Ctx, view: DayFacts, m: number): number | null {
 }
 
 /** Maximal stretches of minutes with `flag` set, within [0, until). */
-function stretches(flags: Uint16Array, flag: number, until: number): Array<{ from: number; to: number }> {
+function stretches(flags: Uint32Array, flag: number, until: number): Array<{ from: number; to: number }> {
   const out: Array<{ from: number; to: number }> = []
   let start = -1
   for (let k = 0; k <= until; k++) {
@@ -435,7 +447,7 @@ function stretches(flags: Uint16Array, flag: number, until: number): Array<{ fro
  * block starting at m, not yet in the view (whether it counts as a project is being decided); `boundaryAt`: the boundary
  * approved at an instant (OPEN: none).
  */
-function workEnds(c: Ctx, view: DayFacts, flags: Uint16Array, m: number, fcWindow: Forecast, projects: ReadonlySet<string>, starting: string | null = null, boundaryAt: (t: number) => number = writtenBoundary(view)): WorkEnd[] {
+function workEnds(c: Ctx, view: DayFacts, flags: Uint32Array, m: number, fcWindow: Forecast, projects: ReadonlySet<string>, starting: string | null = null, boundaryAt: (t: number) => number = writtenBoundary(view)): WorkEnd[] {
   const isWorkHere = (id: string) => setsWorkEndBlock(c.byId.get(id), projects)
   const runningWork = c.blocks.some((b) => {
     const f = view.blocks.get(b.id)
@@ -594,9 +606,9 @@ export function computeDay(ctx: DayContext): DayState {
   // The actual flags of the past, with the blocks counted as projects (D195) decided at their start.
   const projects = new Set<string>()
   for (const b of blocks) if (b.isWork && b.afterWorkMark) projects.add(b.id)
-  let actual = new Uint16Array(cap)
+  let actual = new Uint32Array(cap)
   const paintActual = () => {
-    actual = new Uint16Array(cap)
+    actual = new Uint32Array(cap)
     const spans = actualSpans(c, facts, now)
     paint(actual, 0, now, spans, projects)
     paintRequests(c, actual, facts, now)
@@ -642,7 +654,7 @@ export function computeDay(ctx: DayContext): DayState {
     let changed = false
     for (const { id, at, view, fc } of startViews) {
       if (projects.has(id)) continue
-      const before = new Uint16Array(actual)
+      const before = new Uint32Array(actual)
       for (let k = at; k < cap; k++) before[k] = 0
       if (workEnds(c, view, before, at, fc, projects, id).length) {
         projects.add(id)
@@ -691,7 +703,7 @@ export function computeDay(ctx: DayContext): DayState {
     return max
   }
   /** The end of the last work block, by the window forecast and the past (index). */
-  const lastWorkEnd = (m: number, flags: Uint16Array, fc: Forecast): number | null => {
+  const lastWorkEnd = (m: number, flags: Uint32Array, fc: Forecast): number | null => {
     let last: number | null = null
     for (let k = 0; k < m; k++) if (flags[k]! & F_END) last = k + 1
     for (const p of fc.placed) {
@@ -700,7 +712,7 @@ export function computeDay(ctx: DayContext): DayState {
     }
     return last
   }
-  const proposalAt = (m: number, view: DayFacts, flags: Uint16Array, fcW: Forecast): number | null => {
+  const proposalAt = (m: number, view: DayFacts, flags: Uint32Array, fcW: Forecast): number | null => {
     // Waiting blocks that expired unstarted keep their place in the proposal (they do not change the boundary).
     const worked = lastWorkEnd(m, flags, fcW)
     const waited = expiredWaitEnd(c, view, m)
@@ -809,7 +821,7 @@ export function computeDay(ctx: DayContext): DayState {
   const hadInput = (k: number): boolean => !activity || !activity.idle.some((i) => i.from <= atOf(g, k) && i.to >= atOf(g, k + 1))
 
   // State of the day at the start of minute m (what the leader would have shown then).
-  const evaluate = (m: number, bedtimeShift: number, simulateShifts: boolean, inclusive = false, flags: Uint16Array = actual) =>
+  const evaluate = (m: number, bedtimeShift: number, simulateShifts: boolean, inclusive = false, flags: Uint32Array = actual) =>
     evaluateAt(
       c,
       m,
@@ -1048,7 +1060,7 @@ function recordedSegments(c: Ctx, facts: DayFacts): (k: number) => Segment | nul
 
 interface EvalDeps {
   approvedAt: (m: number) => { boundary: number; at: number; auto: boolean } | null
-  proposalAt: (m: number, view: DayFacts, flags: Uint16Array, fcW: Forecast) => number | null
+  proposalAt: (m: number, view: DayFacts, flags: Uint32Array, fcW: Forecast) => number | null
   maxAt: (m: number, view: DayFacts, fc: Forecast) => number
   baseBedtime: (m: number) => number
   shiftLimit: (m: number) => number
@@ -1082,7 +1094,7 @@ interface Evaluation {
   budgetMin: number
   forecastBudgetMin: number
   /** The minutes as evaluated: the past before m, the forecast from m. */
-  flags: Uint16Array
+  flags: Uint32Array
   /** Regeneration per minute (REST_*). */
   rest: Uint8Array
   rewardRest: Uint8Array
@@ -1092,7 +1104,7 @@ interface Evaluation {
  * The day at the start of minute m: the past before m with the forecast from m. `inclusive`: with the events of minute m
  * itself (the state shown now, right after a click).
  */
-function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, projects: ReadonlySet<string>, d: EvalDeps, inclusive = false): Evaluation {
+function evaluateAt(c: Ctx, m: number, now: number, actual: Uint32Array, projects: ReadonlySet<string>, d: EvalDeps, inclusive = false): Evaluation {
   const { g, cap } = c
   const { settings, params } = c.settingsAt(inclusive ? m + 1 : m)
   const view = viewAt(c.facts, inclusive ? m + 1 : m)
@@ -1100,7 +1112,7 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   const fcT = forecast({ blocks: c.blocks, view, m, mode: 'typical', transitionBufferMin: settings.transitionBufferMin, typicalMin: c.typical })
 
   // The combined minutes: the past as it happened, the forecast from m.
-  const flags = new Uint16Array(cap)
+  const flags = new Uint32Array(cap)
   flags.set(actual.subarray(0, Math.min(m, now)))
   const spans: Span[] = fcT.placed.map((p) => ({ block: p.block, from: Math.max(p.from, m), to: Math.min(p.to, cap), bg: p.bg }))
   // In the forecast a block of „po końcu pracy jak projekt” is work unless it has the mark „po pracy” (D209) – the marked
@@ -1170,20 +1182,22 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
   {
     let k = 0
     let seenBlock = false
+    // A buffer of decompression (T2452) is time without a block for the gap of 30 min, its own minutes no regeneration.
+    const free = (f: number) => !(f & (F_BLOCK | F_DISC)) || onlyBuffer(f)
     while (k < cap) {
       const f = flags[k]!
-      if (f & F_BLOCK || f & F_DISC) {
+      if (!free(f)) {
         if (f & F_BLOCK) seenBlock = true
-        if (!(f & F_REQUEST) && (f & F_DISC || f & F_REGEN)) regen[k] = f & F_DISC ? REST_DISCONNECT : REST_BLOCK
+        if (!(f & F_REQUEST) && (f & F_DISC || f & F_REGEN) && !(f & F_DECOMP)) regen[k] = f & F_DISC ? REST_DISCONNECT : REST_BLOCK
         k++
         continue
       }
       // A stretch of time without a block.
       let z = k
-      while (z < cap && !(flags[z]! & (F_BLOCK | F_DISC))) z++
+      while (z < cap && free(flags[z]!)) z++
       const between = seenBlock && z < cap
       for (let j = k; j < z; j++) {
-        if (j < c.wake) continue
+        if (j < c.wake || flags[j]! & F_DECOMP) continue
         if (after[j] || (between && z - k >= 30) || flags[j]! & F_FREE_REST) regen[j] = REST_FREE
       }
       k = z
@@ -1199,7 +1213,9 @@ function evaluateAt(c: Ctx, m: number, now: number, actual: Uint16Array, project
     const he = r.hardEndAt != null ? idxOf(g, r.hardEndAt) : null
     for (let k = r.from; k < to; k++) {
       const f = flags[k]!
-      const broke = (f & F_DISC) !== 0 || (r.from > 0 && (flags[r.from - 1]! & F_REGEN) !== 0 && !(f & (F_END | F_PROJECT)))
+      // A buffer of decompression broken is no regeneration broken (T2452: it counts to no minimum).
+      const before = r.from > 0 ? flags[r.from - 1]! : 0
+      const broke = (f & F_DISC) !== 0 || ((before & F_REGEN) !== 0 && !(before & F_DECOMP) && !(f & (F_END | F_PROJECT)))
       const wouldRest = after[k] === 1 && !(f & (F_END | F_PROJECT | F_LIFE))
       if (broke || (he != null && k >= he && wouldRest)) {
         justified++

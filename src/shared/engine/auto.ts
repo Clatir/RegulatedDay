@@ -12,13 +12,14 @@
 import { REGEN_CATEGORY, type Place } from '../model/categories'
 import { derivedId, questionId } from '../model/ids'
 import type { PlanBlock } from '../model/plan'
-import { lastInputAt, firstUseAfter, firstUseFrom, lastOutsideBefore, type Activity, type Interval } from './activity'
+import { idleMinAt, lastInputAt, firstUseAfter, firstUseFrom, lastOutsideBefore, type Activity, type Interval } from './activity'
 import { isBoundaryWork, plannedSpan, startPlanned, type BlockInfo } from './blocks'
 import { settingsAtMinute, type DayContext, type DayState } from './day'
+import { DECOMPRESS_RULE } from './decompress'
 import { blockAt, endShiftOf, isRunning, OPEN, resumedWith, type BlockFact } from './facts'
 import { atOf, idxOf, type Grid } from './grid'
 import { requestAction, requestAutoEnds, requestEndOf, requestLimit, requestQuestionId } from './requests'
-import { awayEndUndo, endTakenByYou, autoEndIds, userUndone, liveReturn, awayStartOf, awayStartUndoable, fixedWorkLeft, groupMate, groupRootIn, groupStarts, groupStartsWith, inGroupOf, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
+import { awayEndUndo, endTakenByYou, autoEndIds, userUndone, liveReturn, awayStartOf, awayStartUndoable, DESK_CHAIN_RULE, deskChainPair, endsAtOf, fixedWorkLeft, groupMate, groupRootIn, groupStarts, groupStartsWith, inGroupOf, lastWorkOf, plannedEndOf, requestHoldsWork, setsWorkEnd, startCost, timerAction, timerNow, workEndParking, type TimerDraft, type TimerNow } from './timer'
 
 const MIN = 60_000
 /** The rules of a request's end without „Koniec” (`requestEndOf`). */
@@ -50,6 +51,11 @@ export interface AutoInput {
   now: number
   /** The leader writes nothing due after this (ms; spec „bramka”). */
   gate: number
+  /**
+   * Blocks with a „Przedłuż” waiting for its second click on this computer (D620, T2861 – the bar's memory, not the log): no chain at
+   * the computer ends them meanwhile.
+   */
+  hold?: ReadonlySet<string>
 }
 
 export interface AutoEvent extends TimerDraft {
@@ -399,6 +405,119 @@ function awayStarts(inp: AutoInput, t: TimerNow, fixedFgAt: number): AutoEvent[]
 }
 
 /**
+ * D403, D581, T2456: a buffer of decompression of the plan, not begun, parked nor cancelled, begins by itself – quietly – once its block
+ * ended and nothing runs in the foreground: at that end, or at the end of a session or classes running then (D583), as long as the
+ * forecast gives it now (its room, „Przedłuż” counted). Not in „Odcinam się” nor while a request runs; one begun after the block's end in
+ * the foreground took its moment (the forecast gives it no place). Its id holds its block's end: undone by „Cofnij”, it never begins
+ * again for that end.
+ */
+function decompressStarts(inp: AutoInput, t: TimerNow): AutoEvent[] {
+  const { state } = inp
+  if (t.fg || state.facts.disconnect.some((d) => d.to === OPEN) || state.facts.requests.some((r) => r.to === OPEN)) return []
+  const date = state.grid.date
+  const at = (idx: number) => atOf(state.grid, idx)
+  for (const b of state.blocks) {
+    // Its block is its anchor – as the forecast places it (one set „po: …” in its panel follows that block).
+    const src = b.anchor
+    if (!b.inPlan || b.decompress?.source == null || src == null) continue
+    const f = state.facts.blocks.get(b.id)
+    if (f && (f.startedAt != null || f.parkedAt != null || f.cancelledAt != null)) continue
+    const sf = state.facts.blocks.get(src)
+    if (sf?.endedAt == null) continue
+    const p = state.forecast.find((x) => x.block.id === b.id)
+    if (!p || p.from > state.now) continue
+    // From the block's end – or the foreground's freeing, or the end of a session or classes after it (in the background too).
+    let from = Math.max(at(sf.endedAt), freeSince(state).at)
+    for (const x of state.blocks) {
+      if (x.rules.kind !== 'session' && !x.rules.classMode) continue
+      for (const r of state.facts.blocks.get(x.id)?.runs ?? []) if (r.to !== OPEN && r.to > sf.endedAt && r.from <= r.to) from = Math.max(from, at(r.to))
+    }
+    if (from > inp.now || from > inp.gate) continue
+    const id = derivedId(date, 'auto', DECOMPRESS_RULE, 'block.start', b.id, at(sf.endedAt))
+    if (state.facts.undone.has(id)) continue
+    // As long as the forecast has it (counted again after „Przedłuż”, cut to its room); one you changed – as you set it (D582, T2477).
+    const planned = { ...startPlanned(b, inp.ctx.plan), ...(b.decompress?.cost != null ? { durationMin: p.to - p.from } : {}) }
+    return [{ id, autoRule: DECOMPRESS_RULE, k: 'block.start', block: b.id, at: from, bg: false, planned, confirmUntil: null, how: 'auto' }]
+  }
+  return []
+}
+
+export { DESK_CHAIN_RULE }
+/** „Jednym ciągiem” at the computer (D570): the next block begins at most this long after the end. */
+export const DESK_CHAIN_GAP_MIN = 5
+/**
+ * „Dalej?” waits for a chain at the computer that holds at most this long after the end (T2499): the leader writes it within a second
+ * – one not caught up (a gate, another computer) leaves the question as before, and the question once seen ends the chain.
+ */
+export const DESK_HOLD_MS = 60_000
+
+/** You took back an end by the chain at the computer of this start of the block (`start`, ms): no chain for it again (T2498). */
+function deskTakenBack(ctx: DayContext, state: DayState, block: string, start: number): boolean {
+  const taken = userUndone(ctx.events, state.facts.undone)
+  return ctx.events.some((e) => {
+    const x = e as { id: string; k?: unknown; autoRule?: unknown; block?: unknown; at?: unknown }
+    return x.autoRule === DESK_CHAIN_RULE && x.k === 'block.end' && x.block === block && typeof x.at === 'number' && x.at >= start && taken.has(x.id)
+  })
+}
+
+/**
+ * „Bloki przy komputerze jednym ciągiem” (D570, D620, T2495–T2497): the block at the computer in front, at its planned end (`at` – the
+ * instant its countdown reaches 0:00, `endsAtOf`), ends there, done, and the next one begins then – the events „Dalej” writes, by the
+ * rule `deskChain` (ids from the block and that instant: one taken back never comes back), or null. Only with the setting on at that
+ * minute, with input on any computer in the 2 min before it (`idleMinAt` – another computer up to its last „obserwacja trwa”), the
+ * question „Dalej?” not seen, no „Przedłuż” waiting (`hold`), and your „Cofnij” of a chain of this start of the block not given. The
+ * next block (`t.next`): flexible, at the computer, of the plan, not begun, of no parallel group, by its own hour (else its place in the
+ * forecast) at most `DESK_CHAIN_GAP_MIN` after the end, before the bedtime, and begun without a cost („Dalej” would ask none – the
+ * boundary). None for the last work block („Dalej?” has „Koniec pracy”), a buffer of decompression after the block (it wins), nor
+ * a session, a lecture, a „zjazd”, a commute or a fixed block whose window reaches into the 5 min after the end (or one waiting now);
+ * none `DESK_HOLD_MS` after the end or later (T2863).
+ */
+export function deskChainOf(inp: Omit<AutoInput, 'gate'>, t: TimerNow = timerNow(inp.state)): { at: number; events: AutoEvent[] } | null {
+  const { ctx, state, activity } = inp
+  const fg = t.fg
+  if (!fg || !fg.running || fg.fact.group != null || fg.info.waits || isFixedLike(fg.info) || fg.info.decompress || placeOf(fg.info) !== 'computer') return null
+  const grid = state.grid
+  const at = endsAtOf(state, fg)
+  // Only within `DESK_HOLD_MS` of the end (T2863): a leader later than that leaves „Dalej?” as before – never a chain minutes after it.
+  if (inp.now < at || inp.now >= at + DESK_HOLD_MS) return null
+  const atIdx = idxOf(grid, at)
+  if (!settingsAtMinute(ctx.snapshot, state.facts, atIdx).settings.deskChain || inp.hold?.has(fg.info.id)) return null
+  if (state.facts.disconnect.some((d) => d.to === OPEN) || state.facts.requests.some((r) => r.to === OPEN)) return null
+  const asked = questionId(grid.date, 'next', fg.info.id, fg.plannedEnd)
+  if (state.facts.seen.has(asked) || state.facts.answers.has(asked)) return null
+  if (deskTakenBack(ctx, state, fg.info.id, atOf(grid, fg.fact.startedAt ?? fg.startedAt))) return null
+  if (idleMinAt(activity, at) >= AWAY_GAP_MIN || isLastWork(state, fg.info) || at >= atOf(grid, state.bedtime.effective)) return null
+  const next = t.next
+  if (!next || !next.inPlan || next.fixed || next.waits || next.bg || next.decompress || placeOf(next) !== 'computer' || groupRootIn(ctx.plan, next.id) != null) return null
+  const gone = (id: string) => {
+    const f = state.facts.blocks.get(id)
+    return !!f && (f.startedAt != null || f.parkedAt != null || f.cancelledAt != null)
+  }
+  if (gone(next.id)) return null
+  const from = next.start ?? state.forecast.find((p) => p.block.id === next.id && !p.running)?.from
+  const until = at + DESK_CHAIN_GAP_MIN * MIN
+  if (from == null || atOf(grid, from) > until) return null
+  if (t.waiting.length || t.held.length) return null
+  const byId = new Map(state.blocks.map((b) => [b.id, b]))
+  for (const b of state.blocks) {
+    if (!b.inPlan || b.id === fg.info.id || gone(b.id)) continue
+    // A buffer of decompression after the block wins (D620): it begins by itself after the block, „Dalej” starts it.
+    if (b.decompress != null && b.anchor === fg.info.id) return null
+    if (!(isFixedLike(b) || b.waits || b.lectureOrCommute)) continue
+    // Its window reaches into [end, end + 5 min] (T2864): one due now too – its start in this pass would pause the block in front.
+    const span = plannedSpan(b, byId)
+    if (span && span.end > atIdx && atOf(grid, span.start) <= until) return null
+  }
+  // What „Dalej” writes now (D484 – done explicitly): no cost, nothing but the end and the start.
+  const r = timerAction(ctx, state, { a: 'next' }, at)
+  if (!r.ok || r.confirm || r.events.length !== 2) return null
+  const [end, start] = r.events as [TimerDraft, TimerDraft]
+  if (end.k !== 'block.end' || end.block !== fg.info.id || start.k !== 'block.start' || start.block !== next.id) return null
+  const events = [auto(grid.date, DESK_CHAIN_RULE, { ...end, rule: DESK_CHAIN_RULE, block: fg.info.id }), auto(grid.date, DESK_CHAIN_RULE, { ...start, how: 'auto', block: next.id })]
+  return events.some((e) => state.facts.undone.has(e.id)) ? null : { at, events }
+}
+
+/**
  * The absences (spec „Bezczynność i nieobecność”) during a work or project block at the computer, in order: from the
  * threshold of the question without input on all computers, since the block's last start or resume.
  */
@@ -621,7 +740,11 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
   for (const list of fixedLists) for (const e of list) if (e.k === 'block.start' && e.bg === false && !list.some((x) => state.facts.undone.has(x.id))) fixedFgAt = Math.min(fixedFgAt, e.at)
   const awayList = awayStarts(inp, t, fixedFgAt)
   if (!(awayList.length && take(awayList))) for (const list of fixedLists) take(list)
+  // A buffer of decompression begins by itself at its block's end (D403, T2456) – after a fixed start of the same pass, never with it.
+  if (!out.some((e) => e.k === 'block.start' && e.bg === false)) take(decompressStarts(inp, t))
   const fg = t.fg
+  // A block at the computer in front at its planned end, „jednym ciągiem” (D570, T2495).
+  const desk = deskChainOf(inp, t)
 
   // Running blocks.
   for (const tb of [...(fg ? [fg] : []), ...t.bg]) {
@@ -660,6 +783,20 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
       continue
     }
     if (tb !== fg) continue
+    // A buffer of decompression runs its length (D581, T2456): only „Dalej” or another block's start ends it earlier – no use of a
+    // computer, no absence, no question.
+    if (b.decompress) {
+      if (due(endAt) && nowIdx >= tb.plannedEnd) take([auto(date, DECOMPRESS_RULE, { k: 'block.end', block: b.id, at: endAt, done: true, rule: DECOMPRESS_RULE, fin: true })])
+      continue
+    }
+    // „Jednym ciągiem” at the computer: the end and the next start – not after a start in front or a pause of this block in the same
+    // pass (T2864), and only once the absences counted out before its instant are written (T2866: the same result however late the
+    // leader is – they first, the chain the next pass, `nextCheckAt`); before the absences' own judging (an absence written earlier in
+    // the block does not stop it – you were active at the end).
+    if (desk && desk.events[0]!.block === b.id && due(desk.at) && !out.some((e) => (e.k === 'block.start' && e.bg === false) || (e.k === 'block.pause' && e.block === b.id))) {
+      const absenceDue = absencesOf(state, activity, b, f).some((x) => x.back != null && x.back <= desk.at && !written.has(auto(date, 'absence', { k: 'block.pause', block: b.id, at: x.away }).id))
+      if (!absenceDue && take(desk.events)) continue
+    }
     // Away from the computer: the first use after at least 2 min without input, a limit, the bedtime.
     const away = awayEnd(c, b, f)
     if (away) {
@@ -792,6 +929,17 @@ export function autoActions(inp: AutoInput): AutoEvent[] {
     if (still && still.rule === a.rule && idxOf(state.grid, still.at) === r.to) continue
     take([a, ...resumedWith(state.facts, r)].map((x) => ({ id: derivedId(date, 'auto', 'revalidate', x.id), k: 'undo', at: inp.now, target: x.id, reason: 'later log', autoRule: 'revalidate' })))
   }
+  // A chain at the computer (T2865, T465): a later log without input in the 2 min before its end (another computer's gap that came
+  // after its „obserwacja trwa”) takes back both halves while the next block runs as it began – the block runs on, „Dalej?” as before;
+  // the next one changed since – it stays.
+  for (const a of state.facts.autos) {
+    if (a.k !== 'block.end' || a.rule !== DESK_CHAIN_RULE || !a.block || state.facts.blocks.get(a.block)?.endId !== a.id) continue
+    const e = ctx.events.find((x) => x.id === a.id) as { at?: unknown } | undefined
+    const when = typeof e?.at === 'number' ? e.at : at(a.at)
+    if (idleMinAt(activity, when) < AWAY_GAP_MIN) continue
+    const pair = deskChainPair(state, a)
+    if (pair?.alive) take(pair.ids.map((id) => ({ id: derivedId(date, 'auto', 'revalidate', id), k: 'undo' as const, at: inp.now, target: id, reason: 'later log', autoRule: 'revalidate' })))
+  }
   return out
 }
 
@@ -805,7 +953,9 @@ export function questionsOf(inp: Omit<AutoInput, 'gate'> & { setsWorkEnd?: (id: 
   const clock = (ms: number) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
 
   const q = nextQuestions(state, t)
-  if (q) {
+  // A chain at the computer that holds (T2499): no „Dalej?” while the leader writes it – at most `DESK_HOLD_MS` after the end.
+  const desk = q ? deskChainOf(inp, t) : null
+  if (q && !(desk && inp.now < desk.at + DESK_HOLD_MS)) {
     const last = isLastWork(state, q.block)
     const late = q.q1.seen != null && q.q1.seen - at(q.plannedEnd) >= LATE_SEEN_MIN * MIN
     const answers: Answer[] = [{ id: 'next', label: 'Dalej' }, { id: 'extend', label: 'Przedłuż' }]
@@ -1015,8 +1165,9 @@ export function answerEvents(state: DayState, q: Question, answer: string, at: n
  * block's planned end (a fixed one in the foreground also 10 min after it), the second ask of „Dalej?” and the end after
  * it. The main process sets its exact timer on it; everything else waits for the 15-second check.
  */
-export function nextDeadline(state: DayState): number | null {
-  const now = atOf(state.grid, state.now)
+export function nextDeadline(state: DayState, nowMs?: number): number | null {
+  // Now in ms (the caller's clock): a deadline within the minute already passed is no deadline (the scheduler would fire at once).
+  const now = nowMs ?? atOf(state.grid, state.now)
   const byId = new Map(state.blocks.map((b) => [b.id, b]))
   const t = timerNow(state)
   const out: number[] = []
@@ -1031,6 +1182,8 @@ export function nextDeadline(state: DayState): number | null {
     const end = atOf(state.grid, tb.plannedEnd)
     out.push(end, end + FIXED_REACTION_MIN * MIN)
   }
+  // The instant the countdown in front reaches 0:00 (with its seconds): a chain at the computer is written then (T2499).
+  if (t.fg) out.push(endsAtOf(state, t.fg, byId))
   const q = nextQuestions(state, t)
   if (q) {
     const from1 = q.passive ? q.q1.at : q.q1.seen

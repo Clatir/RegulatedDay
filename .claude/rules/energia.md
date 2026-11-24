@@ -6,6 +6,20 @@ paths:
   - "tests/unit/engine/model-energii.test.ts"
   - "tests/unit/engine/reserve.test.ts"
   - "tests/unit/engine/body-energy.test.ts"
+  - "src/shared/engine/trialEnergy.ts"
+  - "src/renderer/features/plan/trialEnergy.ts"
+  - "tests/unit/engine/trial-energy.test.ts"
+  - "tests/web/trial-energy.test.ts"
+  - "src/renderer/features/plan/TrialCaption.tsx"
+  - "src/renderer/features/week/WeekTrial.tsx"
+  - "tests/web/energy-live.test.ts"
+  - "tests/web/energy-live-week.test.ts"
+  - "tests/e2e/energy-live.spec.ts"
+  - "src/shared/engine/shortNight.ts"
+  - "src/renderer/features/today/checkinLogic.ts"
+  - "src/renderer/features/today/shortNight.ts"
+  - "tests/unit/engine/short-night.test.ts"
+  - "tests/web/short-night.test.ts"
 ---
 
 # Energia (E2)
@@ -23,10 +37,26 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
   T903): dzień przyszły od przyjętego check-inu (`ASSUMED_CHECKIN`, 04:00, `assumed`) – tylko dla energii, nie zdarzenie logu.
   Dziś bez check-inu (brak, „Pomiń”) – też `assumedEnergy` (T2430): w kolumnie (`columnEnergy` `today`) i przy osi „Dziś” (`dayAxis`, gdy
   `date >= today`); przyjęte zdarzenie żyje tylko w kopii `ctx.events` do `computeEnergy` – nigdy w logu, pliku dnia ani `DayState`.
+  `EnergyState.runs` → `EnergyTrack.runs` (T2571): biegi bloków, z których liczy się krzywa (log do teraz, prognoza od teraz) – z nich bierze właściciela zejścia obwódka przy przyczynie (`reserveCause.ts`).
   Rysunek: `EnergyLanes` (× `ASSUMED_FACTOR`, liczby „teraz” `ASSUMED_NOW_OPACITY`, podpis `energy-assumed`), `EnergyStrip` (`data-assumed`).
 - `engine/energyCurve.ts` (T1280, T1281, T2607) – wygładzona krzywa toru (`poolCurve` – każda pula ze swoich próbek, `curveAt`, `valuesAt`,
   `energySpan`), `stripState`, `eachStripMinute` – jedno przejście po minutach paska: `stripRuns` (pasek kolumny) i `dayEnergy` (kropka
   miesiąca – najciemniejsza minuta paska, pamięć po obiekcie toru); okno bierze je przez `plan/energyDraw.ts` (re-eksport).
+- `engine/trialEnergy.ts` (N19, T2574–T2580) – energia na żywo: `trialLowest(dzień, { plan?, events? })` → `{ before, after, pool, beforePool, assumed }` –
+  najniższa energia jak linia po zmianie (D529 `groupEnergy`, D369 `lowestEnergy`: od teraz do `bedtime.forecast`, dzień przyszły od 04:00, `shownOf`),
+  dzień po zmianie liczony od nowa (`computeDay` + `computeEnergy`), bez check-inu (przyszły, dziś przed nim) – z przyjętego (`assumedCheckin`); null – dzień
+  miniony, moduł wyłączony; `before` raz na `DayState` (`lowestBefore`). Zmiany: `costTrial` (okienko kosztu: zaczęty – `block.cost` od teraz, niezaczęty – `costs`
+  w planie), `resizeTrial` (krawędź trwającego – `resizeClick`), plan grupy – `DragPreview.plan`, plan przeciągnięcia „Dziś” – `planAfter` (`dayPush.ts`).
+  Okno: `plan/trialEnergy.ts` `useTrialLowest(dzień, { key, change })` (`TrialRunner`: liczy tylko najnowszą zmianę po `TRIAL_DELAY_MS` bez nowszej, pamięć po kluczu
+  na dzień, `fresh` false – poprzedni wynik w czasie liczenia; brak próby – od razu null); `changeTrial` – `DayChange` jako próba. Próba ~3–4 ms na dniu z 15 blokami.
+- Podpis w oknie (N19, D593, D594, T2581–T2585): `plan/TrialCaption.tsx` – `trialText` „najniższa energia 52 → 44 (G)” (litera puli po zmianie, „ · przyjęte” gdy `assumed`, null przy `after === before`),
+  `TrialCaption` (`energy-trial`, `data-before|after|pool|fresh`; `fresh` false – `text-muted`). „Dziś”: `Timeline.energyTrial` (`TimelineTrial`: `day` = `model`, `drag(TrialDrag)` → `Trial`, `cost(dzień, id, koszty)`) –
+  `Timeline` woła `useTrialLowest` tylko w trakcie ruchu (`drag.moved` i nie `dropped`); `TodayPage.trialOfDrag` buduje tę samą zmianę, którą rysuje podgląd i zapisuje puszczenie (`dragChange` / `copyPreview` / `ontoChange`
+  przez `changeTrial`, grupa – `dragPreview().plan`, krawędź trwającego – `resizeTrial` z `previewOf().to`); klucz = id, krawędź, start–koniec, początek chwytu, Ctrl, przy grupie id członków. Miejsce: przy ciele i grupie
+  `energy-trial-box` pod dolną krawędzią miejsca bloku (`dragShown`), przy krawędzi – druga linia w `edge-hint`. Esc odwołuje pojedyncze przeciągnięcie po ruszeniu (jak w „Tygodniu”, T2581; wcześniej tylko grupę) tylko na osi z `energyTrial` („Dziś”; „Szablony” jak dotąd) – nic się nie zapisuje,
+  podpis znika z `drag = null`. Okienko kosztu: `TileCost.trial` (`CostTrial`: `day()` – dzień z energią, wartość albo obietnica, pytany przy otwartym oknie i po zmianie danych; `change(dzień, koszty)` – `costTrial`) – `CostEnergy` (miejsce `cost-pop-energy-slot` w oknie, stała wysokość dwóch linii, puste bez słów – podpis nie przestawia okna ani nie wypycha go z ekranu; tekst `cost-pop-energy`)
+  liczy pokazaną liczbę nad zapisaną (kliknięcia czekające na zapis i liczba z kółka – `SettingNumber.onShown` → `turn`); podpis tylko z samej próby (`before` i `after` z `trialLowest`, jedna chwila – T2580, T2586), póki liczby różnią się od zapisanych; po echu zapisu (dzień policzony od nowa z kosztem) znika (D594); odświeżanie dnia co 30 s (`useNow`), nieudany odczyt (null) nie wymazuje dobrego dnia; bez modułu energii (`rd.general.modules.energy`) `TodayPage` i `DayGrid` nie podają `trial` – ani linii, ani miejsca.
+  „Tydzień” i „3 dni”: `week/WeekTrial.tsx` – pod pasmem `week-drop` kolumny docelowej (`week-energy-trial`), tylko w czasie trzymania (`flight`) i dla puszczenia, które coś zapisze (nie `dropStays`); dni czytane i liczone leniwie, gdy wskaźnik spocznie `TRIAL_DELAY_MS` nad parą dni (`readDay`, pamięć `WeekDays` – jedna na siatkę, po dacie, `stamp` danych i półminucie; `peek` – dni już policzone: bez odczytu, zwykłe opóźnienie haka; odświeżanie `useNow`; `WeekTrial` stoi, póki w kolumnie jest pasmo (`want` null ↔ nie-null nie montuje od nowa); dzień okienka kosztu z tej samej pamięci); pierwszy wynik dni, które doszły z odczytu po spoczynku, liczony od razu (`useTrialLowest(…, { onArrival })`, `TrialRunner.ask(…, true)`; nie dla dni z pamięci) – od spoczynku do podpisu jedno opóźnienie haka i liczenie; dzień miniony (`to < today`, zegar okna po 04:00) – bez podpisu; w obrębie dnia `dragChange` / `copyPreview`, na inny dzień `movedDayPlan` (`weekMove.ts`: te same `moveBetweenDays` + `pushedOn` co zapis, blok z zakotwiczonymi i rozsunięte), kopia `addChange`; mówi o dniu docelowym (źródła nie liczy); bez podpisu: grupa, upuszczenie na blok (D492), dzień minął. Chwila próby: `costTrial` / `resizeTrial` biorą `at` (domyślnie `Date.now()`), `TrialChange.at` – `before` i `after` liczone w tej samej chwili (T2580; „przed” w późniejszej chwili raz na stan dnia i minutę – `lowestAt`; dzień miniony sprawdzany w chwili liczenia). Upuszczenie na blok (D492) ma próbę zawsze poza `hint.same`. Testy: `tests/web/energy-live*.test.ts`, E2E `energy-live.spec.ts`.
 - Zdarzenia `energy.*` w `model/events.ts`; `DayState.rest` i `settingsAtMinute` z `engine/day.ts`;
   `DataFolder.energyState` i zapis `energy.reserve` w zadaniach prowadzącego (`main/data/folder.ts`).
 
@@ -47,6 +77,8 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
   own → rutyna → wariant → kategoria. Koszt zmieniony na kafelku zaczętego bloku (D501) – `block.cost` od swojej minuty, po starcie bloku;
   koszt rutyny – `routine.cost` od swojej minuty; sprzed startu (w kolejności logu) tylko dla startu bez `routineCosts` (T1431, T1440;
   `costChange.ts`, `costOf(x, s, k)`; reguły `koszt.md`). Kalibracja (`costEvidence`) bierze koszt startu tym samym `startCostOf` (T1442).
+- Bufor dekompresji (D386, T2452): energia z kosztu kategorii „regeneracja” (blok), nie z `rest` – jego minuty mają `rest`/`rewardRest` 0
+  (bez minimum i nagrody „Reakcja na rezerwę”); `regenWaysOf` go pomija (`planned.decompress`).
 - Grupa równoległa (D476, T1191, T1199): blok grupy w tle (`why: 'group'`) – 0, także w prognozie (`alongside`); nic z przodu –
   z przodu ostatnio zaczęty blok grupy (`groupAt`), pełny koszt.
 - Kilka bloków na pierwszym planie (`pickFront`): elastyczny pod innym pauzuje (bez kosztu, powrót = przełączenie),
@@ -70,6 +102,22 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
   (`routine.cost`; `block.cost` – ciało kosztu sprzed zmiany, T1534) i `daySnapshotOf` (bloki migawki) z `startingBody` (T1520, T1527);
   ustawienia migawki i `day.snapshot` starszej wersji – ciało z Twoich ustawień datowanych (T1532, reguły `koszt.md`); walidatory zdarzeń –
   ciało może nie być, jest – sprawdzane (T1528). `RULES_VERSION` 16 (T1524).
+- Krótka noc (D571, N2, T2515–T2529): `engine/shortNight.ts` `shortNightOf(dzień, zdarzenia)` – ostatnie wejście (wszystkie komputery z logu dnia)
+  w [`bedtime.effective`, 04:00), ≥ `SHORT_NIGHT_MIN` (30, stałe) po porze snu; wejście po 04:00 (log dnia następnego) się nie liczy. Odcinki
+  z `activityOf`, luki wejścia czytane tu od nowa z własnymi regułami – `activityOf` (bezczynność, sesja, „poza komputerem”) ich nie ma:
+  luka bez `gap.close` (`openGap`) – od odcinka, w którym się zaczyna, a poza odcinkami (podział o 04:00 przed pierwszym „trwa”, sen bez
+  zapowiedzi) od pierwszego odcinka po niej, gdy ten zaczął się bez `observe.from` albo `resume` (odcinek nowego startu – pusta luka) – przez
+  kolejne odcinki zaczęte `observe.from` `why: 'resume'` (tylko ten powód), do nowszej luki; nowsza luka przy otwartej starszej = zgubione
+  zamknięcie: jej początek to chwila wejścia (w odcinku, do którego starsza sięga); wejście krótsze niż `START_GRACE_MS` (2 min, jak `GAP_MS` śledzenia; krótkie pisanie tuż po starcie ginie – świadomie) od początku
+  odcinka zaczętego `why: 'start'` (tylko ten powód) nie jest wejściem (restart: obserwacja od otwarcia folderu, pierwsza luka od startu
+  śledzenia). Nieznany / brak `why` – żadna z reguł. Okno: `features/today/shortNight.ts` –
+  `useShortNight(dziś, on)` w `MorningPlan` (`on` = check-in przed Tobą, także w czasie Strony B i celów) = `useDayData(wczoraj, on, fresh)`
+  (IPC `dayData`, bez nowego kanału; `fresh` – tylko odczyty tego hooka przy `on`, nigdy pamięć okna sprzed) + `computeDay` wczoraj (`nightOf`;
+  nie `dayUsable` albo wyjątek – null, nigdy błąd); `nightKept` – odczyt nieużywalny trzyma ostatnią noc dnia, jeszcze nieprzeczytany – null; liczenie
+  od nowa tylko przy zmianie `nightDataKey` (id zdarzeń, pliki). `useCheckinHint` w `MorningPlan` (nad zwinięciem karty – zwinięcie to nie powrót):
+  póki pytanie bez Twojej odpowiedzi – nowsza noc zastępuje podpowiedź, null jej nie zdejmuje; po odpowiedzi bez zmian; przy zamontowaniu tylko bez
+  odpowiedzi. `Checkin` (`hint`): od „Zapisz” `useUi.checkinSaved` (per data, przeżywa zwinięcie i zmianę ekranu; ustawione przed zapisem, cofane przy odmowie; `MorningPlan` czyści je przy `checkinAt`) zamraża formularz (odpowiedzi, podpowiedź, przyciski); `Checkin key={model.date}`.
+  Odpowiedzi w `useUi` z `null` = jeszcze nie Twoja (`OwnAnswers`), pokazane = `shownAnswers(own, preset)`; dopisek `checkin-short-night` (`shortNightNote`).
 - Moduł energii: przełącznik w ustawieniach (E3) zapisuje `rd.general.modules.energy` i `energy.module` w logu dnia.
 - Jeszcze nie: zobaczenie komunikatu i tryby ciszy (E4b), warianty przy rezerwie i przesunięcie granicy po regeneracji
   z komunikatu (E5), wyjątki typów dni w nagrodzie i nuty (E7), okres kalibracji (E6).

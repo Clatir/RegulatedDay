@@ -392,6 +392,8 @@ export interface DragPreview {
   moved: Map<string, DragSpan>
   pushed: Map<string, DragSpan>
   copies: Map<string, DragSpan>
+  /** The day's plan after the drop (a day's preview – `dragPreview`; a template's has none): what the energy on trial counts (N19, `trialEnergy.ts`). */
+  plan?: readonly PlanBlock[]
 }
 
 /** The id a copy of block `id` has in a preview (one rule for every preview: never a block's own id, never written). */
@@ -427,7 +429,7 @@ export function dragPreview(day: GroupDay, ids: readonly string[], minutes: numb
   const taken = new Set(take)
   const anchored = new Set(judged.along.map((a) => a.id))
   const map = new Map(plan.map((b) => [b.id, b]))
-  const out: DragPreview = { moved: new Map(), pushed: new Map(), copies: new Map() }
+  const out: DragPreview = { moved: new Map(), pushed: new Map(), copies: new Map(), plan }
   for (const [id, span] of shown) {
     if (copies.has(id)) out.copies.set(copies.get(id)!, span)
     else if (!o.copy && (taken.has(id) || anchored.has(id) || followsMoving(map, id, taken))) out.moved.set(id, span)

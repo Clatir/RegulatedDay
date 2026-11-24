@@ -22,6 +22,8 @@ paths:
   - "tests/fs/save-as.test.ts"
   - "tests/web/save-as.test.ts"
   - "tests/e2e/save-as.spec.ts"
+  - "src/shared/engine/shiftRest.ts"
+  - "tests/unit/engine/shift-rest.test.ts"
 ---
 
 # Zmiany grupowe bloków (D527–D531, ciąg Z – logika i zapis)
@@ -69,6 +71,32 @@ linii – moduł Z1 (`src/shared/groupText.ts`); tu tylko dane.
 - „Szablony” – `templates/templateGroup.ts` `changeTemplateGroup({ templateId, from }, ids, a)`: identyfikatory wersji; w turze zapisu szablon
   z widoku i dzień wersji (`templateDay.ts` `templateDayOf` – ta sama reguła co strona), jedna zmiana wersji od `from` (bez zmiany – bez wersji
   i „Cofnij”); usuń – odmowa przy `attachmentsUnread`; przesunięcie – `templateShift` (`frameOf`, `reshown` – wspólne z `inTemplate`; `preview` – podgląd przeciągania).
+
+## Reszta dnia – „Przesuń resztę dnia o…” (N17, D584, T2465–T2475, T2490–T2494)
+- `GroupAction` `shiftRest` (±min). `restOf(day, ids, today)` (`restIn` na jednym `lookupOf`) → `atMin`, `atIdx` (najwcześniejszy zaznaczony: `axisStart`,
+  każdego rodzaju; trwający dziś = teraz; zaczęty poza planem albo już skończony – miejsce z prognozy albo `startedAt`), `take` = `pushable` (zbiór D367) od `atIdx` – dziś
+  po `from` prognozy, dzień przyszły po planowanym starcie (T2491) –, także za stałymi, z blokami obok w grupie, które same mogą się ruszyć (`placeWhy`
+  null – zaczęty, zaparkowany, odwołany obok zostaje); dzień miniony – nic. `judgeGroup` 'shiftRest' – przed „nie ma” (zaczęty poza planem to
+  początek, nie pominięty); `ruleVerdicts.rest`.
+- `engine/shiftRest.ts` `shiftedRestDay(day, raw, ids, minutes, today, onUnsettled, changes)` → `DayChanged` + `moved` (start zmieniony – liczba linii)
+  + `over`. Później (T2465): `shiftPatches` +N od `axisStart`, pierwszy (`groupRootOf` null) tam, gdzie pokaże go jedno liczenie prognozy (przeskok
+  stałego), potem `pushApart(…, lead, { only: take })`, potem każdy z reszty, którego prognoza pokazuje później niż nowy plan, zapisany tam
+  (zapis = prognoza); za 03:59 (T2492) `laidBack`: tylko ogon reszty, który rozsuwanie położyło na 03:59 (albo własnym przejściem końca doby przed start
+  sprzed zmiany) – najpóźniejsze starty po minucie w kolejności reszty, nad podłogą (blok reszty przed ogonem; pokazany przed nim blok, który zostaje –
+  stały / chroniony według planu, trwający według miejsca, zakotwiczony do głowy przed ogonem według klucza kotwicy z `after`; dziś – teraz), nigdy po
+  03:59 (`dayFileFrom` zgubiłby blok) ani przed startem sprzed zmiany; za mało minut – od podłogi w przód, ostatnie na 03:59 i `onUnsettled`. Nic nie przesunięte – plik bez zmian (bez wpisu bloku szablonu). Wcześniej (T2466): `gaps.ts` `earlierRest(…, { onUnsettled,
+  maxRounds })` = `closing` z `rest` (do końca dnia, `REST_ROUNDS` 40, `onUnsettled`; stały zostaje i nie jest przeskakiwany wstecz; próba od min(plan,
+  prognoza) − N, nigdy start późniejszy niż plan – taki blok nie rusza i się nie liczy; podłoga `floorOf`, T2490: teraz, 04:00, bloki przed łańcuchem i te, które
+  zostają – trwający (najpierw), inny zaczęty i blok obok według `p.from`, reszta według planu; zakotwiczony do ruszanego albo obok niego (też bufor N7, zapauzowany) – według nowego startu
+  kotwicy (albo jej bufora – `BlockInfo.after`, jak `plannedKey`) + jej długość, `keyOf`); grupa jak `shiftPatches` (zostający obok – poza grupą na starej godzinie); `closeGap` bez zmian.
+- Bufory N7 (T2493, T2475): bufory i zakotwiczone nigdy w `take` ani w zapisie; z `changes` (rd.json) `withBuffersLaid` liczy plik po zmianie od nowa
+  (`dayPlan` + `replanned` z `context.ts`) – blok, który bufor (dłuższy po przesunięciu, nowy) przesuwa dalej niż zapis i niż dzień pokazywał,
+  zapisany tam i policzony (D583); zwracany plan – ze świeżymi buforami.
+- `over` (T2470, tylko później i tylko pogorszenie): `dayEnd`, `max`, `boundary` (zatwierdzona), `bedtime`; `restOverText`, `restOversText` („za granicą w K dniach”).
+- Okno: `editDays` – gałąź `shiftRest` (`changed` = `moved`, `pushed` 0, pasek `told` = `moved`, `GroupDone.over`, `changes` = `rd.settings`); „Cofnij” jak
+  „Przesuń o” (`fieldsUndoOf`). `templateGroup` odmawia. Kolumny bez `judge` (T2494): `weekSelect` `restLeftIn` → `MenuBlock.restNone` (od najwcześniejszego
+  zaznaczonego dnia blok z `HorizonBlock.pushable` – `pushable` silnika w `horizonDay`). `editDays`: nic nie przesunięte – bez wpisu dnia. Linia: `blockLineText` („Przesunięto N bloków” + `warning`), `nothingText(d, a)`.
+  Testy: `shift-rest.test.ts` (też „przegląd r1”), web `group-menu`/`group-run`/`group-actions`, E2E `group-select.spec.ts`.
 
 ## Przeciąganie grupy (D531, Z6)
 - Czyste – `engine/groupDrag.ts`: `judgeDrag(dni, klucze {date,id}, {days, minutes}, today, { inView, copy })` → `take` (`DragMove`: dzień, cel, nowy start =

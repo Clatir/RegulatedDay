@@ -120,9 +120,10 @@ export interface PlanBlock {
   name: string | null
   /**
    * Where it comes from: the template, the plan of lectures, the session layer, you, the import of „zjazdy” from a PDF
-   * (D357: a fixed class of a „zjazd”) or a series (D381: an occurrence); a version that does not know one reads it as yours.
+   * (D357: a fixed class of a „zjazd”), a series (D381: an occurrence) or a buffer of decompression (D386 – the day's plan makes it, a file
+   * has one you changed); a version that does not know one reads it as yours.
    */
-  origin: 'template' | 'lecture' | 'session' | 'user' | 'zjazd' | 'series'
+  origin: 'template' | 'lecture' | 'session' | 'user' | 'zjazd' | 'series' | 'decompress'
   /** The session of the session layer, the lecture series, the template block it was made from, the series' root (D381). */
   sourceId: string | null
   /** The computer that records a lecture (spec „Plan wykładów”). */
@@ -168,6 +169,13 @@ export interface PlanBlock {
    * Only on such a block (no block else gets a new field in its file).
    */
   byType?: DayTypeId
+  /**
+   * A buffer of decompression the day's plan has (D386, D403, T2450 – `engine/decompress.ts`, never in a file): the cost an hour of the
+   * block it follows (the head's, the emotions' or the senses', the highest – its length is counted again by it after „Przedłuż”) and the
+   * logical minute it ends by at the latest (the plan's bedtime). A buffer you changed is written to the day's file without it (D582: yours,
+   * not counted again).
+   */
+  decompress?: { cost: number; untilMin: number }
 }
 
 export interface TemplateVersion {
@@ -292,7 +300,7 @@ export function planBlockFrom(v: unknown, origin: PlanBlock['origin'] = 'user'):
   const anchor = typeof v.anchor === 'string' && v.anchor ? v.anchor : null
   const durationMin = intIn(v.durationMin, 1, MAX_BLOCK_MIN)
   if ((startMin == null && !anchor) || durationMin == null) return null
-  const origins = ['template', 'lecture', 'session', 'user', 'zjazd', 'series']
+  const origins = ['template', 'lecture', 'session', 'user', 'zjazd', 'series', 'decompress']
   const variantId = typeof v.variantId === 'string' && v.variantId ? v.variantId : null
   return {
     id: v.id,

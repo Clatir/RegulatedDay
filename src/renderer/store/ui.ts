@@ -4,6 +4,7 @@
  */
 import { create } from 'zustand'
 import { classify, historyKey } from '@shared/data/paths'
+import type { ShortNight } from '@shared/engine/shortNight'
 import type { Answer } from '@shared/model/events'
 import type { PlanBlock } from '@shared/model/plan'
 import type { SearchKind, SearchRecord } from '@shared/search'
@@ -57,8 +58,16 @@ interface UiState {
   goalsClosed: string | null
   /** The day whose first check-in „Pomiń” skipped here (B5, D563): until the day changes – it does not come back with a change of screen. */
   checkinSkipped: string | null
-  /** The check-in's answers not saved yet, with their day (B5, D563): they survive another screen; another day starts clean, a save clears them. */
-  checkinAnswers: { date: string; answers: Answer[] } | null
+  /**
+   * The check-in's answers not saved yet, with their day (B5, D563): they survive another screen; another day starts clean, a save clears them.
+   * Null at a question you have not answered (D571: the form shows its answer beforehand there – „tak” after a short night).
+   */
+  checkinAnswers: { date: string; answers: ReadonlyArray<Answer | null> } | null
+  /**
+   * The check-in of the day saved here, as it was saved (T2526): the form stays so – a fold of the card or another screen and back
+   * too – until the day has its check-in (`checkinAt`), and a second „Zapisz” writes nothing.
+   */
+  checkinSaved: { date: string; answers: readonly Answer[]; hint: ShortNight | null } | null
   /** The day whose morning list of days not closed „Pomiń” hid here (B5, D563): until the day changes. */
   unclosedSkipped: string | null
   /** The new block not saved yet, with its day (D461: saved at its first committed field or when you leave it; Esc throws it away while untouched – `touched`: a field or a step changed, T1080) – it also survives going to another screen when the exchange for it is not answered (spec „Szkice”, A6-17). */
@@ -71,7 +80,7 @@ interface UiState {
   memory: ViewMemory
 }
 
-export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null, movedLater: null, sideBClosed: null, goalsClosed: null, checkinSkipped: null, checkinAnswers: null, unclosedSkipped: null, blockDraft: null, pick: null, from: null, memory: NO_MEMORY }))
+export const useUi = create<UiState>(() => ({ page: 'today', toasts: [], day: null, focus: null, movedLater: null, sideBClosed: null, goalsClosed: null, checkinSkipped: null, checkinAnswers: null, checkinSaved: null, unclosedSkipped: null, blockDraft: null, pick: null, from: null, memory: NO_MEMORY }))
 
 export function closeSideB(date: string): void {
   useUi.setState({ sideBClosed: date })
@@ -87,9 +96,15 @@ export function skipCheckin(date: string): void {
 }
 
 /** The check-in's answers of `date` as they stand (null: nothing to keep – a save, or the draft of another day is replaced at the first answer). */
-export function setCheckinAnswers(date: string, answers: Answer[] | null): void {
+export function setCheckinAnswers(date: string, answers: ReadonlyArray<Answer | null> | null): void {
   if (answers) useUi.setState({ checkinAnswers: { date, answers } })
   else if (useUi.getState().checkinAnswers?.date === date) useUi.setState({ checkinAnswers: null })
+}
+
+/** The check-in of `date` saved, as saved (null: the day has its check-in now – the form is gone, or comes clean if it ever comes back). */
+export function setCheckinSaved(date: string, saved: { answers: readonly Answer[]; hint: ShortNight | null } | null): void {
+  if (saved) useUi.setState({ checkinSaved: { date, ...saved } })
+  else if (useUi.getState().checkinSaved?.date === date) useUi.setState({ checkinSaved: null })
 }
 
 /** „Pomiń” of the morning list of days not closed, on `date` – the logical day it is today (B5, D563). */

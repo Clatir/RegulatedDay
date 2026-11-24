@@ -398,6 +398,21 @@ describe('dni zapisane raz w rd.json (D320, T509)', () => {
     }
   })
 
+  it('przywrócenie starszego rd.json nie przywraca schowanej linii „Uzupełnij ciało” (D623: „×” na zawsze)', async () => {
+    const hub = hubFor()
+    try {
+      expect(await hub.open(dirA)).toBe(true)
+      const zip = await backupOfA()
+      await hub.edit([{ rel: 'rd.json', edits: [{ path: ['bodyFillHidden'], base: undefined, value: true }, { path: ['note'], base: undefined, value: 'nowa' }] }])
+      await hub.restoreRecords(zip, ['rd.json'])
+      const rd = (await hub.service!.folder.recordView('rd.json'))!
+      expect(rd.bodyFillHidden).toBe(true)
+      expect(rd.note).toBeUndefined()
+    } finally {
+      await hub.close('quit')
+    }
+  })
+
   it('kopia ze starszym stanem przeglądu kalibracji nie cofa go: zrobiony przegląd zostaje, propozycje zastosowane (A3-02)', async () => {
     const hub = hubFor()
     try {

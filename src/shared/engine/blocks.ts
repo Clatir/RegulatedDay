@@ -58,6 +58,17 @@ export interface BlockInfo {
    */
   routineCosts: Costs | null | undefined
   bgCostPct: number | null
+  /**
+   * A buffer of decompression (D386, T2450): the block it follows (null – begun outside the plan), the cost an hour its length is counted
+   * by again after that block's „Przedłuż” and the latest minute (index) it ends by – both null for a buffer you changed (D582: as it is).
+   * None – no buffer. Its minutes count to no minimum of regeneration nor reward (T2452).
+   */
+  decompress?: { source: string | null; cost: number | null; until: number | null }
+  /**
+   * D583 (T2461): the buffer of decompression of the block this one is anchored to – it stands after that buffer on the axis (`plannedSpan`,
+   * the forecast) while the buffer has a place; the anchor (`anchor`) stays the block, for every other rule (`Dalej`, the bar, „Koniec pracy”).
+   */
+  after?: string
 }
 
 const CAT_FALLBACK: CategoryRules = {
@@ -122,7 +133,8 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
       protectedLife: rules.cls === 'life' && rules.protected,
       costs: p.costs,
       routineCosts: routineCostApplies(settings.categories, p.categoryId) ? routineCostOf(routines, p.routine) : null,
-      bgCostPct: p.bgCostPct
+      bgCostPct: p.bgCostPct,
+      ...(p.origin === 'decompress' ? { decompress: { source: p.sourceId, cost: p.decompress?.cost ?? null, until: p.decompress ? idxOfLogical(grid, p.decompress.untilMin) : null } } : {})
     }
   }
   const ids = new Set<string>()
@@ -132,7 +144,7 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
   }
   for (const [id, f] of facts.blocks) {
     if (ids.has(id) || !f.planned) continue
-    out.push(
+    const begun = out.push(
       make(
         {
           id,
@@ -162,8 +174,15 @@ export function blockInfos(grid: Grid, plan: readonly PlanBlock[], facts: DayFac
         false
       )
     )
+    // A buffer taken out of the plan after it began (T2452): still no minimum of regeneration.
+    if (f.planned.decompress === true) out[begun - 1]!.decompress = { source: null, cost: null, until: null }
   }
   const byId = new Map(out.map((b) => [b.id, b]))
+  // D583: a block anchored to a block with a buffer of decompression stands after the buffer (`after`; `forecast.ts` – back to the block
+  // when the buffer has no place); its anchor stays the block.
+  const bufferOf = new Map<string, string>()
+  for (const b of out) if (b.inPlan && b.decompress?.source != null && b.anchor != null) bufferOf.set(b.anchor, b.id)
+  if (bufferOf.size) for (const b of out) if (b.inPlan && !b.decompress && b.anchor != null && bufferOf.has(b.anchor)) b.after = bufferOf.get(b.anchor)!
   // D492 (T1161): a block beside another block of the plan starts with the first block of its group.
   const planned = new Map(plan.map((p) => [p.id, p]))
   for (const b of out) {
@@ -197,7 +216,8 @@ export function plannedSpan(b: BlockInfo, byId: Map<string, BlockInfo>, depth = 
   if (along) return { start: along.start, end: along.start + b.durationMin }
   if (b.start != null) return { start: b.start, end: b.start + b.durationMin }
   if (!b.anchor || depth > 20) return null
-  const a = byId.get(b.anchor)
+  // D583: after the buffer of its anchor, when the plan has it.
+  const a = (b.after != null ? byId.get(b.after) : undefined) ?? byId.get(b.anchor)
   const s = a ? plannedSpan(a, byId, depth + 1) : null
   return s ? { start: s.end, end: s.end + b.durationMin } : null
 }
@@ -220,7 +240,9 @@ export function startPlanned(info: BlockInfo, plan: readonly PlanBlock[] = []): 
     // D512: the cost of its routine now – a later change of the routine never changes what the block began with; not known now (the
     // routine's file cannot be read, T1372) – no field: the block counts the routine's cost as known later, never an empty one for good.
     ...(info.routineCosts !== undefined ? { routineCosts: info.routineCosts } : {}),
-    bgCostPct: info.bgCostPct
+    bgCostPct: info.bgCostPct,
+    // T2452: a buffer of decompression stays one once out of the plan (no minimum of regeneration nor reward).
+    ...(info.decompress ? { decompress: true } : {})
   }
 }
 

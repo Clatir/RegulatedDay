@@ -73,9 +73,9 @@ paths:
   to ona sama. `onPointerEnter` w React to `pointerover` (w testach).
 
 ## Linia zmian grupowych (`store/groupLine.ts`, `components/GroupLine.tsx`, T1541)
-- W oknie, **nie w pasku pulpitu** (`widget.ts` i pasek nietknięte): osobna linia na widok (`today`, `template`, `week`, `cases`, `calendar`),
+- W oknie, **nie w pasku pulpitu** (`widget.ts` i pasek nietknięte): osobna linia na widok (`today`, `template`, `week`, `cases`, `calendar`, `settings` – „Kategorie”: zaznaczanie drzewa D608 i „Przelicz koszty ×N”, reguły `kategorie.md`),
   `UNDO_LINE_MS` od zmiany (liczy store, nie ekran; timer = `until` − teraz), następna zmiana widoku ją zastępuje, przeżywa zmianę strony (jak `weekPush`).
-- `undoGroupLine`: cofanie raz (flaga `undoing` w stanie linii), po nim linia znika, o ile jej nie zastąpiono; w trakcie cofania linia nie znika
+- `retextGroupLine(view, undo, tekst)` – nowe słowa linii tej zmiany (cofnięta w części, T2720). `undoGroupLine`: cofanie raz (flaga `undoing` w stanie linii), po nim linia znika, o ile jej nie zastąpiono; w trakcie cofania linia nie znika
   (mimo upływu czasu); zwrócony napis → `toast` (D313); wyjątek – linia zostaje (do końca terminu albo nowe 15 min) i `UNDO_FAILED_TEXT`.
   Tylko tekst linii ma `role="status"` – „Cofnij” liczy się jako klik poza dla menu i okienek (`outside.ts` pomija `[role=status]`). Zmiana grupowa pisze jeden zapis na plik dnia, a cofnięcie przywraca tylko zmienione pola
   – to robi ekran (Z2–Z6), nie podstawa.
@@ -108,7 +108,8 @@ paths:
 - „Tydzień” / „3 dni”: `week/weekSelect.tsx` `useWeekGroup` w `DayGrid` (klucz bloku `blockKey(date, id)`; order `weekOrder` – dzień, potem start; `BlockBox`: `marked`, `onPick` – Ctrl/Shift
   zaznacza bez otwierania dnia, zwykły klik otwiera jak dotąd; `DayGrid` ma klucz pierwszego dnia, więc inny tydzień, zakres 3 dni i tryb zaczynają bez zaznaczenia); napis `week-selection`. Del na kolumnach: ≥ 2 – `removeBlocksTarget`, jeden blok zaznaczony Ctrl+klikiem – `removeTarget` z nazwą bloku (UX17, F8; `useWeekGroup.removeTarget`, wcześniej jeden blok nie był celem Del).
 - Menu „Zmień N bloków” (`groupMenu.ts` – `blockMenu`, czyste: podkategoria i wariant z ✓/„—”, „Koszt…” → okno `GroupCostDialog`, rutyna tylko dla rodzaju „rutyna”, „Przesuń o…” → później /
-  wcześniej o 5, 15, 30, 60 i pole, „Przenieś na dzień…” → `GroupMoveDialog`, „Odwołaj”, „Zaparkuj”, „Zapisz jako szablon / rutynę…” (N15, `on.saveAs` – reguły `zmiany-grupowe.md`), „Usuń”; szablon bez trzech działań dnia; wyłączone z powodem wg `MenuBlock.state` (`open` / `begun` / `past` / `off`): wszystkie zaczęte –
+  wcześniej o 5, 15, 30, 60 i pole, „Przesuń resztę dnia o…” (N17 – te same kroki, `shiftRest`, `block-menu-rest-*`; nie w szablonie; wyłączona: `ruleVerdicts.rest`
+  0 albo – kolumny – wszystkie `MenuBlock.pastDay` / `restNone`, T2494), „Przenieś na dzień…” → `GroupMoveDialog`, „Odwołaj”, „Zaparkuj”, „Zapisz jako szablon / rutynę…” (N15, `on.saveAs` – reguły `zmiany-grupowe.md`), „Usuń”; szablon bez trzech działań dnia; wyłączone z powodem wg `MenuBlock.state` (`open` / `begun` / `past` / `off`): wszystkie zaczęte –
   „Żaden blok nie jest niezaczęty”, wszystkie minione, wszystkie zdjęte z planu (zaparkowane, odwołane), żaden nie ma godziny do przesunięcia, różne podkategorie dla wariantu; okno kosztu zaczyna od kosztu
   pierwszego zaznaczonego). `BlockGroupMenu` składa menu i dwa okna dla ekranów. Prawy przycisk i klawisz menu na elemencie: `menuBind(open)` w `ContextMenu.tsx` (kafelek osi, `BlockBox`, wiersz Spraw, dzień Kalendarza).
 - **Działania (Z4-B, Z5):** każda zmiana idzie przez `runBlockGroup(view, ids, akcja, where)` z `plan/groupRun.ts` (importują go wprost `BlockGroupMenu`, `useAxisGroup`, `weekSelect`):

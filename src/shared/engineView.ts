@@ -27,7 +27,7 @@ import { ROUTINE_LINE_MIN, routinesDue } from './engine/routineCheck'
 import { TASK_ANSWERS, TASK_LINE_MIN, taskLineText, taskQuestions } from './engine/cases'
 import { logicalDayOf } from './time/day'
 import { modesOf, type ModePrefs, type Modes } from './engine/modes'
-import { awayEndUndo, awayStartUndoable, endsAtOf, fixedStartPair, laterWork, plannedEndOf, runningOfGroup, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
+import { awayEndUndo, awayStartUndoable, deskChainPair, endsAtOf, fixedStartPair, laterWork, plannedEndOf, runningOfGroup, setsWorkEnd, timerNow, workEndOpen, type TimerNow } from './engine/timer'
 import { workedUntilOf } from './engine/explain'
 import { namedById, type NamedBlock } from './blockName'
 import { namingOf } from './engine/context'
@@ -113,8 +113,14 @@ export function autoText(a: AutoAction, blockName: string, clock: string): strin
       return `${name} skończony o ${clock} (według planu)`
     case 'awayChain':
       return `${name} skończony o ${clock} (według planu, jednym ciągiem)`
+    // „Jednym ciągiem” at the computer (D570, D620): the end by the plan and the next start, each with „Cofnij” of both.
+    case 'deskChain':
+      return a.k === 'block.start' ? `${name} zaczęty o ${clock} (jednym ciągiem przy komputerze)` : `${name} skończony o ${clock} (według planu, jednym ciągiem przy komputerze)`
     case 'groupStart':
       return `${name} zaczęty o ${clock} (razem z grupą)`
+    // A buffer of decompression (D403, T2456): after its block, for its length.
+    case 'decompress':
+      return a.k === 'block.start' ? `${name} od ${clock} (po końcu bloku)` : `${name} skończona o ${clock} (po swojej długości)`
     case 'groupFront':
       return `${name} na pierwszym planie od ${clock} (po końcu bloku z grupy)`
     case 'groupPlan':
@@ -270,7 +276,9 @@ function dayLines(i: EngineInput, t: TimerNow, modes: Modes, nameOf: (id: string
     if (!b.inPlan) continue
     // Anchored to a block that ended (not to a session of the layer): its own moment came. It waits through a session or
     // a class; its dot only while nothing runs, never in „mniej pytań” (D194).
-    if (!b.waits && b.anchor && !b.anchor.startsWith('session:') && untouched(b.id) && fact(b.anchor)?.endedAt != null && !running.has(b.id)) {
+    // D583: a buffer of decompression of its anchor still to run or running holds it (its line after the buffer).
+    const bufferAhead = b.after != null && (running.has(b.after) || state.forecast.some((p) => p.block.id === b.after && !p.running))
+    if (!b.waits && !b.decompress && !bufferAhead && b.anchor && !b.anchor.startsWith('session:') && untouched(b.id) && fact(b.anchor)?.endedAt != null && !running.has(b.id)) {
       if (!modes.session && !modes.classMode)
         out.push({ id: `anchor:${b.id}`, text: nameOf(b.id), actions: [{ id: 'start', label: 'Zacznij' }, { id: 'park', label: 'Zaparkuj' }, ...(b.isWork ? [{ id: 'workEnd', label: 'Koniec pracy' }] : [])], dot: !modes.fewer && !t.fg })
       continue
@@ -433,7 +441,7 @@ export function engineView(i: EngineInput): WidgetView {
   // „Zrobione automatycznie” (D350): the actions as the plan said them (a fixed block's start, an end by the plan) in one
   // row that unfolds into them, each with „Cofnij”; what changes the counting of time – a flexible block's pause at a fixed
   // start too – and the rest each in a row of its own.
-  const autoItem = (a: (typeof state.facts.autos)[number]) => ({ id: a.id, text: autoText(a, a.block ? nameOf(a.block) : '', clockOf(at(a.at))), undo: !INFO_RULES.has(a.rule) && (fixedStartPair(state, a)?.alive ?? true) && awayStartUndoable(state, a) && awayEndUndo(i.ctx, state, i.activity, a, (idx) => chainOn(i.ctx, state, idx)) != null })
+  const autoItem = (a: (typeof state.facts.autos)[number]) => ({ id: a.id, text: autoText(a, a.block ? nameOf(a.block) : '', clockOf(at(a.at))), undo: !INFO_RULES.has(a.rule) && (fixedStartPair(state, a)?.alive ?? true) && (deskChainPair(state, a)?.alive ?? true) && awayStartUndoable(state, a) && awayEndUndo(i.ctx, state, i.activity, a, (idx) => chainOn(i.ctx, state, idx)) != null })
   const asPlanned = (a: (typeof state.facts.autos)[number]) => (a.rule === 'fixedStart' && a.k !== 'block.pause') || a.rule === 'plan'
   const planned = state.facts.autos.filter(asPlanned)
   const groups = planned.length ? [{ id: 'plan', text: `bloki stałe według planu: ${planned.length}`, items: planned.map(autoItem).reverse() }] : []
@@ -472,7 +480,8 @@ export function engineView(i: EngineInput): WidgetView {
   // one; never chosen for the tones, A8-04).
   const recorders = [...new Set([...(fg ? [fg] : []), ...t.bg].flatMap((x) => (x.info.rules.kind === 'lecture' ? [i.ctx.plan.find((p) => p.id === x.info.id)?.recorder ?? null] : [])).filter((x): x is string => x != null))]
   const recording = !!i.computer && recorders.includes(i.computer)
-  const soundOk = !hidden && !modes.fewer && dayType !== 'zjazd-stacjonarny' && !recording
+  // A buffer of decompression in front is quiet (D403): no tone at its 5 and 0.
+  const soundOk = !hidden && !modes.fewer && dayType !== 'zjazd-stacjonarny' && !recording && !fg?.info.decompress
   return {
     soundOk,
     recording,

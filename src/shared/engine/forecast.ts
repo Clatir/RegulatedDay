@@ -14,9 +14,16 @@
  *
  * Two modes: 'window' – waiting blocks in their planned window at full length (the boundary's proposal, the maximum, the
  * variants' marker); 'typical' – from now with the typical length (energy, budget, hard end, pool).
+ *
+ * A buffer of decompression (D386, D403, T2450, T2455) not begun stands right after its block's real end (before what else starts
+ * then; the session or the class mode – from its end, D583), as long as `bufferMinutes` of that block's length with „Przedłuż”, cut to
+ * the room before the next fixed block in the foreground and its bedtime (every 5 min, at least 5 – else it has no place); no
+ * transition buffer after it. Its moment passed (another block began in the foreground after its block, or its whole time went by
+ * without it) – it has no place. A block anchored to it follows it, or – without its place – its block.
  */
-import { OPEN, endShiftOf, isRunning, pausedPlaceOf, ranMinutes, type DayFacts } from './facts'
+import { OPEN, endShiftOf, isRunning, pausedPlaceOf, ranMinutes, type BlockFact, type DayFacts } from './facts'
 import { plannedSpan, type BlockInfo } from './blocks'
+import { afterSpans, bufferMinutes, bufferRoom } from './bufferLength'
 
 export type ForecastMode = 'window' | 'typical'
 
@@ -54,6 +61,20 @@ function waitWindow(b: BlockInfo): { start: number; end: number } | null {
   return { start: b.start, end: b.start + b.durationMin }
 }
 
+/**
+ * The planned end of a begun block at minute `m` (T2481): a fixed one – its window's end (begun late: from its start) with its changes of the
+ * end, never before `m`; another – what is left of its length (planned, „Przedłuż”, a shortening) from `m`: paused time does not count.
+ * `lengthMin` – its length instead of the planned one (a session's typical length). One rule for the forecast and the plan's buffers.
+ */
+export function runEnd(b: BlockInfo, f: BlockFact, m: number, byId: Map<string, BlockInfo>, lengthMin?: number): number {
+  const extended = endShiftOf(f)
+  if (lengthMin == null) {
+    const span = b.fixed ? plannedSpan(b, byId) : null
+    if (span) return Math.max(m, Math.max(span.end, f.startedAt!) + extended)
+  }
+  return m + Math.max(0, (lengthMin ?? f.planned?.durationMin ?? b.durationMin) + extended - ranMinutes(f, m))
+}
+
 export function forecast(inp: ForecastInput): Forecast {
   const { view, m, mode } = inp
   const byId = new Map(inp.blocks.map((b) => [b.id, b]))
@@ -76,22 +97,9 @@ export function forecast(inp: ForecastInput): Forecast {
   }
 
   /** The planned end of a started block: its start, the planned length, the paused time and confirmed extensions. */
-  const runningEnd = (b: BlockInfo): number => {
-    const f = fact(b.id)!
-    const planned = f.planned?.durationMin ?? b.durationMin
-    const extended = endShiftOf(f)
-    let length = planned + extended
-    const typical = mode === 'typical' && b.rules.kind === 'session' ? inp.typicalMin(b) : null
-    if (typical != null) length = typical + extended
-    else {
-      // A fixed block ends at its window's end with its extensions, also begun late – where the timer ends it (spec
-      // „Timer”); a session in 'typical' mode with a typical length counts by it instead.
-      const span = b.fixed ? plannedSpan(b, byId) : null
-      if (span) return Math.max(m, Math.max(span.end, f.startedAt!) + extended)
-    }
-    // Paused time does not count to the block: what is left of its length runs from now; past its length it ends now.
-    return m + Math.max(0, length - ranMinutes(f, m))
-  }
+  // A fixed block ends at its window's end with its extensions, also begun late – where the timer ends it (spec „Timer”); a session in
+  // 'typical' mode with a typical length counts by it instead. Paused time does not count: what is left of its length runs from now.
+  const runningEnd = (b: BlockInfo): number => runEnd(b, fact(b.id)!, m, byId, (mode === 'typical' && b.rules.kind === 'session' ? inp.typicalMin(b) : null) ?? undefined)
 
   // Parallel groups (T1162): the blocks not begun beside a block of the plan, by that block's id.
   const beside = new Map<string, BlockInfo[]>()
@@ -216,7 +224,7 @@ export function forecast(inp: ForecastInput): Forecast {
     const place = placeOf(b)
     if (place != null) return place
     if (b.start != null) return b.start
-    const a = b.anchor ? byId.get(b.anchor) : undefined
+    const a = b.anchor ? ((b.after != null ? byId.get(b.after) : undefined) ?? byId.get(b.anchor)) : undefined
     return a && depth < 50 ? plannedKey(a, depth + 1) + a.durationMin : Number.POSITIVE_INFINITY
   }
   // A parallel group paused whole (1.23-B: a start outside it, „Odcinam się”, a fixed start – T1211): its blocks come back
@@ -235,9 +243,11 @@ export function forecast(inp: ForecastInput): Forecast {
     pausedLead.set(sorted[0]!.id, sorted.slice(1))
     for (const x of sorted.slice(1)) pausedMates.add(x.id)
   }
+  // A buffer of decompression goes first of what is planned at its block's end (T2455), a block anchored to another last.
+  const rank = (x: BlockInfo) => (x.decompress?.source != null && x.anchor != null ? -1 : x.anchor ? 1 : 0)
   const chain = inp.blocks
     .filter((b) => !grouped.has(b.id) && !pausedMates.has(b.id) && ((status(b) === 'open' && !b.bg && (b.anchor != null || (!b.fixed && !b.waits))) || paused.includes(b)))
-    .sort((a, b) => plannedKey(a) - plannedKey(b) || (a.anchor ? 1 : 0) - (b.anchor ? 1 : 0) || (a.id < b.id ? -1 : 1))
+    .sort((a, b) => plannedKey(a) - plannedKey(b) || rank(a) - rank(b) || (a.id < b.id ? -1 : 1))
 
   // The cursor: where the foreground is free from – the running foreground block's end, else now; the cursor without the
   // floor of now follows the real end of the last foreground block.
@@ -258,6 +268,30 @@ export function forecast(inp: ForecastInput): Forecast {
   let prevCat: string | null = runningFg[0]?.block.categoryId ?? null
   const buffer = (cat: string) => (prevCat && prevCat !== cat ? inp.transitionBufferMin : 0)
 
+  /**
+   * The end of the session or the class mode `t` falls in (D583: a buffer begins after it): a block of a session or with the class mode
+   * running or placed through `t` – its end, again from there; `t` itself without one.
+   */
+  const afterModes = (t: number): number => {
+    const spans: Array<{ from: number; to: number }> = []
+    for (const x of inp.blocks) {
+      if (x.rules.kind !== 'session' && !x.rules.classMode) continue
+      const xf = fact(x.id)
+      for (const r of xf?.runs ?? []) spans.push({ from: r.from, to: r.to === OPEN ? (placedById.get(x.id)?.to ?? m) : r.to })
+      const ahead = xf?.startedAt == null ? placedById.get(x.id) : undefined
+      if (ahead) spans.push(ahead)
+    }
+    return afterSpans(t, spans)
+  }
+  /** A buffer's block (a buffer without a place – the block it stands for, D583): what a block anchored to it follows. */
+  const anchorOf = (b: BlockInfo): string | null => (b.after != null && byId.has(b.after) && !dropped.has(b.after) ? b.after : b.anchor)
+  /** The start of the first fixed block in the foreground not over at `t`: the room of a buffer ends there. */
+  const fixedFrom = (t: number): number => {
+    let at = Number.POSITIVE_INFINITY
+    for (const fx of fixedFg) if (fx.to > t) at = Math.min(at, fx.from)
+    return at
+  }
+
   const pending = [...chain]
   for (let guard = 0; pending.length && guard < 10_000; guard++) {
     const b = pending.shift()!
@@ -266,10 +300,64 @@ export function forecast(inp: ForecastInput): Forecast {
     let from: number
     let due: number
     const place = placeOf(b)
+    if (b.decompress?.source != null && b.anchor != null && place == null && f?.startedAt == null) {
+      // A buffer of decompression not begun (T2455). Without a place: the blocks beside it counted each by itself (T2486).
+      const drop = () => {
+        dropped.add(b.id)
+        for (const x of beside.get(b.id) ?? []) if (grouped.delete(x.id) && !x.bg && !x.fixed && !x.waits) pending.push(x)
+      }
+      const src = b.anchor
+      if (dropped.has(src)) {
+        drop()
+        continue
+      }
+      const sf = fact(src)
+      const sp = placedById.get(src)
+      const srcEnd = sf?.endedAt ?? sp?.to ?? null
+      if (srcEnd == null) {
+        if (pending.some((x) => x.id === src)) pending.push(b)
+        else drop()
+        continue
+      }
+      const info = byId.get(src)
+      // Its length again from its block's length with „Przedłuż” (D403, D580); before any change of that end – as the plan counted it.
+      const length = b.decompress.cost != null && info && sf && sf.endChanges.length ? bufferMinutes((sf.planned?.durationMin ?? info.durationMin) + endShiftOf(sf), b.decompress.cost) : b.durationMin
+      const moment = afterModes(srcEnd)
+      // Its moment passed: a block begun in the foreground after its block ended, or its whole time gone by without it.
+      const ended = sf?.endedAt
+      // A session or a class it waits for (D583) takes no moment of it.
+      const modeOf = (id: string) => {
+        const r = byId.get(id)?.rules
+        return r?.kind === 'session' || r?.classMode === true
+      }
+      const passed = ended != null && (moment + length <= m || [...view.blocks].some(([id, x]) => id !== b.id && id !== src && !modeOf(id) && x.runs.some((r) => !r.bg && r.from >= ended)))
+      if (passed) {
+        drop()
+        continue
+      }
+      const start = Math.max(moment, m, cursor)
+      const room = Math.min(b.decompress.until ?? Number.POSITIVE_INFINITY, fixedFrom(start)) - start
+      // A buffer you changed (D582, T2477: no cost of the plan's) is as long as you set it – never cut.
+      const len = b.decompress.cost == null ? length : bufferRoom(length, room)
+      if (!len) {
+        drop()
+        continue
+      }
+      const bp: Placed = { block: b, from: start, to: start + len, bg: false, due: srcEnd, running: false }
+      put(bp)
+      // Blocks saved beside it (an older file, T2482 – no drop makes one now) run with it.
+      const groupTo = Math.max(bp.to, ...putBeside(bp).map((x) => x.to))
+      cursor = Math.max(cursor, groupTo)
+      cursorDue = Math.max(cursorDue, srcEnd + (groupTo - start))
+      // The buffer is the break: no transition buffer after it.
+      prevCat = null
+      continue
+    }
     if (b.anchor && place == null) {
-      const af = fact(b.anchor)
-      const ap = placedById.get(b.anchor)
-      if (dropped.has(b.anchor)) {
+      const anchor = anchorOf(b)!
+      const af = fact(anchor)
+      const ap = placedById.get(anchor)
+      if (dropped.has(anchor)) {
         dropped.add(b.id)
         // Its group has no place now: its blocks are counted each by itself, at the group's start (T1162).
         for (const x of beside.get(b.id) ?? []) if (grouped.delete(x.id) && !x.bg && !x.fixed && !x.waits) pending.push(x)
@@ -278,7 +366,7 @@ export function forecast(inp: ForecastInput): Forecast {
       let anchorEnd: number | null = af?.endedAt ?? ap?.to ?? null
       if (anchorEnd == null) {
         // The anchor is still to be placed (later in the chain): wait for it.
-        if (pending.some((x) => x.id === b.anchor)) {
+        if (pending.some((x) => x.id === anchor)) {
           pending.push(b)
           continue
         }
@@ -286,9 +374,10 @@ export function forecast(inp: ForecastInput): Forecast {
         for (const x of beside.get(b.id) ?? []) if (grouped.delete(x.id) && !x.bg && !x.fixed && !x.waits) pending.push(x)
         continue
       }
-      // The anchor ended in the background or in the foreground: no buffer either way.
+      // The anchor ended in the background or in the foreground: no buffer either way. Back to the block of a buffer without a place
+      // (D583, T2461): sorted after the buffer, it never goes over what the chain put there meanwhile.
       due = anchorEnd
-      from = Math.max(anchorEnd, m)
+      from = Math.max(anchorEnd, m, b.after != null && anchor !== b.after ? cursor : Number.NEGATIVE_INFINITY)
     } else {
       const planned = place ?? b.start ?? m
       due = Math.max(planned, cursorDue + buffer(b.categoryId))

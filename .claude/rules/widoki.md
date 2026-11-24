@@ -6,6 +6,10 @@ paths:
   - "src/renderer/store/weekPush.ts"
   - "src/shared/engine/calendarViews.ts"
   - "src/shared/engine/energyTrack.ts"
+  - "src/shared/engine/reserveCause.ts"
+  - "src/renderer/features/plan/ReserveCauseHint.tsx"
+  - "tests/web/reserve-cause-view.test.ts"
+  - "tests/unit/engine/reserve-cause.test.ts"
   - "src/shared/engine/week.ts"
   - "tests/web/week-*.test.ts"
   - "tests/web/day-grid.test.ts"
@@ -22,7 +26,7 @@ T950–T955, T960–T969, T980–T986 (część A; D426), T936–T939 (ekrany).
 
 ## Dane (część A)
 - Dzień kolumny = `HorizonDay` (`engine/week.ts`, jedno przeliczenie dnia w procesie pomocniczym, pamięć w `folder.horizonDay`):
-  bloki z `movable` (D417 – `movableBlock`, ta sama reguła co oś „Dziś”), `fixed`, `session`; `energy` (`EnergyTrack`, T903 –
+  bloki z `movable` (D417 – `movableBlock`, ta sama reguła co oś „Dziś”), `pushable` (N17 – `pushable` rozsuwania), `fixed`, `session`; `energy` (`EnergyTrack`, T903 –
   przyszły i dziś bez check-inu / po „Pomiń” (T2430) z `assumed`: jaśniej, podpis „przyjęte”, D422; tylko `weekView`/`daysView`/`monthView` – T914, T2601; miniony – moduł z oceny, T950),
   `budget` (praca wobec budżetu; miniony bez obecności – null, T918). IPC: `weekView(data)`, `daysView(daty, { energy })` („3 dni”
   – `threeDays`, „Agenda” – `agendaDates` z `energy: false`, T954; 1–14 dat), `monthView('RRRR-MM')` (`MonthDay` z `blocks` – każdy blok dnia po godzinie (kolejność z `horizonDay`) `MonthBlock` z `monthBlockOf`: `{ id, named (bez note), categoryId, startMin, endMin, fixed, session, state, background, outsidePlan, movable }` (N18), bez zdjętych z dnia; T1013, T1015; `energy` – `DayEnergy` (`engine/energyTrack.ts`) z `dayEnergy` (`engine/energyCurve.ts`, ta sama minuta co pasek – T2607): `{ pool, value, state, reserve, assumed }` albo null, krzywa nie idzie do okna – N21, T2600–T2602).
@@ -63,6 +67,7 @@ T950–T955, T960–T969, T980–T986 (część A; D426), T936–T939 (ekrany).
   `month-bar-`, `month-more-`, `month-load-`, `month-energy-` – **bez prefiksu `day-`** (E2E wybierają komórki przez `[data-testid^="day-"]`);
   kropka energii (N21, D595, T2604–T2606): `monthCellView.energy` (`MonthEnergy`: `monthEnergy` z `DayEnergy` – wypełnienie `POOL_COLOR[pool]` × `STRIP_OPACITY[state]` × `ASSUMED_FACTOR` przy przyjętej, obwódka 1 px pełna, `energyTitle` = „Energia: najsłabsza bodźce 18 · poniżej rezerwy (rezerwa 20)” + „ · przyjęte”), 8 px, `right-[20px]` – na lewo od kropki obciążenia, to samo miejsce bez niej; `data-state` / `data-pool` / `data-assumed="true"`; kreator i kopia dnia (bez `detail`) jej nie mają, filtr kalendarzy jej nie rusza;
   `data-counted` na stronie Kalendarza = miesiąc policzony (testy czekają na to przed odczytem tekstu komórki).
+- Obwódka przy przyczynie (N20, T2560–T2573): `engine/reserveCause.ts` `reserveCauses(tor, bloki)` – przy przeliczeniu widoku dnia (`dayAxis`; `DayColumn` `useMemo`), nie w pętli kafelków; bloki dnia **przed** filtrem kalendarzy (`DayGrid counted`), bez zaparkowanych, odwołanych, niezaczętych minionych (dzień miniony w „Dziś” – każdy niezaczęty). Pierwsze zejście puli (`firstDescents`: `≥` → `< rezerwy`, liczby z ekranu jak pasek) należy do biegu z minuty `at − 1` (T2571: biegi z `EnergyTrack.runs` – log i prognoza silnika, więc blok pod stałą sesją biegnie po niej, a obwódka stoi na jego kafelku w miejscu planu; bez `runs` – godziny planu; stykające się biegi bloku to jeden – T2572; podpowiedź dopisuje „ · w prognozie 17:00–18:30” / „ · biegł 10:00–10:20” tylko gdy bieg w ogóle nie nachodzi na kafelek – T2573, D592), bez niej do startującego w `at` (koszt jednorazowy; pierwszy plan startujący w `at` wygrywa z tłem z `at − 1`); remis: pierwszy plan, później zaczęty, mniejsze id. `ReserveCause.drops` (pula, poziom na starcie bloku albo najwyższy przed zejściem, najniższy do końca bloku). `ReserveRing` (warstwa `box-shadow: inset`), `ReserveCauseHint` (portal; `useReserveHint(current)`: kafelek bez przyczyny zamyka podpowiedź; nie w trakcie przeciągania (`lifted`); przewinięcie zamyka; `hintLeft`, `hintAbove`; klawiatura T2569: Tab z kafelka → okienko, Shift+Tab z pierwszego → kafelek, Esc i Tab z ostatniego → kafelek i zamknięcie, `leave` / `rest`; slot akcji N3: `children`, `Timeline.reserveAction`, `DayGrid.reserveAction(id, cause, date)`). Testy: `reserve-cause.test.ts`, `reserve-cause-view.test.ts`, E2E `reserve-cause.spec.ts`.
 - Koszt na kafelku (D501): `HorizonBlock.cost` (zaczęty – `begunCosts`, inny – `blockCosts`; `edit` – `costEditable`), `BlockBox` rysuje `plan/TileCost` („Tydzień” `tight` – „3·1·1”, „3 dni” „3 · 1 · 1”;
   miejsce: róg / koniec wiersza nazwy / po najechaniu przy 2+ ścieżkach), zapis `plan/costSave.ts` `saveTileCosts` – ta sama droga co „Dziś”, blok serii pyta o zakres (reguły `koszt.md`).
 - Testy: `tests/web/week-views.test.ts`, `day-grid.test.ts`, `week-page-modes.test.ts`, `month-cells.test.ts`; E2E `week.spec.ts`.

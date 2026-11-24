@@ -16,12 +16,15 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } 
 import { durationLabel, logicalClock } from '@shared/format'
 import type { EnergyTrack } from '@shared/engine/energyTrack'
 import type { DragPreview } from '@shared/engine/groupDrag'
+import type { TrialChange, TrialDay } from '@shared/engine/trialEnergy'
 import type { TileCost as TileCostInfo } from '@shared/model/blockCosts'
 import type { Costs } from '@shared/model/categories'
+import type { ReserveCause } from '@shared/engine/reserveCause'
 import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
 import type { DueBadge } from '@shared/engine/caseDates'
 import type { Priority } from '@shared/model/requests'
 import { SERIES_MARK } from '@shared/seriesText'
+import { DECOMPRESS_HINT } from '@shared/engine/decompress'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { menuBind } from '../../components/ContextMenu'
 import { cx } from '../../components/ui'
@@ -35,9 +38,13 @@ import { EnergyLanes } from './EnergyLanes'
 import { hasEnergy } from './energyDraw'
 import { DEFAULT_NEW_BLOCK_MIN, DRAG_FROM_PX } from './gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from './gridDrag'
+import { ReserveCauseHint, ReserveRing, reserveTileProps, useReserveHint } from './ReserveCauseHint'
 import { inParallelZone, tileAt, tileLanes } from './parallelDrag'
 import type { CostAsk } from './costSave'
 import { costRoom, TileCost } from './TileCost'
+import { TrialCaption, trialText } from './TrialCaption'
+import { useTrialLowest, type Trial } from './trialEnergy'
+import { DecompressIcon } from './DecompressIcon'
 import { onTileName, TileNameField, type TimelineRename } from './tileRename'
 import { COPY_SPAN_ID } from '../today/dayPush'
 
@@ -64,6 +71,8 @@ export interface TimelineItem {
   finished?: boolean
   /** Waits for „Zacznij” (a fixed session). */
   waits?: boolean
+  /** A buffer of decompression (D386): the cup by its name, its words on hover. */
+  decompress?: boolean
   /** An occurrence of a series: the mark `SERIES_MARK` stands by its name (D401). */
   series?: boolean
   /** The due date of the task the block is of (D409): „Po terminie” (red) or „Termin jutro” … (muted) by its name; none for days gone by. */
@@ -89,6 +98,11 @@ export interface TimelineItem {
    * `edit` – a click on it opens the window that changes it (`Timeline.onCosts`).
    */
   cost?: TileCostInfo
+  /**
+   * The pools that first go below the reserve in this block's time (N20): the tile has a ring in the first one's colour and the hint
+   * „Tu głowa schodzi poniżej rezerwy (28 → 19)” (`dayAxis`, `reserveCauses`); absent – not a cause.
+   */
+  reserve?: ReserveCause
 }
 
 /**
@@ -127,6 +141,13 @@ export interface ParallelHint {
   pushed: ReadonlyMap<string, BlockSpan> | null
   same?: boolean
 }
+
+/**
+ * The place of a drag the warning of a buffer of decompression is counted for (D386, D582): moved, held (a copy too – it takes the buffer
+ * as any block), not onto another block nor a group; null – none.
+ */
+export const warnKeyOf = (drag: Pick<Drag, 'id' | 'moved' | 'onto' | 'group' | 'dropped' | 'edge' | 'start' | 'end' | 'from' | 'fromEnd' | 'copy'> | null): string | null =>
+  drag?.moved && !drag.onto && !drag.group && !drag.dropped ? `${drag.id}|${drag.edge ?? ''}|${drag.start}|${drag.end}|${drag.from}|${drag.fromEnd}|${drag.copy}` : null
 
 /** The edge of a block dragged by its handle: the top one moves its start, the bottom one its end (D365). */
 export type DragEdge = 'top' | 'end'
@@ -243,6 +264,32 @@ interface Drag {
 }
 
 /**
+ * A drag in progress as the energy on trial sees it (N19): the block, the edge (null – the body), where it is held (`span`) and was grabbed
+ * (`shown`), Ctrl (`copy`), the block it is over (`onto`, D492), and for a group (`group`) the minutes it moved by.
+ */
+export interface TrialDrag {
+  id: string
+  edge: DragEdge | null
+  span: BlockSpan
+  shown: BlockSpan
+  copy: boolean
+  onto: string | null
+  group: boolean
+  minutes: number
+}
+
+/**
+ * The energy on trial of an axis (N19): `day` – the day counted with its energy (null – nothing to say: a day gone by, the module off); `drag`
+ * – the change a drag in progress would write, as a trial (its key and how it is built – null: nothing to try); `cost` – the same for the
+ * window of a tile's cost (`costs` null – „Jak podkategoria”). Left out – the axis says nothing of energy while dragging.
+ */
+export interface TimelineTrial {
+  day: TrialDay | null
+  drag: (d: TrialDrag) => Trial | null
+  cost?: (day: TrialDay, id: string, costs: Costs | null) => TrialChange | null
+}
+
+/**
  * D531: the drag of a block of the selection of many (two and more) is the group's. `has` – the block is in such a selection; `preview` – where
  * the group (`moved`, the grabbed one too), the blocks it pushes apart (`pushed`) and the copies (`copies`, Ctrl) would stand with every selected
  * block `minutes` later (earlier) – the grabbed one's drop less where its tile stood – null: nothing moves; `drop` – let go there.
@@ -296,6 +343,7 @@ export function Timeline({
   resizeNote,
   edgeLimits,
   pushPreview,
+  warnPreview,
   parallelPreview,
   onParallel,
   onCopy,
@@ -303,6 +351,8 @@ export function Timeline({
   attached,
   onAttachDrop,
   onCosts,
+  energyTrial,
+  reserveAction,
   rename,
   ghost,
   draft,
@@ -359,6 +409,8 @@ export function Timeline({
    * pointer (D372) – drawn and said there.
    */
   pushPreview?: (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan, copy: boolean) => ReadonlyMap<string, BlockSpan> | null
+  /** D386: what the dragged block's place warns of (a block of work on a buffer of decompression), said by it while it is held; null – nothing. */
+  warnPreview?: (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan, copy: boolean) => string | null
   /**
    * D492: what dropping the dragged block `id` onto block `target` does (null – `target` takes no drop: the drag stays a move to
    * its hour). Asked while the pointer is over the right part of another tile; with it the tile is drawn where the drop puts it.
@@ -389,6 +441,10 @@ export function Timeline({
   onAttachDrop?: (id: string, dt: DataTransfer) => void
   /** The block's own cost set in the window of its tile (D501), or null – the category's again; left out – the cost is only told. */
   onCosts?: (id: string, costs: Costs | null, ask: CostAsk) => void | Promise<SaveAnswer>
+  /** N19: the lowest energy before and with the change a drag, an edge or the window of a tile's cost has not written yet – said beside it. */
+  energyTrial?: TimelineTrial
+  /** An action under the words of a tile's reserve hint (N20 – a slot; N3 puts „Wstaw regenerację tutaj” there); left out – the hint only tells. */
+  reserveAction?: (id: string, cause: ReserveCause) => ReactNode
   /**
    * The name changed in place (N9, `useTileRename`): a double click on a tile's name starts it, the field stands over the tile's name row while
    * `rename.active` is the tile's id. Left out – a tile's name is only told (the wizard's axis).
@@ -454,6 +510,9 @@ export function Timeline({
   }, [waitingSeq])
   // Let go anywhere (the block drawn anew in another column loses the pointer): the drag ends without a move.
   const holding = drag != null && !drag.dropped
+  // Whether this axis has the energy on trial (the handler of Esc reads it – it is set up once for a hold).
+  const trialOn = useRef(false)
+  trialOn.current = energyTrial != null
   useEffect(() => {
     if (!holding) return
     const end = (e: PointerEvent) => {
@@ -468,10 +527,12 @@ export function Timeline({
       if (copy !== d.copy) setDrag({ ...d, copy, onto: copy ? null : d.onto })
     }
     // D531 (T1764): Esc while a group is held – moved or not yet past the 4 px – ends its gesture with nothing changed; it is the drag's alone
-    // (heard first, in the capture phase): it never clears the selection under it, and the click after it is muted.
+    // (heard first, in the capture phase): it never clears the selection under it, and the click after it is muted. N19 (T2581): the same for a block
+    // or an edge once it has moved (as in „Tydzień”), on the axis that says the energy on trial („Dziś”: `energyTrial`; „Szablony” – as before) – the caption
+    // goes with it, nothing is written.
     const escape = (e: KeyboardEvent) => {
       const d = dragRef.current
-      if (e.key !== 'Escape' || !d || d.dropped || !d.group) return
+      if (e.key !== 'Escape' || !d || d.dropped || !(d.group || (d.moved && trialOn.current))) return
       e.preventDefault()
       e.stopPropagation()
       setDrag(null)
@@ -510,6 +571,8 @@ export function Timeline({
     onRange: (r) => onCreate?.(r.startMin, r.endMin - r.startMin)
   })
   const gridBind = onCreate ? grid.bind : {}
+  // N20: the hint of the tile that is a cause (one at a time) – opens under the pointer on it, never while a block is held.
+  const reserveHint = useReserveHint((key) => items.find((x) => x.id === key)?.reserve != null)
   const y = (min: number) => (min - lo) * PPM
   const height = (hi - lo) * PPM
 
@@ -541,6 +604,15 @@ export function Timeline({
   )
   // D531: a group – every selected block at its new place and what they push apart, counted once for each place of the drag; once let go it
   // stays as it was (the day counted again after the save would move it a second time) until the day shows the drop.
+  // D386: the warning of the place (counted once for each place of the drag, as the push).
+  const warnOf = useRef(warnPreview)
+  warnOf.current = warnPreview
+  const warnKey = warnPreview ? warnKeyOf(drag) : null
+  const warning = useMemo(
+    () => (warnKey && drag ? (warnOf.current?.(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }, drag.copy) ?? null) : null),
+    // The drag's place is in the key; a new count of the day brings new items.
+    [warnKey, items]
+  )
   const groupOf = useRef(groupDrag)
   groupOf.current = groupDrag
   const groupLast = useRef<{ key: string; preview: DragPreview | null } | null>(null)
@@ -566,6 +638,18 @@ export function Timeline({
   // Where the dragged block is drawn: under the pointer, where it will stand (`pushPreview` with its own id), or beside the
   // block it is dropped onto (D492).
   const dragShown: BlockSpan | null = drag ? shownSpan(drag, hint, pushed) : null
+  // N19: the lowest energy of the day before the change the drag (or the edge) would write and with it – counted off the pointer's path (`useTrialLowest`);
+  // once it is let go (or Esc) there is no trial: the caption goes at once.
+  const trying = drag?.moved && !drag.dropped && energyTrial ? drag : null
+  // A drop that writes nothing (back at its own place, a group moved by no minutes, a drop onto a block of its own group) has no trial: no caption. A drop
+  // onto a block writes its place beside it (`alongside`) even where the block stands now – only the block's own group (`hint.same`) is nothing.
+  const stays = trying != null && dragShown != null && (trying.group ? trying.start === trying.from : trying.onto ? hint?.same === true : staysPut(dragShown, trying))
+  const tried = useTrialLowest(
+    energyTrial?.day ?? null,
+    trying && energyTrial && !stays
+      ? energyTrial.drag({ id: trying.id, edge: trying.edge, span: { startMin: trying.start, endMin: trying.end }, shown: { startMin: trying.from, endMin: trying.fromEnd }, copy: trying.copy, onto: trying.onto, group: trying.group, minutes: trying.start - trying.from })
+      : null
+  )
 
   // D513: a copy being dragged – the block stays at its place among the others (a copy never changes it: never drawn pushed), a
   // dashed tile of the copy goes with the pointer (D531: of every copy of the group, where it will stand).
@@ -646,8 +730,9 @@ export function Timeline({
     const costAt = !i.cost ? null : !tiny && !narrow ? 'corner' : tiny && lane.lanes === 1 ? 'row' : 'hover'
     const costLabel = (className: string) =>
       i.cost && costAt && (
-        <TileCost cost={i.cost} id={`tile:${i.id}`} testId={`block-${i.id}-cost`} className={className} place={costAt} onChange={onCosts ? (costs, ask) => onCosts(i.id, costs, ask) : undefined} />
+        <TileCost cost={i.cost} id={`tile:${i.id}`} testId={`block-${i.id}-cost`} className={className} place={costAt} trial={energyTrial?.cost ? { day: () => energyTrial.day, change: (day, costs) => energyTrial.cost!(day, i.id, costs) } : undefined} onChange={onCosts ? (costs, ask) => onCosts(i.id, costs, ask) : undefined} />
       )
+    const menu = onContext ? menuBind((at) => onContext(i.id, at)) : undefined
     return (
       <button
         key={i.id}
@@ -657,6 +742,7 @@ export function Timeline({
         data-lane={lane.lanes > 1 ? `${lane.lane}/${lane.lanes}` : undefined}
         {...NO_GRID}
         data-block-title={i.title}
+        data-reserve-cause={i.reserve?.drops[0]?.pool}
         data-movable={draggable ? 'true' : undefined}
         data-selected={selected === i.id ? 'true' : undefined}
         data-marked={marked?.(i.id) ? 'true' : undefined}
@@ -689,12 +775,15 @@ export function Timeline({
           rename.start(i.id)
         }}
         // D528: the right button and the menu key open the menu of the selection (the screen puts this block into it first).
-        {...(onContext ? menuBind((at) => onContext(i.id, at)) : {})}
+        {...(menu ? { onContextMenu: menu.onContextMenu } : {})}
+        // N20: the hint of a tile that is a cause (its pointer, focus and Tab) – the key handler of the menu goes on through it.
+        {...reserveTileProps(reserveHint, i.id, i.reserve, () => !!dragRef.current, menu?.onKeyDown)}
         // D305: the left button drags a movable block from where it is shown; its start goes on the 5-min grid. D365: from
         // an edge's handle the edge goes (never both at once), a block with no handle under the pointer is moved as before.
         onPointerDown={(e) => {
           if (e.button !== 0) return
           pressed.current = { x: e.clientX, y: e.clientY }
+          if (i.reserve) reserveHint.hide(true)
           const at = (e.target as HTMLElement).dataset.edge
           const edge: DragEdge | null = at === 'top' && topEdge ? 'top' : at === 'end' && endEdge ? 'end' : null
           if (edge == null && !draggable) return
@@ -814,8 +903,9 @@ export function Timeline({
           // dimmed, A8-05).
           ...(pushedTo ? { outline: `1px dashed ${i.color}`, outlineOffset: -1 } : {})
         }}
-        title={i.hiddenIn ? `${i.title} · z ukrytego kalendarza ${i.hiddenIn}` : undefined}
+        title={i.hiddenIn ? `${i.title} · z ukrytego kalendarza ${i.hiddenIn}` : i.decompress ? DECOMPRESS_HINT : undefined}
         data-hidden-calendar={i.hiddenIn}
+        data-decompress={i.decompress ? 'true' : undefined}
         data-waiting={waiting ? 'true' : undefined}
         data-pushed={pushedTo ? 'true' : undefined}
         // D531: a block of the group dragged with the grabbed one, at its new place.
@@ -825,6 +915,8 @@ export function Timeline({
         {...(onAttachDrop && i.attach !== undefined ? tileDrop(i.id, onAttachDrop, dropOver, setDropOver) : {})}
       >
         {i.priority && <PriorityMark priority={i.priority} testId="block-priority" apart />}
+        {/* N20: the pool that first goes below the reserve in this block's time – a ring in its colour. */}
+        <ReserveRing cause={i.reserve} />
         {/* The edges over everything in the tile (z-30 – the cost's label in the corner or shown on hover is z-20): the whole width resizes (D365, D501). */}
         {topEdge && <span data-edge="top" data-testid={`block-${i.id}-edge-top`} className={cx('absolute inset-x-0 top-0 z-30 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
         {endEdge && <span data-edge="end" data-testid={`block-${i.id}-edge-end`} className={cx('absolute inset-x-0 bottom-0 z-30 cursor-ns-resize hover:bg-fg/25', tiny ? 'h-[5px]' : 'h-[6px]')} />}
@@ -836,6 +928,7 @@ export function Timeline({
                 ✓{' '}
               </span>
             )}
+            {i.decompress && <DecompressIcon className="mr-1 inline-block align-[-1px]" />}
             {i.title}
           </span>
           {i.badge && !narrow && <DueMark badge={i.badge} compact testId="block-due" />}
@@ -966,6 +1059,16 @@ export function Timeline({
             {hint.text}
           </div>
         )}
+        {/* D386: a block of work held on a buffer of decompression – the warning; the drop saves it all the same (D72). */}
+        {warning && dragShown && (
+          <div
+            className="pointer-events-none absolute right-3 z-30 rounded-sm border border-rose/50 bg-bg/90 px-1.5 py-0.5 text-[11px] text-rose"
+            style={{ top: y(dragShown.endMin) }}
+            data-testid="decompress-warning"
+          >
+            {warning}
+          </div>
+        )}
         {/* D365: the hours of an edge being dragged, and what the end costs. */}
         {drag?.moved && !drag.dropped && drag.edge && (
           <div
@@ -977,6 +1080,14 @@ export function Timeline({
             {staysPut(dragShown!, drag)
               ? 'bez zmian'
               : (resizeNote?.(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }) ?? durationLabel(dragShown!.endMin - dragShown!.startMin))}
+            {/* N19: the lowest energy with the new length – a line of the hint itself (it already stands at the edge). */}
+            <TrialCaption shown={tried} className="block" />
+          </div>
+        )}
+        {/* N19: the lowest energy of the day before and with the drag of a block or a group – under the place it would stand at. */}
+        {trying && !trying.edge && dragShown && trialText(tried) && (
+          <div className="pointer-events-none absolute right-3 z-30 rounded-sm border border-line bg-bg/90 px-1.5 py-0.5 text-[11px]" style={{ top: y(dragShown.endMin) }} data-testid="energy-trial-box">
+            <TrialCaption shown={tried} />
           </div>
         )}
         {markers.map((m) => (
@@ -989,6 +1100,11 @@ export function Timeline({
           </div>
         ))}
       </div>
+      {/* N20: the hint of the tile that is a cause. */}
+      {reserveHint.open && (() => {
+        const at = items.find((x) => x.id === reserveHint.open!.key)
+        return at?.reserve && <ReserveCauseHint id={at.id} cause={at.reserve} anchor={reserveHint.open!.anchor} hint={reserveHint}>{reserveAction?.(at.id, at.reserve)}</ReserveCauseHint>
+      })()}
       {/* D500: the energy beside the axis – four lanes G · E · B · C (`EnergyLanes`). */}
       {hasEnergy(energy) && <EnergyLanes track={energy} lo={lo} ppm={PPM} height={height} nowAt={nowMarker?.at ?? null} nowColor={TONE[nowMarker?.tone ?? 'fg']} />}
     </div>

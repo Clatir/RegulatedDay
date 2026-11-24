@@ -20,14 +20,14 @@ import { pushedText } from '@shared/engine/pushApart'
 import { attachmentFrom, attachmentRel, attachmentsOfBlock, type AttachmentOwner, type BlockPlace } from '@shared/model/attachment'
 import { templateJson } from '@shared/model/defaults'
 import { newId } from '@shared/model/ids'
-import { templateFrom, withTemplateVersion, type PlanBlock } from '@shared/model/plan'
+import { dayFileFrom, templateFrom, withTemplateVersion, type PlanBlock } from '@shared/model/plan'
 import { copyAttachments, removeAttachments } from '../../store/attachments'
 import { change, DAY_UNREADABLE, type CaseUndoFile } from '../../store/cases'
 import { editOf, rawRecord, useData, type SendState } from '../../store/data'
 import { undoToast } from '../../store/ui'
 import { templateCopy, withTemplateChange, type TemplateDay } from '../templates/templatePush'
-import { withPushed } from '../today/dayActions'
-import { copyChange, COPY_SPAN_ID, pushedStarts, type DayChange } from '../today/dayPush'
+import { tellTaken, withPushed, withTaken } from '../today/dayActions'
+import { copyChange, COPY_SPAN_ID, pushedStarts, withBufferPushes, type DayChange } from '../today/dayPush'
 
 /**
  * What a copy of `block` dropped at `startMin` of a day to come (`pushes`) pushes apart – for the preview while it is held (the copy
@@ -125,16 +125,22 @@ function afterCopy(text: string, undo: readonly CaseUndoFile[], ownerRel: string
  */
 export async function copyBlockTo(o: { to: string; today: string; startMin: number; name: string; dayText?: string; at?: number; read: () => Promise<CopyRead> }): Promise<CopyDone> {
   let made: { block: PlanBlock; pushed: number; attachments: string[] } | null = null
+  let taken: { day: CopyRead['day']; c: DayChange } | null = null
   const r = await change(async (put) => {
     made = null
+    taken = null
     const at = o.at ?? Date.now()
     const { block, place, day, file } = await o.read()
     const rel = paths.day(o.to)
     const copy = blockCopy(block, o.startMin, { date: o.to, at, caseOf: (id) => rawRecord(paths.record('request', id)) })
     // D367: on a taken place the flexible blocks after it are pushed apart, as for a new block (a day gone is history) – the
     // original held where it is (a copy never changes it).
-    const pushed = pushedStarts(day.ctx.plan, copyChange(day, copy.block, block.id, o.to >= o.today))
-    put(rel, file, withPushed(dayRaw(file, o.to), o.to, (raw) => putBlock(raw, copy.block), pushed))
+    const c = copyChange(day, copy.block, block.id, o.to >= o.today)
+    // D583 (T2485): with the blocks the buffers of the day after the copy push – as in „Dziś”.
+    const pushed = pushedStarts(day.ctx.plan, { pushed: withBufferPushes(day, c, useData.getState().rd.settings, file ? dayFileFrom(file, o.to) : null, o.to >= o.today) })
+    taken = c.takes ? { day, c } : null
+    // D582: a copy laid on a buffer of decompression takes it – in the same edit.
+    put(rel, file, withPushed(dayRaw(file, o.to), o.to, (raw) => withTaken(putBlock(raw, copy.block), c.takes), pushed))
     // A new sprawa goes with the day that holds its block (T923): a question about the day keeps it waiting, „theirs” takes it out.
     for (const c of copy.cases) put(paths.record('request', c.id), null, c.raw, rel)
     made = { block: copy.block, pushed: pushed.length, attachments: attachmentsOfBlock(useData.getState().attachments, block, place).map((a) => a.id) }
@@ -149,6 +155,8 @@ export async function copyBlockTo(o: { to: string; today: string; startMin: numb
   const entry = u ? editOf(u.rel, u.before, u.after) : null
   if (o.to === o.today && m.pushed > 0 && entry) await window.rd.planPushed(o.to, m.pushed, entry, entry.create ? u!.after : null, false).catch(() => undefined)
   const files = afterCopy(copiedText(o.name, { day: o.dayText, pushed: m.pushed }), r.undo, rel, { scope: 'day', date: o.to, blockId: m.block.id }, m.attachments)
+  const t = taken as { day: CopyRead['day']; c: DayChange } | null
+  if (t) tellTaken(t.day, t.c)
   return { saved: true, block: m.block, pushed: m.pushed, files, ...base }
 }
 

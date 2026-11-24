@@ -15,8 +15,8 @@ import { POOL_NAME } from './energyDraw'
 /** The field of a pool's cost: an integer in the schema's range. */
 export const COST_FIELD = { kind: 'integer', range: RANGES.cost } as const
 
-export function CostInput({ pool, value, onCommit, testId, wheel }: { pool: Pool; value: number; onCommit: (v: number) => void; testId: string; wheel: WheelMode }) {
-  return <SettingNumber field={{ ...COST_FIELD, label: `${POOL_NAME[pool]}: koszt na godzinę` }} value={value} onCommit={onCommit} className="w-[52px]" wheel={wheel} data-testid={testId} />
+export function CostInput({ pool, value, onCommit, testId, wheel, onShown }: { pool: Pool; value: number; onCommit: (v: number) => void; testId: string; wheel: WheelMode; onShown?: (v: number | null) => void }) {
+  return <SettingNumber field={{ ...COST_FIELD, label: `${POOL_NAME[pool]}: koszt na godzinę` }} value={value} onCommit={onCommit} className="w-[52px]" wheel={wheel} onShown={onShown} data-testid={testId} />
 }
 
 /** The text of `WideCostWarning` for these costs (null – none): the computers of the folder's view. */
