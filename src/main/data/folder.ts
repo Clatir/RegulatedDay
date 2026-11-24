@@ -3461,9 +3461,10 @@ export class DataFolder {
   /**
    * Actions of the main window as events of a day's log (spec: facts you set live only in the log): only the kinds a
    * window may write, each checked as a line of the log before it is written; an action without its instant gets now. A
-   * snapshot „od dziś” or of a change of type takes the settings in force at its instant (with your queued changes).
+   * snapshot „od dziś” or of a change of type takes the settings in force at its instant (with your queued changes). The ids of the
+   * events written, in their order (D587: „Gorszy dzień” keeps the id of the approval it wrote).
    */
-  async userEvents(drafts: ReadonlyArray<Record<string, unknown>>): Promise<void> {
+  async userEvents(drafts: ReadonlyArray<Record<string, unknown>>): Promise<string[]> {
     const now = this.clock.now()
     const ready: EventDraft[] = []
     for (const d of drafts) {
@@ -3485,8 +3486,9 @@ export class DataFolder {
       if (!check.ok || !isKnown(check.event)) throw new Error(`zdarzenie ${k}: ${check.ok ? 'nieznane' : check.why}`)
       ready.push(draft)
     }
-    for (const d of ready) this.append(d)
+    const ids = ready.map((d) => this.append(d).id)
     await this.log.flush()
+    return ids
   }
 
   /** The events of the given kinds of every day of a month ('RRRR-MM'), as this computer sees them now. */

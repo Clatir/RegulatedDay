@@ -996,7 +996,8 @@ export interface RdApi {
    * file (`made` – the file it created, else null): the bar keeps „Przestawiono: <label> · Cofnij” as after a variant (D313).
    */
   planArranged(day: string, label: string, entry: EditEntry, made: RawRecord | null): Promise<void>
-  logEvents(events: EventIn[]): Promise<void>
+  /** The window's events written to the day's log: the ids of those written, in their order (none – a bridge that does not say, as stubs). */
+  logEvents(events: EventIn[]): Promise<string[] | void>
   resolve(id: string, choice: 'mine' | 'theirs'): Promise<void>
   /** The events of every day of a month (kinds asked) – e.g. the exceptions of the boundary this month. */
   monthEvents(month: string, kinds: string[]): Promise<unknown[]>

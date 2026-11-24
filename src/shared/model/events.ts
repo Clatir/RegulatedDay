@@ -75,9 +75,13 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * T2450–T2458): with the setting on, the day's plan has a block „Dekompresja” after a block long and costly enough, the leader begins it
  * by itself at that block's end (`decompress`) and ends it after its length; its minutes count to no minimum of regeneration nor reward
  * (`planned.decompress`). An older version knows none of it (it would count such a begun block as a regeneration toward the minimum,
- * end it at the return to a computer and never begin it): it gives way to this one as the leader.
+ * end it at the return to a computer and never begin it): it gives way to this one as the leader. 21 – N4 (and N1 of A1, the same release
+ * 1.38): „Gorszy dzień” (D570, D587, T2530–T2548) – the day's file marks it (`worseDay`), and in each of its periods (from an acceptance to
+ * its „Cofnij”) the proposal of the boundary is earlier by its minutes, never before the click (`worseBoundary`). An older version knows no
+ * mark: it would approve the boundary by itself at the start of the first work block, and judge the minutes of the period, by the proposal
+ * of before – it gives way to this one as the leader.
  */
-export const RULES_VERSION = 20
+export const RULES_VERSION = 21
 
 /** The rules since which a block's start writes the cost of its routine (D512, `planned.routineCosts`): an earlier start had none. */
 export const ROUTINE_COSTS_FROM = 14

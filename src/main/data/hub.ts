@@ -1090,9 +1090,11 @@ export class DataHub {
     return this.need().dayRuns(day)
   }
 
-  async events(drafts: EventIn[]): Promise<void> {
-    await this.need().userEvents(drafts)
+  /** The window's events written; the ids of those written, in their order. */
+  async events(drafts: EventIn[]): Promise<string[]> {
+    const ids = await this.need().userEvents(drafts)
     this.changed()
+    return ids
   }
 
   /** A click of the bar's „Koszt ▸” (D585): judged and written by the folder in its turn; the windows hear it at once (its tile, T2503). */

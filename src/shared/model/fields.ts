@@ -36,7 +36,7 @@ export interface ToggleField {
   group: FieldGroup
 }
 
-/** „Bloki poza komputerem jednym ciągiem” (D553–D556) and „Bufory dekompresji” (D569): off by default. */
+/** „Bloki poza komputerem jednym ciągiem” (D553–D556), „Bufory dekompresji” (D569) and the proposal „Gorszy dzień” (D570): off by default. */
 export const TOGGLE_FIELDS: readonly ToggleField[] = [
   {
     key: 'awayChain',
@@ -51,6 +51,14 @@ export const TOGGLE_FIELDS: readonly ToggleField[] = [
     path: ['decompress', 'on'],
     label: 'Bufory dekompresji',
     hint: 'Po długim bloku o wysokim koszcie głowy, emocji albo bodźców plan wstawia blok „Dekompresja” (regeneracja, 5–20 min) i przesuwa kolejne elastyczne; stałe zostają. Bufor zaczyna się sam po końcu bloku; usuniesz go jak każdy blok.',
+    group: 'plan'
+  },
+  // „Gorszy dzień” (D570, D587): the proposal after the check-in off by default; the button of the morning plan is there always.
+  {
+    key: 'worseDay.propose',
+    path: ['worseDay', 'propose'],
+    label: 'Proponuj „Gorszy dzień” po check-inie',
+    hint: 'Gdy check-in pokaże gorzej w co najmniej dwóch pulach (wynik puli 65 albo niżej – jedno „tak” albo dwa razy „trochę”), plan poranny zaproponuje „Gorszy dzień” – rutyny w wersji na gorsze dni i wcześniejszą granicę. Przycisk „Gorszy dzień” w planie porannym działa zawsze.',
     group: 'plan'
   }
 ]
@@ -120,6 +128,7 @@ export const NUMBER_FIELDS: readonly NumberField[] = [
   { key: 'solitudeAfterMin', scope: 'general', path: ['solitudeAfterMin'], label: 'Samotność po kontakcie dłuższym niż', kind: 'duration', range: GENERAL_RANGES.solitudeAfterMin, offAllowed: true, group: 'care', hint: 'Po tak długim kontakcie z ludźmi aplikacja sugeruje chwilę samotności; 0 wyłącza sugestię.' },
   { key: 'decompress.minLengthMin', scope: 'dated', path: ['decompress', 'minLengthMin'], label: 'Bufor dekompresji po bloku od', kind: 'duration', range: RANGES.decompressLengthMin, group: 'plan', hint: 'Długość bloku (z „Przedłuż”), po którym stoi bufor dekompresji.' },
   { key: 'decompress.minCost', scope: 'dated', path: ['decompress', 'minCost'], label: 'Bufor dekompresji przy koszcie od', kind: 'integer', range: RANGES.decompressCost, unit: '/h', group: 'plan', hint: 'Koszt głowy, emocji albo bodźców na godzinę (1 = 3 punkty energii na godzinę).' },
+  { key: 'worseDay.earlierMin', scope: 'dated', path: ['worseDay', 'earlierMin'], label: 'O ile wcześniej kończyć pracę w gorszy dzień', kind: 'duration', range: RANGES.worseDayEarlierMin, group: 'plan', hint: 'Tyle wcześniej staje granica po przyjęciu „Gorszego dnia” – nie przed chwilą przyjęcia; 0 zostawia granicę.' },
   { key: 'parallelMax', scope: 'general', path: ['parallelMax'], label: 'Najwięcej bloków naraz', kind: 'integer', range: GENERAL_RANGES.parallelMax, group: 'plan', hint: 'Blok przeciągnięty na inny biegnie razem z nim; ponad tę liczbę staje zaraz po grupie.' },
   { key: 'deadlineDays', scope: 'general', path: ['deadlineDays'], label: 'Ostrzegaj o terminie na', kind: 'integer', range: GENERAL_RANGES.deadlineDays, unit: 'dni', group: 'cases', hint: 'Plan poranny pokazuje sprawy po terminie i z terminem do tylu dni naprzód (2 – dziś, jutro i pojutrze).' }
 ]

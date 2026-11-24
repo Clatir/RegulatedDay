@@ -15,6 +15,7 @@ import type { PlanBlock } from '../model/plan'
 import { NO_ROUTINE_COSTS, type RoutineCosts } from '../model/routines'
 import { placeOf } from '../model/categories'
 import { settingsOn, type DayTypeParams, type RulesSettings, type SettingsChange } from '../model/settings'
+import { worseBoundary, worseFloorOf, type WorsePeriod } from '../model/worseDay'
 import { placeLogical } from '../time/day'
 import { addDays, weekday } from '../time/zone'
 import { activityOf, type Activity } from './activity'
@@ -22,7 +23,7 @@ import { blockInfos, isBoundaryWork, plannedSpan, setsWorkEndBlock, type BlockIn
 import { EXPLAIN_END_RULES, explainMinutes, explainsOf, type Explain } from './explain'
 import { OPEN, compareOrder, foldFacts, isPassive, isRunning, orderOf, ranMinutes, sameClick, viewAt, workSince, type DayFacts, type EventOrder, type Segment } from './facts'
 import { forecast, type Forecast, type Placed } from './forecast'
-import { atOf, gridOf, idxOf, idxOfLogical, type Grid } from './grid'
+import { atOf, gridOf, idxCeilOf, idxOf, idxOfLogical, type Grid } from './grid'
 
 /** How far past the day's end a block that runs through 04:00 may still be followed (it belongs to the day it began). */
 const SPILL_MIN = 12 * 60
@@ -99,6 +100,44 @@ export interface DayContext {
    * None – from the day's snapshot.
    */
   changes?: readonly SettingsChange[]
+  /**
+   * „Gorszy dzień” (D570, D587; the periods of the mark of the day's file – `dayContextOf`, `worsePeriodsOf`): in the minutes from an
+   * acceptance's `at` to its „Cofnij” (`until`) the proposal of the boundary is earlier by `earlierMin`, never before the click rounded up
+   * to a whole minute and to 5 min (`worseBoundary`). None – none.
+   */
+  worseDays?: readonly WorsePeriod[]
+}
+
+/** A period of „Gorszy dzień” on the day's grid: its minutes [from, until), the boundary's floor and how much earlier. */
+interface WorseSpan {
+  from: number
+  until: number
+  floor: number
+  earlierMin: number
+}
+
+/** The periods of „Gorszy dzień” of a day's context on its grid (D587, T2543) – minutes of the clock, as `now` is (rounded). */
+function worseOf(g: Grid, list: DayContext['worseDays']): WorseSpan[] {
+  return (list ?? []).map((w) => ({
+    from: Math.max(0, idxOf(g, w.at)),
+    until: w.until == null ? Number.POSITIVE_INFINITY : idxOf(g, w.until),
+    floor: worseFloorOf(Math.max(0, idxCeilOf(g, w.at))),
+    earlierMin: w.earlierMin
+  }))
+}
+
+/** A proposal of the boundary at minute m on a worse day (the period in force then); outside one – as it is. */
+const worseAt = (spans: readonly WorseSpan[], p: number, m: number): number => {
+  const w = spans.find((x) => x.from <= m && m < x.until)
+  return w ? worseBoundary(p, w.earlierMin, w.floor) : p
+}
+
+/**
+ * A proposal of the boundary counted at another minute (`computeDay` at the day's start – „Wstałeś później?”) as the day has it at
+ * minute `m` of the grid: earlier when „Gorszy dzień” is in force then (D587, T2544).
+ */
+export function worseProposalAt(ctx: Pick<DayContext, 'date' | 'worseDays'>, p: number | null, m: number): number | null {
+  return p == null ? null : worseAt(worseOf(gridOf(ctx.date), ctx.worseDays), p, m)
 }
 
 /** The routines' costs of a day's context (none given – none). */
@@ -160,7 +199,8 @@ export interface DayState {
   dayType: string
   wake: number
   firstWorkStart: number | null
-  boundary: { proposal: number | null; approved: number | null; approvedAt: number | null; auto: boolean; max: number }
+  /** `worseMin` – on a worse day (D587) how much earlier the proposal is now than it would be (absent – not earlier). */
+  boundary: { proposal: number | null; approved: number | null; approvedAt: number | null; auto: boolean; max: number; worseMin?: number }
   ends: WorkEnd[]
   firstEnd: number | null
   /** The end of work now in force (null while work is open); in a day without work: the wake time. */
@@ -224,6 +264,8 @@ interface Ctx {
   asWritten: boolean
   /** A third of the minimum of regeneration in force at each minute (the limit before the end of work, D208, D218). */
   regenThird: Uint16Array
+  /** „Gorszy dzień” (D587): its periods on the grid (`worseOf`). */
+  worse: readonly WorseSpan[]
 }
 
 /** The planned end of a started block: fixed ones end at their window (as the timer ends them), others after their length and pauses. */
@@ -591,7 +633,8 @@ export function computeDay(ctx: DayContext): DayState {
     }),
     events,
     asWritten: ctx.asWritten === true,
-    regenThird: new Uint16Array(cap)
+    regenThird: new Uint16Array(cap),
+    worse: worseOf(g, ctx.worseDays)
   }
   // The minimum in force at k: the one a change of type fixed (as `required` reads it), else its settings' (T514).
   // It changes only in the minute after a snapshot.
@@ -712,13 +755,20 @@ export function computeDay(ctx: DayContext): DayState {
     }
     return last
   }
+  /** How much earlier the proposal is now (D587 – the boundary's card says it): set by the count of minute `now`. */
+  let worseNow = 0
   const proposalAt = (m: number, view: DayFacts, flags: Uint32Array, fcW: Forecast): number | null => {
     // Waiting blocks that expired unstarted keep their place in the proposal (they do not change the boundary).
     const worked = lastWorkEnd(m, flags, fcW)
     const waited = expiredWaitEnd(c, view, m)
     const end = worked == null ? waited : waited == null ? worked : Math.max(worked, waited)
     if (end == null) return null
-    return Math.min(maxAt(m, view, fcW), end + settingsAt(m).settings.boundaryBufferMin)
+    const p = Math.min(maxAt(m, view, fcW), end + settingsAt(m).settings.boundaryBufferMin)
+    // „Gorszy dzień” (D587): in its period earlier – never before its click (a minute before it, or after its „Cofnij”, keeps its own).
+    if (!c.worse.length) return p
+    const shifted = worseAt(c.worse, p, m)
+    if (m === now) worseNow = p - shifted
+    return shifted
   }
   // The approval: the last one written (not undone after it), else on its own at the start of the first work block (D490,
   // T1149): a minute whose work is only a block away from the computer the app began by itself (a commute while you slept)
@@ -958,7 +1008,10 @@ export function computeDay(ctx: DayContext): DayState {
     }
   }
 
+  worseNow = 0
   const fin = evaluate(now, shift, true, true)
+  // The proposal of now as `fin` counted it: how much earlier it is on a worse day (0 – not at all).
+  const worseMin = fin.proposal == null ? 0 : worseNow
   let explainMin = 0
   for (const x of explains) if (!x.answer) explainMin += explainMinutes(x, now)
   let budget = 0
@@ -985,7 +1038,7 @@ export function computeDay(ctx: DayContext): DayState {
     dayType,
     wake: c.wake,
     firstWorkStart,
-    boundary: { proposal: fin.proposal, approved: fin.approved?.boundary ?? null, approvedAt: fin.approved?.at ?? null, auto: fin.approved?.auto ?? false, max: fin.max },
+    boundary: { proposal: fin.proposal, approved: fin.approved?.boundary ?? null, approvedAt: fin.approved?.at ?? null, auto: fin.approved?.auto ?? false, max: fin.max, ...(worseMin > 0 ? { worseMin } : {}) },
     ends: fin.ends,
     firstEnd: fin.ends[0]?.at ?? (fin.noWork ? c.wake : null),
     workEnd: fin.workEnd,

@@ -12,6 +12,7 @@ import { startingBody, type Costs } from './categories'
 import { DAY_TYPES, isSessionMarket, isZone, type DayTypeId, type SessionChoice, type SessionMarket } from './settings'
 import { routineStepsEntries, type RoutineStepsEntry } from './routineSteps'
 import { doneSetFrom, stepsFrom, type Step } from './steps'
+import { WORSE_DAY_KEY, worseDayMarkFrom, type WorseDayMark } from './worseDay'
 
 /**
  * A block of a template that is a session (D511, D515, `model/templateSessions.ts`): its hour is Polish time as usual (as the
@@ -257,6 +258,8 @@ export interface DayFile {
    * routineSteps.ts`); a block not in it shows its routine as the routine is now. Unknown to older versions (kept in the file).
    */
   routineSteps?: Record<string, RoutineStepsEntry>
+  /** „Gorszy dzień” accepted for this day (D570, D587; `model/worseDay.ts`) – present only then. Unknown to older versions (kept in the file). */
+  worseDay?: WorseDayMark
 }
 
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -556,6 +559,7 @@ export function dayFileFrom(v: unknown, date: string): DayFile {
       const ids = [...doneSetFrom(x)]
       if (ids.length) stepsDone[k] = ids
     }
+  const worse = worseDayMarkFrom(r[WORSE_DAY_KEY])
   return {
     schema: 1,
     date,
@@ -574,7 +578,8 @@ export function dayFileFrom(v: unknown, date: string): DayFile {
     movedTo,
     asked,
     stepsDone,
-    routineSteps: routineStepsEntries(r.routineSteps)
+    routineSteps: routineStepsEntries(r.routineSteps),
+    ...(worse ? { worseDay: worse } : {})
   }
 }
 

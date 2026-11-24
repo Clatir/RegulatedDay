@@ -20,6 +20,8 @@ import { paths } from '../../src/shared/data/paths'
 import { createDailyBackup } from '../../src/main/data/backup'
 import { RULES_VERSION } from '../../src/shared/model/events'
 import { logicalMinuteOf, placeLogical } from '../../src/shared/time/day'
+import { durationLabel, logicalClock } from '../../src/shared/format'
+import { worseBoundary } from '../../src/shared/model/worseDay'
 import { addDays } from '../../src/shared/time/zone'
 import { launch, logicalToday, viewPage, withMainLog, DAY_NUMBER } from './app'
 import { seedAwake } from './seedAwake'
@@ -1244,6 +1246,72 @@ test('prośby w pasku (D311, D312, D564 P17, P20): „⋯” – „Prośba ▸�
 
 /** The logical minute now (04:00 = 240, after midnight + 1440). */
 const logicalMinuteNow = (): number => Math.floor(logicalMinuteOf(logicalToday(), Date.now()))
+
+test('gorszy dzień (D587): przycisk w planie porannym – rutyna na gorsze dni i granica wcześniej; „Cofnij” przy znaku przywraca obie', async () => {
+  // The routine to come (in 15 min) and the day's file are today's: not in the last 40 min of the logical day (04:00).
+  test.skip(logicalMinuteOf(logicalToday(), Date.now()) > 28 * 60 - 40, 'doba logiczna kończy się w trakcie testu (04:00)')
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-worse-day-'))
+  seed(dataDir, { sessions: false })
+  const today = logicalToday()
+  const start = logicalMinuteNow() + 15
+  mkdirSync(join(dataDir, 'routines'), { recursive: true })
+  writeFileSync(join(dataDir, 'routines', 'r.json'), JSON.stringify({ schema: 1, id: 'r', name: 'Poranna', normal: [{ id: 'woda', name: 'woda', min: 2 }, { id: 'kot', name: 'kot', min: 8 }], worse: [{ id: 'woda', name: 'woda', min: 2 }], archived: false }))
+  const dayFile = join(dataDir, 'days', today.slice(0, 4), `${today}.json`)
+  const day = JSON.parse(readFileSync(dayFile, 'utf8'))
+  day.blocks.push({ id: 'rut', categoryId: 'rutyny', startMin: start, durationMin: 10, fixed: false, routine: 'r' })
+  writeFileSync(dayFile, JSON.stringify(day))
+  const file = () => JSON.parse(readFileSync(dayFile, 'utf8')) as { routineSteps?: Record<string, { version: string }>; worseDay?: { earlierMin: number; undoneAt?: number }; asked?: Record<string, string> }
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('morning-plan')).toBeVisible({ timeout: 30_000 })
+      if (new Date(`${today}T12:00:00Z`).getUTCDay() === 1) await page.getByTestId('side-b-done').click()
+      await page.getByTestId('goals-skip').click()
+      await page.getByTestId('checkin-skip').click()
+      // The work block at 03:00 of the night after: the proposal is the maximum of an ordinary day (19:00).
+      await expect(page.getByTestId('boundary')).toContainText('Propozycja granicy: 19:00')
+      // D570: without the setting no proposal after the check-in – the button is there anyway.
+      await expect(page.getByTestId('worse-day-proposal')).toHaveCount(0)
+      // 60 min earlier, never before the click rounded up to a whole minute and to 5 min (after 18:00 the floor is now, after 19:00
+      // it stays): the click lies between these two readings of the clock.
+      const ceil5 = (m: number) => Math.ceil(m / 5) * 5
+      const minuteUp = (t: number) => Math.floor(logicalMinuteOf(today, t)) + (t % 60_000 ? 1 : 0)
+      const expected = (t: number) => worseBoundary(19 * 60, 60, ceil5(minuteUp(t)))
+      const before = expected(Date.now())
+      await page.getByTestId('worse-day').click()
+      const after = expected(Date.now())
+      await expect.poll(() => file().routineSteps?.rut?.version, { timeout: 15_000 }).toBe('worse')
+      expect(file().worseDay?.earlierMin).toBe(60)
+      const line = page.getByRole('status').filter({ hasText: 'Gorszy dzień: 1 rutyna na gorsze dni, granica 19:00' })
+      await expect(line).toBeVisible()
+      await expect(line.getByTestId('toast-action')).toHaveText('Cofnij')
+      const words = (m: number) => (m === 19 * 60 ? 'granica 19:00 bez zmian' : `granica 19:00 → ${logicalClock(m)}`)
+      const said = (await line.textContent()) ?? ''
+      expect([words(before), words(after)].some((w) => said.includes(w))).toBe(true)
+      const to = said.includes(words(before)) ? before : after
+      await expect(page.getByTestId('boundary')).toContainText(`Propozycja granicy: ${logicalClock(to)}`)
+      // The card says how much earlier the proposal really is (none when it stays).
+      if (to < 19 * 60) await expect(page.getByTestId('boundary-worse')).toHaveText(`; gorszy dzień – ${durationLabel(19 * 60 - to)} wcześniej`)
+      else await expect(page.getByTestId('boundary-worse')).toHaveCount(0)
+      await expect(page.getByTestId('worse-day-mark')).toContainText('Gorszy dzień')
+      await expect(page.getByTestId('worse-day')).toHaveCount(0)
+      await shot(page, 'n4-worse-day')
+      // „Cofnij” at the mark (as the line's): the routine's version and the boundary back; the mark's period ends (it stays in the
+      // file for the minutes it was in force), and the proposal is not asked again today.
+      await page.getByTestId('worse-day-undo').click()
+      await expect.poll(() => file().worseDay?.undoneAt, { timeout: 15_000 }).toBeGreaterThan(0)
+      expect(file().routineSteps?.rut).toBeUndefined()
+      expect(file().asked?.worseDay).toBe('no')
+      await expect(page.getByTestId('boundary')).toContainText('Propozycja granicy: 19:00')
+      await expect(page.getByTestId('boundary-worse')).toHaveCount(0)
+      await expect(page.getByTestId('worse-day')).toBeVisible()
+      await expect(page.getByRole('status').filter({ hasText: 'Cofnięto gorszy dzień.' })).toBeVisible()
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
 
 test('rutyny (D328): karta w „Dziś” z wersją i krokami; „Kroki ▸” w pasku – zapis w jednym miejscu zamyka oba', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-routines-'))

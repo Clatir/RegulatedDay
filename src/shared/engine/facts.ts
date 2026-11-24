@@ -198,9 +198,9 @@ export interface DayFacts {
   /**
    * `plan`: the blocks of the plan when it was approved (null: an approval that does not say); `undoneAt` – the minute of
    * the first „Cofnij” written after it (by the order of the log, so an approval, its „Cofnij” and a new approval in one
-   * minute keep the new one).
+   * minute keep the new one). In the order of the log; `id` – its event's (D587: „Gorszy dzień” knows the approval it wrote, T2533).
    */
-  approvals: Array<{ at: number; boundary: number; auto: boolean; plan: string[] | null; undoneAt: number | null }>
+  approvals: Array<{ id: string; at: number; boundary: number; auto: boolean; plan: string[] | null; undoneAt: number | null }>
   undos: number[]
   exceptions: Array<{ at: number; minutes: number }>
   /** „Koniec pracy” and what writes it: the click (index, and its place in the log) and the end it confirms (index). */
@@ -515,7 +515,7 @@ export function foldFacts(grid: Grid, events: readonly AnyEvent[], bodiesAt?: (a
         break
       }
       case 'boundary.approve':
-        f.approvals.push({ at: idx(e.at), boundary: idx(e.boundary), auto: e.auto === true, plan: Array.isArray(e.plan) ? e.plan : null, undoneAt: null })
+        f.approvals.push({ id: e.id, at: idx(e.at), boundary: idx(e.boundary), auto: e.auto === true, plan: Array.isArray(e.plan) ? e.plan : null, undoneAt: null })
         break
       case 'boundary.undo':
         f.undos.push(idx(e.at))

@@ -18,7 +18,7 @@ import { logicalMinuteOf } from '../time/day'
 import { dayWakeMin, firstFixedStart, morningBound, wakeShiftedStart } from './createDay'
 import { isBoundaryWork } from './blocks'
 import { awayStartOf, awayStartUndoable } from './timer'
-import { computeDay, type DayContext, type DayState } from './day'
+import { computeDay, worseProposalAt, type DayContext, type DayState } from './day'
 import { atOf } from './grid'
 
 /** How much later than planned the day's first block must stand to ask (D488: 20 min). */
@@ -151,7 +151,9 @@ export function detectLateWake(ctx: DayContext, state: DayState, dayFile: DayFil
   // Work that no longer fits before the boundary (it stays: the approved one, else the plan's own proposal – the day
   // counted from its start, before the late start pushed anything): the latest flexible work blocks are shortened,
   // never below 15 min – shorter, parked.
-  const boundary = state.boundary.approved ?? computeDay({ ...ctx, now: g.start }).boundary.proposal
+  // On a worse day (D587, T2544) the plan's own proposal is earlier as from now: counted at the day's start without its periods (one from
+  // 04:00 would shift it there already), then shifted once, as the period in force now has it.
+  const boundary = state.boundary.approved ?? worseProposalAt(ctx, computeDay({ ...ctx, worseDays: undefined, now: g.start }).boundary.proposal, state.now)
   const shortens: LateWake['shortens'] = []
   const parks: PlanBlock[] = []
   if (boundary != null) {

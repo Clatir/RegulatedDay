@@ -3,7 +3,8 @@
  * plan – the day's wake (in the header), blocks moved from yesterday, the questions of the session layer and of
  * holidays, a lighter day after a stationary „zjazd”, the announcement of the session shift, requests chosen from the
  * queue, the boundary to approve (approving it approves the plan – also from the header, D8) and its exception. The day's warnings
- * are not here: the side panel and the block's panel have them (D563 P10). Every step can be skipped; nothing is blocked.
+ * are not here: the side panel and the block's panel have them (D563 P10). „Gorszy dzień” (D587) – its button in the header always, its
+ * proposal at the top of the plan (`WorseDay.tsx`). Every step can be skipped; nothing is blocked.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { marketDay } from '@shared/calendar/holidays'
@@ -34,6 +35,7 @@ import { checkinAnswersOf, checkinOpen, shortNightNote, shownAnswers } from './c
 import { useCheckinHint, useShortNight } from './shortNight'
 import type { ShortNight } from '@shared/engine/shortNight'
 import { goalsStepOpen } from './goalsStepLogic'
+import { WorseDayHead, WorseDayProposal } from './WorseDay'
 import { logEvents, useData } from '../../store/data'
 import { useDayFiles, type DayModel } from '../../store/day'
 import { useBusy } from '../../lib/busy'
@@ -153,6 +155,8 @@ export function MorningHeader({ model, open, plan, onToggle, busy: shared }: { m
         <span className="flex-1" />
         <span className="text-muted">{open ? '▴' : '▾'}</span>
       </button>
+      {/* „Gorszy dzień” (D587): always, while the card stands – whatever the step; accepted – its mark with „Cofnij”. */}
+      <WorseDayHead model={model} busy={shared ?? own} />
       {approve && (
         <button type="button" className="btn btn-accent" disabled={busy} onClick={() => void run(async () => void (await logEvents(approve)))} data-testid="morning-approve">
           Zatwierdź
@@ -334,6 +338,8 @@ function Plan({ model, names, busy: approving }: { model: DayModel; names: Names
 
   return (
     <div className="flex flex-col gap-3 text-[12.5px]" data-testid="morning-steps">
+      {/* D570, D587: after the check-in worse in two pools or more – only with the setting on. */}
+      <WorseDayProposal model={model} busy={approving} />
       <CalibrationCard model={model} />
       {yesterday.length > 0 && (
         <Card>
@@ -558,7 +564,9 @@ export function Boundary({ model, lm, approved, proposal, busy: shared }: { mode
       ) : proposal != null ? (
         <div className="flex flex-wrap items-center gap-2">
           <span>
-            Propozycja granicy: <span className="num text-lamp">{lm(proposal)}</span> (koniec ostatniego bloku pracy + {s.settings.boundaryBufferMin} min, najpóźniej {lm(s.boundary.max)})
+            Propozycja granicy: <span className="num text-lamp">{lm(proposal)}</span> (koniec ostatniego bloku pracy + {s.settings.boundaryBufferMin} min, najpóźniej {lm(s.boundary.max)}
+            {/* D587: on a worse day the proposal is earlier – the card says by how much it is now (none – no note). */}
+            {s.boundary.worseMin ? <span data-testid="boundary-worse">; gorszy dzień – {durationLabel(s.boundary.worseMin)} wcześniej</span> : null})
           </span>
           <button type="button" className="btn btn-accent" disabled={busy} onClick={() => void log(approveEvents(model) ?? [])} data-testid="boundary-approve">
             Zatwierdź
