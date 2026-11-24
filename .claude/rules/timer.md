@@ -77,6 +77,11 @@ paths:
   z przodu – także przy sprawdzaniu końców); powrót – `liveReturn` (pomija tylko Twoje cofnięcia, `userUndone`); koniec znów ważny po
   sprawdzeniu – nowy id (`autoEndIds`, `freshEnd`). Ustawienie z chwili startu bloku (`chainOn`), start po końcu ciągu – `chainKnownAt`
   (2 min bez użycia), Twoje „Cofnij” – `chainTakenBack` (T1968–T1971).
+- Bufor dekompresji (D403, D581, T2456, T2462): `decompressStarts` w `auto.ts` – po końcu źródła (= `anchor` bufora; „Koniec pracy” go nie parkuje – `workEndParking`), gdy nic nie biegnie z przodu, nie w „Odcinam się”
+  ani przy prośbie, a prognoza daje mu miejsce teraz: `block.start` (`autoRule: 'decompress'`, `at` = koniec źródła albo koniec sesji/zajęć po nim,
+  `planned.durationMin` z prognozy, `planned.decompress`; id z końca źródła – „Cofnij” nie wraca); koniec po długości (`decompress`, `fin`) –
+  bez `firstUse`, nieobecności i pytań („Dalej?” go nie ma – miejsce „away”); „Dalej” na źródle startuje go (`nextBlock`, długość z prognozy),
+  „Dalej” na nim kończy wcześniej. Pasek: `soundOk` false (bez dźwięku 5 i 0), bez linii kotwicy „Zacznij · Zaparkuj”, `autoText`.
 - Grupa równoległa (D476, D493, D494, D499, T1190–T1199): `block.start.group` (`BlockFact.group`) – start grupy
   `groupStarts` (`groupOf` z `parallel.ts`, 1.23-A), z przodu `groupFront` (to samo w `energy.ts`), `front` (pasek „+K w
   tle”), `groupStart`/`groupPlan` w `auto.ts`; blok spoza grupy (także stały sam, „Odcinam się”) pauzuje całą grupę, „Dalej” w

@@ -24,6 +24,7 @@ import { DRAG_STEP_MIN, MAX_BLOCK_MIN, MIN_BLOCK_MIN } from '@shared/model/plan'
 import type { DueBadge } from '@shared/engine/caseDates'
 import type { Priority } from '@shared/model/requests'
 import { SERIES_MARK } from '@shared/seriesText'
+import { DECOMPRESS_HINT } from '@shared/engine/decompress'
 import { blockEdgeDim, blockFill, blockFillDim } from '@shared/theme'
 import { menuBind } from '../../components/ContextMenu'
 import { cx } from '../../components/ui'
@@ -43,6 +44,7 @@ import type { CostAsk } from './costSave'
 import { costRoom, TileCost } from './TileCost'
 import { TrialCaption, trialText } from './TrialCaption'
 import { useTrialLowest, type Trial } from './trialEnergy'
+import { DecompressIcon } from './DecompressIcon'
 import { onTileName, TileNameField, type TimelineRename } from './tileRename'
 import { COPY_SPAN_ID } from '../today/dayPush'
 
@@ -69,6 +71,8 @@ export interface TimelineItem {
   finished?: boolean
   /** Waits for „Zacznij” (a fixed session). */
   waits?: boolean
+  /** A buffer of decompression (D386): the cup by its name, its words on hover. */
+  decompress?: boolean
   /** An occurrence of a series: the mark `SERIES_MARK` stands by its name (D401). */
   series?: boolean
   /** The due date of the task the block is of (D409): „Po terminie” (red) or „Termin jutro” … (muted) by its name; none for days gone by. */
@@ -137,6 +141,13 @@ export interface ParallelHint {
   pushed: ReadonlyMap<string, BlockSpan> | null
   same?: boolean
 }
+
+/**
+ * The place of a drag the warning of a buffer of decompression is counted for (D386, D582): moved, held (a copy too – it takes the buffer
+ * as any block), not onto another block nor a group; null – none.
+ */
+export const warnKeyOf = (drag: Pick<Drag, 'id' | 'moved' | 'onto' | 'group' | 'dropped' | 'edge' | 'start' | 'end' | 'from' | 'fromEnd' | 'copy'> | null): string | null =>
+  drag?.moved && !drag.onto && !drag.group && !drag.dropped ? `${drag.id}|${drag.edge ?? ''}|${drag.start}|${drag.end}|${drag.from}|${drag.fromEnd}|${drag.copy}` : null
 
 /** The edge of a block dragged by its handle: the top one moves its start, the bottom one its end (D365). */
 export type DragEdge = 'top' | 'end'
@@ -332,6 +343,7 @@ export function Timeline({
   resizeNote,
   edgeLimits,
   pushPreview,
+  warnPreview,
   parallelPreview,
   onParallel,
   onCopy,
@@ -397,6 +409,8 @@ export function Timeline({
    * pointer (D372) – drawn and said there.
    */
   pushPreview?: (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan, copy: boolean) => ReadonlyMap<string, BlockSpan> | null
+  /** D386: what the dragged block's place warns of (a block of work on a buffer of decompression), said by it while it is held; null – nothing. */
+  warnPreview?: (id: string, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan, copy: boolean) => string | null
   /**
    * D492: what dropping the dragged block `id` onto block `target` does (null – `target` takes no drop: the drag stays a move to
    * its hour). Asked while the pointer is over the right part of another tile; with it the tile is drawn where the drop puts it.
@@ -590,6 +604,15 @@ export function Timeline({
   )
   // D531: a group – every selected block at its new place and what they push apart, counted once for each place of the drag; once let go it
   // stays as it was (the day counted again after the save would move it a second time) until the day shows the drop.
+  // D386: the warning of the place (counted once for each place of the drag, as the push).
+  const warnOf = useRef(warnPreview)
+  warnOf.current = warnPreview
+  const warnKey = warnPreview ? warnKeyOf(drag) : null
+  const warning = useMemo(
+    () => (warnKey && drag ? (warnOf.current?.(drag.id, { startMin: drag.start, endMin: drag.end }, drag.edge, { startMin: drag.from, endMin: drag.fromEnd }, drag.copy) ?? null) : null),
+    // The drag's place is in the key; a new count of the day brings new items.
+    [warnKey, items]
+  )
   const groupOf = useRef(groupDrag)
   groupOf.current = groupDrag
   const groupLast = useRef<{ key: string; preview: DragPreview | null } | null>(null)
@@ -880,8 +903,9 @@ export function Timeline({
           // dimmed, A8-05).
           ...(pushedTo ? { outline: `1px dashed ${i.color}`, outlineOffset: -1 } : {})
         }}
-        title={i.hiddenIn ? `${i.title} · z ukrytego kalendarza ${i.hiddenIn}` : undefined}
+        title={i.hiddenIn ? `${i.title} · z ukrytego kalendarza ${i.hiddenIn}` : i.decompress ? DECOMPRESS_HINT : undefined}
         data-hidden-calendar={i.hiddenIn}
+        data-decompress={i.decompress ? 'true' : undefined}
         data-waiting={waiting ? 'true' : undefined}
         data-pushed={pushedTo ? 'true' : undefined}
         // D531: a block of the group dragged with the grabbed one, at its new place.
@@ -904,6 +928,7 @@ export function Timeline({
                 ✓{' '}
               </span>
             )}
+            {i.decompress && <DecompressIcon className="mr-1 inline-block align-[-1px]" />}
             {i.title}
           </span>
           {i.badge && !narrow && <DueMark badge={i.badge} compact testId="block-due" />}
@@ -1032,6 +1057,16 @@ export function Timeline({
             data-testid="parallel-hint"
           >
             {hint.text}
+          </div>
+        )}
+        {/* D386: a block of work held on a buffer of decompression – the warning; the drop saves it all the same (D72). */}
+        {warning && dragShown && (
+          <div
+            className="pointer-events-none absolute right-3 z-30 rounded-sm border border-rose/50 bg-bg/90 px-1.5 py-0.5 text-[11px] text-rose"
+            style={{ top: y(dragShown.endMin) }}
+            data-testid="decompress-warning"
+          >
+            {warning}
           </div>
         )}
         {/* D365: the hours of an edge being dragged, and what the end costs. */}

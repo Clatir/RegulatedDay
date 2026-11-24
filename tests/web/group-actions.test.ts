@@ -118,6 +118,29 @@ describe('changeDayGroup – pola i przesunięcie: jedna zmiana pliku dnia', () 
     expect(startsOf(s.files[TODAY], TODAY)).toEqual({ a: lm('11:00'), b: lm('12:00'), c: lm('13:00') })
   })
 
+  it('„Przesuń resztę dnia o +30” (N17) od trwającego bloku: 4 elastyczne jednym wpisem, trwający i sesje na miejscu; pasek – wyzwalacz znacznika; „Cofnij” przywraca plik dnia', async () => {
+    const plan = [flex('a', '05:00', 30), flex('b', '05:45', 30), flex('c', '06:30', 30), flex('d', '11:15', 30), flex('e', '12:00', 60)]
+    const file = fileOf(TODAY, plan)
+    const events = new Scenario({ date: TODAY, plan }).start('a', '05:00').events
+    const s = stub({ [TODAY]: file }, { events: { [TODAY]: events } })
+    const r = await changeDayGroup(TODAY, ['a'], { k: 'shiftRest', minutes: 30 }, { at: AT + 60_000 })
+    expect(r).toMatchObject({ status: 'saved', changed: 4, skipped: [], pushed: 0 })
+    expect(r.over).toBeUndefined()
+    expect(s.sent).toHaveLength(1)
+    expect(startsOf(s.files[TODAY], TODAY)).toEqual({ a: lm('05:00'), b: lm('06:15'), c: lm('07:00'), d: lm('11:45'), e: lm('12:30') })
+    expect(s.told).toEqual([[TODAY, 4, false]])
+    expect(await r.undo!()).toEqual({ saved: true, restored: 4, kept: 0 })
+    expect(s.files[TODAY]).toEqual(file)
+  })
+
+  it('„Przesuń resztę dnia o” w dniu minionym – nic, „miniony”', async () => {
+    const plan = [flex('a', '10:00', 30)]
+    const s = stub({ '2098-12-30': fileOf('2098-12-30', plan) })
+    const r = await changeDayGroup('2098-12-30', ['a'], { k: 'shiftRest', minutes: 15 }, { at: AT })
+    expect(r).toMatchObject({ changed: 0, skipped: [{ id: 'a', why: 'miniony' }], undo: null })
+    expect(s.sent.flat()).toEqual([])
+  })
+
   it('blok serii zmienia się jak „Tylko to”: plik dnia, bez pytania i bez zmiany serii – policzony do dopisku', async () => {
     const seriesBlock = { categoryId: 'inne', variantId: null, startMin: 11 * 60, durationMin: 60, fixed: false, background: null, costs: null, bgCostPct: null, note: '', name: null, routine: null, steps: [] }
     useData.setState({ series: [newSeries('s1', seriesBlock, '2098-12-01', { kind: 'daily' }, 'ask', { until: null, count: null })] })

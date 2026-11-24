@@ -5,13 +5,16 @@
  */
 import type { DayContext, DayState } from '@shared/engine/day'
 import { plannedSpan } from '@shared/engine/blocks'
+import { bufferUnder, decompressWarning, isBuffer } from '@shared/engine/decompress'
+import { replanned } from '@shared/engine/context'
+import { setsDecompress, type SettingsChange } from '@shared/model/settings'
 import { atOf } from '@shared/engine/grid'
 import { draggedBlock } from '@shared/engine/planEdit'
 import { plannedEndOf } from '@shared/engine/timer'
 import { logicalMinuteOf } from '@shared/time/day'
 import { groupEndMin, PARALLEL_SAME_TEXT, parallelDrop, parallelFullText, parallelJoinText, placePatch, type BlockPatch } from '@shared/engine/parallel'
 import { axisMoves, pushApart, withBlock, type PushedBlock } from '@shared/engine/pushApart'
-import type { PlanBlock } from '@shared/model/plan'
+import { dayFileFrom, type DayFile, type PlanBlock } from '@shared/model/plan'
 import type { BlockSpan, DragEdge, ParallelHint } from '../plan/Timeline'
 import { edgePatch } from '../plan/edgeEdit'
 import type { PushedStart } from './dayActions'
@@ -26,6 +29,11 @@ export interface DayChange {
   /** The other blocks of its group the change writes (D492, T1166: it left the group as its first block). */
   others: BlockPatch[]
   pushed: PushedBlock[]
+  /**
+   * The buffer of decompression a block of work laid on its place takes away (D386, D582): the warning in the drag's hint, the save
+   * cancels it in the same edit (one „Cofnij”); none – none taken.
+   */
+  takes?: PlanBlock | null
 }
 
 /** The plan after a change: its block, and the others of its group it writes (`others`). */
@@ -41,9 +49,10 @@ export function changedPlan(plan: readonly PlanBlock[], c: Pick<DayChange, 'bloc
  * The plan as the day has it after the change is written: its block, the others of its group, and the blocks it pushes apart at their new
  * starts (`withPushed`) – one plan for the preview of the axis (`pushedSpans`, `parallelHint`) and the energy on trial (N19, `plan/trialEnergy.ts`).
  */
-export function planAfter(plan: readonly PlanBlock[], c: Pick<DayChange, 'block' | 'others' | 'pushed'>): PlanBlock[] {
+export function planAfter(plan: readonly PlanBlock[], c: Pick<DayChange, 'block' | 'others' | 'pushed'> & { takes?: DayChange['takes'] }): PlanBlock[] {
   const starts = new Map(c.pushed.map((p) => [p.id, p.startMin]))
-  return changedPlan(plan, c).map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b))
+  // Without the buffer of decompression the change takes (D582) – as the save leaves the day.
+  return without(changedPlan(plan, c), c.takes ?? null).map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b))
 }
 
 /**
@@ -60,7 +69,85 @@ export function dragChange(day: { ctx: DayContext; state: DayState }, id: string
   const patch = placed.patch
   const block = { ...was, ...patch }
   const c = { was, block, patch, others: placed.others }
-  return { ...c, pushed: pushes ? pushApart(day.ctx, day.state, changedPlan(plan, c), id, { atMin: edge === 'end' ? shown.startMin : undefined, onUnsettled }) : [] }
+  // The block's place after the change: a drag by its body gives only its start (`onMove`) – its whole length from there.
+  const takes = pushes ? bufferTakenBy(day, block, edge ? span : { startMin: block.startMin ?? span.startMin, endMin: (block.startMin ?? span.startMin) + block.durationMin }, { was: id }) : null
+  return { ...c, takes, pushed: pushes ? pushApart(day.ctx, day.state, without(changedPlan(plan, c), takes), id, { atMin: edge === 'end' ? shown.startMin : undefined, onUnsettled }) : [] }
+}
+
+/** The plan without the buffer a change takes (D582). */
+const without = (plan: readonly PlanBlock[], taken: PlanBlock | null): PlanBlock[] => (taken ? plan.filter((b) => b.id !== taken.id) : [...plan])
+
+/**
+ * What a saved change says of the buffer of decompression it took (D386, D582): a block of work – „Na miejscu dekompresji po <blok>”
+ * (`nameOf` names the buffer's block); another block, or none taken – nothing.
+ */
+export function takenNotice(day: { ctx: DayContext; state: DayState }, c: Pick<DayChange, 'block' | 'takes'>, nameOf: (b: PlanBlock) => string): string | null {
+  if (!c.takes || !warnsOnBuffer(day, c.block)) return null
+  // The block it stands after (its anchor – one set „po: …” in its panel follows that block), else the one it was made for.
+  const after = c.takes.anchor ?? c.takes.sourceId
+  const source = day.ctx.plan.find((b) => b.id === after)
+  return decompressWarning(source ? nameOf(source) : 'bloku')
+}
+
+/** A block of work (D386, D582): laid on a buffer of decompression, it is warned of („Na miejscu dekompresji po …”). */
+export const warnsOnBuffer = (day: { state: DayState }, block: Pick<PlanBlock, 'categoryId'>): boolean => day.state.settings.categories[block.categoryId]?.cls === 'work'
+
+/**
+ * The buffer of decompression not begun that a block placed at `span` (logical minutes) lays on (D386, D582: any block takes its place, a
+ * block of work with a warning – `warnsOnBuffer`) – where the day's axis shows the buffers (today the forecast, another day its plan);
+ * null – none.
+ */
+export function bufferTakenBy(day: { ctx: DayContext; state: DayState }, block: PlanBlock, span: BlockSpan, o: { was?: string; axis?: 'plan' } = {}): PlanBlock | null {
+  // A block in the background runs beside the buffer (T2478): it takes nothing.
+  if (isBuffer(block) || (block.background ?? day.state.settings.categories[block.categoryId]?.startsInBackground ?? false)) return null
+  const st = day.state
+  const lm = (idx: number) => logicalMinuteOf(st.grid.date, atOf(st.grid, idx))
+  const byId = new Map(st.blocks.map((b) => [b.id, b]))
+  // One axis for the buffers and the block before the change (T2483): today's forecast where the drag is shown, else the plan.
+  const today = o.axis !== 'plan' && day.ctx.now >= st.grid.start && day.ctx.now < st.grid.start + st.grid.length * 60_000
+  const spanOf = (id: string) => {
+    const info = byId.get(id)
+    const p = today ? st.forecast.find((x) => x.block.id === id) : undefined
+    const at = p ? { start: p.from, end: p.to } : !today && info ? plannedSpan(info, byId) : null
+    return at ? { id, startMin: lm(at.start), endMin: lm(at.end) } : null
+  }
+  const axis: Array<{ id: string; startMin: number; endMin: number }> = []
+  for (const b of day.ctx.plan) {
+    if (!isBuffer(b) || st.facts.blocks.get(b.id)?.startedAt != null) continue
+    const at = spanOf(b.id)
+    if (at) axis.push(at)
+  }
+  // Only a change that newly lays the block on one (D582, T2487): the buffers it lay on already before keep it there – the others are asked.
+  const before = o.was != null ? spanOf(o.was) : null
+  const fresh = before ? axis.filter((x) => !(before.startMin < x.endMin && before.endMin > x.startMin)) : axis
+  return fresh.length ? bufferUnder(fresh, day.ctx.plan, block.id, span) : null
+}
+
+/** Where the day's axis shows block `id` (today the forecast, another day its plan; logical minutes) – null: not on it. */
+export function axisSpanOf(day: { ctx: DayContext; state: DayState }, id: string): BlockSpan | null {
+  const st = day.state
+  const lm = (idx: number) => logicalMinuteOf(st.grid.date, atOf(st.grid, idx))
+  const today = day.ctx.now >= st.grid.start && day.ctx.now < st.grid.start + st.grid.length * 60_000
+  const p = today ? st.forecast.find((x) => x.block.id === id) : undefined
+  const info = st.blocks.find((b) => b.id === id)
+  const at = p ? { start: p.from, end: p.to } : !today && info ? plannedSpan(info, new Map(st.blocks.map((b) => [b.id, b]))) : null
+  return at ? { startMin: lm(at.start), endMin: lm(at.end) } : null
+}
+
+/** The buffer a change made in the block's panel newly lays it on (D582, T2483): on the plan's axis, a block of its own hour; none – null. */
+export function panelTakes(day: { ctx: DayContext; state: DayState }, was: PlanBlock, after: PlanBlock): PlanBlock | null {
+  if (after.startMin == null || after.anchor != null) return null
+  return bufferTakenBy(day, after, { startMin: after.startMin, endMin: after.startMin + after.durationMin }, { was: was.id, axis: 'plan' })
+}
+
+/**
+ * The buffer a drag of `was` – by its body or an edge (`edge`), grabbed at `shown` – to `span` would take, without counting the push (the
+ * hint asks it at every place; D582): a copy (`copy`) is a new block – asked under `COPY_SPAN_ID`, never its original's place or buffer.
+ */
+export function dragTaken(day: { ctx: DayContext; state: DayState }, was: PlanBlock, span: BlockSpan, edge: DragEdge | null, shown: BlockSpan, copy: boolean): PlanBlock | null {
+  const start = edge === 'end' ? shown.startMin : span.startMin
+  const at = edge ? span : { startMin: start, endMin: start + was.durationMin }
+  return bufferTakenBy(day, { ...was, id: copy ? COPY_SPAN_ID : was.id, startMin: start }, at, copy ? {} : { was: was.id })
 }
 
 /**
@@ -148,13 +235,16 @@ export const COPY_SPAN_ID = '__copy__'
  */
 export function copyChange(day: { ctx: DayContext; state: DayState }, copy: PlanBlock, originalId: string, pushes: boolean): DayChange {
   const held = day.ctx.plan.map((b) => (b.id === originalId ? { ...b, fixed: true } : b))
-  const pushed = pushes ? pushApart(day.ctx, day.state, withBlock(held, copy), copy.id, { onUnsettled }).filter((p) => p.id !== originalId) : []
-  return { was: null, block: copy, patch: copy, others: [], pushed }
+  // D582: a copy laid on a buffer of decompression takes its place as any block.
+  const takes = pushes && copy.startMin != null ? bufferTakenBy(day, copy, { startMin: copy.startMin, endMin: copy.startMin + copy.durationMin }) : null
+  const pushed = pushes ? pushApart(day.ctx, day.state, without(withBlock(held, copy), takes), copy.id, { onUnsettled }).filter((p) => p.id !== originalId) : []
+  return { was: null, block: copy, patch: copy, others: [], takes, pushed }
 }
 
 /** A new block added to a day to come (`pushes`) and what it pushes apart (D367: „Dodaj” in the panel of „Dziś”). */
 export function addChange(day: { ctx: DayContext; state: DayState }, block: PlanBlock, pushes: boolean): DayChange {
-  return { was: null, block, patch: block, others: [], pushed: pushes ? pushApart(day.ctx, day.state, withBlock(day.ctx.plan, block), block.id, { onUnsettled }) : [] }
+  const takes = pushes && block.startMin != null ? bufferTakenBy(day, block, { startMin: block.startMin, endMin: block.startMin + block.durationMin }) : null
+  return { was: null, block, patch: block, others: [], takes, pushed: pushes ? pushApart(day.ctx, day.state, without(withBlock(day.ctx.plan, block), takes), block.id, { onUnsettled }) : [] }
 }
 
 /**
@@ -168,6 +258,30 @@ export function pushedSpans(day: { ctx: DayContext; state: DayState }, c: DayCha
   const moves = axisMoves(day.ctx, day.state, planAfter(day.ctx.plan, c), axis)
   moves.delete(c.block.id)
   return moves.size ? moves : null
+}
+
+/**
+ * The change with the blocks the buffers of decompression of the plan after it move (D583: „Przesunięto N” counts them, D367 writes them):
+ * the plan of the file after the change (its pushes, without the buffer it takes) with the buffers laid again (`replanned`, your settings'
+ * `changes`) – a block whose start differs from where the plan shows it now and from where the change puts it is pushed by a buffer.
+ */
+export function withBufferPushes(day: { ctx: DayContext; state: DayState }, c: DayChange, changes: readonly SettingsChange[], file: DayFile | null, pushes = true): PushedBlock[] {
+  // A day gone by is history (D367): nothing pushed.
+  if (!pushes || !setsDecompress(changes)) return c.pushed
+  const base = day.ctx.basePlan ?? day.ctx.plan
+  const starts = new Map(c.pushed.map((p) => [p.id, p.startMin]))
+  const after = without(changedPlan(base, c), c.takes ?? null).map((b) => (starts.has(b.id) ? { ...b, startMin: starts.get(b.id)! } : b))
+  // The buffer it takes is gone also from a day without a file yet.
+  const gone = c.takes ? { ...(file ?? dayFileFrom({}, day.ctx.date)), cancelled: [...(file?.cancelled ?? []), c.takes.id] } : file
+  const shown = new Map(day.ctx.plan.map((b) => [b.id, b.startMin]))
+  const out = new Map(c.pushed.map((p) => [p.id, p]))
+  for (const b of replanned(day.ctx, after, changes, gone)) {
+    const was = after.find((x) => x.id === b.id)
+    if (isBuffer(b) || b.id === c.block.id || !was || was.startMin == null || b.startMin == null || b.startMin === was.startMin || b.startMin === shown.get(b.id)) continue
+    const span = { startMin: b.startMin, endMin: b.startMin + b.durationMin }
+    out.set(b.id, { id: b.id, fromMin: shown.get(b.id) ?? was.startMin, startMin: b.startMin, shown: span, planned: span })
+  }
+  return [...out.values()]
 }
 
 /** The counting of a push did not settle (a bound for safety): said in the console of a development build only. */

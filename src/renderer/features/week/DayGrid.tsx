@@ -35,7 +35,8 @@ import { useMachine } from '../../store/machine'
 import { openDay, openPick, setBlockDraft, toast } from '../../store/ui'
 import { showWeekPush } from '../../store/weekPush'
 import { DAY_TYPE_COLORS } from '../calendar/dayTypes'
-import { blockColor, blockKind, blockName, type Names } from '../plan/blockView'
+import { blockColor, blockKind, blockName, DECOMPRESS_COLOR, type Names } from '../plan/blockView'
+import { DecompressIcon } from '../plan/DecompressIcon'
 import { DEFAULT_NEW_BLOCK_MIN, dragStarted, snapMinute, type GridRange } from '../plan/gridCreate'
 import { NO_GRID, RangeBand, useGridCreate } from '../plan/gridDrag'
 import { AllDayBar } from '../allday/AllDayBar'
@@ -878,7 +879,9 @@ export function BlockBox({ block: b, reserve, reserveAction, lifted, lo, ppm = W
   const { top, height } = blockSpan(b, lo, ppm)
   // N20: the hint of a block that is a cause (its ring is in the tile's style).
   const reserveHint = useReserveHint(() => reserve != null)
-  const color = blockColor(b.categoryId, names)
+  // D386: a buffer of decompression in the sea green, with its cup.
+  const buffer = b.named.origin === 'decompress'
+  const color = buffer ? DECOMPRESS_COLOR : blockColor(b.categoryId, names)
   const dim = b.state === 'missed' || b.state === 'parked' || b.state === 'cancelled'
   const name = blockName(b.named, names)
   // D430: a block with its own name says its category beside its hours.
@@ -893,6 +896,7 @@ export function BlockBox({ block: b, reserve, reserveAction, lifted, lo, ppm = W
   const nameContent = (
     <>
       {b.outsidePlan ? '+ ' : ''}
+      {buffer && <DecompressIcon className="mr-0.5 inline-block align-[-1px]" />}
       {name}
       {b.named.origin === 'series' && (
         <span className="ml-1 text-muted" title="Z serii" aria-label="z serii" data-testid="series-mark">
@@ -965,6 +969,7 @@ export function BlockBox({ block: b, reserve, reserveAction, lifted, lo, ppm = W
       data-tile-id={b.id}
       data-tile-date={date}
       data-state={b.state}
+      data-decompress={buffer ? 'true' : undefined}
       data-outside={b.outsidePlan ? 'true' : undefined}
       data-marked={marked ? 'true' : undefined}
       data-open-wait={waiting ? 'true' : undefined}

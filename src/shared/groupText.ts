@@ -26,7 +26,7 @@ const NOUNS: Record<GroupKind, Noun> = {
 export const groupCount = (n: number, kind: GroupKind = 'block'): string => countLabel(n, NOUNS[kind].one, NOUNS[kind].few, NOUNS[kind].many)
 
 /** The verbs of the line (impersonal, as „Przesunięto N bloków”). */
-export const VERB = { changed: 'Zmieniono', moved: 'Przeniesiono', planned: 'Zaplanowano', removed: 'Usunięto', copied: 'Skopiowano' } as const
+export const VERB = { changed: 'Zmieniono', moved: 'Przeniesiono', planned: 'Zaplanowano', removed: 'Usunięto', copied: 'Skopiowano', pushed: 'Przesunięto' } as const
 
 /** What the line says besides the count. */
 export interface GroupLineParts {
@@ -45,6 +45,8 @@ export interface GroupLineParts {
   energy?: { from: number; to: number } | null
   /** The selection held blocks of a series: they changed as „Tylko to” (D529). */
   series?: boolean
+  /** What the change pushed past (D72 – „praca kończy się po maksimum (19:00)”, N17): said right after the count. */
+  warning?: string | null
 }
 
 const unique = (xs: readonly string[]): string[] => [...new Set(xs)]
@@ -73,6 +75,7 @@ export const SERIES_NOTE = 'bloki serii – tylko te dni'
 /** The text of the line without „Cofnij”: the parts joined with „ · ”. */
 export function groupLineText(l: GroupLineParts): string {
   const parts = [`${l.verb ?? VERB.changed} ${groupCount(l.n, l.kind)}`]
+  if (l.warning) parts.push(l.warning)
   const skipped = skippedText(l.skipped ?? [])
   if (skipped) parts.push(skipped)
   const stayed = stayedText(l.stayed ?? [], l.kind, { place: l.stayedPlace === true })

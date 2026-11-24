@@ -32,17 +32,22 @@ const REREAD_MS = 30_000
  */
 export const dayUsable = (d: Pick<DayData, 'complete' | 'unknown' | 'away'>): boolean => !d.unknown && (d.complete || d.away)
 
-/** The day's data, read again when the data change (the last one read is shown meanwhile – no flash of an empty day). */
-export function useDayData(date: string): DayData | null {
+/**
+ * The day's data, read again when the data change (the last one read is shown meanwhile – no flash of an empty day). `on` false –
+ * nothing is read (what was read before is still given). `fresh` – only what this very hook read while `on` (null till then and
+ * while `on` is false): never the window's memory of an earlier read, which may be hours old (the short night, T2526).
+ */
+export function useDayData(date: string, on = true, fresh = false): DayData | null {
   const stamp = useData((s) => s.stamp)
   const open = useData((s) => s.view?.status === 'open')
   const reread = useNow(REREAD_MS)
-  const [data, setData] = useState<DayData | null>(() => cache.get(date) ?? null)
+  const [data, setData] = useState<DayData | null>(() => (fresh ? null : (cache.get(date) ?? null)))
   useEffect(() => {
-    setData(cache.get(date) ?? null)
-  }, [date])
+    setData(fresh ? null : (cache.get(date) ?? null))
+  }, [date, fresh])
   useEffect(() => {
-    if (!open) return
+    if (fresh && !on) setData(null)
+    if (!open || !on) return
     let alive = true
     window.rd
       .dayData(date)
@@ -54,7 +59,7 @@ export function useDayData(date: string): DayData | null {
     return () => {
       alive = false
     }
-  }, [date, stamp, open, reread])
+  }, [date, stamp, open, reread, on])
   return data
 }
 

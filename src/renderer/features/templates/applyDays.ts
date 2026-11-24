@@ -87,7 +87,8 @@ export async function readApplyDays(dates: readonly string[], at: number): Promi
     if (typeof p === 'string') return void unreadable.push(date)
     const begun = begunIds(p.facts)
     const off = new Set([...stayingIds(p.facts)].filter((id) => !begun.has(id)))
-    days.push({ date, plan: p.ctx.plan, snapshot: p.ctx.snapshot, raw: p.file as ApplyDay['raw'], begun, off, runs: p.runs })
+    // The buffers of decompression (T2458) are no collision: the day lays them again after the template.
+    days.push({ date, plan: p.ctx.basePlan ?? p.ctx.plan, snapshot: p.ctx.snapshot, raw: p.file as ApplyDay['raw'], begun, off, runs: p.runs })
   })
   return { days, unreadable }
 }
