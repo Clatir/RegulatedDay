@@ -55,7 +55,8 @@ interface Made {
  * are refused (nothing written).
  */
 export async function changeTemplateGroup(t: TemplateGroupTarget, ids: readonly string[], a: GroupAction): Promise<GroupDone> {
-  if (a.k === 'cancel' || a.k === 'park' || a.k === 'moveTo') return groupNone('refused')
+  // A template has no day of its own: its actions of a day and the rest of a day (N17) are refused.
+  if (a.k === 'cancel' || a.k === 'park' || a.k === 'moveTo' || a.k === 'shiftRest') return groupNone('refused')
   const rel = paths.record('template', t.templateId)
   const state: SendState = { afterSend: false }
   let made: Made | null = null

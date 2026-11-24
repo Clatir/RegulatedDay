@@ -93,7 +93,8 @@ export function wakeChange(snapshot: DaySnapshot, file: DayFile, wakeMin: number
  * also a session the answer „tak” added, which is in no snapshot) and not by being taken out of the file (your own).
  */
 export function leavesByCancel(id: string, snapshot: Pick<DaySnapshot, 'blocks'>, file: Pick<DayFile, 'blocks'> | null): boolean {
-  return snapshot.blocks.some((b) => b.id === id) || !file?.blocks.some((b) => b.id === id)
+  // A buffer of decompression (D386, T2450) – the plan counts it, also one you changed: cancelled, or the plan would count it again.
+  return snapshot.blocks.some((b) => b.id === id) || !file?.blocks.some((b) => b.id === id && b.origin !== 'decompress')
 }
 
 /** The planned start of a block (an anchored one: its anchor's planned end), a logical minute; null when unknown. */

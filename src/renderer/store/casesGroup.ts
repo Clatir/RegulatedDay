@@ -190,7 +190,7 @@ export async function planCases(ids: readonly string[], date: string, startMin: 
     for (const d of touched) {
       let next = files[d]!
       if (d === date && o.push) {
-        const pushed = pushedInto(next, d, o.push)
+        const pushed = pushedInto(next, d, o.push, new Set(made.map((m) => m.s.id)))
         next = pushed.next
         moved = pushed.moved
       }

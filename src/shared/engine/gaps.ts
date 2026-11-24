@@ -280,19 +280,76 @@ const MAX_ROUNDS = 10
  */
 export const closeGap = (ctx: DayContext, state: DayState, gap: Pick<Gap, 'block' | 'tryMin'>): PushedBlock[] => closing(ctx, state, gap.block, gap.tryMin).out
 
-/** `closeGap` with where the gap's block then stands on the axis (index; null: it cannot move). */
-function closing(ctx: DayContext, state: DayState, block: string, tryMin: number): { out: PushedBlock[]; from: number | null } {
+/** The rounds of the rest of the day (`earlierRest`): a whole day's chain may need more than a gap's (as `pushApart`). */
+const REST_ROUNDS = 40
+
+/**
+ * „Przesuń resztę dnia o… → Wcześniej o…” (N17, D584, T2466, T2490): the chain of „Przesuń resztę wcześniej” through the whole rest of the day –
+ * the blocks `take` (`restOf`: the flexible ones from the earliest selected block on) each `minutes` earlier than the axis shows it (than its
+ * plan, when the forecast shows it later), never before now, 04:00 (the day's first index), a block before the rest nor a block that stays
+ * among them (a fixed, waiting, protected, begun one, one anchored to a block that stays – kept in the forecast's order: none is passed
+ * backwards), never later than its plan; written where the forecast then shows them. Empty: none of them can move. `onUnsettled` – the rounds
+ * ran out (`maxRounds`, tests).
+ */
+export function earlierRest(ctx: DayContext, state: DayState, take: readonly string[], minutes: number, o: { onUnsettled?: () => void; maxRounds?: number } = {}): PushedBlock[] {
+  const ids = new Set(take)
+  const first = foreground(state).find((p) => ids.has(p.block.id))
+  return first ? closing(ctx, state, first.block.id, minutes, { take: ids, ...o }).out : []
+}
+
+/**
+ * `closeGap` with where the gap's block then stands on the axis (index; null: it cannot move). `rest` – the rest of the day (`earlierRest`):
+ * the chain goes on past fixed blocks (they stay, as the protected and begun ones), only its blocks move, none of them before a block before
+ * the chain nor later than its plan.
+ */
+function closing(ctx: DayContext, state: DayState, block: string, tryMin: number, rest?: { take: ReadonlySet<string>; onUnsettled?: () => void; maxRounds?: number }): { out: PushedBlock[]; from: number | null } {
+  const through = rest?.take
   const g = state.grid
   const fg = foreground(state)
   const k = fg.findIndex((p) => p.block.id === block)
   if (k < 0) return { out: [], from: null }
   const chain: Placed[] = []
   for (const p of fg.slice(k)) {
-    if (p.block.fixed || p.block.waits) break
+    if (!through && (p.block.fixed || p.block.waits)) break
     chain.push(p)
   }
-  const movable = new Set(chain.filter((p) => !p.running && pushable(p.block, state.facts)).map((p) => p.block.id))
+  const movable = new Set(chain.filter((p) => !p.running && pushable(p.block, state.facts) && (!through || through.has(p.block.id))).map((p) => p.block.id))
   if (!movable.has(block)) return { out: [], from: null }
+  // Through the rest of the day (T2490): a block that goes with one that moves – anchored to it up its chain (a buffer of decompression too,
+  // N7) or beside it – holds where that one's new start puts it (its anchor's start and length – the forecast's key; beside – its first's
+  // start), as the anchor may move less than asked (now, 04:00, a block before it); a begun block or one beside another that stays holds by
+  // where the day shows it (its plan's hour may lie far from it), the others by their planned starts (the order the forecast keeps). The
+  // gap's chain (`closeGap`) – by planned starts, as before.
+  const infos = new Map(state.blocks.map((b) => [b.id, b]))
+  const goesWith = (b: BlockInfo | undefined, depth = 0): boolean => {
+    if (!b || depth > 40) return false
+    if (b.alongside != null && (movable.has(b.alongside) || goesWith(infos.get(b.alongside), depth + 1))) return true
+    return b.anchor != null && (movable.has(b.anchor) || goesWith(infos.get(b.anchor), depth + 1))
+  }
+  /**
+   * Where a block that goes with a moving one stands by the starts given (`startOf` – of the moving ones): the forecast's key of it (`plannedKey`
+   * – anchored after its anchor's buffer of decompression when it has one, D583 `BlockInfo.after`, else after the anchor; beside – its first).
+   */
+  const keyOf = (b: BlockInfo, startOf: (id: string) => number | null, depth = 0): number | null => {
+    if (depth > 40) return null
+    const of = (x: BlockInfo): number | null => (movable.has(x.id) ? startOf(x.id) : x.anchor != null || x.alongside != null ? keyOf(x, startOf, depth + 1) : x.start)
+    if (b.alongside != null) {
+      const r = infos.get(b.alongside)
+      return r ? of(r) : null
+    }
+    const a = b.anchor != null ? ((b.after != null ? infos.get(b.after) : undefined) ?? infos.get(b.anchor)) : undefined
+    const s = a ? of(a) : null
+    return s == null || !a ? null : s + a.durationMin
+  }
+  const floorOf = (p: Placed, startOf: (id: string) => number | null): number | null => {
+    if (!through) return p.block.start
+    // Running: where it runs – also one anchored to a block that moves (it no longer follows its anchor's plan). One paused goes with its
+    // anchor as the forecast shows it (its key); another begun one – where the day shows it.
+    if (p.running) return p.from
+    if (goesWith(p.block)) return keyOf(p.block, startOf)
+    const begun = state.facts.blocks.get(p.block.id)?.startedAt != null
+    return begun || p.block.alongside != null || p.block.start == null ? p.from : p.block.start
+  }
   const before = new Map(state.forecast.map((p) => [p.block.id, p]))
   const forecastOf = shownForecaster(ctx, state)
   const count = (starts: ReadonlyMap<string, number>) => new Map(forecastOf(state.blocks.map((b) => (starts.has(b.id) ? { ...b, start: starts.get(b.id)! } : b))).map((p) => [p.block.id, p]))
@@ -304,25 +361,40 @@ function closing(ctx: DayContext, state: DayState, block: string, tryMin: number
     while (x < lastIdx && idxOfLogical(g, lm(x)) !== x) x++
     return x
   }
-  // The starts tried: as much earlier as the gap, after the block that stays before (its planned start keeps the order).
+  // The starts tried: as much earlier as the gap, after the block that stays before (its planned start keeps the order). Through the rest
+  // of the day a shift may be longer than any gap: never before the blocks before the chain either, nor before 04:00 (what holds – `floorOf`).
   const tried = new Map<string, number>()
   let last = Number.NEGATIVE_INFINITY
+  const triedOf = (id: string) => tried.get(id) ?? null
+  const hold = (p: Placed) => {
+    const f = floorOf(p, triedOf)
+    if (f != null) last = Math.max(last, f)
+  }
+  if (through) for (const p of fg.slice(0, k)) hold(p)
   for (const p of chain) {
     if (movable.has(p.block.id)) {
-      const s = Math.max(p.from - tryMin, state.now, last + 0.5)
+      // Through the rest of the day: from its plan when the forecast shows it later (an earlier shift never puts it after its plan).
+      const from = through && p.block.start != null ? Math.min(p.block.start, p.from) : p.from
+      const s = Math.max(from - tryMin, state.now, through ? 0 : Number.NEGATIVE_INFINITY, last + 0.5)
       tried.set(p.block.id, s)
       last = s
-    } else if (p.block.start != null) last = Math.max(last, p.block.start)
+    } else hold(p)
   }
   let placed = count(tried)
   let written = new Map<string, number>()
-  for (let round = 0; round < MAX_ROUNDS; round++) {
+  let settled = false
+  const rounds = through ? (rest?.maxRounds ?? REST_ROUNDS) : MAX_ROUNDS
+  for (let round = 0; round < rounds; round++) {
     const next = new Map<string, number>()
+    // The starts this round gives the moving blocks (kept or written) – where the blocks going with them stand.
+    const now = new Map<string, number>()
+    const nowOf = (id: string) => now.get(id) ?? null
     let lastStart = Number.NEGATIVE_INFINITY
     for (const p of chain) {
       const b = p.block
       if (!movable.has(b.id)) {
-        if (b.start != null) lastStart = Math.max(lastStart, b.start)
+        const f = floorOf(p, nowOf)
+        if (f != null) lastStart = Math.max(lastStart, f)
         continue
       }
       const q = placed.get(b.id)
@@ -331,18 +403,30 @@ function closing(ctx: DayContext, state: DayState, block: string, tryMin: number
       // Not moved, its plan still in order: it keeps it.
       if (!earlier && b.start! > lastStart) {
         lastStart = b.start!
+        now.set(b.id, b.start!)
         continue
       }
       let to = place(earlier ? q!.from : was.from)
       if (to <= lastStart) to = place(lastStart + 1)
+      // The rest of the day: never later than its plan (T2490) – a block that would be is not moved (its plan kept, not counted).
+      if (through && to > b.start!) {
+        lastStart = Math.max(lastStart, b.start!)
+        now.set(b.id, b.start!)
+        continue
+      }
       if (to !== b.start) next.set(b.id, to)
+      now.set(b.id, to)
       lastStart = to
     }
     const same = next.size === written.size && [...next].every(([id, s]) => written.get(id) === s)
     written = next
     placed = count(written)
-    if (same) break
+    if (same) {
+      settled = true
+      break
+    }
   }
+  if (through && !settled) rest?.onUnsettled?.()
   const planned = new Map(ctx.plan.map((b) => [b.id, b.startMin]))
   const out = chain
     .filter((p) => written.has(p.block.id) && placed.has(p.block.id))

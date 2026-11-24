@@ -71,9 +71,13 @@ export type Domain = 'timer' | 'energy' | 'game' | 'meta'
  * older version reads a cost past ±5 as none – a category's, variant's or routine's in the settings as the default's (`costsFrom`), a block's
  * own in a day's file as its category's (`poolCostsFrom`), a block's start as by its plan (`planned.costs`); `block.cost`, `routine.cost`,
  * `energy.cost` with one – a broken line to it, skipped and listed (the line stays in its writer's log). It would count other energy (other
- * descents, the reward „Reakcja na rezerwę”): it gives way to this one as the leader.
+ * descents, the reward „Reakcja na rezerwę”): it gives way to this one as the leader. 20 – the buffers of decompression (D386, D403, N7,
+ * T2450–T2458): with the setting on, the day's plan has a block „Dekompresja” after a block long and costly enough, the leader begins it
+ * by itself at that block's end (`decompress`) and ends it after its length; its minutes count to no minimum of regeneration nor reward
+ * (`planned.decompress`). An older version knows none of it (it would count such a begun block as a regeneration toward the minimum,
+ * end it at the return to a computer and never begin it): it gives way to this one as the leader.
  */
-export const RULES_VERSION = 19
+export const RULES_VERSION = 20
 
 /** The rules since which a block's start writes the cost of its routine (D512, `planned.routineCosts`): an earlier start had none. */
 export const ROUTINE_COSTS_FROM = 14
@@ -96,6 +100,8 @@ export interface StartPlanned {
   task?: string | null
   routine?: string | null
   requests?: string[]
+  /** A buffer of decompression (D386, T2452): its minutes count to no minimum of regeneration nor reward – also once out of the plan. */
+  decompress?: true
 }
 
 /**

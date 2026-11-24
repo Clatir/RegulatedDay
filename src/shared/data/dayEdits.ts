@@ -40,7 +40,9 @@ export function putRawBlock(raw: Raw, b: Raw): Raw {
  * newer `tag`, a newer shape of `costs`) reads as its default and, untouched, stays as the file holds it; fields this
  * version does not know stay too.
  */
-export function blockJson(b: PlanBlock, before?: Raw): Raw {
+export function blockJson(block: PlanBlock, before?: Raw): Raw {
+  // A buffer of decompression written by a change of yours is yours (D582, T2450): without what the plan counted it by.
+  const { decompress: _counted, ...b } = block
   // Its steps (D440, T786, T787): the list without the day's ticks, in the file's order; none and none before – no field.
   if (!before) return withStepsJson({ ...b } as Raw, b.steps)
   // Read as the day's file reads its blocks (an origin unknown to this version is „user” there too).

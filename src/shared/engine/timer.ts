@@ -756,7 +756,13 @@ function startEvents(ctx: DayContext, state: DayState, t: TimerNow, info: BlockI
     out.push({ k: 'block.resume', block: info.id, at, confirmUntil })
     if ((f.runs.at(-1)?.bg ?? false) && !toBg) out.push({ k: 'block.fg', block: info.id, at, bg: false })
   }
-  else out.push({ k: 'block.start', block: info.id, at, bg: toBg, planned: startPlanned(info, ctx.plan), confirmUntil, how: 'click', ...(clickedGroup != null ? { group: clickedGroup } : {}) })
+  else {
+    // A buffer of decompression begins as long as the forecast has it (D403: counted again after its block's „Przedłuż”, cut to its room).
+    // One you changed – as you set it (D582, T2477).
+    const buffer = info.decompress?.cost != null ? state.forecast.find((p) => p.block.id === info.id) : undefined
+    const planned = { ...startPlanned(info, ctx.plan), ...(buffer ? { durationMin: buffer.to - buffer.from } : {}) }
+    out.push({ k: 'block.start', block: info.id, at, bg: toBg, planned, confirmUntil, how: 'click', ...(clickedGroup != null ? { group: clickedGroup } : {}) })
+  }
   // D493: the rest of its group begins with it, behind; a resumed block of a running group needs none.
   if (clickedGroup != null && !sameGroup) out.push(...groupStarts(ctx, state, info.id, at, 'click', confirmed))
   return out
@@ -1136,7 +1142,8 @@ export function workEndParking(state: DayState, ending: string | null, at: numbe
       continue
     }
     if (b.fixed || b.waits || b.rules.afterWorkAsProject || !scope.open(b)) continue
-    const anchoredToEnding = ending != null && b.anchor === ending
+    // A buffer of decompression of the ending block is no work: it begins after the end of work (D581, T2462).
+    const anchoredToEnding = ending != null && b.anchor === ending && !b.decompress
     if ((isBoundaryWork(b) && scope.before(b)) || anchoredToEnding) out.push({ k: 'block.park', block: b.id, at, rule: 'workEnd', autoRule: 'workEnd' })
   }
   return out
