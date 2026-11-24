@@ -30,7 +30,7 @@ export interface SettingsGroupInfo {
 
 /** A group of number and switch fields: with a date, at once, or both (the fields of a group are all of one kind now). */
 export function fieldGroupWhen(group: FieldGroup): 'dated' | 'now' | 'mixed' {
-  const dated = [...NUMBER_FIELDS.filter((f) => f.group === group).map((f) => f.scope === 'dated'), ...TOGGLE_FIELDS.filter((f) => f.group === group).map(() => true)]
+  const dated = [...NUMBER_FIELDS.filter((f) => f.group === group).map((f) => f.scope === 'dated'), ...TOGGLE_FIELDS.filter((f) => f.group === group).map((f) => f.scope !== 'general')]
   if (dated.every(Boolean)) return 'dated'
   return dated.some(Boolean) ? 'mixed' : 'now'
 }

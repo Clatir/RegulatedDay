@@ -40,6 +40,9 @@ import { changeTaskSteps } from '../../store/steps'
 import { tickCaseStep } from '../steps/stepsFinish'
 import { openHistoryOf, takeFoundPick, takePick, undoToast, useUi } from '../../store/ui'
 import { groupedCategoryOptions } from '../plan/blockView'
+import { DurationHintLine } from '../plan/DurationHint'
+import { useDurationHint } from '../../store/durationHistory'
+import { caseSamples } from '@shared/durationHint'
 import { caseTitle, DATE_PRESETS, afterRequestAdded, doDateNote, filterOf, PRIORITY_CHOICES, presetDate, sectionsOf, statusParts, type PriorityChoice } from './casesLogic'
 import { CasesMatrix } from './CasesMatrix'
 import { readCasesView, rememberCasesView, type CasesView } from './casesView'
@@ -370,6 +373,10 @@ function CaseRow({ x, today, marked, group, expanded, onExpand }: { x: CaseItem;
   const parts = statusParts(x, today)
   const badge = dueBadge(r, today)
   const done = x.list === 'done'
+  // N6 (D625): „Szacunek” against the blocks of the subcategory it would be planned in – the value the field shows (a request without one: none,
+  // T2912); not for one done, nor beyond the field's range.
+  const hinted = useDurationHint((h) => caseSamples(h, r, names.settings.categories), isTask ? x.estimateMin : r.estimateMin, !done)
+  const estimateHint = hinted && hinted.minutes <= ESTIMATE_RANGE[1] ? hinted : null
   // P25: the row is one line (title / person and note, estimate, the badges of the due date and the priority, „Zaplanuj…”, „…”); the rest – the note and
   // the subcategory of a task, the list, the priority, „Zrobione”, „Terminy”, „Kroki”, „Powtarzaj”, „Usuń” – under „▸” and in the menu „…” (the same states).
   const toggleRepeat = () => (repeating && rule.current?.unsaved() ? (setMoveAfter(null), setAsking(true)) : setRepeating(!repeating))
@@ -438,6 +445,7 @@ function CaseRow({ x, today, marked, group, expanded, onExpand }: { x: CaseItem;
         )}
         <CaseMenuButton items={menu} />
       </div>
+      {estimateHint && <DurationHintLine hint={estimateHint} onAccept={(estimateMin) => set({ estimateMin })} className="pl-[30px]" data-testid="case-estimate-hint" />}
       {expanded && (
         <div className="flex flex-col gap-1.5 border-t border-line pt-1.5" data-testid="case-more">
           {isTask && (

@@ -53,6 +53,11 @@ export interface Forecast {
   placed: Placed[]
   /** Blocks that will not happen: their window passed unstarted, their anchor left. */
   dropped: Set<string>
+  /**
+   * The order of the foreground chain (step 3), made when asked: each block of it with its planned key and rank – blocks of an equal key
+   * and rank go by their ids (D624: a block tried at a start tells whether a random id would decide its place).
+   */
+  chainOrder: () => ReadonlyMap<string, { key: number; rank: number }>
 }
 
 /** The planned window of a waiting block: start, and the last minute it may start (exclusive end) – its planned end. */
@@ -413,5 +418,5 @@ export function forecast(inp: ForecastInput): Forecast {
     }
   }
   placed.sort((a, b) => a.from - b.from || (a.block.id < b.block.id ? -1 : 1))
-  return { placed, dropped }
+  return { placed, dropped, chainOrder: () => new Map(chain.map((b) => [b.id, { key: plannedKey(b), rank: rank(b) }])) }
 }

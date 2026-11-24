@@ -463,6 +463,11 @@ export interface CasePlanInput {
   startMin: number
   /** The block's length when it is not the sprawa's estimate (D464: the end typed in „Postaw na osi” – the estimate of the sprawa stays). */
   durationMin?: number
+  /**
+   * The block to write, made by the caller (`caseBlock` with the same `rules`) and tried on the day before (D624, „Rozłóż w luki”: the same id –
+   * the forecast orders equal starts by it); without it the block is made here at `startMin`.
+   */
+  block?: PlanBlock
   /** The files of the days the change reads: the day of the axis and the day the sprawa is planned in now (null – none). */
   files: Readonly<Record<string, Raw | null>>
   /** The categories in force on that day. */
@@ -562,7 +567,7 @@ export function casePlan(i: CasePlanInput): CasePlan | CasePlanRefusal | null {
     if (next !== raw && begun === undefined) return { refused: 'begunUnknown' }
     if (next !== raw && oldBlockTakeable(was.day, today, begun)) days[was.day] = next
   }
-  const block = caseBlock(r, i.startMin, i.rules, i.durationMin)
+  const block = i.block ?? caseBlock(r, i.startMin, i.rules, i.durationMin)
   days[i.date] = withTaskBlock(fileOf(i.date), block)
   return { block, record: scheduledRaw(i.record, i.date, block.id, i.at), days }
 }

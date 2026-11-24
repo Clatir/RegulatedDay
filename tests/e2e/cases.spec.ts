@@ -19,8 +19,9 @@ import { plDate } from '../../src/shared/format'
 import { paths } from '../../src/shared/data/paths'
 import { dayFileFrom } from '../../src/shared/model/plan'
 import { newRequest, newTask } from '../../src/shared/model/requests'
+import { logicalMinuteOf } from '../../src/shared/time/day'
 import { addDays } from '../../src/shared/time/zone'
-import { dataOpen, launch, withMainLog } from './app'
+import { dataOpen, launch, logicalToday, withMainLog } from './app'
 import { seedAwake } from './seedAwake'
 
 type Json = Record<string, unknown>
@@ -180,6 +181,48 @@ test('plan poranny: krok próśb obejmuje zadania z „Dziś” – wybrane zada
       await expect.poll(() => records(dataDir).find((r) => r.id === 't1')!.block).toBe(blocksOf(dataDir, today)[0]!.id)
       // The request stays in the step; the task is planned and gone from it.
       await expect(pick.getByTestId('queue-item')).toHaveCount(1)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('plan poranny: „Rozłóż w luki” (D624) – trzy sprawy „Dziś” w dwóch lukach: dwie stoją, trzecia policzona; „Cofnij” z linii zdejmuje bloki', async () => {
+  const nowMin = logicalMinuteOf(logicalToday(), Date.now())
+  // The gaps stand from a quarter after now; the maximum is set to 23:59 – later in the logical day they do not fit before it.
+  test.skip(nowMin > 1439 - 170, 'luki nie mieszczą się już przed maksimum 23:59')
+  const gap = Math.ceil(nowMin / 5) * 5 + 15
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-cases-gaps-'))
+  const own = (id: string, startMin: number, durationMin: number, fixed = false) => ({ id, categoryId: 'inne', startMin, durationMin, fixed, origin: 'user' })
+  // Now to the first gap – a fixed block; then gaps of 30 min (gap … +30) and 45 min (+90 … +135), the rest to the maximum taken.
+  const start = Math.max(240, Math.floor(nowMin / 5) * 5 - 30)
+  const { today } = seedAwake(dataDir, [own('p', start, gap - start, true), own('a', gap + 30, 60), own('b', gap + 135, Math.max(5, 1440 - (gap + 135)))], { maxMin: 1439 })
+  putRecord(dataDir, newTask('t1', Date.now(), today, { title: 'Pierwsza', list: 'today', estimateMin: 30 })!)
+  putRecord(dataDir, newTask('t2', Date.now() - 1000, today, { title: 'Druga', list: 'today', estimateMin: 45 })!)
+  putRecord(dataDir, newTask('t3', Date.now() - 2000, today, { title: 'Trzecia', list: 'today', estimateMin: 30 })!)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('morning-plan')).toBeVisible({ timeout: 30_000 })
+      if (await page.getByTestId('side-b').isVisible()) await page.getByTestId('side-b-done').click()
+      await page.getByTestId('goals-skip').click()
+      await page.getByTestId('checkin-skip').click()
+      const pick = page.getByTestId('queue-pick')
+      await pick.getByTestId('queue-gaps').click()
+      // One edit: the two blocks in the gaps, the blocks of the day where they were, the third sprawa without a block.
+      await expect.poll(() => blocksOf(dataDir, today).filter((b) => b.task).map((b) => [b.task, b.startMin, b.durationMin]), { timeout: 15_000 }).toEqual([
+        ['t1', gap, 30],
+        ['t2', gap + 90, 45]
+      ])
+      expect(blocksOf(dataDir, today).filter((b) => !b.task).map((b) => [b.id, b.startMin])).toEqual([['p', start], ['a', gap + 30], ['b', gap + 135]])
+      expect(records(dataDir).find((r) => r.id === 't3')!.block).toBeNull()
+      await expect(page.getByTestId('group-line-today')).toContainText('Zaplanowano 2 sprawy w lukach · 1 się nie zmieściła')
+      // „Cofnij”: the blocks go, the sprawy are on „Dziś” again without a block – the button stays for them.
+      await page.getByTestId('group-line-today-undo').click()
+      await expect.poll(() => blocksOf(dataDir, today).filter((b) => b.task).length, { timeout: 15_000 }).toBe(0)
+      await expect.poll(() => records(dataDir).filter((r) => r.block != null).length).toBe(0)
+      await expect(pick.getByTestId('queue-gaps')).toBeVisible()
     })
     expect(errors).toEqual([])
   } finally {

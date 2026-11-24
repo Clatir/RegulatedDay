@@ -1098,6 +1098,7 @@ function registerIpc(): void {
   handle(CH.sideB, () => needHub().sideB())
   handle(CH.calibration, () => needHub().calibration())
   handle(CH.stats, (_e, period: unknown) => needHub().stats(period === '3m' || period === 'all' ? period : '4w'))
+  handle(CH.durationHistory, () => needHub().durationHistory())
   handle(CH.searchDays, () => needHub().searchDays())
   handle(CH.seriesCreate, (_e, input: unknown) => needHub().seriesCreate(input))
   handle(CH.seriesChange, (_e, target: unknown, scope: unknown, patch: unknown) => needHub().seriesChange(target, scope, patch))

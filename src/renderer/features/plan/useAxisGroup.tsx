@@ -41,6 +41,8 @@ export interface AxisGroupOptions {
   where: GroupWhere
   /** The engine's judgement of the menu's entries on the view's model (T1720); none – `stateOf`. */
   judge?: MenuJudge
+  /** „Zapisz jako szablon / rutynę…” in the menu (N15 – „Dziś”; not a template's version). */
+  saveAs?: boolean
 }
 
 export interface AxisGroup {
@@ -109,6 +111,6 @@ export function useAxisGroup(o: AxisGroupOptions): AxisGroup {
     },
     onContext: (id, at) => setMenu({ ids: [...sel.onItemContext(id)], at }),
     removeTarget,
-    overlay: <BlockGroupMenu view={o.view} menu={menu} onClose={() => setMenu(null)} blocksOf={blocksOf} ctx={ctx} today={o.today} moveFrom={o.moveFrom} where={o.where} />
+    overlay: <BlockGroupMenu view={o.view} menu={menu} onClose={() => setMenu(null)} blocksOf={blocksOf} ctx={ctx} today={o.today} moveFrom={o.moveFrom} where={o.where} saveAs={o.saveAs === true} />
   }
 }

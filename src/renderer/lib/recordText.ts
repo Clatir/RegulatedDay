@@ -8,7 +8,7 @@ import { countLabel, durationLabel, logicalClock, plDate, plDateTime } from '@sh
 import { ALL_DAY_COLOR_NAMES, type AllDayColor } from '@shared/model/allDay'
 import { DEFAULT_CALENDAR_ID, DEFAULT_CALENDAR_NAME } from '@shared/model/calendars'
 import { OTHER_GROUP } from '@shared/model/categoryTree'
-import { fieldByKey } from '@shared/model/fields'
+import { fieldByKey, settingLabelOf, settingValueText, unitFieldAt } from '@shared/model/fields'
 import { CASE_LIST_NAMES, isPriority, PRIORITY_NAMES, type CaseList } from '@shared/model/requests'
 import { categoryName, MODULE_NAMES, personName, type ModuleId, type RdFile } from '@shared/model/rd'
 import { DAY_TYPE_NAMES, type DayTypeId } from '@shared/model/settings'
@@ -60,7 +60,7 @@ const ATTACHMENT_FIELDS: Record<string, string> = { kind: 'rodzaj', name: 'nazwa
 const STATES: Record<string, string> = { queued: 'w kolejce', planned: 'w planie', done: 'zrobiona', dropped: 'porzucona' }
 
 /** A value as shown: minutes and times as the fields show them, ids as names, objects briefly. */
-export function valueText(key: string | undefined, v: unknown, n: TextNames): string {
+export function valueText(key: string | undefined, v: unknown, n: TextNames, path?: readonly string[]): string {
   if (v === undefined || v === null || v === '') return '—'
   if (typeof v === 'boolean') {
     if (key === 'fixed') return v ? 'stały' : 'elastyczny'
@@ -71,6 +71,10 @@ export function valueText(key: string | undefined, v: unknown, n: TextNames): st
     if (key === 'startMin' || key === 'waitUntilMin' || key === 'wakeMin' || key === 'maxMin' || key === 'bedtimeMin') return logicalClock(v)
     if (key && /Min$/.test(key)) return durationLabel(v)
     if (key === 'savedAt' || key === 'createdAt' || key === 'at' || key === 'addedAt' || key === 'removedAt' || key === 'doneAt') return plDateTime(v)
+    // A setting's whole number with its unit, as its field and „Zaplanowane zmiany” show it („20 %”, „3 /h”, „1 dzień”; T2934, T2938) –
+    // the field by the whole path when it is known, else by its name.
+    const field = path ? unitFieldAt(path) : key ? fieldByKey(key) : undefined
+    if (field?.kind === 'integer' && field.unit) return settingValueText(field, v)
     return String(v)
   }
   if (typeof v === 'string') {
@@ -189,7 +193,7 @@ export function fieldText(rel: string, path: readonly string[], n: TextNames, va
     }
     if (a === 'general') {
       if (b === 'modules') return rest[0] ? `moduł ${MODULE_NAMES[rest[0] as ModuleId] ?? ''}`.trim() : 'moduły'
-      return fieldByKey(b ?? '')?.label ?? 'ustawienie'
+      return settingLabelOf(b ?? '') ?? 'ustawienie'
     }
     if (a === 'settings') return 'zmiana ustawień'
     return 'inne ustawienie'

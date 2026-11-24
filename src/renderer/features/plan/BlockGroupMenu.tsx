@@ -15,10 +15,25 @@ import { DateField } from '../../components/fields'
 import type { GroupView } from '../../store/groupLine'
 import { CostInput, WideCostWarning } from './CostInput'
 import { POOL_COLOR, POOL_NAME } from './energyDraw'
-import { blockMenu, blockMenuTitle, type GroupWhere, type MenuBlock, type MenuCtx } from './groupMenu'
+import { blockMenu, blockMenuTitle, parseBlockKey, type GroupWhere, type MenuBlock, type MenuCtx } from './groupMenu'
 import { runBlockGroup } from './groupRun'
+import { SaveAsWindow, type SaveAsOpen } from './SaveAsDialogs'
 
-type Window = { kind: 'cost' | 'move'; ids: string[] }
+type Window = { kind: 'cost' | 'move'; ids: string[] } | { kind: 'save'; open: SaveAsOpen }
+
+/** Why the blocks of a selection cannot be saved as a template or a routine (N15): they are of several days. */
+export const SAVE_AS_DAYS_WHY = 'Szablon i rutynę zapiszesz z bloków jednego dnia'
+
+/**
+ * The day and the blocks of a selection for „Zapisz jako…” (N15): the day of „Dziś” (`where.date`) and the ids, or the keys of the columns by their
+ * one day; blocks of several days (or no day known) – the reason.
+ */
+export function saveAsSource(view: GroupView, ids: readonly string[], where?: GroupWhere): { date: string; ids: string[] } | { why: string } {
+  if (view === 'today' && where && 'date' in where) return { date: where.date, ids: [...ids] }
+  const keys = ids.map(parseBlockKey)
+  const dates = new Set(keys.map((k) => k.date))
+  return dates.size === 1 ? { date: keys[0]!.date, ids: keys.map((k) => k.id) } : { why: SAVE_AS_DAYS_WHY }
+}
 
 export function BlockGroupMenu({
   view,
@@ -28,7 +43,8 @@ export function BlockGroupMenu({
   ctx,
   today,
   moveFrom,
-  where
+  where,
+  saveAs
 }: {
   view: GroupView
   menu: { ids: readonly string[]; at: { x: number; y: number } } | null
@@ -41,9 +57,11 @@ export function BlockGroupMenu({
   moveFrom?: string
   /** Where the blocks are (the day of „Dziś”, the version of a template) – none in „Tydzień” (the keys say it). */
   where?: GroupWhere
+  /** „Zapisz jako szablon…” and „Zapisz jako rutynę…” in the menu (N15: „Dziś”, „Tydzień”, „3 dni”). */
+  saveAs?: boolean
 }) {
   const [window, setWindow] = useState<Window | null>(null)
-  const blocks = window ? blocksOf(window.ids) : []
+  const blocks = window && window.kind !== 'save' ? blocksOf(window.ids) : []
   // The entries counted for the menu opened (the engine's verdicts of the selection – one pass, T1720) and again only when what they come from
   // changes: the day or the template's version (`where`), the view, the view's data (`ctx` – its `judge` holds the model) and the blocks
   // (`blocksOf`); the screens keep those stable between their renders.
@@ -54,11 +72,12 @@ export function BlockGroupMenu({
         ? blockMenu(blocksOf(menu.ids), ctx, {
             action: (a) => void runBlockGroup(view, menu.ids, a, where),
             cost: () => setWindow({ kind: 'cost', ids: [...menu.ids] }),
-            moveTo: () => setWindow({ kind: 'move', ids: [...menu.ids] })
+            moveTo: () => setWindow({ kind: 'move', ids: [...menu.ids] }),
+            ...(saveAs ? { saveAs: saveAsEntry(saveAsSource(view, menu.ids, where), (open) => setWindow({ kind: 'save', open })) } : {})
           })
         : [],
     // `where` by its value (`whereKey`): a screen may make the object anew at a render.
-    [menu, view, whereKey, ctx, blocksOf]
+    [menu, view, whereKey, ctx, blocksOf, saveAs]
   )
   return (
     <>
@@ -82,6 +101,7 @@ export function BlockGroupMenu({
           }}
         />
       )}
+      {window?.kind === 'save' && <SaveAsWindow open={window.open} view={view} onClose={() => setWindow(null)} />}
       {window?.kind === 'move' && (
         <GroupMoveDialog
           n={window.ids.length}
@@ -96,6 +116,12 @@ export function BlockGroupMenu({
       )}
     </>
   )
+}
+
+/** The menu's „Zapisz jako…” for a source: its windows, or both off with the reason. */
+function saveAsEntry(src: ReturnType<typeof saveAsSource>, open: (o: SaveAsOpen) => void): { pick: (kind: SaveAsOpen['kind']) => void; why?: string } {
+  if ('why' in src) return { pick: () => undefined, why: src.why }
+  return { pick: (kind) => open({ kind, date: src.date, ids: src.ids }) }
 }
 
 /** The cost the window starts from: the first selected block's (all of them having it – the same one); none known: zeros. */

@@ -4,7 +4,7 @@
  * past one too – only those from a day after today are planned. No DOM: the list on the settings page draws it.
  */
 import { DAY_TYPE_NAMES, isPlain, type SettingsChange } from '@shared/model/settings'
-import { NUMBER_FIELDS, TOGGLE_FIELDS, formatField } from '@shared/model/fields'
+import { NUMBER_FIELDS, TOGGLE_FIELDS, settingValueText } from '@shared/model/fields'
 import { isPlannedChange, withdrawRefusal, type WithdrawFixed } from '@shared/model/settingsWithdraw'
 
 export interface PlannedItem {
@@ -42,7 +42,7 @@ function itemsOf(patch: Record<string, unknown>, names: PlannedNames): PlannedIt
       const joined = at.join('.')
       const number = NUMBER_FIELDS.find((f) => f.path.join('.') === joined)
       const toggle = TOGGLE_FIELDS.find((f) => f.path.join('.') === joined)
-      if (number && typeof value === 'number') out.push({ label: number.label, value: `${formatField(number, value)}${number.unit && number.kind === 'integer' ? ` ${number.unit}` : ''}` })
+      if (number && typeof value === 'number') out.push({ label: number.label, value: settingValueText(number, value) })
       else if (toggle && typeof value === 'boolean') out.push({ label: toggle.label, value: value ? 'włączone' : 'wyłączone' })
       else if (joined === 'weekTypes' && Array.isArray(value)) out.push({ label: 'Typy dni tygodnia', value: value.map((t, i) => `${WEEKDAY_SHORT[i] ?? '?'} ${typeName(t)}`).join(' · ') })
       else if (at[0] === 'categories' && at.length === 2) out.push({ label: names.categories[key] != null ? `Podkategoria „${names.categories[key]}”` : 'Podkategoria usunięta', value: 'koszt i właściwości' })
