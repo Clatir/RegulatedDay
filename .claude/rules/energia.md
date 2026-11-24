@@ -6,6 +6,11 @@ paths:
   - "tests/unit/engine/model-energii.test.ts"
   - "tests/unit/engine/reserve.test.ts"
   - "tests/unit/engine/body-energy.test.ts"
+  - "src/shared/engine/shortNight.ts"
+  - "src/renderer/features/today/checkinLogic.ts"
+  - "src/renderer/features/today/shortNight.ts"
+  - "tests/unit/engine/short-night.test.ts"
+  - "tests/web/short-night.test.ts"
 ---
 
 # Energia (E2)
@@ -70,6 +75,22 @@ nagroda „Reakcja na rezerwę” w tabeli „Grywalizacja”. Decyzje T436–T4
   (`routine.cost`; `block.cost` – ciało kosztu sprzed zmiany, T1534) i `daySnapshotOf` (bloki migawki) z `startingBody` (T1520, T1527);
   ustawienia migawki i `day.snapshot` starszej wersji – ciało z Twoich ustawień datowanych (T1532, reguły `koszt.md`); walidatory zdarzeń –
   ciało może nie być, jest – sprawdzane (T1528). `RULES_VERSION` 16 (T1524).
+- Krótka noc (D571, N2, T2515–T2529): `engine/shortNight.ts` `shortNightOf(dzień, zdarzenia)` – ostatnie wejście (wszystkie komputery z logu dnia)
+  w [`bedtime.effective`, 04:00), ≥ `SHORT_NIGHT_MIN` (30, stałe) po porze snu; wejście po 04:00 (log dnia następnego) się nie liczy. Odcinki
+  z `activityOf`, luki wejścia czytane tu od nowa z własnymi regułami – `activityOf` (bezczynność, sesja, „poza komputerem”) ich nie ma:
+  luka bez `gap.close` (`openGap`) – od odcinka, w którym się zaczyna, a poza odcinkami (podział o 04:00 przed pierwszym „trwa”, sen bez
+  zapowiedzi) od pierwszego odcinka po niej, gdy ten zaczął się bez `observe.from` albo `resume` (odcinek nowego startu – pusta luka) – przez
+  kolejne odcinki zaczęte `observe.from` `why: 'resume'` (tylko ten powód), do nowszej luki; nowsza luka przy otwartej starszej = zgubione
+  zamknięcie: jej początek to chwila wejścia (w odcinku, do którego starsza sięga); wejście krótsze niż `START_GRACE_MS` (2 min, jak `GAP_MS` śledzenia; krótkie pisanie tuż po starcie ginie – świadomie) od początku
+  odcinka zaczętego `why: 'start'` (tylko ten powód) nie jest wejściem (restart: obserwacja od otwarcia folderu, pierwsza luka od startu
+  śledzenia). Nieznany / brak `why` – żadna z reguł. Okno: `features/today/shortNight.ts` –
+  `useShortNight(dziś, on)` w `MorningPlan` (`on` = check-in przed Tobą, także w czasie Strony B i celów) = `useDayData(wczoraj, on, fresh)`
+  (IPC `dayData`, bez nowego kanału; `fresh` – tylko odczyty tego hooka przy `on`, nigdy pamięć okna sprzed) + `computeDay` wczoraj (`nightOf`;
+  nie `dayUsable` albo wyjątek – null, nigdy błąd); `nightKept` – odczyt nieużywalny trzyma ostatnią noc dnia, jeszcze nieprzeczytany – null; liczenie
+  od nowa tylko przy zmianie `nightDataKey` (id zdarzeń, pliki). `useCheckinHint` w `MorningPlan` (nad zwinięciem karty – zwinięcie to nie powrót):
+  póki pytanie bez Twojej odpowiedzi – nowsza noc zastępuje podpowiedź, null jej nie zdejmuje; po odpowiedzi bez zmian; przy zamontowaniu tylko bez
+  odpowiedzi. `Checkin` (`hint`): od „Zapisz” `useUi.checkinSaved` (per data, przeżywa zwinięcie i zmianę ekranu; ustawione przed zapisem, cofane przy odmowie; `MorningPlan` czyści je przy `checkinAt`) zamraża formularz (odpowiedzi, podpowiedź, przyciski); `Checkin key={model.date}`.
+  Odpowiedzi w `useUi` z `null` = jeszcze nie Twoja (`OwnAnswers`), pokazane = `shownAnswers(own, preset)`; dopisek `checkin-short-night` (`shortNightNote`).
 - Moduł energii: przełącznik w ustawieniach (E3) zapisuje `rd.general.modules.energy` i `energy.module` w logu dnia.
 - Jeszcze nie: zobaczenie komunikatu i tryby ciszy (E4b), warianty przy rezerwie i przesunięcie granicy po regeneracji
   z komunikatu (E5), wyjątki typów dni w nagrodzie i nuty (E7), okres kalibracji (E6).

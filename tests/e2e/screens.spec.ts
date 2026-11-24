@@ -18,7 +18,8 @@ import { defaultTemplates, firstComputerRecords, SETUP_FROM, templateJson } from
 import { planBlock } from '../../src/shared/model/plan'
 import { paths } from '../../src/shared/data/paths'
 import { createDailyBackup } from '../../src/main/data/backup'
-import { logicalMinuteOf } from '../../src/shared/time/day'
+import { RULES_VERSION } from '../../src/shared/model/events'
+import { logicalMinuteOf, placeLogical } from '../../src/shared/time/day'
 import { addDays } from '../../src/shared/time/zone'
 import { launch, logicalToday, viewPage, withMainLog } from './app'
 import { seedAwake } from './seedAwake'
@@ -1135,6 +1136,63 @@ test('kalibracja (D119): po okresie karta w planie porannym – „Nie teraz” 
       await page.getByTestId('calibration-finish').click()
       await expect.poll(() => review()?.reviewed, { timeout: 15_000 }).toBe(today)
       await expect(page.getByTestId('calibration-state')).toContainText('Przegląd zrobiony')
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('krótka noc (D571): wczoraj pisanie na drugim komputerze do 01:40 – dopisek i wstępne „tak”; „nie” wygrywa, nic w logu przed „Zapisz”', async () => {
+  // The check-in and its log are today's: not in the last 20 min of the logical day, where „today” would turn during the test.
+  test.skip(logicalMinuteOf(logicalToday(), Date.now()) > 28 * 60 - 20, 'doba logiczna kończy się w trakcie testu (04:00)')
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-short-night-'))
+  seed(dataDir)
+  const today = logicalToday()
+  const yesterday = addDays(today, -1)
+  // Yesterday an ordinary day (its bedtime 22:00, 21:00 in a week of the session shift – the line says which).
+  writeFileSync(join(dataDir, 'days', yesterday.slice(0, 4), `${yesterday}.json`), JSON.stringify({ schema: 1, date: yesterday, dayType: 'zwykly', blocks: [] }))
+  // Another computer's log of yesterday: observed 21:00–02:00, input until 01:40 (its gap in input and in use from then).
+  const at = (min: number) => placeLogical(yesterday, min)
+  const lines: string[] = []
+  let n = 0
+  const ev = (k: string, t: number, extra: Record<string, unknown>) => lines.push(JSON.stringify({ id: `seed-${n}`, c: 'seed', n: n++, t, l: t, v: RULES_VERSION, day: yesterday, dom: 'meta', k, ...extra }))
+  ev('observe.from', at(21 * 60), { at: at(21 * 60), why: 'start' })
+  for (let m = 21 * 60 + 5; m < 26 * 60; m += 5) ev('observe.alive', at(m), { at: at(m) })
+  for (const kind of ['input', 'use']) ev('gap.open', at(25 * 60 + 42), { gap: `seed-${kind}`, kind, from: at(25 * 60 + 40), lastOutside: at(25 * 60 + 40) })
+  ev('observe.to', at(26 * 60), { at: at(26 * 60), why: 'quit' })
+  mkdirSync(join(dataDir, 'log', yesterday.slice(0, 4), yesterday), { recursive: true })
+  writeFileSync(join(dataDir, 'log', yesterday.slice(0, 4), yesterday, 'seed.jsonl'), `${lines.join('\n')}\n`)
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await expect(page.getByTestId('morning-plan')).toBeVisible({ timeout: 30_000 })
+      if (new Date(`${today}T12:00:00Z`).getUTCDay() === 1) await page.getByTestId('side-b-done').click()
+      await page.getByTestId('goals-skip').click()
+      await expect(page.getByTestId('checkin-short-night')).toHaveText(/^Wczoraj przy komputerze do 01:40 \(pora snu (22|21):00\)$/, { timeout: 30_000 })
+      const answer = (i: number, label: string) => page.getByTestId(`checkin-${i}`).getByRole('radio', { name: label })
+      await expect(answer(1, 'tak')).toHaveAttribute('aria-checked', 'true')
+      await expect(answer(0, 'nie')).toHaveAttribute('aria-checked', 'true')
+      await shot(page, 'n2-short-night')
+      await answer(1, 'nie').click()
+      await expect(answer(1, 'nie')).toHaveAttribute('aria-checked', 'true')
+      // Nothing written before „Zapisz”: the day's logs have no check-in.
+      const computer = (await page.evaluate(() => window.rd.dataView())).computer
+      const ownLog = () => readFileSync(join(dataDir, 'log', today.slice(0, 4), today, `${computer}.jsonl`), 'utf8')
+      const checkins = () => {
+        try {
+          return ownLog()
+            .split('\n')
+            .filter((l) => l.includes('"k":"energy.checkin"'))
+            .map((l) => (JSON.parse(l) as { answers: { head: number[] } }).answers.head)
+        } catch {
+          return []
+        }
+      }
+      expect(checkins()).toEqual([])
+      await page.getByTestId('checkin-save').click()
+      await expect.poll(checkins, { timeout: 15_000 }).toEqual([[0, 0]])
+      await expect(page.getByTestId('checkin-short-night')).toHaveCount(0)
     })
     expect(errors).toEqual([])
   } finally {
