@@ -9,6 +9,7 @@
 import { ruleVerdicts, type GroupAction as EngineAction, type GroupDay, type MenuRule, type RuleVerdict } from '@shared/engine/groupEdit'
 import type { StayHow } from '@shared/engine/planEdit'
 import { pushedText } from '@shared/engine/pushApart'
+import { restOversText } from '@shared/engine/shiftRest'
 import { plural } from '@shared/format'
 import { groupCount, groupLineText, keptText, skippedText, VERB } from '@shared/groupText'
 import { showGroupLine, UndoNotDone, type GroupView } from '../../store/groupLine'
@@ -30,6 +31,8 @@ export function engineAction(a: GroupAction): EngineAction {
       return { k: 'routine', routine: a.routine, minutes: a.minutes ?? 0 }
     case 'shift':
       return { k: 'shift', minutes: a.minutes }
+    case 'shiftRest':
+      return { k: 'shiftRest', minutes: a.minutes }
     case 'moveTo':
       return { k: 'moveTo', date: a.date }
     default:
@@ -46,8 +49,9 @@ export const judgeBlocks = (day: GroupDay, ids: readonly string[], today: string
 /** Why a block anchored to a moved one stayed on its day (D424, T965) – the words of the line of a move of one block (`weekText`). */
 const STAY_WORD: Record<StayHow, string> = { running: 'już trwa', done: 'już zrobiony', parked: 'zaparkowany', cancelled: 'odwołany', kept: 'w swoim dniu' }
 
-/** The verb of the line: „Przeniesiono” a move, „Usunięto” a removal, „Odwołano”, „Zaparkowano”, else „Zmieniono”. */
-const verbOf = (a: GroupAction): string => (a.kind === 'moveTo' ? VERB.moved : a.kind === 'remove' ? VERB.removed : a.kind === 'cancel' ? 'Odwołano' : a.kind === 'park' ? 'Zaparkowano' : VERB.changed)
+/** The verb of the line: „Przeniesiono” a move, „Usunięto” a removal, „Odwołano”, „Zaparkowano”, „Przesunięto” the rest of the day, else „Zmieniono”. */
+const verbOf = (a: GroupAction): string =>
+  a.kind === 'moveTo' ? VERB.moved : a.kind === 'remove' ? VERB.removed : a.kind === 'cancel' ? 'Odwołano' : a.kind === 'park' ? 'Zaparkowano' : a.kind === 'shiftRest' ? VERB.pushed : VERB.changed
 
 /** „1 dzień czeka na odpowiedź”, „2 dni niezapisane” – the days a change did not write (the save's toast says why). */
 export function unwrittenDaysText(d: Pick<GroupDone, 'waitingDays' | 'refusedDays'>): string[] {
@@ -60,12 +64,14 @@ export function unwrittenDaysText(d: Pick<GroupDone, 'waitingDays' | 'refusedDay
 /**
  * The text of the line after a group change of blocks (D529): the count, the reasons of those left out (once each), those that stayed on their day
  * (D424), the lowest energy before and after, the note of a series, the blocks pushed apart (D367 – „przesunięto 2 bloki”, as the line of a move)
- * and the days not written (a question, a refusal).
+ * and the days not written (a question, a refusal). The rest of the day (N17): „Przesunięto 4 bloki” – every block it moved is in the count – with
+ * what it pushed past (D72, `over`) right after it.
  */
-export function blockLineText(a: GroupAction, d: Pick<GroupDone, 'changed' | 'skipped' | 'stayed' | 'pushed' | 'energy' | 'seriesOnly' | 'waitingDays' | 'refusedDays'>): string {
+export function blockLineText(a: GroupAction, d: Pick<GroupDone, 'changed' | 'skipped' | 'stayed' | 'pushed' | 'energy' | 'seriesOnly' | 'waitingDays' | 'refusedDays' | 'over'>): string {
   const text = groupLineText({
     verb: verbOf(a),
     n: d.changed,
+    warning: d.over?.length ? restOversText(d.over) : null,
     skipped: d.skipped.map((s) => s.why),
     stayed: (d.stayed ?? []).map((s) => STAY_WORD[s.how]),
     // „został w swoim dniu” – where they stayed (every one that stays only because it does not move to another day).
@@ -76,10 +82,13 @@ export function blockLineText(a: GroupAction, d: Pick<GroupDone, 'changed' | 'sk
   return [text, ...(d.pushed > 0 ? [pushedText(d.pushed).replace(/^P/, 'p')] : []), ...unwrittenDaysText(d)].join(' · ')
 }
 
-/** What a change that changed nothing says (no line): „Bez zmian · pominięto 2: zaczęty, sesja”, or that the blocks are so already. */
-export function nothingText(d: Pick<GroupDone, 'skipped' | 'same' | 'waitingDays' | 'refusedDays'>): string {
+/**
+ * What a change that changed nothing says (no line): „Bez zmian · pominięto 2: zaczęty, sesja”, or that the blocks are so already; the rest of the
+ * day with nothing to move (N17) – „Bez zmian – nie ma czego przesunąć”.
+ */
+export function nothingText(d: Pick<GroupDone, 'skipped' | 'same' | 'waitingDays' | 'refusedDays'>, a?: GroupAction): string {
   const skipped = skippedText(d.skipped.map((s) => s.why))
-  const base = skipped ? `Bez zmian · ${skipped}` : d.same > 0 ? 'Bez zmian – zaznaczone bloki już tak mają' : 'Bez zmian'
+  const base = skipped ? `Bez zmian · ${skipped}` : d.same > 0 ? 'Bez zmian – zaznaczone bloki już tak mają' : a?.kind === 'shiftRest' ? 'Bez zmian – nie ma czego przesunąć' : 'Bez zmian'
   return [base, ...unwrittenDaysText(d)].join(' · ')
 }
 
@@ -105,7 +114,7 @@ export function sayGroupDone(view: GroupView, a: GroupAction, d: GroupDone): voi
     return
   }
   if (d.changed > 0) toast(blockLineText(a, d), 'info')
-  else if (d.status === 'saved' || d.status === 'refused') toast(nothingText(d), 'info')
+  else if (d.status === 'saved' || d.status === 'refused') toast(nothingText(d, a), 'info')
 }
 
 /**

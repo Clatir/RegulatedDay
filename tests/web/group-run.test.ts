@@ -15,7 +15,7 @@ import { settingsOn } from '@shared/model/settings'
 import { placeLogical } from '@shared/time/day'
 import type { MenuEntry } from '@renderer/components/ContextMenu'
 import { blockKey, blockMenu, menuCtxOf, type GroupAction, type MenuBlock } from '@renderer/features/plan/groupMenu'
-import { blockLineText, judgeBlocks, runBlockGroup } from '@renderer/features/plan/groupRun'
+import { blockLineText, judgeBlocks, nothingText, runBlockGroup } from '@renderer/features/plan/groupRun'
 import { useData } from '@renderer/store/data'
 import { countDay } from '@renderer/store/day'
 import { clearGroupLine, undoGroupLine, useGroupLine } from '@renderer/store/groupLine'
@@ -121,6 +121,32 @@ describe('„Dziś”: menu → zmiana → linia → „Cofnij”', () => {
     expect(starts()).toEqual({ a: lm('10:00'), b: lm('11:00'), c: lm('15:00') })
   })
 
+  it('„Gotowe, gdy” (N17): menu „Przesuń resztę dnia o… → Później o… → 30 min” na pierwszym bloku – 4 elastyczne przesunięte, stały na miejscu; „Cofnij” przywraca plik dnia', async () => {
+    const plan = [flex('a', '09:00', 60), flex('b', '10:00', 75), flex('F', '11:30', 60, { fixed: true }), flex('c', '12:30', 30), flex('d', '14:00', 30)]
+    const file = fileOf(SUN2, plan)
+    const s = stub({ [SUN2]: file })
+    let run: unknown
+    const entries = blockMenu(menuBlocks(plan, ['a']), menuCtxOf(names()), { action: (a: GroupAction) => void (run = runBlockGroup('today', ['a'], a, { date: SUN2 }, AT)), cost: () => undefined, moveTo: () => undefined })
+    picked(entry(entries, 'block-menu-rest', 'block-menu-rest-later', 'block-menu-rest-later-30'))
+    await run
+    const starts = () => Object.fromEntries(blocksOf(s.files[SUN2], SUN2).map((b) => [b.id, b.startMin]))
+    // b would end 11:45 – on F: it jumps behind it; c follows b; d has room at 14:30.
+    expect(starts()).toEqual({ a: lm('09:30'), b: lm('12:30'), F: lm('11:30'), c: lm('13:45'), d: lm('14:30') })
+    expect(line('today')).toBe('Przesunięto 4 bloki')
+    await undoGroupLine('today')
+    expect(s.files[SUN2]).toEqual(file)
+  })
+
+  it('„Przesuń resztę dnia o” bez czego przesunąć (N17, r3) – żadnego wpisu dnia, bez linii, w rogu „Bez zmian – nie ma czego przesunąć”', async () => {
+    const plan = [flex('a', '10:00', 30), flex('F', '12:00', 60, { fixed: true })]
+    const s = stub({ [SUN2]: fileOf(SUN2, plan) })
+    const done = await runBlockGroup('today', ['F'], { kind: 'shiftRest', minutes: 15 }, { date: SUN2 }, AT)
+    expect(done?.changed).toBe(0)
+    expect(s.sent.flat()).toEqual([])
+    expect(line('today')).toBeUndefined()
+    expect(useUi.getState().toasts.at(-1)?.text).toBe('Bez zmian – nie ma czego przesunąć')
+  })
+
   it('zmiana, która nic nie zmienia – bez linii, w rogu „Bez zmian” z powodami', async () => {
     const plan = [flex('a', '05:00', 30)]
     const events = new Scenario({ date: TODAY, plan }).start('a', '05:00').events
@@ -202,6 +228,32 @@ describe('„Tydzień”: kilka dni jedną zmianą, jedno „Cofnij”', () => {
     expect(groupLog).toHaveBeenCalledWith(TODAY, 'park', ['a'])
     expect(done?.skipped).toEqual([{ id: 'b', why: 'nie dziś' }])
     expect(line('week')).toBe('Zaparkowano 1 blok · pominięto 1: nie dziś')
+  })
+
+  it('„Przesuń resztę dnia o” +15 w dwóch dniach (N17): każdy dzień od swojego zaznaczonego, jedna edycja, linia „Przesunięto 3 bloki”, jedno „Cofnij”', async () => {
+    const days = { [SUN2]: [flex('a', '09:00', 60), flex('b', '11:00', 30)], [SUN3]: [flex('x', '09:00', 30), flex('y', '10:00', 30)] }
+    const s = stub(Object.fromEntries(Object.entries(days).map(([d, p]) => [d, fileOf(d, p)])))
+    await runBlockGroup('week', [blockKey(SUN2, 'a'), blockKey(SUN3, 'y')], { kind: 'shiftRest', minutes: 15 }, undefined, AT)
+    expect(s.sent).toHaveLength(1)
+    const starts = (d: string) => Object.fromEntries(blocksOf(s.files[d], d).map((b) => [b.id, b.startMin]))
+    expect([starts(SUN2), starts(SUN3)]).toEqual([
+      { a: lm('09:15'), b: lm('11:15') },
+      { x: lm('09:00'), y: lm('10:15') }
+    ])
+    expect(line('week')).toBe('Przesunięto 3 bloki')
+    await undoGroupLine('week')
+    expect([starts(SUN2), starts(SUN3)]).toEqual([
+      { a: lm('09:00'), b: lm('11:00') },
+      { x: lm('09:00'), y: lm('10:00') }
+    ])
+  })
+
+  it('tekst linii „Przesuń resztę dnia o” (N17): liczba, ostrzeżenie granicy (D72), energia; nic – „Bez zmian – nie ma czego przesunąć”', () => {
+    expect(blockLineText({ kind: 'shiftRest', minutes: 30 }, { changed: 4, skipped: [], pushed: 0, seriesOnly: 0, over: [{ kind: 'max', atMin: lm('19:00') }], energy: { before: 52, after: 44 } })).toBe(
+      'Przesunięto 4 bloki · praca kończy się po maksimum (19:00) · najniższa energia 52 → 44'
+    )
+    expect(blockLineText({ kind: 'shiftRest', minutes: -15 }, { changed: 1, skipped: [], pushed: 0, seriesOnly: 1, refusedDays: 1 })).toBe('Przesunięto 1 blok · bloki serii – tylko te dni · 1 dzień niezapisany')
+    expect(nothingText({ skipped: [], same: 0 }, { kind: 'shiftRest', minutes: 15 })).toBe('Bez zmian – nie ma czego przesunąć')
   })
 
   it('tekst linii: przeniesienie z blokiem, który został, rozsuniętymi, energią i dopiskiem serii', () => {

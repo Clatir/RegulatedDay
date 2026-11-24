@@ -8,7 +8,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MenuEntry } from '@renderer/components/ContextMenu'
 import { blockKey, blockMenu, blockMenuTitle, blockSummary, byStart, parseBlockKey, removeBlocksTarget, weekOrder, type BlockMenuOn, type GroupAction, type MenuBlock, type MenuCtx } from '@renderer/features/plan/groupMenu'
 import { commonCosts } from '@renderer/features/plan/BlockGroupMenu'
-import { stateOfWeek } from '@renderer/features/week/weekSelect'
+import { restLeftIn, stateOfWeek } from '@renderer/features/week/weekSelect'
+import type { HorizonBlock } from '@shared/engine/week'
 import { useUi } from '@renderer/store/ui'
 
 const CTX: MenuCtx = {
@@ -137,6 +138,58 @@ describe('Przesuń o…, Przenieś na dzień…, Odwołaj, Zaparkuj, Usuń', () 
     for (const id of ['block-menu-cancel', 'block-menu-park', 'block-menu-moveto']) expect(find(t, id), id).toBeUndefined()
     expect(find(t, 'block-menu-shift')).toBeDefined()
     expect(find(t, 'block-menu-remove')).toBeDefined()
+  })
+})
+
+describe('„Przesuń resztę dnia o…” (N17, D584)', () => {
+  it('później / wcześniej o 5, 15, 30, 60 min i pole na własną liczbę – działanie `shiftRest`; szablon – bez tej pozycji', () => {
+    const m = blockMenu([b('a')], CTX, ON)
+    expect(item(m, 'block-menu-rest').label).toBe('Przesuń resztę dnia o…')
+    item(m, 'block-menu-rest-later-30').onPick!()
+    item(m, 'block-menu-rest-earlier-15').onPick!()
+    const own = find(m, 'block-menu-rest-later-own') as Extract<MenuEntry, { kind: 'field' }>
+    expect(own.onSubmit('1:30')).toBeUndefined()
+    expect(typeof own.onSubmit('abc')).toBe('string')
+    expect((find(m, 'block-menu-rest-earlier-own') as Extract<MenuEntry, { kind: 'field' }>).onSubmit('45')).toBeUndefined()
+    expect(picked).toEqual([
+      { kind: 'shiftRest', minutes: 30 },
+      { kind: 'shiftRest', minutes: -15 },
+      { kind: 'shiftRest', minutes: 90 },
+      { kind: 'shiftRest', minutes: -45 }
+    ])
+    expect([5, 15, 30, 60].every((n) => item(m, `block-menu-rest-later-${n}`) != null && item(m, `block-menu-rest-earlier-${n}`) != null)).toBe(true)
+    // „Przesuń o…” keeps its own ids.
+    item(m, 'block-menu-later-15').onPick!()
+    expect(picked.at(-1)).toEqual({ kind: 'shift', minutes: 15 })
+    expect(find(blockMenu([b('a')], { ...CTX, template: true }, ON), 'block-menu-rest')).toBeUndefined()
+  })
+
+  it('zaczęty, stały i minięty wyznaczają tylko początek – pozycja włączona; wszystkie z minionych dni („Tydzień”) – wyłączona z powodem', () => {
+    for (const s of ['begun', 'past', 'off'] as const) expect(item(blockMenu([b('a', { state: s, movable: false })], CTX, ON), 'block-menu-rest').disabled, s).toBeUndefined()
+    const gone = blockMenu([b('a', { pastDay: true, notToday: true }), b('b', { pastDay: true, notToday: true })], CTX, ON)
+    expect(item(gone, 'block-menu-rest').disabled).toBe('Wszystkie wybrane bloki są z minionych dni')
+    expect(item(blockMenu([b('a', { pastDay: true }), b('b')], CTX, ON), 'block-menu-rest').disabled).toBeUndefined()
+  })
+
+  it('kolumny (T2494): po zaznaczonych w ich dniach nic elastycznego – wyłączona z powodem; `restLeftIn` – od najwcześniejszego zaznaczonego', () => {
+    const none = blockMenu([b('a', { restNone: true }), b('b', { restNone: true })], CTX, ON)
+    expect(item(none, 'block-menu-rest').disabled).toBe('Po tych blokach nie ma bloków elastycznych do przesunięcia (stałe, chronione, zaczęte, sesje i wykłady zostają)')
+    expect(item(blockMenu([b('a', { restNone: true }), b('b')], CTX, ON), 'block-menu-rest').disabled).toBeUndefined()
+    const hb = (id: string, startMin: number, o: Partial<HorizonBlock> = {}) => ({ id, startMin, categoryId: 'inne', movable: true as const, background: false, ...o }) as HorizonBlock
+    // `pushable` – the engine's rule (a protected one, a fixed one, one in the background: not).
+    const day = { blocks: [hb('f', 600, { fixed: true, movable: undefined }), hb('p', 700, { categoryId: 'posilek' }), hb('x', 500, { pushable: true }), hb('bg', 800, { background: true })] }
+    expect(restLeftIn(day, ['f'])).toBe(false)
+    expect(restLeftIn(day, ['x'])).toBe(true)
+    expect(restLeftIn({ blocks: [...day.blocks, hb('late', 900, { pushable: true })] }, ['f'])).toBe(true)
+  })
+
+  it('według silnika (T1720): nic do przesunięcia – wyłączona z powodem; dzień miniony – „już minęły”', () => {
+    const none = { take: 0, skipped: [] }
+    const off = blockMenu([b('a')], { ...CTX, judge: () => ({ rest: none }) }, ON)
+    expect(item(off, 'block-menu-rest').disabled).toBe('Po tych blokach nie ma bloków elastycznych do przesunięcia (stałe, chronione, zaczęte, sesje i wykłady zostają)')
+    const past = blockMenu([b('a')], { ...CTX, judge: () => ({ rest: { take: 0, skipped: ['miniony' as const] } }) }, ON)
+    expect(item(past, 'block-menu-rest').disabled).toBe('Wszystkie wybrane bloki już minęły')
+    expect(item(blockMenu([b('a')], { ...CTX, judge: () => ({ rest: { take: 3, skipped: [] } }) }, ON), 'block-menu-rest').disabled).toBeUndefined()
   })
 })
 

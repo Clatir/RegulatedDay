@@ -18,6 +18,7 @@ import type { Step } from '../model/steps'
 import type { BoundaryOutcome } from './outcome'
 import { dayOutcome } from './outcome'
 import { blockInfos, movableBlock, plannedSpan, type BlockInfo } from './blocks'
+import { pushable } from './pushApart'
 import { columnEnergy, type EnergyTrack } from './energyTrack'
 import { namingOf } from './context'
 import { snapshotEntries } from './createDay'
@@ -64,6 +65,11 @@ export interface HorizonBlock {
   movable?: true
   /** Fixed in the plan (its hour is fixed: a meeting, a lecture, a class of a „zjazd”, a session); absent – flexible. */
   fixed?: true
+  /**
+   * The push apart moves it (D367 – `pushable`: flexible, of its own hour, in the foreground, not protected nor begun; never on a day gone by) –
+   * what „Przesuń resztę dnia o…” of the columns moves (N17, T2494); absent – not.
+   */
+  pushable?: true
   /** A trading session (a category of the kind „sesja”, D192); absent – not. */
   session?: true
   /** Beside the block with this id – the first block of its group of parallel blocks (D492); absent – none. */
@@ -225,7 +231,7 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen, withCos
     return { ...costs, edit: costEditable(f, when === 'past', st === 'missed') }
   }
   const out: HorizonBlock[] = []
-  const push = (info: BlockInfo, named: NamedBlock, from: number, to: number, st: HorizonBlockState, outsidePlan: boolean, steps?: Step[], movable = false) =>
+  const push = (info: BlockInfo, named: NamedBlock, from: number, to: number, st: HorizonBlockState, outsidePlan: boolean, steps?: Step[], movable = false, pushes = false) =>
     out.push({
       id: info.id,
       named,
@@ -237,6 +243,7 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen, withCos
       background: info.bg,
       ...(steps?.length ? { steps } : {}),
       ...(movable ? { movable: true as const } : {}),
+      ...(pushes ? { pushable: true as const } : {}),
       ...(info.fixed ? { fixed: true as const } : {}),
       ...(isSessionBlock(info) ? { session: true as const } : {}),
       ...(info.alongside != null ? { alongside: info.alongside } : {}),
@@ -261,7 +268,7 @@ function axisBlocks(ctx: DayContext, state: DayState, when: HorizonWhen, withCos
     if (from == null || to == null) continue
     const st: HorizonBlockState = gone ?? (when === 'past' || (nowIdx != null && to <= nowIdx) ? 'missed' : 'planned')
     // D417: as „Dziś” drags it (`movableBlock`, where the axis shows its end); a day gone by stays as it was.
-    push(info, named, from, to, st, false, p.steps, when !== 'past' && movableBlock(info, f, to, nowIdx))
+    push(info, named, from, to, st, false, p.steps, when !== 'past' && movableBlock(info, f, to, nowIdx), when !== 'past' && pushable(info, state.facts))
   }
   for (const info of state.blocks) {
     if (info.inPlan) continue

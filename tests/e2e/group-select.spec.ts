@@ -7,6 +7,8 @@
  * Przeciąganie grupy (D531): na osi jutra dwa zaznaczone o godzinę później (w trakcie drugi na nowym miejscu, kolejny rozsunięty), linia
  * „Przeniesiono 2 bloki · Cofnij”, „Cofnij” przywraca; w „Tygodniu” dwa bloki wtorku na czwartek – miejsce drugiego widać w trakcie, oba dni jedną
  * zmianą, „Cofnij” przywraca oba.
+ * „Przesuń resztę dnia o…” (N17, D584): z menu jednego bloku na osi jutra i w „Tygodniu” +30 min – 4 elastyczne przesunięte (jeden przeskakuje
+ * stały), stały na miejscu, linia „Przesunięto 4 bloki” z ostrzeżeniem maksimum (D72), „Cofnij” przywraca plik dnia.
  */
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -272,6 +274,93 @@ test('Tydzień: dwa bloki z różnych dni → menu „Koszt…” → głowa +1,
       await expect(page.getByTestId('group-line-week')).toContainText('Zmieniono 2 bloki')
       await page.getByTestId('group-line-week-undo').click()
       await expect.poll(costs, { timeout: 15_000 }).toEqual([null, null])
+      await expect(page.getByTestId('group-line-week')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+/** The evening of N17's examples: b would end on the fixed F once 30 min later – it jumps behind it; c follows b; d has room (after the sessions of a weekday). */
+const restDay = (date: string) => ({
+  schema: 1,
+  date,
+  wakeMin: 12 * 60,
+  blocks: [
+    { id: 'a', categoryId: 'inne', startMin: 18 * 60, durationMin: 60, fixed: false, name: 'A' },
+    { id: 'b', categoryId: 'inne', startMin: 19 * 60, durationMin: 75, fixed: false, name: 'B' },
+    { id: 'f', categoryId: 'inne', startMin: 20 * 60 + 30, durationMin: 60, fixed: true, name: 'F' },
+    { id: 'c', categoryId: 'inne', startMin: 21 * 60 + 30, durationMin: 30, fixed: false, name: 'C' },
+    { id: 'd', categoryId: 'inne', startMin: 23 * 60, durationMin: 30, fixed: false, name: 'D' }
+  ]
+})
+const REST_BEFORE = { a: 18 * 60, b: 19 * 60, f: 20 * 60 + 30, c: 21 * 60 + 30, d: 23 * 60 }
+const REST_AFTER = { a: 18 * 60 + 30, b: 21 * 60 + 30, f: 20 * 60 + 30, c: 22 * 60 + 45, d: 23 * 60 + 30 }
+
+test('„Przesuń resztę dnia o…” (N17): oś jutra – menu jednego bloku „Później o… → 30 min”: 4 elastyczne, stały na miejscu, linia z ostrzeżeniem; „Cofnij” przywraca plik dnia', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-group-rest-'))
+  const { today } = seedAwake(dataDir, [])
+  const tomorrow = addDays(today, 1)
+  write(dataDir, paths.day(tomorrow), restDay(tomorrow))
+  // The plan of the day's file as read (its blocks with every field): what „Cofnij” brings back.
+  const before = blocksOf(dataDir, tomorrow)
+  const starts = () => Object.fromEntries(blocksOf(dataDir, tomorrow).map((b) => [b.id, b.startMin]))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('day-next').click()
+      const tile = page.getByTestId('block-a')
+      await expect(tile).toBeVisible({ timeout: 30_000 })
+      await tile.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+      await tile.click({ button: 'right' })
+      await expect(page.getByTestId('block-menu')).toHaveAttribute('aria-label', 'Zmień 1 blok')
+      await page.getByTestId('block-menu-rest').click()
+      await page.getByTestId('block-menu-rest-later').click()
+      await page.getByTestId('block-menu-rest-later-30').click()
+      await expect.poll(starts, { timeout: 15_000 }).toEqual(REST_AFTER)
+      await expect(page.getByTestId('group-line-today')).toContainText('Przesunięto 4 bloki')
+      // The work of the evening ends later past the day's maximum: said, written all the same (D72).
+      await expect(page.getByTestId('group-line-today')).toContainText('praca kończy się po maksimum')
+      await page.getByTestId('group-line-today-undo').click()
+      await expect.poll(starts, { timeout: 15_000 }).toEqual(REST_BEFORE)
+      expect(blocksOf(dataDir, tomorrow)).toEqual(before)
+      await expect(page.getByTestId('group-line-today')).toHaveCount(0)
+    })
+    expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('„Przesuń resztę dnia o…” (N17): „Tydzień” – prawy przycisk na bloku wtorku „Później o… → 30 min”: ten sam wynik, linia „Przesunięto 4 bloki”, „Cofnij” przywraca', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'rd-e2e-group-rest-week-'))
+  const { today } = seedAwake(dataDir, [])
+  const tue = addDays(mondayOf(today), 8)
+  write(dataDir, paths.day(tue), restDay(tue))
+  const starts = () => Object.fromEntries(blocksOf(dataDir, tue).map((b) => [b.id, b.startMin]))
+  const { app, page, userData, errors } = await launch({ env: { RD_DATA_DIR: dataDir } })
+  try {
+    await withMainLog(userData, async () => {
+      await page.setViewportSize({ width: 1280, height: 900 }).catch(() => undefined)
+      await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 })
+      await page.getByTestId('nav-week').click()
+      await page.getByTestId('week-mode-week').click()
+      await page.getByTestId('week-next').click()
+      const box = page.getByTestId(`week-block-${tue}-a`)
+      await expect(box).toBeVisible({ timeout: 30_000 })
+      await box.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+      await box.click({ button: 'right' })
+      await expect(page.getByTestId('block-menu')).toHaveAttribute('aria-label', 'Zmień 1 blok')
+      await page.getByTestId('block-menu-rest').click()
+      await page.getByTestId('block-menu-rest-later').click()
+      await page.getByTestId('block-menu-rest-later-30').click()
+      await expect.poll(starts, { timeout: 15_000 }).toEqual(REST_AFTER)
+      await expect(page.getByTestId('group-line-week')).toContainText('Przesunięto 4 bloki')
+      await page.getByTestId('group-line-week-undo').click()
+      await expect.poll(starts, { timeout: 15_000 }).toEqual(REST_BEFORE)
       await expect(page.getByTestId('group-line-week')).toHaveCount(0)
     })
     expect(errors).toEqual([])

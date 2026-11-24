@@ -19,6 +19,16 @@ export function stateOfWeek(state: HorizonBlock['state']): MenuState {
   return state === 'ran' || state === 'running' || state === 'paused' ? 'begun' : state === 'missed' ? 'past' : state === 'parked' || state === 'cancelled' ? 'off' : 'open'
 }
 
+/**
+ * Whether „Przesuń resztę dnia o…” has a block to move on a day of the columns (N17, T2494 – their menu has no engine's verdict): from the earliest
+ * of the selected blocks `ids` on (where the column draws it: a begun one where it began), a block the push apart moves (`HorizonBlock.pushable` –
+ * the engine's rule, D367).
+ */
+export function restLeftIn(day: Pick<HorizonDay, 'blocks'>, ids: readonly string[]): boolean {
+  const from = Math.min(...day.blocks.filter((b) => ids.includes(b.id)).map((b) => b.startMin))
+  return day.blocks.some((b) => b.startMin >= from && b.pushable === true)
+}
+
 /** The focus is on the columns, or on no element at all: the keys of the selection are heard there. */
 export function inWeek(e: KeyboardEvent): boolean {
   const t = e.target
@@ -54,14 +64,29 @@ export function useWeekGroup(o: { days: readonly HorizonDay[]; scope: string; to
   const ctx = useMemo(() => menuCtxOf(o.namesOf(first)), [first, o.namesOf])
   // Stable while the days are (the menu counts its entries again only when they change).
   const today = o.today
+  const { days } = o
   const blocksOf = useCallback(
-    (ids: readonly string[]): MenuBlock[] =>
-      ids.flatMap((k) => {
+    (ids: readonly string[]): MenuBlock[] => {
+      // The rest of each day (N17): from its earliest selected block – none left there, the entry says so (T2494).
+      const byDate = new Map<string, string[]>()
+      for (const k of ids) {
+        const { date, id } = parseBlockKey(k)
+        byDate.set(date, [...(byDate.get(date) ?? []), id])
+      }
+      const left = new Map(
+        [...byDate].map(([date, dayIds]) => {
+          const day = days.find((d) => d.date === date)
+          return [date, day ? restLeftIn(day, dayIds) : true] as const
+        })
+      )
+      return ids.flatMap((k) => {
         const b = byKey.get(k)
         if (!b) return []
-        return [{ id: k, categoryId: b.categoryId, variantId: b.named.variantId ?? null, routine: b.named.routine ?? null, costs: b.cost?.costs ?? null, state: stateOfWeek(b.state), movable: b.movable === true, notToday: parseBlockKey(k).date !== today }]
-      }),
-    [byKey, today]
+        const date = parseBlockKey(k).date
+        return [{ id: k, categoryId: b.categoryId, variantId: b.named.variantId ?? null, routine: b.named.routine ?? null, costs: b.cost?.costs ?? null, state: stateOfWeek(b.state), movable: b.movable === true, notToday: date !== today, pastDay: date < today, restNone: left.get(date) === false }]
+      })
+    },
+    [byKey, today, days]
   )
   return {
     sel,
