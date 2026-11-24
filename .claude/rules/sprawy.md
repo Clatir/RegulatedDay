@@ -10,6 +10,9 @@ paths:
   - "src/shared/quickDates.ts"
   - "src/shared/quickCategories.ts"
   - "src/shared/quickSaid.ts"
+  - "src/shared/quickList.ts"
+  - "src/renderer/widget/usePasteList.ts"
+  - "src/renderer/features/cases/taskList.ts"
   - "src/renderer/store/cases.ts"
   - "src/renderer/store/casesGroup.ts"
   - "src/main/windows/quickWindow.ts"
@@ -27,6 +30,8 @@ paths:
   - "tests/unit/theme.test.ts"
   - "tests/e2e/quick*.spec.ts"
   - "tests/unit/quick-words.test.ts"
+  - "tests/unit/quick-list.test.ts"
+  - "tests/web/bar-quick.test.ts"
 ---
 
 # Sprawy, Skrzynka, szybki zapis (OPS2, L2)
@@ -55,6 +60,7 @@ paths:
   (T852), `caseCompare` – kolejność list (termin, potem P1–P4, potem reszta – `caseGroupOf` 0 / 1–4 / 9, w grupie `caseOrder`);
   `engine/caseDates.ts` – `dueBadge`, `doText`, `deadlineCases` + „Pomiń” w `asked` dnia (`deadline:<id>`); `shared/quickDates.ts`
   (lekki – okienko „Do skrzynki”) – `parseQuickWords(text, today, categories)` (`hub.quickAdd`, `createTask`, `quickPreview`; słowa: `!`/`@` dzień, `d.mm[.rrrr]`, `rrrr-mm-dd`, nie z ukośnikiem – D455; N10: długość `1h30`, `#nazwa` – `categoryOfWord`, `@dzień HH:MM` / `@HH:MM` → `startMin` – blok od razu na osi przez `casePlan`, bez rozsuwania; nierozpoznane zostaje w tytule, D600–D602), `parseQuickDates` (same daty), `shortDay`, `dayWord`; lista `{ id, name }` w kolejności drzewa – `shared/quickCategories.ts`, dla okienka i paska IPC `quickCategories` (`useQuickToday` → `categories`); wynik `QuickAddResult.placed` / `notPlaced`; powody i zdanie paska i dymka – jedno miejsce `shared/quickSaid.ts` (`NOT_PLACED`, `notPlacedBefore` – dzień minął / dziś godzina przed bieżącą minutą, D603, `quickSavedText`, `quickNowMin`); `hub.quickAdd`: `ok` także przy pytaniu kolejki (`conflict`, `changedElsewhere`, `removedElsewhere`) – jak `isSaved` okna, ponowny Enter nie dubluje; pytanie o wpis dnia = `asked` (nie `placed`; okienko zostaje i mówi to pod polem, `quick-asked`); `parseQuickWords(…, nowMin)` – w nocy bare `@HH:MM` od 04:00 to następny dzień logiczny (D604); próg `general.deadlineDays`.
+- Wklejenie listy (N11, D605, D606): `shared/quickList.ts` (`pastedLines` – bez znaczników, ≤ 50, null przy < 2 liniach; `pastedOneTitle`; zdania pól i „Cofnij”), hook `widget/usePasteList.ts` (trzy pola; jedna `useEscapeLayer` – pierwszy Esc tylko odpowiada). Zapis `hub.quickAddMany` (`quickDraft`: plik dnia raz, bloki dnia w jednej edycji; wynik z `batch`), „Cofnij” `hub.quickUndo(batch)` (rekord tylko gdy `editStands`, dzień zmieniony – jego sprawy zostają, `kept`); okno `createTasks` + `features/cases/taskList.ts` (dymek, `undoGroup`); pasek okna/panelu – linia `quick:<batch>` (`WidgetEngine.quickListSaid`).
 - Proces główny: `windows/quickWindow.ts` (okienko „Do skrzynki”, skrót globalny), `hub.quickAdd`, `hub.casesRitual` →
   `folder.casesRitual`; pasek: `engineView` (linie `task:`), `WidgetEngine` (akcje `quickAdd`, `quickOpen`, linia `task`).
 

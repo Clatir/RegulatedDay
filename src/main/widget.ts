@@ -47,6 +47,7 @@ import { logicalDayOf } from '@shared/time/day'
 import { addDays } from '@shared/time/zone'
 import { answered } from '@shared/engine/care'
 import { batteryLine, NO_SYNC, syncLines } from '@shared/sync/syncLines'
+import { QUICK_UNDO_ASKED, quickUndoText } from '@shared/quickList'
 import { quickSavedText } from '@shared/quickSaid'
 import { ASSESS_TEXT, barCostOp, CLICK_UNDO_MS, noFolderView, SEEN_LINE, SIGNAL_TEXT, UNDO_LINE_MS, type BarCostClick, type BarCostResult, type BarPending, type BarRoutine, type WidgetView } from '@shared/widget'
 import type { DataFolder } from './data/folder'
@@ -107,6 +108,8 @@ export interface WidgetDeps {
   backup?: () => { failed: { error: string } | null } | null
   /** The quick capture (D385, D402): a task of your own into „Skrzynka” – the field of the bar; why, when not saved. */
   quickAdd?: (title: string) => Promise<{ ok: boolean; error: string | null; title: string | null; placed?: string; notPlaced?: string; asked?: boolean }>
+  /** „Cofnij” of a pasted list (N11, D606): its sprawy and blocks taken away, the count of what went and what stayed. */
+  quickUndo?: (batch: string) => Promise<{ ok: boolean; error: string | null; undone: number; kept: number; asked?: boolean; again?: boolean }>
   /** „+ Skrzynka” of the desktop bar (D564 P15): it takes no keys – the window „Do skrzynki” opens as by its shortcut. */
   openQuick?: () => void
 }
@@ -324,6 +327,8 @@ export class WidgetEngine {
   private stepsUndo: StepsUndo | null = null
   /** „<akcja> · Cofnij” of the bar's last click it can take back (D564 P18): one at a time – a newer click replaces it. */
   private clickUndo: ClickUndo | null = null
+  /** „Dodano 5 spraw · Cofnij” after a list pasted into the field of the window or the panel (N11, D606): one at a time, for `UNDO_LINE_MS`. */
+  private quickLine: { batch: string; text: string; until: number; seq: number; undoing: boolean } | null = null
   private clickSeq = 0
 
   constructor(private readonly d: WidgetDeps) {}
@@ -628,8 +633,16 @@ export class WidgetEngine {
     for (const [kind, mv] of [...this.moved]) if (mv.until <= mono) this.moved.delete(kind)
     // The newest first; after every line of the day (`linesLast`): the bar shows one of them at most, the other waits in
     // „⋯” with its „Cofnij” (`barLines`).
-    const movedLines = [...this.moved].sort((a, b) => b[1].seq - a[1].seq).map(([kind, mv]) => ({ id: `moved:${kind}`, text: mv.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false }))
-    if (movedLines.length && !v.hidden) v.lines = [...v.lines, ...movedLines]
+    // A list pasted into the field (N11) is such a line too (`quick:<batch>`): in the order of the newest first with the plan's changes.
+    const q = this.quickLine
+    if (q && q.until <= mono) this.quickLine = null
+    const changeLines = [
+      ...[...this.moved].map(([kind, mv]) => ({ seq: mv.seq, line: { id: `moved:${kind}`, text: mv.text, actions: [{ id: 'undo', label: 'Cofnij' }], dot: false } })),
+      ...(this.quickLine ? [{ seq: this.quickLine.seq, line: { id: `quick:${this.quickLine.batch}`, text: this.quickLine.text, actions: [{ id: 'undo', label: this.quickLine.undoing ? 'Cofam…' : 'Cofnij' }], dot: false } }] : [])
+    ]
+      .sort((a, b) => b.seq - a.seq)
+      .map((x) => x.line)
+    if (changeLines.length && !v.hidden) v.lines = [...v.lines, ...changeLines]
     // A routine saved from the bar (D328) or a block ended by its last step (D474): its „Cofnij” for a while, in place of its line.
     const u = this.stepsUndo
     if (u && (u.until <= mono || u.day !== date)) this.stepsUndo = null
@@ -674,7 +687,7 @@ export class WidgetEngine {
    */
   private linesLast(): void {
     const v = this.view!
-    const moved = (l: { id: string }) => l.id.startsWith('moved:')
+    const moved = (l: { id: string }) => l.id.startsWith('moved:') || l.id.startsWith('quick:')
     const hard = (l: { id: string }) => l.id.startsWith('hardEnd:')
     // The reminders (UX13) after all: they never push a line of the day – nor a change's „Cofnij” – into „⋯”.
     const remind = (l: { id: string }) => l.id.startsWith('remind:')
@@ -1220,6 +1233,8 @@ export class WidgetEngine {
         if (!line || !act) return
         const [kind, id] = [line.slice(0, line.indexOf(':')), line.slice(line.indexOf(':') + 1)]
         button = `line:${line}|${act}`
+        // „Dodano 5 spraw · Cofnij” of a pasted list (N11, D606).
+        if (kind === 'quick') return act === 'undo' ? this.undoQuickList(id) : undefined
         if (kind === 'moved') return act === 'undo' ? this.undoMoved(id === 'push' ? 'push' : 'variant') : undefined
         // „<akcja> · Cofnij” of the bar's last click (D564 P18).
         if (kind === 'clickUndo') return act === 'undo' ? this.undoClickLine(id) : undefined
@@ -1330,6 +1345,44 @@ export class WidgetEngine {
   /** The quick capture saved by the global shortcut (the window „Do skrzynki”, D470): the bar says it as it does for its own field. */
   quickSaid(title: string, o: { placed?: string; notPlaced?: string; asked?: boolean } = {}): Promise<void> {
     this.say(quickSavedText(title, o), true)
+    return this.refresh()
+  }
+
+  /**
+   * A list pasted into the quick capture saved (N11, D606): the window „Do skrzynki” (`batch` null) – the bar says it as it says one title; the
+   * window's bar and the panel – a line „Dodano 5 spraw · Cofnij” for `UNDO_LINE_MS` (one list at a time; a newer one takes its place).
+   */
+  quickListSaid(text: string, batch: string | null): Promise<void> {
+    if (batch) this.quickLine = { batch, text, until: this.mono + UNDO_LINE_MS, seq: ++this.movedSeq, undoing: false }
+    else this.say(text, true)
+    return this.refresh()
+  }
+
+  /** „Cofnij” on the line of a pasted list: all its sprawy and blocks taken away but what changed since – the bar says what went and what stayed. */
+  private async undoQuickList(batch: string): Promise<void> {
+    const q = this.quickLine
+    if (!q || q.batch !== batch || q.undoing) return
+    q.undoing = true
+    let r: Awaited<ReturnType<NonNullable<WidgetDeps['quickUndo']>>> | null = null
+    let failed: string | null = null
+    try {
+      await this.refresh()
+      r = this.d.quickUndo ? await this.d.quickUndo(batch) : null
+    } catch (e) {
+      failed = `Nie cofnięto: ${e instanceof Error ? e.message : String(e)}`
+    } finally {
+      q.undoing = false
+    }
+    // The list given back (nothing of the undo was written – `again`) or the call failed: the line stays with its „Cofnij”; else it is spent.
+    const again = failed != null || (r != null && !r.ok && r.again === true)
+    if (!again && this.quickLine === q) this.quickLine = null
+    // The line ran out while the undo ran (its 15 minutes) and no newer list took its place: it comes back for a minute to try again.
+    else if (again && this.quickLine == null) {
+      q.until = this.mono + 60_000
+      this.quickLine = q
+    }
+    if (r?.ok) this.say(r.asked ? QUICK_UNDO_ASKED : quickUndoText(r.undone, r.kept), true)
+    else this.say(failed ?? r?.error ?? 'Cofnięcie nie działa teraz.')
     return this.refresh()
   }
 

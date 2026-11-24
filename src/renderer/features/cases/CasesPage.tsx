@@ -54,6 +54,8 @@ import { SeriesFields } from '../series/SeriesFields'
 import { UnsavedRuleDialog, type RuleGuard } from '../series/UnsavedRuleDialog'
 import { draftProblem, repeatChanged, repeatDraft, repeatInputOf, type SeriesDraft } from '../series/seriesForm'
 import { StepsEditor } from '../steps/StepsEditor'
+import { usePasteList } from '../../widget/usePasteList'
+import { addTaskList } from './taskList'
 import { stepsAnswer } from '../steps/stepsUi'
 
 export function CasesPage() {
@@ -245,8 +247,11 @@ function ViewSwitch({ view, onChange }: { view: CasesView; onChange: (v: CasesVi
   )
 }
 
-/** A new task (D384): its title – Enter adds it to „Skrzynka” (30 min, „Inne”; the rest is edited in its row), Esc closes. */
-function NewTask({ onClose }: { onClose: () => void }) {
+/**
+ * A new task (D384): its title – Enter adds it to „Skrzynka” (30 min, „Inne”; the rest is edited in its row), Esc closes. A list of lines pasted into it
+ * (N11, D605) is asked about under the field first („Dodać 5 spraw? · Enter · Esc – jeden tytuł”): Enter adds them all (a toast with „Cofnij”), Esc pastes one title.
+ */
+export function NewTask({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState('')
   const [busy, run] = useBusy()
   // D409, D600–D602: the words at the end of the title (dates, length, subcategory, hour) – what they set, said under the field before Enter.
@@ -257,10 +262,43 @@ function NewTask({ onClose }: { onClose: () => void }) {
   const preview = quickPreview(title, today, categories, quickNowMin(today, now))
   // Once: the field is cleared at once and a second Enter (or „Dodaj”) while it saves does nothing; a save that did not happen gives the title back.
   const add = () => submitTitle(run, title, { set: setTitle, save: async (t) => caseAnswer(await createTask({ title: t })), done: onClose })
+  const input = useRef<HTMLInputElement>(null)
+  // D607: what was typed before the paste stays – the form stays open with it; an empty field closes, as after a title – while it is still empty.
+  // One save at a time (a ref: a second Enter before the next render must meet it).
+  const listing = useRef(false)
+  const titleNow = useRef(title)
+  titleNow.current = title
+  // The form that saved may be gone when the answer comes (Esc closed it, Ctrl+N opened it again): its answer then closes nothing.
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+    }
+  }, [])
+  const addList = (lines: string[]): boolean => {
+    if (listing.current) return false
+    listing.current = true
+    const at = title
+    let ran = false
+    // `run` calls the action at once when no other save runs (a title being saved); when it did not, the list was not taken.
+    void run(async () => {
+      ran = true
+      try {
+        if ((await addTaskList(lines)) === true && alive.current && at.trim() === '' && titleNow.current === at) onClose()
+      } finally {
+        listing.current = false
+      }
+    })
+    if (!ran) listing.current = false
+    return ran
+  }
+  const paste = usePasteList({ value: title, setValue: setTitle, input, save: addList })
   return (
     <div className="flex flex-col gap-1" data-testid="case-add">
       <div className="flex items-center gap-2">
         <input
+          ref={input}
           autoFocus
           className="input min-w-0 flex-1"
           value={title}
@@ -269,7 +307,9 @@ function NewTask({ onClose }: { onClose: () => void }) {
           placeholder="Tytuł zadania – Enter dodaje do Skrzynki"
           aria-label="Tytuł zadania"
           onChange={(e) => setTitle(e.currentTarget.value)}
+          onPaste={paste.onPaste}
           onKeyDown={(e) => {
+            if (paste.onKeyDown(e)) return
             if (e.key === 'Enter') void add()
             if (e.key === 'Escape') {
               e.stopPropagation()
@@ -285,10 +325,16 @@ function NewTask({ onClose }: { onClose: () => void }) {
           Anuluj
         </button>
       </div>
-      {preview && (
-        <span className="text-[12px] text-muted" data-testid="case-add-preview">
-          {preview}
+      {paste.question ? (
+        <span className="text-[12px] text-muted" data-testid="case-add-paste">
+          {paste.question}
         </span>
+      ) : (
+        preview && (
+          <span className="text-[12px] text-muted" data-testid="case-add-preview">
+            {preview}
+          </span>
+        )
       )}
     </div>
   )
