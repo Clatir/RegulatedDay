@@ -119,7 +119,7 @@ export function useTreeSelection(o: { tree: readonly TreeGroup[]; s: RulesSettin
             // replaces it (T2716).
             if (menu?.from === 'bar') return setMenu(null)
             // The focus on the button first: the menu gives it back there (a click does not always focus a button). Without a scroll:
-            // the menu closes on any scroll (`ContextMenu`), and focusing a button at the edge of the page scrolls it (T2940).
+            // the menu closes on any scroll (`ContextMenu`), and focusing a button at the edge of the page scrolls it (T2884).
             e.currentTarget.focus({ preventScroll: true })
             openMenu(null, menuPoint(e.nativeEvent, e.currentTarget))
           }}

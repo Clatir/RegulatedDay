@@ -378,7 +378,7 @@ describe('ekran: pasek zaznaczenia (runda 1 i 2 przeglądu)', () => {
     expect(selectedKeys()).toEqual([])
   })
 
-  it('„Zmień N ▾” daje sobie fokus bez przewijania – menu zamyka się na każde przewinięcie strony (T2940)', async () => {
+  it('„Zmień N ▾” daje sobie fokus bez przewijania – menu zamyka się na każde przewinięcie strony (T2884)', async () => {
     await show()
     await press(row('analiza'))
     await press(row('sesja'), { ctrlKey: true })
