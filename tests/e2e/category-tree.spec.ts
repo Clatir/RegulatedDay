@@ -119,6 +119,10 @@ test('zaznaczanie w „Kategoriach” (D608, D609): 6 podkategorii Ctrl+klik →
       await expect(page.locator('[data-tree-item][data-selected="true"]')).toHaveCount(6)
       await expect(page.getByTestId('tree-selection')).toContainText('Zaznaczone: 6')
 
+      // The bar stands above the tree, scrolled away by the clicks on the rows: scroll to it first and let the scroll event come
+      // (one frame later) before the click – a menu closes on any scroll, and Playwright scrolls and clicks in the same frame (T2940).
+      await page.getByTestId('tree-selection-menu').scrollIntoViewIfNeeded()
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
       await page.getByTestId('tree-selection-menu').click()
       await expect(page.getByTestId('tree-menu')).toContainText('Zmień 6 podkategorii')
       await page.getByTestId('tree-menu-cost').click()

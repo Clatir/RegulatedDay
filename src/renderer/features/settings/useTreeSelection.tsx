@@ -92,7 +92,7 @@ export function useTreeSelection(o: { tree: readonly TreeGroup[]; s: RulesSettin
         if (!rowOf(e) || isEditable(e.target) || (e.target instanceof Element && e.target.closest(OWN_CONTROL))) return
         sel.onItemClick(key, e)
         // The row is where the keys of the selection look for it (Ctrl+A, Esc, Shift+F10).
-        if (document.activeElement !== e.currentTarget) e.currentTarget.focus({ preventScroll: true })
+        if (document.activeElement !== e.currentTarget) e.currentTarget.focus()
       },
       onContextMenu: (e) => rowOf(e) && bind.onContextMenu(e),
       onKeyDown: (e) => bind.onKeyDown(e),
@@ -118,8 +118,9 @@ export function useTreeSelection(o: { tree: readonly TreeGroup[]; s: RulesSettin
             // A second click closes it (the button is no press „beside” the menu – `keep`, T2709), as „⋯” of the day; a row's menu open – the bar's
             // replaces it (T2716).
             if (menu?.from === 'bar') return setMenu(null)
-            // The focus on the button first: the menu gives it back there (a click does not always focus a button).
-            e.currentTarget.focus()
+            // The focus on the button first: the menu gives it back there (a click does not always focus a button). Without a scroll:
+            // the menu closes on any scroll (`ContextMenu`), and focusing a button at the edge of the page scrolls it (T2940).
+            e.currentTarget.focus({ preventScroll: true })
             openMenu(null, menuPoint(e.nativeEvent, e.currentTarget))
           }}
           data-testid="tree-selection-menu"

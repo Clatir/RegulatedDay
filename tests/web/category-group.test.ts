@@ -378,6 +378,22 @@ describe('ekran: pasek zaznaczenia (runda 1 i 2 przeglądu)', () => {
     expect(selectedKeys()).toEqual([])
   })
 
+  it('„Zmień N ▾” daje sobie fokus bez przewijania – menu zamyka się na każde przewinięcie strony (T2940)', async () => {
+    await show()
+    await press(row('analiza'))
+    await press(row('sesja'), { ctrlKey: true })
+    const button = q('tree-selection-menu')!
+    const focus = vi.spyOn(button, 'focus')
+    await press(button)
+    expect(q('tree-menu')).not.toBeNull()
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+    // A scroll after the opening (as the focus used to cause) closes the menu – that is why the focus must not scroll.
+    await act(async () => {
+      window.dispatchEvent(new Event('scroll'))
+    })
+    expect(q('tree-menu')).toBeNull()
+  })
+
   it('„Zmień N ▾” otwiera menu i drugim kliknięciem je zamyka (przycisk nie jest „obok”, T2709)', async () => {
     await show()
     await press(row('analiza'))
